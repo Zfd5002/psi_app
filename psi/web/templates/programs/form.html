@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{% if program %}Edit Program{% else %}New Program{% endif %} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{% if program %}Edit Program{% else %}New Program{% endif %}</h1>
+  <form class="form" method="post" action="{% if program %}/programs/{{ program.id }}/edit{% else %}/programs/new{% endif %}">
+    <div class="field">
+      <label>Name</label>
+      <input name="name" value="{{ program.name if program else '' }}" required />
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <textarea name="description">{{ program.description if program else '' }}</textarea>
+    </div>
+    {% if program %}
+    <div class="field">
+      <label>Reason (optional, for audit log)</label>
+      <input name="reason" placeholder="e.g., updated scope" />
+    </div>
+    {% endif %}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Save</button>
+      {% if program %}
+        <a class="btn" href="/programs/{{ program.id }}">Cancel</a>
+      {% else %}
+        <a class="btn" href="/programs">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

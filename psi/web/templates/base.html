@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}PSI{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="/">PSI</a>
+      <a href="/programs">Programs</a>
+      <a href="/molecules">Molecules</a>
+      <a href="/batches">Batches</a>
+      <a href="/data">Lab Notebook</a>
+      <a href="/evidence">Evidence</a>
+      <a href="/decisions">Decisions</a>
+      <a href="/search">Search</a>
+    </div>
+  </div>
+  <div class="wrap">
+    {% block content %}{% endblock %}
+    <div class="footer">Local-first PSI (SQLite). No auth. All changes audited.</div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

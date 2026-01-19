@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ batch.batch_id }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1>{{ batch.batch_id }}</h1>
+      <p class="muted">Molecule: <a href="/molecules/{{ molecule.id }}">{{ molecule.primary_id }}</a></p>
+      {% if batch.title %}<p class="muted">{{ batch.title }}</p>{% endif %}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
+      <a class="btn primary" href="/data/new?batch_id={{ batch.id }}">New Data Record</a>
+      <a class="btn primary" href="/evidence/new?batch_id={{ batch.id }}">New Evidence</a>
+      <a class="btn" href="/batches/{{ batch.id }}/edit">Edit</a>
+    </div>
+  </div>
+
+  <div class="tabs no-print">
+    <a class="tab {% if tab=='data' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=data">Data Records</a>
+    <a class="tab {% if tab=='evidence' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=evidence">Evidence</a>
+    <a class="tab {% if tab=='files' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=files">Files</a>
+    <a class="tab {% if tab=='audit' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=audit">Audit</a>
+  </div>
+
+  {% if tab=='data' %}
+    <h2>Data records (timeline)</h2>
+    <table class="table">
+      <thead><tr><th>Run date</th><th>Title</th><th>Domain</th><th>Type/Method</th></tr></thead>
+      <tbody>
+        {% for r in data_records %}
+        <tr>
+          <td class="muted">{{ r.run_date or '' }}</td>
+          <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
+          <td class="muted">{{ r.domain }}</td>
+          <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No data records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% elif tab=='evidence' %}
+    <h2>Evidence tied to this batch</h2>
+    <table class="table">
+      <thead><tr><th>Type</th><th>Domain</th><th>Strength</th><th>Summary</th></tr></thead>
+      <tbody>
+        {% for e in evidence %}
+        <tr>
+          <td><a href="/evidence/{{ e.id }}">{{ e.evidence_type }}</a></td>
+          <td class="muted">{{ e.domain }}</td>
+          <td>{{ e.strength }}</td>
+          <td class="muted">{{ e.summary }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No evidence yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% elif tab=='files' %}
+    <h2>Files</h2>
+    <form class="form no-print" method="post" action="/batches/{{ batch.id }}/files" enctype="multipart/form-data">
+      <div class="field">
+        <label>Attach files</label>
+        <input type="file" name="files" multiple />
+      </div>
+      <button class="btn" type="submit">Upload</button>
+    </form>
+    <table class="table">
+      <thead><tr><th>Filename</th><th>SHA256</th><th>Size</th></tr></thead>
+      <tbody>
+        {% for fl in file_links %}
+          {% set f = files_by_id.get(fl.file_id) %}
+          <tr>
+            <td>{% if f %}<a href="/files/{{ f.id }}/download">{{ f.original_name }}</a>{% else %}<span class="muted">(missing)</span>{% endif %}</td>
+            <td class="muted">{% if f %}{{ f.sha256 }}{% endif %}</td>
+            <td class="muted">{% if f %}{{ f.size_bytes }}{% endif %}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="3" class="muted">No files attached.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <h2>Audit</h2>
+    {% include "partials/audit_table.html" %}
+  {% endif %}
+
+  <div class="card" style="margin-top:16px;">
+    <h3>Batch notes</h3>
+    <div class="grid cols-2">
+      <div>
+        <div class="muted">Expression notes</div>
+        <pre>{{ batch.expression_notes or '' }}</pre>
+      </div>
+      <div>
+        <div class="muted">Purification notes</div>
+        <pre>{{ batch.purification_notes or '' }}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

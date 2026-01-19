@@ -1,0 +1,39 @@
+{% if audits and audits|length %}
+<table class="table">
+  <thead>
+    <tr>
+      <th>Time (UTC)</th>
+      <th>Action</th>
+      <th>Reason</th>
+      <th>Diff</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in audits %}
+    <tr>
+      <td class="muted">{{ a.timestamp }}</td>
+      <td>{{ a.action }}</td>
+      <td class="muted">{{ a.reason or '' }}</td>
+      <td>
+        {% if a.diff_json %}
+          <details>
+            <summary>view</summary>
+            <pre>{{ a.diff_json }}</pre>
+          </details>
+        {% elif a.before_json or a.after_json %}
+          <details>
+            <summary>view</summary>
+            <pre>before: {{ a.before_json }}
+after: {{ a.after_json }}</pre>
+          </details>
+        {% else %}
+          <span class="muted">-</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No audit events yet.</p>
+{% endif %}

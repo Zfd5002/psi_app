@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Batches | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <h1>Batches</h1>
+    <a class="btn primary" href="/batches/new">New Batch</a>
+  </div>
+  <table class="table">
+    <thead><tr><th>Batch ID</th><th>Molecule</th><th>Title</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for b in batches %}
+      <tr>
+        <td><a href="/batches/{{ b.id }}">{{ b.batch_id }}</a></td>
+        <td class="muted"><a href="/molecules/{{ b.molecule.id }}">{{ b.molecule.primary_id }}</a></td>
+        <td class="muted">{{ b.title or '' }}</td>
+        <td class="muted">{{ b.created_at }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No batches yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.venv/
+venv/
+ENV/
+*.sqlite3
+*.db
+uploads/
+ProcessedData/
+.DS_Store
+.idea/
+.vscode/
+
+# PSI local runtime
+psi.sqlite
+*.sqlite

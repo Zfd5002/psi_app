@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Data {{ record.id }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1>{{ record.title }}</h1>
+      <p class="muted">{{ record.domain }} • {{ record.data_type }}/{{ record.method }}</p>
+      <p class="muted">
+        Program: <a href="/programs/{{ record.program.id }}">{{ record.program.name }}</a>
+        {% if record.molecule %} • Molecule: <a href="/molecules/{{ record.molecule.id }}">{{ record.molecule.primary_id }}</a>{% endif %}
+        {% if record.batch %} • Batch: <a href="/batches/{{ record.batch.id }}">{{ record.batch.batch_id }}</a>{% endif %}
+        {% if record.run_date %} • Run date: {{ record.run_date }}{% endif %}
+      </p>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
+      <a class="btn" href="/data/{{ record.id }}/edit">Edit</a>
+      <a class="btn primary" href="/evidence/new?program_id={{ record.program_id }}{% if record.molecule_id %}&molecule_id={{ record.molecule_id }}{% endif %}{% if record.batch_id %}&batch_id={{ record.batch_id }}{% endif %}">Create Evidence (cite this)</a>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div>
+      <h2>Structured results</h2>
+      <pre>{{ (record.results_json or '{}') }}</pre>
+    </div>
+    <div>
+      <h2>Parameters</h2>
+      <pre>{{ (record.params_json or '{}') }}</pre>
+    </div>
+  </div>
+
+  <h2>Notes</h2>
+  <pre>{{ record.notes or '' }}</pre>
+
+  <h2>Files</h2>
+  <table class="table">
+    <thead><tr><th>Filename</th><th>SHA256</th><th>Size</th></tr></thead>
+    <tbody>
+      {% for fl in file_links %}
+        {% set f = files_by_id.get(fl.file_id) %}
+        <tr>
+          <td>{% if f %}<a href="/files/{{ f.id }}/download">{{ f.original_name }}</a>{% else %}<span class="muted">(missing)</span>{% endif %}</td>
+          <td class="muted">{% if f %}{{ f.sha256 }}{% endif %}</td>
+          <td class="muted">{% if f %}{{ f.size_bytes }}{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">No files attached.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Cited by evidence</h2>
+  <ul>
+    {% for e in evidence_citing %}
+      <li><a href="/evidence/{{ e.id }}">{{ e.evidence_type }}</a> <span class="muted">({{ e.domain }}, strength {{ e.strength }})</span></li>
+    {% else %}
+      <li class="muted">Not cited by any evidence yet.</li>
+    {% endfor %}
+  </ul>
+
+  <h2>Audit</h2>
+  {% include "partials/audit_table.html" %}
+</div>
+{% endblock %}

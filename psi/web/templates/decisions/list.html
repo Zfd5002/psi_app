@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Decisions | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1 style="margin:0;">Decisions</h1>
+      <div class="muted">Immutable decision snapshots. Each snapshot links to the exact Evidence IDs used.</div>
+    </div>
+    <a class="btn primary" href="/decisions/new">Run decision</a>
+  </div>
+
+  <table class="table" style="margin-top:12px;">
+    <thead><tr>
+      <th>ID</th>
+      <th>Decision</th>
+      <th>Scope</th>
+      <th>Rules</th>
+      <th>When</th>
+    </tr></thead>
+    <tbody>
+      {% for s in snaps %}
+      <tr>
+        <td><a href="/decisions/{{ s.id }}">#{{ s.id }}</a></td>
+        <td>{{ s.decision_key }}</td>
+        <td>
+          Program {{ s.program_id }}
+          {% if s.molecule_id %}· Mol {{ s.molecule_id }}{% endif %}
+          {% if s.batch_id %}· Batch {{ s.batch_id }}{% endif %}
+        </td>
+        <td>{{ s.rules_version }}</td>
+        <td>{{ s.created_at }}</td>
+      </tr>
+      {% endfor %}
+      {% if snaps|length == 0 %}
+      <tr><td colspan="5" class="muted">No decisions yet.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}{{ molecule.primary_id }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1>{{ molecule.primary_id }}</h1>
+      <p class="muted">{{ molecule.title or '' }}</p>
+      {% set user_desc = molecule.description_user or molecule.description %}
+      {% if user_desc %}<p>{{ user_desc }}</p>{% endif %}
+      {% if molecule.description_auto %}
+        <p class="muted"><strong>Auto description:</strong> {{ molecule.description_auto }}</p>
+      {% endif %}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
+      <a class="btn primary" href="/batches/new?molecule_id={{ molecule.id }}">New Batch</a>
+      <a class="btn" href="/molecules/{{ molecule.id }}/edit">Edit</a>
+    </div>
+  </div>
+
+  <div class="tabs no-print">
+    <a class="tab active" href="#batches">Batches</a>
+    <a class="tab" href="#data">Data Records</a>
+    <a class="tab" href="#evidence">Evidence</a>
+    <a class="tab" href="#files">Files</a>
+    <a class="tab" href="#computed">Computed Results</a>
+    <a class="tab" href="#domains">Domains & Labels</a>
+    <a class="tab" href="#audit">Audit</a>
+  </div>
+
+  <h2 id="batches">Batches</h2>
+  <table class="table">
+    <thead><tr><th>Batch ID</th><th>Title</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for b in batches %}
+      <tr>
+        <td><a href="/batches/{{ b.id }}">{{ b.batch_id }}</a></td>
+        <td class="muted">{{ b.title or '' }}</td>
+        <td class="muted">{{ b.created_at }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No batches yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 id="data">Recent data records</h2>
+  <table class="table">
+    <thead><tr><th>Title</th><th>Domain</th><th>Type/Method</th><th>Run date</th></tr></thead>
+    <tbody>
+      {% for r in data_records %}
+      <tr>
+        <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
+        <td class="muted">{{ r.domain }}</td>
+        <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
+        <td class="muted">{{ r.run_date or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No data records linked to this molecule yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 id="evidence">Recent evidence</h2>
+  <table class="table">
+    <thead><tr><th>Evidence type</th><th>Domain</th><th>Strength</th><th>Summary</th></tr></thead>
+    <tbody>
+      {% for e in evidence %}
+      <tr>
+        <td><a href="/evidence/{{ e.id }}">{{ e.evidence_type }}</a></td>
+        <td class="muted">{{ e.domain }}</td>
+        <td>{{ e.strength }}</td>
+        <td class="muted">{{ e.summary }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No evidence linked to this molecule yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 id="computed">Computed Results</h2>
+  <p class="muted">Computed results are generated automatically and never overwrite experimental data.</p>
+
+  <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;">
+    <form method="post" action="/molecules/{{ molecule.id }}/computed/recompute">
+      <button class="btn" type="submit">Recompute FAST properties</button>
+    </form>
+    <form method="post" action="/molecules/{{ molecule.id }}/numbering" style="display:flex;gap:8px;align-items:center;">
+      <label class="muted" style="margin:0;">Antibody numbering scheme</label>
+      <select name="scheme">
+        {% for s in ['kabat','imgt','chothia'] %}
+          <option value="{{ s }}" {% if request.query_params.get('scheme','kabat')==s %}selected{% endif %}>{{ s|upper }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn primary" type="submit">Compute numbering</button>
+    </form>
+  </div>
+
+  {% if latest_run %}
+    <div class="card" style="margin:10px 0;">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div>
+          <strong>Latest run</strong>
+          <div class="muted">{{ latest_run.created_at }} · {{ latest_run.status }} · {{ latest_run.trigger_reason }} · tier={{ latest_run.compute_tier }}</div>
+          {% if latest_run.error %}<div class="muted">Error: {{ latest_run.error }}</div>{% endif %}
+        </div>
+      </div>
+      <table class="table" style="margin-top:10px;">
+        <thead><tr><th>Property</th><th>Value</th><th>Tier</th></tr></thead>
+        <tbody>
+          {% for v in latest_values_parsed %}
+            <tr>
+              <td>{{ v.label }}</td>
+              <td><pre style="white-space:pre-wrap;margin:0;">{{ v.value }}</pre></td>
+              <td class="muted">{{ v.tier }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h3>Antibody numbering (manual, cached by domain)</h3>
+      {% set scheme = request.query_params.get('scheme','kabat') %}
+      {% if numbering_payload and (numbering_payload.VH or numbering_payload.VL) %}
+        {% if numbering_payload.pending %}<div class="muted">Numbering is still running for one or more domains. Refresh this page.</div>{% endif %}
+        {% for chain_name in ['VH','VL'] %}
+          {% set payload = numbering_payload[chain_name] %}
+          {% if payload %}
+            <h4>{{ chain_name }} ({{ scheme|upper }})</h4>
+            {% if payload.cdrs %}
+              <div class="muted">CDR1: {{ payload.cdrs.get('CDR1','') }} · CDR2: {{ payload.cdrs.get('CDR2','') }} · CDR3: {{ payload.cdrs.get('CDR3','') }}</div>
+            {% endif %}
+            <table class="table" style="margin-top:6px;">
+              <thead><tr><th>Position</th><th>Residue</th></tr></thead>
+              <tbody>
+                {% for pos, aa in payload.positions.items() %}
+                  <tr><td class="muted">{{ pos }}</td><td><code>{{ aa }}</code></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="muted">{{ chain_name }}: not available yet (ensure domain extraction succeeded, then click “Compute numbering”).</div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <div class="muted">No numbering results yet. Click “Compute numbering” above to generate and cache results for this molecule’s VH/VL domains.</div>
+      {% endif %}
+    </div>
+
+    <h3>Property run history</h3>
+    <table class="table">
+      <thead><tr><th>When</th><th>Status</th><th>Reason</th><th>Tier</th><th>Input hash</th></tr></thead>
+      <tbody>
+        {% for r in property_runs %}
+          <tr>
+            <td class="muted">{{ r.created_at }}</td>
+            <td>{{ r.status }}</td>
+            <td class="muted">{{ r.trigger_reason }}</td>
+            <td class="muted">{{ r.compute_tier }}</td>
+            <td class="muted"><code>{{ r.input_hash[:12] }}...</code></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No computed results yet. They will run automatically when the molecule is created or its sequences change.</p>
+  {% endif %}
+
+  <h3 id="computed_log">Latest run log</h3>
+  <table class="table">
+    <thead><tr><th>Time</th><th>Step</th><th>Level</th><th>Message</th></tr></thead>
+    <tbody>
+      {% for ev in latest_run_events %}
+        <tr>
+          <td class="muted">{{ ev.timestamp }}</td>
+          <td class="muted">{{ ev.step }}</td>
+          <td>{{ ev.level }}</td>
+          <td class="muted">{{ ev.message }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No log entries.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h2 id="domains">Domains & Labels</h2>
+  <p class="muted">Auto-extracted domains and user-defined label spans. User edits always override auto extraction.</p>
+
+  <table class="table">
+    <thead><tr><th>Component</th><th>Domain type</th><th>Span</th><th>Source</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>
+      {% for di in domain_instances %}
+        <tr>
+          <td class="muted">{{ di.component.role }}</td>
+          <td>{{ di.domain_type }}</td>
+          <td class="muted">[{{ di.start_idx }}, {{ di.end_idx }})</td>
+          <td class="muted">{{ di.source }}</td>
+          <td>{{ di.status }}</td>
+          <td class="muted">{% if di.error %}{{ di.error }}{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">No domain labels yet (domain extraction runs automatically for structured molecules).</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="card no-print" style="margin-top:10px;">
+    <h3>Add or override a label span</h3>
+    <form class="form" method="post" action="/molecules/{{ molecule.id }}/domains">
+      <div class="field">
+        <label>Component</label>
+        <select name="component_id">
+          {% for c in components %}
+            <option value="{{ c.id }}">{{ c.role }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Domain type</label>
+        <input name="domain_type" placeholder="e.g., VH, VL, CH1, PD-L1_IgV, LINKER, KIH_KNOB, LALA" />
+        <div class="help">Use any descriptive token. Common values: VH, VL, CDR1, CDR2, CDR3, FR1–FR4, CH1, CH2, CH3, hinge, Fc, PD-L1_IgV, PD-L1_IgC, PD-L2_IgV, PD-L2_IgC, linker.</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="field" style="min-width:140px;">
+          <label>Start index</label>
+          <input type="number" name="start_idx" value="0" />
+        </div>
+        <div class="field" style="min-width:140px;">
+          <label>End index</label>
+          <input type="number" name="end_idx" value="0" />
+        </div>
+      </div>
+      <button class="btn primary" type="submit">Save label</button>
+    </form>
+  </div>
+
+  <h2 id="files">Files</h2>
+  <form class="form no-print" method="post" action="/molecules/{{ molecule.id }}/files" enctype="multipart/form-data">
+    <div class="field">
+      <label>Attach files</label>
+      <input type="file" name="files" multiple />
+      <div class="help">Optional: you can attach supporting files directly to a molecule.</div>
+    </div>
+    <button class="btn" type="submit">Upload</button>
+  </form>
+
+  <table class="table">
+    <thead><tr><th>Filename</th><th>SHA256</th><th>Size</th></tr></thead>
+    <tbody>
+      {% for fl in file_links %}
+        {% set f = files_by_id.get(fl.file_id) %}
+        <tr>
+          <td>{% if f %}<a href="/files/{{ f.id }}/download">{{ f.original_name }}</a>{% else %}<span class="muted">(missing)</span>{% endif %}</td>
+          <td class="muted">{% if f %}{{ f.sha256 }}{% endif %}</td>
+          <td class="muted">{% if f %}{{ f.size_bytes }}{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">No files attached.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 id="audit">Audit</h2>
+  {% include "partials/audit_table.html" %}
+</div>
+{% endblock %}

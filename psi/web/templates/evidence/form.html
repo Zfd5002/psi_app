@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% block title %}{% if ev %}Edit Evidence{% else %}New Evidence{% endif %} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1 style="margin:0;">{% if ev %}Edit Evidence{% else %}New Evidence{% endif %}</h1>
+      <div class="muted">Evidence is a claim. It must cite one or more Data Records (which link to raw files).</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a class="btn" href="/evidence">Back</a>
+      {% if ev %}<a class="btn" href="/evidence/{{ ev.id }}">View</a>{% endif %}
+    </div>
+  </div>
+
+  <form id="evForm" class="form" method="post" action="{% if ev %}/evidence/{{ ev.id }}/edit{% else %}/evidence/new{% endif %}" enctype="multipart/form-data">
+
+    <div class="grid cols-2">
+      <div class="field">
+        <label>Program</label>
+        <select name="program_id" id="evProgram" required>
+          {% for p in programs %}
+            {% set sel = (ev and p.id==ev.program_id) or (not ev and prefill.program_id and p.id==prefill.program_id) %}
+            <option value="{{ p.id }}" {% if sel %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Scope</label>
+        <div class="help">Program-level evidence uses no molecule/batch. Molecule-level uses molecule only. Batch-level uses batch (and should align with the chosen molecule).</div>
+        <div class="grid cols-2">
+          <div class="field">
+            <label>Molecule (optional)</label>
+            <select name="molecule_id" id="evMolecule">
+              <option value="">(none)</option>
+              {% for m in molecules %}
+                {% set sel = (ev and ev.molecule_id==m.id) or (not ev and prefill.molecule_id and prefill.molecule_id==m.id) %}
+                <option value="{{ m.id }}" {% if sel %}selected{% endif %}>{{ m.primary_id }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Batch (optional)</label>
+            <select name="batch_id" id="evBatch">
+              <option value="">(none)</option>
+              {% for b in batches %}
+                {% set sel = (ev and ev.batch_id==b.id) or (not ev and prefill.batch_id and prefill.batch_id==b.id) %}
+                <option value="{{ b.id }}" {% if sel %}selected{% endif %}>{{ b.batch_id }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid cols-3">
+      <div class="field">
+        <label>Domain</label>
+        <select name="domain" id="evDomain" required>
+          {% for d in domains %}
+            <option value="{{ d }}" {% if (ev and ev.domain==d) %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Evidence type</label>
+        <select name="evidence_type" id="evType" required></select>
+      </div>
+      <div class="field">
+        <label>Strength (0–4)</label>
+        <input type="number" min="0" max="4" step="1" name="strength" value="{{ ev.strength if ev else 0 }}" required />
+        <div class="help">Presence threshold is configured in the rules YAML (default: strength ≥ 2).</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Summary</label>
+      <input name="summary" value="{{ ev.summary if ev else '' }}" required placeholder="One sentence claim" />
+    </div>
+
+    <div class="field">
+      <label>Details</label>
+      <textarea name="details" placeholder="Longer narrative / context">{{ ev.details if ev else '' }}</textarea>
+    </div>
+
+    <div class="card" style="margin:0;">
+      <h2>Step 1: Cite existing Data Records</h2>
+      <div class="muted">Required unless you create a new Data Record inline in Step 2.</div>
+
+      <div class="grid cols-2">
+        <div class="field">
+          <label>Filter</label>
+          <input id="drSearch" placeholder="filter by title / data_type / method" />
+          <div class="help">The list is restricted by the registry mapping for the selected evidence type.</div>
+        </div>
+        <div class="field">
+          <label>Eligible Data Records (in scope)</label>
+          <div id="drList" style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:10px;"></div>
+        </div>
+      </div>
+
+      <input type="hidden" name="citation_data_record_ids" id="citationIds" value="" />
+
+      {% if cited_ids %}
+        <div class="notice">Editing: previously cited IDs: {{ cited_ids|join(', ') }}</div>
+      {% endif %}
+    </div>
+
+    <div class="card" style="margin:0;">
+      <h2>Step 2 (optional): Create a new Data Record inline</h2>
+      <div class="field">
+        <label><input type="checkbox" id="inlineToggle" name="create_datarecord_inline" value="1" /> Create a new Data Record and cite it automatically</label>
+      </div>
+
+      <div id="inlineBox" style="display:none;">
+        <div class="grid cols-2">
+          <div class="field">
+            <label>Data title</label>
+            <input name="dr_title" placeholder="e.g., SPR run 2026-01-17" />
+          </div>
+          <div class="field">
+            <label>Run date (optional)</label>
+            <input type="date" name="dr_run_date" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Notes</label>
+          <input name="dr_notes" placeholder="optional" />
+        </div>
+
+        <div class="grid cols-3">
+          <div class="field">
+            <label>Domain</label>
+            <select name="dr_domain" id="drDomain">
+              {% for d in domains %}
+                <option value="{{ d }}">{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Data type</label>
+            <select name="dr_data_type" id="inlineDataType"></select>
+          </div>
+          <div class="field">
+            <label>Method</label>
+            <select name="dr_method" id="inlineMethod"></select>
+          </div>
+        </div>
+
+        <div class="grid cols-2">
+          <div class="card" style="margin:0;">
+            <h3>Parameters</h3>
+            <div id="inlineParams"></div>
+          </div>
+          <div class="card" style="margin:0;">
+            <h3>Results</h3>
+            <div id="inlineResults"></div>
+          </div>
+        </div>
+
+        <input type="hidden" name="dr_params_json" id="inlineParamsJson" value="{}" />
+        <input type="hidden" name="dr_results_json" id="inlineResultsJson" value="{}" />
+
+        <div class="field">
+          <label>Attach files to inline Data Record (optional)</label>
+          <input type="file" name="dr_files" multiple />
+        </div>
+
+        <div class="notice" style="border-color:var(--warn);">
+          Inline creation uses the Evidence scope (program/molecule/batch). If the selected data type requires a batch, you must pick a batch above.
+        </div>
+      </div>
+    </div>
+
+    {% if ev %}
+      <div class="field">
+        <label>Reason (optional, for audit log)</label>
+        <input name="reason" />
+      </div>
+    {% endif %}
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Save Evidence</button>
+      {% if ev %}<a class="btn" href="/evidence/{{ ev.id }}">Cancel</a>{% else %}<a class="btn" href="/evidence">Cancel</a>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const domainMap = {{ domain_evidence_types|tojson }};
+  const preType = "{{ ev.evidence_type if ev else '' }}";
+
+  const domainSel = document.getElementById('evDomain');
+  const typeSel = document.getElementById('evType');
+  const programSel = document.getElementById('evProgram');
+  const molSel = document.getElementById('evMolecule');
+  const batchSel = document.getElementById('evBatch');
+  const drList = document.getElementById('drList');
+  const drSearch = document.getElementById('drSearch');
+  const citationIds = document.getElementById('citationIds');
+
+  const inlineToggle = document.getElementById('inlineToggle');
+  const inlineBox = document.getElementById('inlineBox');
+  const inlineDataType = document.getElementById('inlineDataType');
+  const inlineMethod = document.getElementById('inlineMethod');
+  const inlineParams = document.getElementById('inlineParams');
+  const inlineResults = document.getElementById('inlineResults');
+  const inlineParamsJson = document.getElementById('inlineParamsJson');
+  const inlineResultsJson = document.getElementById('inlineResultsJson');
+  const drDomain = document.getElementById('drDomain');
+
+  let registry = null;
+  let allowed = null;
+  let currentRecords = [];
+
+  function opt(el, value, label){ const o=document.createElement('option'); o.value=value; o.textContent=label; el.appendChild(o); }
+  function clear(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+
+  function populateTypes(){
+    clear(typeSel);
+    const d = domainSel.value;
+    (domainMap[d]||[]).slice().sort().forEach(t=>opt(typeSel, t, t));
+    if(preType && (domainMap[d]||[]).includes(preType)) typeSel.value = preType;
+  }
+
+  async function loadRegistry(){
+    if(!registry) registry = await fetch('/api/registry').then(r=>r.json());
+    return registry;
+  }
+
+  async function refreshAllowed(){
+    const t = typeSel.value;
+    if(!t){ allowed = null; return; }
+    allowed = await fetch(`/api/evidence_allowed_sources?evidence_type=${encodeURIComponent(t)}`).then(r=>r.json());
+  }
+
+  function pairOk(rec){
+    if(!allowed) return true;
+    const dts = allowed.allowed_data_types || [];
+    if(dts.length && !dts.includes(rec.data_type)) return false;
+    const by = allowed.allowed_methods_by_data_type || {};
+    const ms = by[rec.data_type] || [];
+    return ms.length ? ms.includes(rec.method) : true;
+  }
+
+  function renderRecords(){
+    clear(drList);
+    const q = (drSearch.value||'').toLowerCase();
+    const filtered = currentRecords
+      .filter(r=>pairOk(r))
+      .filter(r=>!q || (`${r.title} ${r.data_type} ${r.method}`.toLowerCase().includes(q)));
+
+    if(filtered.length===0){
+      const div=document.createElement('div'); div.className='muted'; div.textContent='No eligible Data Records in scope.'; drList.appendChild(div);
+      return;
+    }
+
+    const pre = new Set({% if cited_ids %}{{ cited_ids|tojson }}{% else %}[]{% endif %});
+
+    filtered.forEach(r=>{
+      const row=document.createElement('div');
+      row.style.display='flex'; row.style.gap='8px'; row.style.alignItems='center'; row.style.marginBottom='6px';
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.value=r.id;
+      if(pre.has(r.id)) cb.checked = true;
+      cb.addEventListener('change', syncCitationIds);
+      const label=document.createElement('label'); label.style.cursor='pointer';
+      label.textContent = `#${r.id} — ${r.title} (${r.data_type}/${r.method})`;
+      row.appendChild(cb); row.appendChild(label);
+      drList.appendChild(row);
+    });
+
+    syncCitationIds();
+  }
+
+  function syncCitationIds(){
+    const ids=[];
+    drList.querySelectorAll('input[type="checkbox"]').forEach(cb=>{ if(cb.checked) ids.push(cb.value); });
+    citationIds.value = ids.join(',');
+  }
+
+  async function fetchRecords(){
+    const pid = programSel.value;
+    const mid = molSel.value;
+    const bid = batchSel.value;
+    const params = new URLSearchParams({program_id:pid});
+    if(mid) params.set('molecule_id', mid);
+    if(bid) params.set('batch_id', bid);
+    const payload = await fetch(`/api/data_records?${params.toString()}`).then(r=>r.json());
+    currentRecords = payload.records || [];
+    renderRecords();
+  }
+
+  function fieldInput(def, value){
+    const wrap = document.createElement('div'); wrap.className='field';
+    const lab = document.createElement('label');
+    lab.textContent = def.label + (def.units?` (${def.units})`:'') + (def.required?' *':'');
+    wrap.appendChild(lab);
+    let inp;
+    if(def.type==='select'){
+      inp=document.createElement('select'); (def.options||[]).forEach(v=>opt(inp,v,v));
+      if(value!=null && value!=='') inp.value=value;
+    } else if(def.type==='number'){
+      inp=document.createElement('input'); inp.type='number'; if(def.step) inp.step=def.step;
+      if(value!=null && value!=='') inp.value=value;
+    } else if(def.type==='date'){
+      inp=document.createElement('input'); inp.type='date'; if(value) inp.value=value;
+    } else {
+      inp=document.createElement('input'); inp.type='text'; if(value!=null && value!=='') inp.value=value;
+    }
+    inp.dataset.key = def.key;
+    if(def.required) inp.required = true;
+    wrap.appendChild(inp);
+    if(def.help){ const h=document.createElement('div'); h.className='help'; h.textContent=def.help; wrap.appendChild(h); }
+    return wrap;
+  }
+
+  function renderInlineSchema(){
+    if(!registry) return;
+    clear(inlineParams); clear(inlineResults);
+    const dt = inlineDataType.value; const m = inlineMethod.value;
+    const schema = (registry.data_schemas||{})[dt] ? (registry.data_schemas||{})[dt][m] : null;
+    (schema?.params_fields||[]).forEach(def=> inlineParams.appendChild(fieldInput(def,'')));
+    (schema?.results_fields||[]).forEach(def=> inlineResults.appendChild(fieldInput(def,'')));
+  }
+
+  function collect(container){
+    const obj={};
+    container.querySelectorAll('[data-key]').forEach(el=>{ if(el.value!=='' && el.value!=null) obj[el.dataset.key]=el.value; });
+    return obj;
+  }
+
+  async function initInline(){
+    await loadRegistry();
+    clear(inlineDataType);
+    Object.keys(registry.data_schemas||{}).slice().sort().forEach(dt=>opt(inlineDataType, dt, dt));
+
+    inlineDataType.addEventListener('change', ()=>{
+      clear(inlineMethod);
+      Object.keys((registry.data_schemas||{})[inlineDataType.value]||{}).slice().sort().forEach(m=>opt(inlineMethod, m, m));
+      renderInlineSchema();
+    });
+    inlineMethod.addEventListener('change', renderInlineSchema);
+
+    inlineDataType.dispatchEvent(new Event('change'));
+  }
+
+  // init
+  populateTypes();
+  loadRegistry().then(initInline);
+
+  domainSel.addEventListener('change', async ()=>{
+    populateTypes();
+    await refreshAllowed();
+    await fetchRecords();
+    drDomain.value = domainSel.value;
+  });
+
+  typeSel.addEventListener('change', async ()=>{
+    await refreshAllowed();
+    await fetchRecords();
+  });
+
+  [programSel, molSel, batchSel].forEach(sel=> sel.addEventListener('change', fetchRecords));
+  drSearch.addEventListener('input', renderRecords);
+
+  inlineToggle.addEventListener('change', ()=>{ inlineBox.style.display = inlineToggle.checked ? 'block' : 'none'; });
+
+  document.getElementById('evForm').addEventListener('submit', ()=>{
+    syncCitationIds();
+    inlineParamsJson.value = JSON.stringify(collect(inlineParams));
+    inlineResultsJson.value = JSON.stringify(collect(inlineResults));
+  });
+
+  // initial
+  drDomain.value = domainSel.value;
+  refreshAllowed().then(fetchRecords);
+})();
+</script>
+{% endblock %}

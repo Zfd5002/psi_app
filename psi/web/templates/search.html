@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Search | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1 style="margin:0;">Search</h1>
+  <div class="muted" style="margin-top:6px;">Searches DataRecord titles/notes/JSON fields, Evidence summary/details, and filenames/SHA256.</div>
+
+  <form method="get" action="/search" class="form" style="margin-top:10px;">
+    <div class="grid cols-2">
+      <div class="field">
+        <label>Query</label>
+        <input name="q" value="{{ q }}" placeholder="e.g. SPR, endotoxin, TCB-001-002, SEC" />
+      </div>
+      <div class="field" style="align-self:flex-end;">
+        <button class="btn primary" type="submit">Search</button>
+      </div>
+    </div>
+  </form>
+
+  {% if q %}
+    <div class="grid cols-2" style="margin-top:12px;">
+      <div class="card" style="margin:0;">
+        <h2 style="margin-top:0;">Data Records ({{ records|length }})</h2>
+        <ul class="clean">
+          {% for r in records %}
+            <li style="margin-bottom:6px;"><a href="/data/{{ r.id }}">Data #{{ r.id }}</a> — {{ r.title }} <span class="muted">({{ r.data_type }}/{{ r.method }})</span></li>
+          {% endfor %}
+          {% if records|length == 0 %}<li class="muted">None.</li>{% endif %}
+        </ul>
+      </div>
+      <div class="card" style="margin:0;">
+        <h2 style="margin-top:0;">Evidence ({{ evidence|length }})</h2>
+        <ul class="clean">
+          {% for e in evidence %}
+            <li style="margin-bottom:6px;"><a href="/evidence/{{ e.id }}">Evidence #{{ e.id }}</a> — {{ e.summary }} <span class="muted">({{ e.evidence_type }}, strength {{ e.strength }})</span></li>
+          {% endfor %}
+          {% if evidence|length == 0 %}<li class="muted">None.</li>{% endif %}
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <h2 style="margin-top:0;">Files ({{ files|length }})</h2>
+      <ul class="clean">
+        {% for f in files %}
+          <li style="margin-bottom:6px;"><a href="/files/{{ f.id }}/download">{{ f.original_name }}</a> <span class="muted">(sha256 {{ f.sha256[:12] }}…, {{ f.size_bytes }} bytes)</span></li>
+        {% endfor %}
+        {% if files|length == 0 %}<li class="muted">None.</li>{% endif %}
+      </ul>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

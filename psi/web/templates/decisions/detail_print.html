@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Decision #{{ snap.id }} (Print) | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="no-print" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1 style="margin:0;">Decision #{{ snap.id }} ({{ snap.decision_key }})</h1>
+      <div class="muted">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
+    </div>
+    <a class="btn" href="/decisions/{{ snap.id }}">Back to interactive view</a>
+  </div>
+
+  <div style="margin-top:0;">
+    <h1 class="print-only" style="display:none;margin:0;">Decision #{{ snap.id }} ({{ snap.decision_key }})</h1>
+    <div class="muted print-only" style="display:none;">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
+  </div>
+
+  {% include "decisions/_decision_body.html" %}
+</div>
+{% endblock %}

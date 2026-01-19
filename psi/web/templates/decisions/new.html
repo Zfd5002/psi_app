@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Run Decision | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1 style="margin:0;">Run Decision</h1>
+  <div class="muted" style="margin-top:6px;">Rules: {{ rules_version }} · Evidence is scored deterministically from max strength per evidence type.</div>
+
+  <form class="form" method="post" action="/decisions/new">
+    <div class="grid cols-2">
+      <div class="field">
+        <label>Program</label>
+        <select name="program_id" id="pSel" required>
+          {% for p in programs %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Decision</label>
+        <select name="decision_key" required>
+          {% for k in decision_keys %}
+            <option value="{{ k }}">{{ k }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="field">
+        <label>Molecule (optional)</label>
+        <select name="molecule_id" id="mSel">
+          <option value="">(none)</option>
+          {% for m in molecules %}
+            <option value="{{ m.id }}" data-program="{{ m.program_id }}">{{ m.primary_id }}</option>
+          {% endfor %}
+        </select>
+        <div class="help">Scope includes program-level evidence + molecule-level (if selected).</div>
+      </div>
+      <div class="field">
+        <label>Batch (optional)</label>
+        <select name="batch_id" id="bSel">
+          <option value="">(none)</option>
+          {% for b in batches %}
+            <option value="{{ b.id }}" data-molecule="{{ b.molecule_id }}">{{ b.batch_id }}</option>
+          {% endfor %}
+        </select>
+        <div class="help">If a batch is selected, scope includes program + molecule + batch evidence.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label><input type="checkbox" name="assumptions_ack" value="yes" required /> I acknowledge assumptions and that PSI is deterministic and only as strong as the cited evidence.</label>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Run & Save Snapshot</button>
+      <a class="btn" href="/decisions">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const pSel = document.getElementById('pSel');
+  const mSel = document.getElementById('mSel');
+  const bSel = document.getElementById('bSel');
+
+  function filterMolecules(){
+    const pid = pSel.value;
+    Array.from(mSel.options).forEach(o=>{
+      if(!o.value) return;
+      o.hidden = (o.dataset.program !== pid);
+    });
+    if(mSel.selectedOptions[0] && mSel.selectedOptions[0].hidden){ mSel.value=''; }
+    filterBatches();
+  }
+
+  function filterBatches(){
+    const mid = mSel.value;
+    Array.from(bSel.options).forEach(o=>{
+      if(!o.value) return;
+      o.hidden = (mid && o.dataset.molecule !== mid);
+    });
+    if(bSel.selectedOptions[0] && bSel.selectedOptions[0].hidden){ bSel.value=''; }
+  }
+
+  pSel.addEventListener('change', filterMolecules);
+  mSel.addEventListener('change', filterBatches);
+  filterMolecules();
+})();
+</script>
+{% endblock %}

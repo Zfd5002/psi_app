@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{% if molecule %}Edit Molecule{% else %}New Molecule{% endif %} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{% if molecule %}Edit Molecule{% else %}New Molecule{% endif %}</h1>
+  <form class="form" method="post" action="{% if molecule %}/molecules/{{ molecule.id }}/edit{% else %}/molecules/new{% endif %}">
+    <div class="field">
+      <label>Program</label>
+      <select name="program_id" required>
+        {% for p in programs %}
+          <option value="{{ p.id }}" {% if molecule and p.id==molecule.program_id %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Primary ID</label>
+      <input name="primary_id" value="{{ molecule.primary_id if molecule else '' }}" required placeholder="TCB-001" />
+      <div class="help">Stable identifier used for batch auto-increment (e.g., TCB-001-001).</div>
+    </div>
+    <div class="field">
+      <label>Title (optional)</label>
+      <input name="title" value="{{ molecule.title if molecule else '' }}" placeholder="e.g., anti-GLP-1R Fab-CKA" />
+    </div>
+    <div class="field">
+      <label>Molecule format</label>
+      <select name="molecule_format" id="molecule_format">
+        <option value="" {% if molecule and not molecule.molecule_format %}selected{% endif %}>Legacy / Unstructured</option>
+        <option value="IgG" {% if molecule and molecule.molecule_format=='IgG' %}selected{% endif %}>IgG</option>
+        <option value="scFv" {% if molecule and molecule.molecule_format=='scFv' %}selected{% endif %}>scFv</option>
+      </select>
+      <div class="help">Format-first entry: choose IgG or scFv to enable role-specific sequence inputs. Legacy keeps a single raw sequence blob.</div>
+    </div>
+
+    <div class="field">
+      <label>Description (user)</label>
+      <textarea name="description_user" placeholder="Optional user-provided description">{{ (molecule.description_user or molecule.description) if molecule else '' }}</textarea>
+      <input type="hidden" name="description" value="{{ molecule.description if molecule else '' }}" />
+      <div class="help">User description overrides auto-generated description. (Legacy description is still stored for compatibility.)</div>
+    </div>
+
+    <div class="field" id="structured_inputs" style="display:none;">
+      <label>Structured sequence inputs</label>
+      <div class="help">Paste amino-acid sequences (no DNA). FASTA headers are optional.</div>
+
+      <div id="igg_fields" style="display:none;">
+        <div class="grid2">
+          <div>
+            <label class="mini">HC1 (required)</label>
+            <textarea name="HC1" rows="4" placeholder=">HC1\n...">{{ components.get('HC1','') if components is defined else '' }}</textarea>
+          </div>
+          <div>
+            <label class="mini">LC1 (required)</label>
+            <textarea name="LC1" rows="4" placeholder=">LC1\n...">{{ components.get('LC1','') if components is defined else '' }}</textarea>
+          </div>
+          <div>
+            <label class="mini">HC2 (optional)</label>
+            <textarea name="HC2" rows="4" placeholder=">HC2\n...">{{ components.get('HC2','') if components is defined else '' }}</textarea>
+            <div class="help">If blank, HC2 is inferred = HC1.</div>
+          </div>
+          <div>
+            <label class="mini">LC2 (optional)</label>
+            <textarea name="LC2" rows="4" placeholder=">LC2\n...">{{ components.get('LC2','') if components is defined else '' }}</textarea>
+            <div class="help">If blank, LC2 is inferred = LC1 (common light chain).</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="scfv_fields" style="display:none;">
+        <div class="grid2">
+          <div>
+            <label class="mini">VH (required)</label>
+            <textarea name="VH" rows="4" placeholder=">VH\n...">{{ components.get('VH','') if components is defined else '' }}</textarea>
+          </div>
+          <div>
+            <label class="mini">VL (required)</label>
+            <textarea name="VL" rows="4" placeholder=">VL\n...">{{ components.get('VL','') if components is defined else '' }}</textarea>
+          </div>
+        </div>
+        <div class="help">GS linker detection and conceptual VH–linker–VL assembly are handled automatically during computed annotation.</div>
+      </div>
+
+      <div class="field">
+        <label>Paste FASTA bundle helper (optional)</label>
+        <textarea name="fasta_bundle" rows="6" placeholder=">HC1\n...\n>LC1\n...\n>HC2\n...\n>LC2\n...\n(or >VH / >VL)"></textarea>
+        <div class="help">If role-specific fields are empty, PSI will best-effort assign sequences based on FASTA headers (e.g., &gt;HC1, &gt;VH).</div>
+      </div>
+
+      <div class="field">
+        <label>Fusion sequence (optional)</label>
+        <textarea name="fusion" rows="3" placeholder=">fusion\n...">{{ components.get('fusion','') if components is defined else '' }}</textarea>
+        <div class="help">If present, PSI will classify architecture as IgG/scFv + fusion. (No structure predictions in v1.01.)</div>
+      </div>
+    </div>
+
+    <div class="field" id="legacy_sequences">
+      <label>Legacy sequences (raw)</label>
+      <textarea name="sequences" placeholder="FASTA / notes">{{ molecule.sequences if molecule else '' }}</textarea>
+      <div class="help">For legacy/unstructured molecules, this raw blob is stored as-is and treated as a single fusion/unknown component until you edit into structured format.</div>
+    </div>
+
+    <div class="field">
+      <label><input type="checkbox" name="heavy_compute_enabled" {% if molecule and molecule.heavy_compute_enabled %}checked{% endif %}/> Enable heavy compute for this molecule</label>
+      <div class="help">Requires global config PSI_ENABLE_HEAVY_COMPUTE=1. Heavy predictors are extension-based and default OFF.</div>
+    </div>
+    {% if molecule %}
+    <div class="field">
+      <label>Reason (optional, for audit log)</label>
+      <input name="reason" />
+    </div>
+    {% endif %}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Save</button>
+      {% if molecule %}
+        <a class="btn" href="/molecules/{{ molecule.id }}">Cancel</a>
+      {% else %}
+        <a class="btn" href="/molecules">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<script>
+  function updateFormatUI() {
+    const fmt = document.getElementById('molecule_format').value;
+    const structured = document.getElementById('structured_inputs');
+    const legacy = document.getElementById('legacy_sequences');
+    const igg = document.getElementById('igg_fields');
+    const scfv = document.getElementById('scfv_fields');
+    if (fmt === 'IgG' || fmt === 'scFv') {
+      structured.style.display = '';
+      legacy.style.display = 'none';
+      igg.style.display = (fmt === 'IgG') ? '' : 'none';
+      scfv.style.display = (fmt === 'scFv') ? '' : 'none';
+    } else {
+      structured.style.display = 'none';
+      legacy.style.display = '';
+      igg.style.display = 'none';
+      scfv.style.display = 'none';
+    }
+  }
+  document.getElementById('molecule_format').addEventListener('change', updateFormatUI);
+  updateFormatUI();
+</script>
+{% endblock %}

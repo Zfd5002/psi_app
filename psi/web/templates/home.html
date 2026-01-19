@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}PSI{% endblock %}
+{% block content %}
+<div class="grid cols-2">
+  <div class="card">
+    <h1>Preclinical Systems Intelligence</h1>
+    <p class="muted">Traceable ELN + deterministic decisions. Everything ties back to <b>Molecule</b> and <b>Batch</b>.</p>
+    <div class="grid cols-2">
+      <a class="btn primary" href="/programs/new">New Program</a>
+      <a class="btn primary" href="/molecules/new">New Molecule</a>
+      <a class="btn primary" href="/batches/new">New Batch</a>
+      <a class="btn primary" href="/data/new">New Data Record</a>
+      <a class="btn primary" href="/evidence/new">New Evidence</a>
+      <a class="btn primary" href="/decisions/new">Run Decision</a>
+    </div>
+    <div class="notice" style="margin-top:12px;">
+      Tip: Create a batch first (auto-incremented like <code>TCB-001-001</code>). Most lab data requires a batch.
+    </div>
+  </div>
+  <div class="card">
+    <h2>Recent</h2>
+    <div class="grid cols-3">
+      <div>
+        <div class="muted">Programs</div>
+        {% for p in programs %}
+          <div><a href="/programs/{{ p.id }}">{{ p.name }}</a></div>
+        {% else %}
+          <div class="muted">(none)</div>
+        {% endfor %}
+      </div>
+      <div>
+        <div class="muted">Molecules</div>
+        {% for m in molecules %}
+          <div><a href="/molecules/{{ m.id }}">{{ m.primary_id }}</a></div>
+        {% else %}
+          <div class="muted">(none)</div>
+        {% endfor %}
+      </div>
+      <div>
+        <div class="muted">Batches</div>
+        {% for b in batches %}
+          <div><a href="/batches/{{ b.id }}">{{ b.batch_id }}</a></div>
+        {% else %}
+          <div class="muted">(none)</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

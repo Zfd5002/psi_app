@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Evidence | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <h1>Evidence</h1>
+    <a class="btn primary" href="/evidence/new">New Evidence</a>
+  </div>
+  <table class="table">
+    <thead><tr><th>ID</th><th>Type</th><th>Domain</th><th>Strength</th><th>Program</th><th>Molecule</th><th>Batch</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for e in evidence %}
+      <tr>
+        <td class="muted">{{ e.id }}</td>
+        <td><a href="/evidence/{{ e.id }}">{{ e.evidence_type }}</a></td>
+        <td class="muted">{{ e.domain }}</td>
+        <td>{{ e.strength }}</td>
+        <td class="muted">{{ e.program.name }}</td>
+        <td class="muted">{% if e.molecule %}<a href="/molecules/{{ e.molecule.id }}">{{ e.molecule.primary_id }}</a>{% else %}-{% endif %}</td>
+        <td class="muted">{% if e.batch %}<a href="/batches/{{ e.batch.id }}">{{ e.batch.batch_id }}</a>{% else %}-{% endif %}</td>
+        <td class="muted">{{ e.created_at }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">No evidence yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

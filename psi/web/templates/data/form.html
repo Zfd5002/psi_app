@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}{% if record %}Edit Data Record{% else %}New Data Record{% endif %} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{% if record %}Edit Data Record{% else %}New Data Record{% endif %}</h1>
+  <form id="dataForm" class="form" method="post" action="{% if record %}/data/{{ record.id }}/edit{% else %}/data/new{% endif %}" enctype="multipart/form-data">
+    <div class="grid cols-2">
+      <div class="field">
+        <label>Program</label>
+        <select name="program_id" id="programSel" required>
+          {% for p in programs %}
+            <option value="{{ p.id }}" {% if (record and p.id==record.program_id) or (not record and p.id==selected_program_id) %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Run date (optional)</label>
+        <input type="date" name="run_date" value="{{ record.run_date if record and record.run_date else '' }}" />
+      </div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="field">
+        <label>Molecule (optional for program-level docs)</label>
+        <select name="molecule_id" id="moleculeSel">
+          <option value="">(none)</option>
+          {% for m in molecules %}
+            <option value="{{ m.id }}" {% if record and record.molecule_id==m.id %}selected{% endif %}>{{ m.primary_id }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Batch (required for most experimental data)</label>
+        <select name="batch_id" id="batchSel">
+          <option value="">(none)</option>
+          {% for b in batches %}
+            <option value="{{ b.id }}" {% if (record and record.batch_id==b.id) or (not record and b.id==selected_batch_id) %}selected{% endif %}>{{ b.batch_id }}</option>
+          {% endfor %}
+        </select>
+        <div class="help">Enforced by UI registry for experimental data types (Binding, CellAssay, InVivo, CMC_Analytics).</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Title</label>
+      <input name="title" value="{{ record.title if record else '' }}" required />
+    </div>
+
+    <div class="grid cols-3">
+      <div class="field">
+        <label>Domain</label>
+        <select name="domain" id="domainSel" required>
+          {% for d in domains %}
+            <option value="{{ d }}" {% if record and record.domain==d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Data type</label>
+        <select name="data_type" id="dataTypeSel" required></select>
+      </div>
+      <div class="field">
+        <label>Method</label>
+        <select name="method" id="methodSel" required></select>
+      </div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="card" style="margin:0;">
+        <h3>Parameters</h3>
+        <div id="paramsFields"></div>
+      </div>
+      <div class="card" style="margin:0;">
+        <h3>Results</h3>
+        <div id="resultsFields"></div>
+      </div>
+    </div>
+
+    <input type="hidden" name="params_json" id="paramsJson" value='{{ record.params_json if record and record.params_json else "{}" }}' />
+    <input type="hidden" name="results_json" id="resultsJson" value='{{ record.results_json if record and record.results_json else "{}" }}' />
+
+    <div class="field">
+      <label>Notes</label>
+      <textarea name="notes">{{ record.notes if record else '' }}</textarea>
+    </div>
+
+    <div class="field">
+      <label>Attach files (optional)</label>
+      <input type="file" name="files" multiple />
+      <div class="help">Unlimited files. Stored under <code>./uploads/</code> with SHA256 tracked in SQLite.</div>
+    </div>
+
+    {% if record %}
+    <div class="field">
+      <label>Reason (optional, for audit log)</label>
+      <input name="reason" />
+    </div>
+    {% endif %}
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Save</button>
+      {% if record %}
+        <a class="btn" href="/data/{{ record.id }}">Cancel</a>
+      {% else %}
+        <a class="btn" href="/data">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async function(){
+  const registry = await fetch('/api/registry').then(r=>r.json());
+  const schemas = registry.data_schemas || {};
+  const requiringBatch = new Set(registry.data_types_requiring_batch || []);
+
+  const domainSel = document.getElementById('domainSel');
+  const dataTypeSel = document.getElementById('dataTypeSel');
+  const methodSel = document.getElementById('methodSel');
+  const paramsFields = document.getElementById('paramsFields');
+  const resultsFields = document.getElementById('resultsFields');
+  const batchSel = document.getElementById('batchSel');
+  const paramsJson = document.getElementById('paramsJson');
+  const resultsJson = document.getElementById('resultsJson');
+
+  function opt(el, value, label){
+    const o = document.createElement('option');
+    o.value = value; o.textContent = label;
+    el.appendChild(o);
+  }
+
+  function clear(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+
+  function fieldInput(def, value){
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const lab = document.createElement('label');
+    lab.textContent = def.label + (def.units ? ` (${def.units})` : '') + (def.required ? ' *' : '');
+    wrap.appendChild(lab);
+
+    let inp;
+    if(def.type === 'select'){
+      inp = document.createElement('select');
+      (def.options||[]).forEach(v=> opt(inp, v, v));
+      if(value!=null && value!=='') inp.value = value;
+    } else if(def.type === 'number'){
+      inp = document.createElement('input');
+      inp.type = 'number';
+      if(def.step) inp.step = def.step;
+      if(value!=null && value!=='') inp.value = value;
+    } else if(def.type === 'date'){
+      inp = document.createElement('input');
+      inp.type = 'date';
+      if(value) inp.value = value;
+    } else {
+      inp = document.createElement('input');
+      inp.type = 'text';
+      if(value!=null && value!=='') inp.value = value;
+    }
+    inp.dataset.key = def.key;
+    if(def.required) inp.required = true;
+
+    wrap.appendChild(inp);
+    if(def.help){
+      const h = document.createElement('div');
+      h.className = 'help';
+      h.textContent = def.help;
+      wrap.appendChild(h);
+    }
+    return wrap;
+  }
+
+  function renderFields(container, defs, existingObj){
+    clear(container);
+    (defs||[]).forEach(def=>{
+      const val = existingObj ? existingObj[def.key] : '';
+      container.appendChild(fieldInput(def, val));
+    });
+  }
+
+  function currentSchema(){
+    const dt = dataTypeSel.value;
+    const m = methodSel.value;
+    return (schemas[dt] && schemas[dt][m]) ? schemas[dt][m] : null;
+  }
+
+  function populateDataTypes(){
+    clear(dataTypeSel);
+    const keys = Object.keys(schemas).sort();
+    keys.forEach(k=> opt(dataTypeSel, k, k));
+
+    const preDt = "{{ record.data_type if record else '' }}";
+    if(preDt && schemas[preDt]) dataTypeSel.value = preDt;
+    populateMethods();
+  }
+
+  function populateMethods(){
+    clear(methodSel);
+    const dt = dataTypeSel.value;
+    const methods = dt && schemas[dt] ? Object.keys(schemas[dt]).sort() : [];
+    methods.forEach(m=> opt(methodSel, m, m));
+
+    const preM = "{{ record.method if record else '' }}";
+    if(preM && methods.includes(preM)) methodSel.value = preM;
+    renderSchema();
+  }
+
+  function enforceBatchRequirement(){
+    const dt = dataTypeSel.value;
+    if(requiringBatch.has(dt)){
+      batchSel.required = true;
+    } else {
+      batchSel.required = false;
+    }
+  }
+
+  function renderSchema(){
+    enforceBatchRequirement();
+    let pObj = {};
+    let rObj = {};
+    try{ pObj = JSON.parse(paramsJson.value || '{}'); }catch(e){}
+    try{ rObj = JSON.parse(resultsJson.value || '{}'); }catch(e){}
+    const s = currentSchema();
+    renderFields(paramsFields, s ? s.params_fields : [], pObj);
+    renderFields(resultsFields, s ? s.results_fields : [], rObj);
+  }
+
+  function collect(container){
+    const obj = {};
+    container.querySelectorAll('[data-key]').forEach(el=>{
+      const k = el.dataset.key;
+      const v = el.value;
+      if(v!=='' && v!=null) obj[k] = v;
+    });
+    return obj;
+  }
+
+  // init
+  populateDataTypes();
+  dataTypeSel.addEventListener('change', populateMethods);
+  methodSel.addEventListener('change', renderSchema);
+
+  document.getElementById('dataForm').addEventListener('submit', (ev)=>{
+    paramsJson.value = JSON.stringify(collect(paramsFields));
+    resultsJson.value = JSON.stringify(collect(resultsFields));
+  });
+})();
+</script>
+{% endblock %}

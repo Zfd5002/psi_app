@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Lab Notebook | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <h1>Data Records</h1>
+    <a class="btn primary" href="/data/new">New Data Record</a>
+  </div>
+  <table class="table">
+    <thead><tr><th>ID</th><th>Title</th><th>Program</th><th>Molecule</th><th>Batch</th><th>Domain</th><th>Type/Method</th><th>Run date</th></tr></thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td class="muted">{{ r.id }}</td>
+        <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
+        <td class="muted">{{ r.program.name }}</td>
+        <td class="muted">{% if r.molecule %}<a href="/molecules/{{ r.molecule.id }}">{{ r.molecule.primary_id }}</a>{% else %}-{% endif %}</td>
+        <td class="muted">{% if r.batch %}<a href="/batches/{{ r.batch.id }}">{{ r.batch.batch_id }}</a>{% else %}-{% endif %}</td>
+        <td class="muted">{{ r.domain }}</td>
+        <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
+        <td class="muted">{{ r.run_date or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">No data records yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

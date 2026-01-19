@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ program.name }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1>{{ program.name }}</h1>
+      <p class="muted">{{ program.description or '' }}</p>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
+      <a class="btn primary" href="/molecules/new?program_id={{ program.id }}">New Molecule</a>
+      <a class="btn" href="/programs/{{ program.id }}/edit">Edit</a>
+    </div>
+  </div>
+
+  <div class="tabs no-print">
+    <a class="tab active" href="#overview">Overview</a>
+    <a class="tab" href="#audit">Audit</a>
+  </div>
+
+  <h2 id="overview">Program dashboard</h2>
+  <div class="grid cols-2">
+    <div>
+      <h3>Molecules</h3>
+      <ul>
+        {% for m in molecules %}
+          <li><a href="/molecules/{{ m.id }}">{{ m.primary_id }}</a> <span class="muted">{{ m.title or '' }}</span></li>
+        {% else %}
+          <li class="muted">(none)</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h3>Recent batches</h3>
+      <ul>
+        {% for b in recent_batches %}
+          <li><a href="/batches/{{ b.id }}">{{ b.batch_id }}</a> <span class="muted">(molecule {{ b.molecule.primary_id }})</span></li>
+        {% else %}
+          <li class="muted">(none)</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid cols-3">
+    <div>
+      <h3>Recent lab entries</h3>
+      <ul>
+        {% for r in recent_data %}
+          <li><a href="/data/{{ r.id }}">{{ r.title }}</a> <span class="muted">{{ r.data_type }}/{{ r.method }}</span></li>
+        {% else %}
+          <li class="muted">(none)</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h3>Recent evidence</h3>
+      <ul>
+        {% for e in recent_evidence %}
+          <li><a href="/evidence/{{ e.id }}">{{ e.evidence_type }}</a> <span class="muted">s={{ e.strength }}</span></li>
+        {% else %}
+          <li class="muted">(none)</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h3>Recent decisions</h3>
+      <ul>
+        {% for d in recent_decisions %}
+          <li><a href="/decisions/{{ d.id }}">{{ d.decision_key }}</a> <span class="muted">{{ d.created_at }}</span></li>
+        {% else %}
+          <li class="muted">(none)</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="audit">Audit</h2>
+  {% include "partials/audit_table.html" %}
+</div>
+{% endblock %}

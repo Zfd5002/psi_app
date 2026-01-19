@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+from .fasta import normalize_aa_sequence
+
+
+SUPPORTED_SCHEMES = ["kabat", "imgt", "chothia"]
+
+
+@dataclass
+class NumberingResult:
+    scheme: str
+    chain_type: str  # VH | VL
+    positions: Dict[str, str]  # position -> residue
+    cdrs: Dict[str, Any]
+    spans: Dict[str, Any]
+    warnings: List[str]
+
+
+def _abnumber_available() -> bool:
+    try:
+        import abnumber  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+def number_variable_domain(seq: str, *, scheme: str = "kabat") -> Optional[NumberingResult]:
+    """Number a VH/VL variable domain using abnumber (preferred).
+
+    Returns None if numbering is unavailable.
+    """
+    s = normalize_aa_sequence(seq)
+    if not s:
+        return None
+    scheme_l = (scheme or "kabat").lower()
+    if scheme_l not in SUPPORTED_SCHEMES:
+        scheme_l = "kabat"
+
+    try:
+        from abnumber import Chain  # type: ignore
+
+        ch = Chain(s, scheme=scheme_l)
+        ctype = "VH" if ch.chain_type == "H" else "VL"
+        # position labels are already scheme-specific (including insertions)
+        pos_map: Dict[str, str] = {str(p): aa for p, aa in ch.positions.items()}
+
+        cdrs = {
+            "CDR1": str(ch.cdr1.seq) if ch.cdr1 else "",
+            "CDR2": str(ch.cdr2.seq) if ch.cdr2 else "",
+            "CDR3": str(ch.cdr3.seq) if ch.cdr3 else "",
+            "FR1": str(ch.fr1.seq) if ch.fr1 else "",
+            "FR2": str(ch.fr2.seq) if ch.fr2 else "",
+            "FR3": str(ch.fr3.seq) if ch.fr3 else "",
+            "FR4": str(ch.fr4.seq) if ch.fr4 else "",
+        }
+        spans = {
+            "variable_start": int(ch.alignment.query_start),
+            "variable_end": int(ch.alignment.query_end),
+        }
+        warnings: List[str] = []
+        if getattr(ch, "warnings", None):
+            warnings.extend([str(w) for w in ch.warnings])
+
+        return NumberingResult(
+            scheme=scheme_l,
+            chain_type=ctype,
+            positions=pos_map,
+            cdrs=cdrs,
+            spans=spans,
+            warnings=warnings,
+        )
+    except Exception as e:
+        # Graceful failure: treat as unavailable
+        return NumberingResult(
+            scheme=scheme_l,
+            chain_type="unknown",
+            positions={},
+            cdrs={},
+            spans={},
+            warnings=[f"Numbering unavailable: {e}"],
+        )

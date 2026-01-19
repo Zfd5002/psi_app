@@ -1,0 +1,42 @@
+version: 0.1.0
+presence_threshold: 2
+
+domains:
+  Biological:
+    evidence_types: [Binding_Affinity, InVitro_Potency, InVivo_Efficacy]
+  CMC:
+    evidence_types: [Purity_SEC, Aggregation_HMW]
+  Execution:
+    evidence_types: [CRO_Quote, Study_Protocol, Safety_RedFlag]
+
+scoring:
+  required_present_count_by_score:
+    1: 1
+    2: 2
+    3: 3
+    4: 3
+
+ceilings:
+  - domain: CMC
+    if_missing_any: [Purity_SEC]
+    cap: 2
+
+hard_stops:
+  - evidence_type: Safety_RedFlag
+    triggers_if_strength_gte: 3
+
+decisions:
+  D1:
+    title: In Vivo Ready
+    min_domain_scores:
+      Biological: 2
+      CMC: 1
+      Execution: 1
+    hard_stops: [Safety_RedFlag]
+  D2:
+    title: IND-Enabling Ready
+    min_domain_scores:
+      Biological: 3
+      CMC: 2
+      Execution: 2
+    hard_stops: [Safety_RedFlag]
