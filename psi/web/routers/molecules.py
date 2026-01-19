@@ -149,7 +149,18 @@ async def create_molecule(request: Request, background_tasks: BackgroundTasks, d
 def molecule_detail(molecule_id: int, request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
     try:
-        ctx = svc.get_molecule_detail(db, molecule_id)
+        mm = request.query_params.get("pdl1_mm", "")
+        try:
+            pdl1_mm = int(mm) if str(mm).strip() != "" else 0
+        except Exception:
+            pdl1_mm = 0
+        # Clamp to a small, safe range for UI.
+        if pdl1_mm < 0:
+            pdl1_mm = 0
+        if pdl1_mm > 25:
+            pdl1_mm = 25
+
+        ctx = svc.get_molecule_detail(db, molecule_id, pdl1_allowed_mismatches=pdl1_mm)
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request

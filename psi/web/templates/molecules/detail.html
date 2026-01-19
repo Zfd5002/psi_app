@@ -182,25 +182,111 @@
     </tbody>
   </table>
   <h2 id="domains">Domains & Labels</h2>
-  <p class="muted">Auto-extracted domains and user-defined label spans. User edits always override auto extraction.</p>
+  <p class="muted">Sequence-aligned feature tracks (domains + reference matches). Click a feature to highlight its residues.</p>
 
-  <table class="table">
-    <thead><tr><th>Component</th><th>Domain type</th><th>Span</th><th>Source</th><th>Status</th><th>Notes</th></tr></thead>
-    <tbody>
-      {% for di in domain_instances %}
-        <tr>
-          <td class="muted">{{ di.component.role }}</td>
-          <td>{{ di.domain_type }}</td>
-          <td class="muted">[{{ di.start_idx }}, {{ di.end_idx }})</td>
-          <td class="muted">{{ di.source }}</td>
-          <td>{{ di.status }}</td>
-          <td class="muted">{% if di.error %}{{ di.error }}{% endif %}</td>
-        </tr>
+  <div class="card no-print" style="margin:10px 0;">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <div class="muted"><strong>PD-L1 scan</strong> (substitutions-only; no indels)</div>
+      <form method="get" action="/molecules/{{ molecule.id }}" style="display:flex;gap:8px;align-items:center;">
+        <label class="muted" style="margin:0;">Allowed mismatches</label>
+        <select name="pdl1_mm" id="pdl1_mm">
+          {% for n in [0,1,2,3,4,5,8,10,15,20,25] %}
+            <option value="{{ n }}" {% if (pdl1_allowed_mismatches|default(0))==n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn" type="submit">Update</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns: 1fr 320px; gap:14px;">
+    <div>
+      {% for t in feature_tracks %}
+        <div class="card" style="margin:12px 0;">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div>
+              <strong>{{ t.role }}</strong>
+              <span class="muted">· length={{ t.length }}</span>
+            </div>
+            <div class="muted mini">click-drag on residues to select</div>
+          </div>
+
+          <div class="seq-scroll" data-component-id="{{ t.component_id }}" style="--len: {{ t.length }};">
+            {% for lane in t.lanes %}
+              <div class="lane">
+                <div class="lane-label muted">{{ lane.lane_name }}</div>
+                <div class="lane-grid" style="grid-template-columns: repeat({{ t.length }}, 1ch);">
+                  {% for f in lane.features %}
+                    <div
+                      class="feature-bar feat-{{ f.feature_type }}"
+                      style="grid-column: {{ f.start_idx + 1 }} / {{ f.end_idx + 1 }};"
+                      data-feature='{{ f | tojson }}'
+                      title="{{ f.name }} [{{ f.start_idx }}, {{ f.end_idx }})"
+                      tabindex="0"
+                    >
+                      {{ f.name }}
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% else %}
+              <div class="muted" style="margin:8px 0;">No feature tracks for this component yet.</div>
+            {% endfor %}
+
+            <div class="lane">
+              <div class="lane-label muted">Sequence</div>
+              <div class="seq-grid" style="grid-template-columns: repeat({{ t.length }}, 1ch);">
+                {% for aa in t.sequence %}
+                  <span class="residue" data-pos="{{ loop.index0 }}">{{ aa }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
       {% else %}
-        <tr><td colspan="6" class="muted">No domain labels yet (domain extraction runs automatically for structured molecules).</td></tr>
+        <div class="muted">No structured components for this molecule (add components on Edit, or set molecule format to IgG/scFv).</div>
       {% endfor %}
-    </tbody>
-  </table>
+
+      <details style="margin-top:12px;">
+        <summary class="muted">Show raw domain instances table (debug)</summary>
+        <table class="table" style="margin-top:10px;">
+          <thead><tr><th>Component</th><th>Domain type</th><th>Span</th><th>Source</th><th>Status</th><th>Notes</th></tr></thead>
+          <tbody>
+            {% for di in domain_instances %}
+              <tr>
+                <td class="muted">{{ di.component.role }}</td>
+                <td>{{ di.domain_type }}</td>
+                <td class="muted">[{{ di.start_idx }}, {{ di.end_idx }})</td>
+                <td class="muted">{{ di.source }}</td>
+                <td>{{ di.status }}</td>
+                <td class="muted">{% if di.error %}{{ di.error }}{% endif %}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6" class="muted">No domain labels yet (domain extraction runs automatically for structured molecules).</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    </div>
+
+    <div>
+      <div class="card" id="feature_meta">
+        <h3 style="margin-top:0;">Selection</h3>
+        <div class="muted" id="feature_meta_hint">Click a feature bar (or select residues) to see details.</div>
+        <div id="feature_meta_body" style="display:none;">
+          <div class="kv" style="grid-template-columns:110px 1fr;">
+            <div class="k">Component</div><div id="meta_component"></div>
+            <div class="k">Name</div><div id="meta_name"></div>
+            <div class="k">Type</div><div id="meta_type"></div>
+            <div class="k">Span</div><div id="meta_span"></div>
+            <div class="k">Tool</div><div id="meta_tool"></div>
+            <div class="k">Method</div><div id="meta_method"></div>
+            <div class="k">Meta</div><div><pre id="meta_json" style="white-space:pre-wrap;margin:0;"></pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="card no-print" style="margin-top:10px;">
     <h3>Add or override a label span</h3>
@@ -261,4 +347,98 @@
   <h2 id="audit">Audit</h2>
   {% include "partials/audit_table.html" %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const metaHint = document.getElementById('feature_meta_hint');
+  const metaBody = document.getElementById('feature_meta_body');
+  const metaComp = document.getElementById('meta_component');
+  const metaName = document.getElementById('meta_name');
+  const metaType = document.getElementById('meta_type');
+  const metaSpan = document.getElementById('meta_span');
+  const metaTool = document.getElementById('meta_tool');
+  const metaMethod = document.getElementById('meta_method');
+  const metaJson = document.getElementById('meta_json');
+
+  function clearSelection(compEl){
+    compEl.querySelectorAll('.residue.selected').forEach(el => el.classList.remove('selected'));
+  }
+
+  function selectRange(compEl, startIdx, endIdx){
+    const s = Math.max(0, parseInt(startIdx||0));
+    const e = Math.max(s, parseInt(endIdx||0));
+    clearSelection(compEl);
+    const residues = compEl.querySelectorAll('.residue');
+    for(let i=s; i<e && i<residues.length; i++){
+      residues[i].classList.add('selected');
+    }
+  }
+
+  function showMeta(compEl, payload){
+    const role = (compEl.closest('.card')?.querySelector('strong')?.textContent || '').trim();
+    metaComp.textContent = role;
+    metaName.textContent = payload.name || '(selection)';
+    metaType.textContent = payload.feature_type || payload.type || 'range';
+    metaSpan.textContent = `[${payload.start_idx}, ${payload.end_idx})`;
+    const tool = (payload.tool_name ? payload.tool_name : '');
+    const ver = (payload.tool_version ? `@${payload.tool_version}` : '');
+    metaTool.textContent = tool + ver;
+    metaMethod.textContent = payload.method || '';
+    metaJson.textContent = payload.meta ? JSON.stringify(payload.meta, null, 2) : '';
+
+    if(metaHint) metaHint.style.display = 'none';
+    if(metaBody) metaBody.style.display = 'block';
+  }
+
+  document.querySelectorAll('.seq-scroll').forEach((compEl) => {
+    // Feature clicks
+    compEl.querySelectorAll('.feature-bar').forEach((bar) => {
+      bar.addEventListener('click', () => {
+        let payload = {};
+        try{ payload = JSON.parse(bar.dataset.feature || '{}'); }catch(e){ payload = {}; }
+        if(typeof payload.start_idx === 'number' && typeof payload.end_idx === 'number'){
+          selectRange(compEl, payload.start_idx, payload.end_idx);
+          showMeta(compEl, payload);
+        }
+      });
+    });
+
+    // Residue selection (click-drag)
+    let dragging = false;
+    let anchor = null;
+    compEl.addEventListener('mousedown', (ev) => {
+      const t = ev.target;
+      if(!t || !t.classList || !t.classList.contains('residue')) return;
+      dragging = true;
+      anchor = parseInt(t.dataset.pos || '0');
+      const payload = {name:'(manual selection)', feature_type:'range', start_idx:anchor, end_idx:anchor+1, tool_name:'', tool_version:'', method:'', meta:{}};
+      selectRange(compEl, payload.start_idx, payload.end_idx);
+      showMeta(compEl, payload);
+      ev.preventDefault();
+    });
+    compEl.addEventListener('mouseover', (ev) => {
+      if(!dragging) return;
+      const t = ev.target;
+      if(!t || !t.classList || !t.classList.contains('residue')) return;
+      const cur = parseInt(t.dataset.pos || '0');
+      const s = Math.min(anchor, cur);
+      const e = Math.max(anchor, cur) + 1;
+      const payload = {name:'(manual selection)', feature_type:'range', start_idx:s, end_idx:e, tool_name:'', tool_version:'', method:'', meta:{}};
+      selectRange(compEl, s, e);
+      showMeta(compEl, payload);
+    });
+    window.addEventListener('mouseup', () => { dragging = false; anchor = null; });
+  });
+
+  // Quality-of-life: auto-submit PD-L1 mismatch select
+  const mmSel = document.getElementById('pdl1_mm');
+  if(mmSel){
+    mmSel.addEventListener('change', () => {
+      mmSel.form && mmSel.form.submit();
+    });
+  }
+})();
+</script>
 {% endblock %}

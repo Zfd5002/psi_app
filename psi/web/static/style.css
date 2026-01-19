@@ -50,4 +50,19 @@ textarea{min-height:110px;resize:vertical}
 .notice{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,204,102,.25);background:rgba(255,204,102,.08);color:#ffe7b3}
 .footer{padding:30px 0;color:var(--muted);font-size:12px}
 .print-only{display:none}
+
+/* --- Sequence-aligned feature tracks (molecule detail) --- */
+.seq-scroll{margin-top:10px;overflow-x:auto;padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(7,13,24,.55)}
+.lane{margin:6px 0}
+.lane-label{font-size:12px;margin-bottom:4px}
+.lane-grid,.seq-grid{display:grid;gap:0;line-height:1.2}
+.seq-grid{padding:4px 0;user-select:none}
+.residue{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:12px;display:inline-block;width:1ch;text-align:center;color:#dbe7f4}
+.residue.selected{background:rgba(51,184,255,.22);border-radius:3px;outline:1px solid rgba(51,184,255,.35)}
+.feature-bar{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:11px;line-height:1.1;padding:2px 4px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid rgba(255,255,255,.10)}
+.feature-bar:hover{filter:brightness(1.07)}
+.feat-domain_instance{background:rgba(0,76,151,.25);border-color:rgba(0,76,151,.45)}
+.feat-reference_match{background:rgba(51,184,255,.18);border-color:rgba(51,184,255,.35)}
+.feat-reference_subdomain{background:rgba(102,255,153,.14);border-color:rgba(102,255,153,.25)}
+
 @media print{.nav,.no-print{display:none !important}.print-only{display:block}.card{box-shadow:none;background:white;color:black;border-color:#ddd}body{background:white;color:black}a{color:#004C97}}

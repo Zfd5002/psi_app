@@ -16,5 +16,5 @@ ProcessedData/
 .vscode/
 
 # PSI local runtime
-psi.sqlite
+psi/psi.sqlite
 *.sqlite

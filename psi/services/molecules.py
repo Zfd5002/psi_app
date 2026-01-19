@@ -26,6 +26,7 @@ from psi.core.db import SessionLocal
 from psi.services.computed import run_computed_properties, get_property_runs, get_run_values
 from psi.services.domains import extract_domains_for_molecule
 from psi.services.numbering import get_numbering_artifacts_for_molecule
+from psi.core.reference_features import detect_pdl1_features
 
 
 def list_molecules(db: Session) -> tuple[list[Molecule], list[Program]]:
@@ -38,7 +39,7 @@ def get_molecule(db: Session, molecule_id: int) -> Molecule | None:
     return db.get(Molecule, molecule_id)
 
 
-def get_molecule_detail(db: Session, molecule_id: int) -> dict:
+def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatches: int = 0) -> dict:
     m = get_molecule(db, molecule_id)
     if not m:
         raise KeyError("Molecule not found")
@@ -95,6 +96,69 @@ def get_molecule_detail(db: Session, molecule_id: int) -> dict:
         .all()
     )
 
+    # --- UI feature tracks (Domains + reference matches, incremental) ---
+    di_by_component: dict[int, list[DomainInstance]] = {}
+    for di in domain_instances:
+        di_by_component.setdefault(int(di.component_id), []).append(di)
+
+    feature_tracks = []
+    for c in components:
+        seq = c.fasta or ""
+        lanes = []
+
+        # Lane: extracted domains (DomainInstance)
+        dom_features = []
+        for di in di_by_component.get(int(c.id), []):
+            dom_features.append(
+                {
+                    "id": f"di:{di.id}",
+                    "name": di.domain_type,
+                    "feature_type": "domain_instance",
+                    "start_idx": int(di.start_idx),
+                    "end_idx": int(di.end_idx),
+                    "source": di.source,
+                    "status": di.status,
+                    "method": di.method,
+                    "tool_name": di.tool_name,
+                    "tool_version": di.tool_version,
+                    "meta": {"error": di.error} if di.error else {},
+                }
+            )
+        if dom_features:
+            lanes.append({"lane_name": "Domains", "features": dom_features})
+
+        # Lane: PD-L1 approximate match
+        ref_features = []
+        for rf in detect_pdl1_features(seq=seq, allowed_mismatches=int(pdl1_allowed_mismatches or 0)):
+            ref_features.append(
+                {
+                    "id": f"ref:{c.id}:{rf.feature_type}:{rf.start_idx}:{rf.end_idx}:{rf.name}",
+                    "name": rf.name,
+                    "feature_type": rf.feature_type,
+                    "start_idx": int(rf.start_idx),
+                    "end_idx": int(rf.end_idx),
+                    "source": "computed",
+                    "status": "success",
+                    "method": rf.method,
+                    "tool_name": rf.tool_name,
+                    "tool_version": rf.tool_version,
+                    "parent_id": rf.parent_id,
+                    "meta": rf.meta or {},
+                }
+            )
+        if ref_features:
+            lanes.append({"lane_name": "Reference matches", "features": ref_features})
+
+        feature_tracks.append(
+            {
+                "component_id": int(c.id),
+                "role": c.role,
+                "sequence": seq,
+                "length": len(seq),
+                "lanes": lanes,
+            }
+        )
+
     # Latest run logs (for troubleshooting)
     run_events = []
     if latest_run:
@@ -120,6 +184,8 @@ def get_molecule_detail(db: Session, molecule_id: int) -> dict:
         "domain_instances": domain_instances,
         "latest_run_events": run_events,
         "numbering_payload": numbering_payload,
+        "feature_tracks": feature_tracks,
+        "pdl1_allowed_mismatches": int(pdl1_allowed_mismatches or 0),
         "property_runs": runs,
         "latest_run": latest_run,
         "latest_values": latest_values,
