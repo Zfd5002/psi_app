@@ -32,9 +32,13 @@ fi
 echo "Rsync overlay from: $SRC"
 echo "Into repo: $REPO_ROOT"
 rsync -av --delete \
-  --exclude='.venv' \
-  --exclude='psi.sqlite' \
+  --exclude='.git/' \
+  --exclude='.venv/' \
+  --exclude='psi/psi.sqlite' \
+  --exclude='*.sqlite' \
+  --exclude='*.sqlite3' \
+  --exclude='*.db' \
+  --exclude='scripts/' \
   "$SRC" "$REPO_ROOT/"
-
 echo "Done. Now run:"
 echo "  cd $REPO_ROOT && git status"
