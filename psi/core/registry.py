@@ -90,6 +90,7 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
                 {"key": "fit_quality", "label": "Fit quality", "type": "select", "required": False, "options": ["Good","OK","Poor"]},
             ],
         },
+    },
     "CellAssay": {
         "Reporter": {
             "params_fields": [
