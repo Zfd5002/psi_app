@@ -154,38 +154,116 @@
   </div>
 
   <h2 id="batches">Batches</h2>
+  <p class="muted">Batch-first view. Expand a batch to see all experiments grouped by assay and structured condition (buffer/NaCl/etc). Results are shown first; metadata is secondary.</p>
+
+  <div class="batch-panels">
+    {% for panel in exp_batch_panels %}
+      {% set b = panel.batch %}
+      <details class="batch-panel" {% if loop.index0 == 0 %}open{% endif %}>
+        <summary>
+          <div class="batch-summary">
+            <div class="batch-id"><a href="/batches/{{ b.id }}">{{ b.batch_id }}</a></div>
+            <div class="muted mini">{{ b.title or "" }}</div>
+            <div class="muted mini">created {{ b.created_at }}</div>
+          </div>
+        </summary>
+
+        <div class="batch-glance">
+          {% for assay, items in panel.glance.items() %}
+            {% if items and items|length > 0 %}
+              <div class="glance-row">
+                <div class="glance-label">{{ assay }}</div>
+                <div class="glance-items">
+                  {% for s in items %}
+                    <span class="chip">{{ s }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+          {% if panel.record_count == 0 %}<div class="muted">No data records linked to this batch yet.</div>{% endif %}
+        </div>
+
+        <div class="batch-tree">
+          {% for assay, conds in panel.assays.items() %}
+            <details class="assay-node">
+              <summary><strong>{{ assay }}</strong> <span class="muted mini">({{ conds|length }} conditions)</span></summary>
+              {% for fp, node in conds.items() %}
+                <details class="cond-node">
+                  <summary>{{ node.label }} <span class="muted mini">(n={{ node.runs|length }})</span></summary>
+                  <table class="table compact" style="margin-top:8px;">
+                    <thead><tr><th>Result</th><th class="muted">Run date</th><th class="muted">Type/Method</th><th class="muted">Title</th></tr></thead>
+                    <tbody>
+                      {% for item in node.runs %}
+                        {% set r = item.record %}
+                        {% set s = item.summary %}
+                        <tr>
+                          <td>
+                            {% if s.kind=="SEC" %}
+                              <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong>
+                              <span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
+                            {% elif s.kind=="Binding" %}
+                              <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
+                              <span class="muted">{% if s.kon %} kon {{ s.kon }}{% endif %}{% if s.koff %} · koff {{ s.koff }}{% endif %}</span>
+                            {% elif s.kind=="Endotoxin" %}
+                              <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
+                              <span class="muted">{% if s.limit_eu_ml is not none %} (limit {{ s.limit_eu_ml }}){% endif %}</span>
+                            {% else %}
+                              <strong>—</strong> <span class="muted">Result summary not defined for this assay yet.</span>
+                            {% endif %}
+                          </td>
+                          <td class="muted">{{ r.run_date or "" }}</td>
+                          <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
+                          <td>
+                            <a href="/data/{{ r.id }}">{{ r.title }}</a>
+                            {% if r.notes %}<div class="muted mini">{{ r.notes }}</div>{% endif %}
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </details>
+              {% endfor %}
+            </details>
+          {% else %}
+            <div class="muted">No experimental data linked to this batch yet.</div>
+          {% endfor %}
+        </div>
+      </details>
+    {% else %}
+      <div class="muted">No batches yet.</div>
+    {% endfor %}
+  </div>
+  <h2 id="data">Data Records</h2>
+  <p class="muted">This section shows molecule-linked records that are <em>not</em> tied to a specific batch (batch_id is empty). Batch-linked data lives in the Batches section above.</p>
   <table class="table">
-    <thead><tr><th>Batch ID</th><th>Title</th><th>Created</th></tr></thead>
+    <thead><tr><th>Result</th><th>Title</th><th>Domain</th><th>Type/Method</th><th>Run date</th></tr></thead>
     <tbody>
-      {% for b in batches %}
-      <tr>
-        <td><a href="/batches/{{ b.id }}">{{ b.batch_id }}</a></td>
-        <td class="muted">{{ b.title or '' }}</td>
-        <td class="muted">{{ b.created_at }}</td>
-      </tr>
+      {% for item in exp_molecule_level_records %}
+        {% set r = item.record %}
+        {% set s = item.summary %}
+        <tr>
+          <td>
+            {% if s.kind=="SEC" %}
+              <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong><span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
+            {% elif s.kind=="Binding" %}
+              <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
+            {% elif s.kind=="Endotoxin" %}
+              <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
+          <td class="muted">{{ r.domain }}</td>
+          <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
+          <td class="muted">{{ r.run_date or "" }}</td>
+        </tr>
       {% else %}
-      <tr><td colspan="3" class="muted">No batches yet.</td></tr>
+        <tr><td colspan="5" class="muted">No molecule-level (unbatched) data records.</td></tr>
       {% endfor %}
     </tbody>
   </table>
-
-  <h2 id="data">Recent data records</h2>
-  <table class="table">
-    <thead><tr><th>Title</th><th>Domain</th><th>Type/Method</th><th>Run date</th></tr></thead>
-    <tbody>
-      {% for r in data_records %}
-      <tr>
-        <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
-        <td class="muted">{{ r.domain }}</td>
-        <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
-        <td class="muted">{{ r.run_date or '' }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4" class="muted">No data records linked to this molecule yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
   <h2 id="evidence">Recent evidence</h2>
   <table class="table">
     <thead><tr><th>Evidence type</th><th>Domain</th><th>Strength</th><th>Summary</th></tr></thead>
@@ -367,32 +445,8 @@
           </div>
 
           <div class="seq-scroll viewer-v2" data-component-id="{{ t.component_id }}" data-molecule-id="{{ molecule.id }}" style="--len: {{ t.length }};" data-seq="{{ t.sequence }}">
-            <div class="lane">
-              <div class="lane-label muted">Pos</div>
-              <div class="num-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), 1ch);">
-                {% for aa in t.sequence %}
-                  <span class="num-cell" data-pos="{{ loop.index0 }}">{% if loop.index == 1 or (loop.index % 10) == 0 %}<span class="ruler-label">{{ loop.index }}</span>{% endif %}</span>
-                {% endfor %}
-              </div>
-            </div>
-
-            {% if t.has_ab_numbering %}
-              <div class="lane">
-                <div class="lane-label muted">Ab #</div>
-                <div class="num-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), 1ch);">
-                  {% for lab in t.ab_labels %}
-                    {% if lab %}
-                      <span class="num-cell" data-pos="{{ loop.index0 }}" title="{{ lab }}">{{ lab[-1] }}</span>
-                    {% else %}
-                      <span class="num-cell blank" data-pos="{{ loop.index0 }}">.</span>
-                    {% endif %}
-                  {% endfor %}
-                </div>
-              </div>
-            {% endif %}
-
-            <div class="lane">
-              <div class="lane-label muted">Sequence</div>
+            <div class=\"lane\">
+              <div class=\"lane-label muted\">Sequence</div>
               <div class="seq-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), 1ch);">
                 {% for aa in t.sequence %}
                   <span class="residue" data-pos="{{ loop.index0 }}">{{ aa }}</span>

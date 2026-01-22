@@ -25,6 +25,12 @@
 - Prevented misleading "success" numbering artifacts when no labels are produced.
 
 
+## v1.1.6
+
+- Molecule page: batch-first expandable panels with nested Assay → Condition → Runs tree; result summaries shown first (supports multiple conditions/runs per batch).
+- Data record entry: standardized condition fields for SEC/SEC-HPLC and SPR/BLI binding; free-text notes preserved.
+- Annotations viewer: sequence-only viewer (no Pos or Ab # lanes). Numbering lanes remain only in Numbering Map.
+
 ## v1.1.5
 - Batch-first experimental view on molecule detail (SEC-HPLC, BLI/SPR, endotoxin) using existing DataRecord schemas.
 - Added SEC_HPLC and Endotoxin schemas; Purity/Aggregation evidence sources now include SEC_HPLC.

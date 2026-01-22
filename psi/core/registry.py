@@ -48,13 +48,16 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "params_fields": [
                 {"key": "platform", "label": "Platform", "type": "select", "required": False, "options": ["SPR"]},
                 {"key": "instrument", "label": "Instrument", "type": "text", "required": False},
-                {"key": "interaction", "label": "Interaction", "type": "text", "required": False, "help": "e.g., PD-1:PD-L1"},
+                {"key": "analyte", "label": "Analyte", "type": "text", "required": True},
+                {"key": "ligand", "label": "Ligand / target", "type": "text", "required": True, "help": "e.g., Antigen A"},
                 {"key": "orientation", "label": "Orientation", "type": "text", "required": False, "help": "e.g., ligand immobilized"},
                 {"key": "model", "label": "Fit model", "type": "text", "required": False, "help": "e.g., 1:1, bivalent"},
-                {"key": "analyte", "label": "Analyte", "type": "text", "required": True},
-                {"key": "ligand", "label": "Ligand", "type": "text", "required": True},
+                {"key": "buffer", "label": "Running buffer", "type": "text", "required": True, "help": "e.g., HBS-EP+"},
+                {"key": "pH", "label": "pH", "type": "number", "required": False},
+                {"key": "salt_type", "label": "Salt", "type": "select", "required": False, "options": ["NaCl","KCl","None"]},
+                {"key": "salt_mM", "label": "Salt concentration", "type": "number", "required": False, "units": "mM"},
+                {"key": "additives", "label": "Additives", "type": "text", "required": False},
                 {"key": "temperature_C", "label": "Temperature", "type": "number", "required": False, "units": "°C"},
-                {"key": "buffer", "label": "Buffer", "type": "text", "required": False},
             ],
             "results_fields": [
                 {"key": "kd_nM", "label": "KD", "type": "number", "required": True, "units": "nM"},
@@ -68,13 +71,16 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "params_fields": [
                 {"key": "platform", "label": "Platform", "type": "select", "required": False, "options": ["BLI"]},
                 {"key": "instrument", "label": "Instrument", "type": "text", "required": False},
-                {"key": "interaction", "label": "Interaction", "type": "text", "required": False, "help": "e.g., PD-1:PD-L1"},
-                {"key": "orientation", "label": "Orientation", "type": "text", "required": False},
-                {"key": "model", "label": "Fit model", "type": "text", "required": False},
-                {"key": "sensor", "label": "Sensor", "type": "text", "required": False},
                 {"key": "analyte", "label": "Analyte", "type": "text", "required": True},
+                {"key": "ligand", "label": "Ligand / target", "type": "text", "required": False},
+                {"key": "sensor", "label": "Sensor", "type": "text", "required": False},
+                {"key": "model", "label": "Fit model", "type": "text", "required": False},
+                {"key": "buffer", "label": "Running buffer", "type": "text", "required": True},
+                {"key": "pH", "label": "pH", "type": "number", "required": False},
+                {"key": "salt_type", "label": "Salt", "type": "select", "required": False, "options": ["NaCl","KCl","None"]},
+                {"key": "salt_mM", "label": "Salt concentration", "type": "number", "required": False, "units": "mM"},
+                {"key": "additives", "label": "Additives", "type": "text", "required": False},
                 {"key": "temperature_C", "label": "Temperature", "type": "number", "required": False, "units": "°C"},
-                {"key": "buffer", "label": "Buffer", "type": "text", "required": False},
             ],
             "results_fields": [
                 {"key": "kd_nM", "label": "KD", "type": "number", "required": True, "units": "nM"},
@@ -84,7 +90,6 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
                 {"key": "fit_quality", "label": "Fit quality", "type": "select", "required": False, "options": ["Good","OK","Poor"]},
             ],
         },
-    },
     "CellAssay": {
         "Reporter": {
             "params_fields": [
@@ -130,8 +135,13 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
     "CMC_Analytics": {
         "SEC": {
             "params_fields": [
+                {"key": "buffer", "label": "Buffer", "type": "text", "required": True, "help": "e.g., PBS"},
+                {"key": "pH", "label": "pH", "type": "number", "required": False},
+                {"key": "salt_type", "label": "Salt", "type": "select", "required": False, "options": ["NaCl","KCl","None"]},
+                {"key": "salt_mM", "label": "Salt concentration", "type": "number", "required": False, "units": "mM"},
+                {"key": "additives", "label": "Additives", "type": "text", "required": False, "help": "e.g., 0.01% Tween-20"},
                 {"key": "column", "label": "Column", "type": "text", "required": False},
-                {"key": "mobile_phase", "label": "Mobile phase", "type": "text", "required": False},
+                {"key": "flow_rate_ml_min", "label": "Flow rate", "type": "number", "required": False, "units": "mL/min"},
             ],
             "results_fields": [
                 {"key": "monomer_pct", "label": "Monomer", "type": "number", "required": True, "units": "%"},
@@ -143,8 +153,12 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "params_fields": [
                 {"key": "instrument", "label": "Instrument", "type": "text", "required": False},
                 {"key": "method_name", "label": "Method name", "type": "text", "required": False},
+                {"key": "buffer", "label": "Buffer", "type": "text", "required": True, "help": "e.g., PBS"},
+                {"key": "pH", "label": "pH", "type": "number", "required": False},
+                {"key": "salt_type", "label": "Salt", "type": "select", "required": False, "options": ["NaCl","KCl","None"]},
+                {"key": "salt_mM", "label": "Salt concentration", "type": "number", "required": False, "units": "mM"},
+                {"key": "additives", "label": "Additives", "type": "text", "required": False, "help": "e.g., 0.01% Tween-20"},
                 {"key": "column", "label": "Column", "type": "text", "required": True},
-                {"key": "mobile_phase", "label": "Mobile phase / buffer", "type": "text", "required": True},
                 {"key": "flow_rate_ml_min", "label": "Flow rate", "type": "number", "required": False, "units": "mL/min"},
                 {"key": "detection_nm", "label": "Detection", "type": "number", "required": False, "units": "nm"},
                 {"key": "injection_ul", "label": "Injection volume", "type": "number", "required": False, "units": "µL"},

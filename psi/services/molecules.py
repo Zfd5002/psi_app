@@ -676,10 +676,15 @@ def update_molecule(
     return m
 
 
+
 def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected_batch_id: int | None = None) -> dict:
     """Batch-first experimental view context for molecule detail.
 
-    Uses existing DataRecord storage and dynamic schemas.
+    v1.1.6 update:
+    - Provide ALL batch-linked records (not just selected batch) so the molecule page can render
+      a nested, glanceable Batch → Assay → Condition → Runs tree.
+    - Keep schema flexibility by using existing DataRecord.params_json for structured conditions.
+    - Notes remain free-form and are displayed at the run level.
     """
     import json as _json
 
@@ -688,25 +693,6 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
         raise KeyError("Molecule not found")
 
     batches = db.query(Batch).filter(Batch.molecule_id == molecule_id).order_by(Batch.created_at.desc()).all()
-    selected_batch = None
-    if batches:
-        if selected_batch_id:
-            for b in batches:
-                if b.id == selected_batch_id:
-                    selected_batch = b
-                    break
-        if not selected_batch:
-            selected_batch = batches[0]
-
-    records: list[DataRecord] = []
-    if selected_batch:
-        records = (
-            db.query(DataRecord)
-            .filter(DataRecord.batch_id == selected_batch.id)
-            .order_by(DataRecord.run_date.desc().nullslast(), DataRecord.created_at.desc())
-            .limit(200)
-            .all()
-        )
 
     def _load(s: str | None) -> dict:
         try:
@@ -718,6 +704,7 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
         res = _load(r.results_json)
         if r.data_type == "CMC_Analytics" and r.method in ("SEC_HPLC", "SEC"):
             return {
+                "kind": "SEC",
                 "monomer_pct": res.get("monomer_pct"),
                 "hmw_pct": res.get("hmw_pct"),
                 "lmw_pct": res.get("lmw_pct"),
@@ -725,38 +712,201 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
             }
         if r.data_type == "CMC_Analytics" and r.method == "Endotoxin":
             return {
+                "kind": "Endotoxin",
                 "value_eu_ml": res.get("value_eu_ml"),
                 "limit_eu_ml": res.get("limit_eu_ml"),
             }
         if r.data_type == "Binding" and r.method in ("BLI", "SPR"):
             return {
+                "kind": "Binding",
                 "kd_nM": res.get("kd_nM"),
                 "kon": res.get("kon"),
                 "koff": res.get("koff"),
                 "chi2": res.get("chi2") or res.get("fit_quality"),
             }
-        return {}
+        return {"kind": "Other"}
 
-    enriched = []
-    for r in records:
-        enriched.append({"record": r, "summary": _summary_for(r)})
+    def _assay_bucket(r: DataRecord) -> str:
+        # UI-facing buckets. Keep descriptive, not interpretive.
+        if r.data_type == "CMC_Analytics" and r.method in ("SEC_HPLC", "SEC"):
+            return "SEC"
+        if r.data_type == "Binding" and r.method in ("SPR", "BLI"):
+            return "Binding"
+        if r.data_type == "CMC_Analytics" and r.method == "Endotoxin":
+            return "Endotoxin"
+        # Fall back to type/method (still useful).
+        return f"{r.data_type}/{r.method}"
 
-    def _latest(predicate):
-        for item in enriched:
-            rr = item["record"]
-            if predicate(rr):
-                return item
-        return None
+    def _normalize_params(p: dict) -> dict:
+        # Remove empty strings/nulls for stable grouping.
+        out = {}
+        for k, v in (p or {}).items():
+            if v is None:
+                continue
+            if isinstance(v, str) and not v.strip():
+                continue
+            out[k] = v
+        return out
 
-    latest_sec = _latest(lambda rr: rr.data_type == "CMC_Analytics" and rr.method in ("SEC_HPLC", "SEC"))
-    latest_binding = _latest(lambda rr: rr.data_type == "Binding" and rr.method in ("BLI", "SPR"))
-    latest_endotoxin = _latest(lambda rr: rr.data_type == "CMC_Analytics" and rr.method == "Endotoxin")
+    def _fingerprint(p: dict) -> str:
+        try:
+            norm = _normalize_params(p)
+            return _json.dumps(norm, sort_keys=True, separators=(",", ":"))
+        except Exception:
+            return ""
+
+    def _condition_label(r: DataRecord, p: dict) -> str:
+        # Human label for the third-level grouping under an assay bucket.
+        # Prefer structured fields; fall back to legacy fields.
+        if r.data_type == "CMC_Analytics" and r.method in ("SEC_HPLC", "SEC"):
+            buf = (p.get("buffer") or p.get("mobile_phase") or "").strip()
+            salt = p.get("salt_mM")
+            salt_type = p.get("salt_type") or "NaCl"
+            parts = []
+            if buf:
+                parts.append(buf)
+            if salt not in (None, "", 0, "0"):
+                try:
+                    parts.append(f"+ {int(float(salt))} mM {salt_type}")
+                except Exception:
+                    parts.append(f"+ {salt} mM {salt_type}")
+            if not parts:
+                parts.append("Unspecified condition")
+            return " ".join(parts)
+
+        if r.data_type == "Binding" and r.method in ("SPR", "BLI"):
+            ligand = (p.get("ligand") or "").strip()
+            analyte = (p.get("analyte") or "").strip()
+            buf = (p.get("buffer") or "").strip()
+            parts = []
+            if ligand and analyte:
+                parts.append(f"{r.method} — {ligand} vs {analyte}")
+            elif ligand:
+                parts.append(f"{r.method} — {ligand}")
+            elif analyte:
+                parts.append(f"{r.method} — {analyte}")
+            else:
+                parts.append(f"{r.method}")
+            if buf:
+                parts.append(f"({buf})")
+            return " ".join(parts)
+
+        if r.data_type == "CMC_Analytics" and r.method == "Endotoxin":
+            matrix = (p.get("sample_matrix") or p.get("buffer") or "").strip()
+            return f"Matrix: {matrix}" if matrix else "Endotoxin"
+
+        return "Condition"
+
+    def _batch_tree_for(batch: Batch) -> dict:
+        # Pull enough history to be useful without going unbounded.
+        recs: list[DataRecord] = (
+            db.query(DataRecord)
+            .filter(DataRecord.batch_id == batch.id)
+            .order_by(DataRecord.run_date.desc().nullslast(), DataRecord.created_at.desc())
+            .limit(500)
+            .all()
+        )
+
+        # Build: assay -> condition_fp -> {label, runs[]}
+        assay_map: dict[str, dict[str, dict]] = {}
+        for r in recs:
+            p = _load(r.params_json)
+            fp = _fingerprint(p)
+            assay = _assay_bucket(r)
+            cond_label = _condition_label(r, p)
+
+            if assay not in assay_map:
+                assay_map[assay] = {}
+            if fp not in assay_map[assay]:
+                assay_map[assay][fp] = {"label": cond_label, "params": _normalize_params(p), "runs": []}
+
+            assay_map[assay][fp]["runs"].append(
+                {
+                    "record": r,
+                    "params": _normalize_params(p),
+                    "summary": _summary_for(r),
+                }
+            )
+
+        # Create small "glance" summaries per assay+condition
+        glance: dict[str, list[str]] = {}
+        for assay, conds in assay_map.items():
+            glance[assay] = []
+            for fp, node in conds.items():
+                runs = node["runs"]
+                if not runs:
+                    continue
+                # For known assays, show result-first summaries that remain descriptive.
+                first = runs[0]
+                s = first.get("summary") or {}
+                label = node["label"]
+                if s.get("kind") == "SEC":
+                    # Show monomer/hmw/lmw. If multiple runs, show range on monomer.
+                    monos = [rr.get("summary", {}).get("monomer_pct") for rr in runs]
+                    monos = [x for x in monos if x is not None]
+                    if len(monos) >= 2:
+                        try:
+                            lo = min(float(x) for x in monos)
+                            hi = max(float(x) for x in monos)
+                            mono_txt = f"{lo:.1f}–{hi:.1f}% monomer"
+                        except Exception:
+                            mono_txt = f"{monos[0]}% monomer"
+                    elif len(monos) == 1:
+                        mono_txt = f"{monos[0]}% monomer"
+                    else:
+                        mono_txt = "monomer n/a"
+                    hmw = s.get("hmw_pct")
+                    lmw = s.get("lmw_pct")
+                    parts = [mono_txt]
+                    if hmw is not None:
+                        parts.append(f"{hmw}% HMW")
+                    if lmw is not None:
+                        parts.append(f"{lmw}% LMW")
+                    glance[assay].append(f"{label}: " + " / ".join(parts) + f" (n={len(runs)})")
+                elif s.get("kind") == "Binding":
+                    kd = s.get("kd_nM")
+                    if kd is not None:
+                        glance[assay].append(f"{label}: KD {kd} nM (n={len(runs)})")
+                    else:
+                        glance[assay].append(f"{label}: KD n/a (n={len(runs)})")
+                elif s.get("kind") == "Endotoxin":
+                    val = s.get("value_eu_ml")
+                    lim = s.get("limit_eu_ml")
+                    if val is not None and lim is not None:
+                        glance[assay].append(f"{label}: {val} EU/mL (limit {lim}) (n={len(runs)})")
+                    else:
+                        glance[assay].append(f"{label} (n={len(runs)})")
+                else:
+                    glance[assay].append(f"{label} (n={len(runs)})")
+
+        return {
+            "batch": batch,
+            "assays": assay_map,
+            "glance": glance,
+            "record_count": len(recs),
+        }
+
+    batch_panels = [_batch_tree_for(b) for b in batches]
+
+    # Also provide molecule-level records not linked to a batch (still important sometimes).
+    molecule_level_records: list[DataRecord] = (
+        db.query(DataRecord)
+        .filter(DataRecord.molecule_id == molecule_id)
+        .filter(DataRecord.batch_id.is_(None))
+        .order_by(DataRecord.run_date.desc().nullslast(), DataRecord.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    molecule_level_enriched = [{"record": r, "summary": _summary_for(r), "params": _normalize_params(_load(r.params_json))} for r in molecule_level_records]
 
     return {
         "exp_batches": batches,
-        "exp_selected_batch": selected_batch,
-        "exp_records": enriched,
-        "exp_latest_sec": latest_sec,
-        "exp_latest_binding": latest_binding,
-        "exp_latest_endotoxin": latest_endotoxin,
+        "exp_batch_panels": batch_panels,
+        "exp_molecule_level_records": molecule_level_enriched,
+        # Legacy keys kept for backwards compatibility with older templates (safe to remove later):
+        "exp_selected_batch": None,
+        "exp_records": [],
+        "exp_latest_sec": None,
+        "exp_latest_binding": None,
+        "exp_latest_endotoxin": None,
     }
