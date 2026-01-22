@@ -499,7 +499,7 @@
                 <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
                   {% for f in g["items"] %}
                     {% set sp = (f.spans[0] if f.spans and (f.spans|length)>0 else {'start':0,'end':0}) %}
-                    <div class="annot-item" data-component-id="{{ t.component_id }}">
+                    <div class="annot-item" data-component-id="{{ t.component_id }}" data-feature='{{ f | tojson }}'>
                       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
                         <div>
                           <div><strong>{{ f.name }}</strong></div>
