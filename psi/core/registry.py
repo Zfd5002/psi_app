@@ -1044,6 +1044,84 @@ LEGACY_DATA_TYPES_REQUIRING_BATCH = {"Binding", "CellAssay", "InVivo", "CMC_Anal
 LEGACY_PROGRAM_LEVEL_DATA_TYPES = {"Execution"}
 
 
+# -----------------------------
+# Minimal registration helpers (guardrails for extension growth)
+#
+# These are intentionally small utilities (not a framework).
+# They validate inputs and keep derived REGISTRY views consistent.
+# -----------------------------
+
+def _refresh_registry_views() -> None:
+    """Refresh derived REGISTRY views after mutating the underlying catalogue."""
+    # domains/aliases are stable, but data_type_meta and the derived sets depend on DATA_TYPE_META
+    REGISTRY["data_type_meta"] = {
+        k: {**v, "requires_batch": _requires_batch(k)} for k, v in DATA_TYPE_META.items()
+    }
+    # keep per-domain list stable and sorted
+    for dk in list(DATA_TYPES_BY_DOMAIN.keys()):
+        DATA_TYPES_BY_DOMAIN[dk] = sorted(set(DATA_TYPES_BY_DOMAIN[dk]))
+    REGISTRY["data_types_by_domain"] = DATA_TYPES_BY_DOMAIN
+
+    # derived requirement sets
+    req_batch = sorted([k for k, v in DATA_TYPE_META.items() if v.get("scope") == "batch"])
+    prog_level = sorted([k for k, v in DATA_TYPE_META.items() if v.get("scope") != "batch"])
+    REGISTRY["data_types_requiring_batch"] = req_batch
+    REGISTRY["program_level_data_types"] = prog_level
+
+
+def register_data_type(
+    dt_key: str,
+    *,
+    label: str,
+    domain_key: str,
+    scope: str = "batch",
+    description: str | None = None,
+) -> None:
+    """Register a new canonical data type.
+
+    This is meant for future extension modules to add data types safely.
+    """
+    if not isinstance(dt_key, str) or not dt_key.strip():
+        raise ValueError("dt_key must be a non-empty string")
+    if dt_key in DATA_TYPE_META:
+        raise ValueError(f"data type already exists: {dt_key}")
+    if domain_key not in DOMAIN_LABELS:
+        raise ValueError(f"unknown domain_key: {domain_key}")
+    if scope not in {"batch", "program"}:
+        raise ValueError("scope must be 'batch' or 'program'")
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError("label must be a non-empty string")
+
+    meta: Dict[str, Any] = {"label": label, "domain_key": domain_key, "scope": scope}
+    if description:
+        meta["description"] = description
+    DATA_TYPE_META[dt_key] = meta
+    DATA_TYPES_BY_DOMAIN.setdefault(domain_key, []).append(dt_key)
+    _refresh_registry_views()
+
+
+def register_method_schema(
+    data_type_key: str,
+    method_key: str,
+    *,
+    params_fields: List[Dict[str, Any]],
+    results_fields: List[Dict[str, Any]],
+) -> None:
+    """Register or update a method schema for an existing data type."""
+    if data_type_key not in DATA_TYPE_META and data_type_key not in DATA_SCHEMAS and data_type_key not in LEGACY_DATA_SCHEMAS:
+        raise ValueError(f"unknown data_type_key: {data_type_key}")
+    if not isinstance(method_key, str) or not method_key.strip():
+        raise ValueError("method_key must be a non-empty string")
+    if not isinstance(params_fields, list) or not isinstance(results_fields, list):
+        raise ValueError("params_fields and results_fields must be lists")
+
+    DATA_SCHEMAS.setdefault(data_type_key, {})[method_key] = {
+        "params_fields": params_fields,
+        "results_fields": results_fields,
+    }
+    # REGISTRY["data_schemas"] references DATA_SCHEMAS directly, so no rebuild is needed here.
+
+
 REGISTRY: Dict[str, Any] = {
     "version": "v1.1.7",
     "domains_ordered": DOMAINS_ORDERED,
