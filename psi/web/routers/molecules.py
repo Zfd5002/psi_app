@@ -184,11 +184,18 @@ def molecule_detail(molecule_id: int, request: Request, tab: str = "overview", b
         raise HTTPException(404)
     ctx["request"] = request
     ctx["tab"] = tab
-    if tab == "experimental":
-        try:
-            ctx.update(svc.get_molecule_experimental_context(db, molecule_id, selected_batch_id=batch_id))
-        except Exception:
-            pass
+    # Always include batch-first experimental context so batches render on all tabs.
+    # Only apply selected_batch_id when explicitly on the experimental tab.
+    try:
+        ctx.update(
+            svc.get_molecule_experimental_context(
+                db,
+                molecule_id,
+                selected_batch_id=batch_id if tab == "experimental" else None,
+            )
+        )
+    except Exception:
+        pass
 
     return templates.TemplateResponse("molecules/detail.html", ctx)
 
