@@ -13,6 +13,7 @@ env/
 # Never include local DBs
 psi/psi.sqlite
 **/*.sqlite
+**/*.sqlite3
 **/*.db
 
 # Never include uploads / user files (optional, but usually huge)
@@ -28,6 +29,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
 
 # OS/editor junk
 .DS_Store

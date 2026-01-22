@@ -1,6 +1,7 @@
-"""Backward-compatible re-export.
+"""LEGACY SHIM — DO NOT EDIT.
 
-Registry now lives in :mod:`psi.core.registry`.
+This module exists for backward compatibility only.
+The canonical registry lives in :mod:`psi.core.registry`.
 """
 
 from .core.registry import *  # noqa: F401,F403
