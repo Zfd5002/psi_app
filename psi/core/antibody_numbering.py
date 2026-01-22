@@ -58,8 +58,10 @@ def number_variable_domain(seq: str, *, scheme: str = "kabat") -> Optional[Numbe
             "FR4": str(getattr(ch, "fr4_seq", "") or ""),
         }
 
-        # abnumber 0.4.x may not expose `alignment`, so compute spans via raw index mapping.
-        mapped = []
+        # abnumber 0.4.x may not expose an explicit alignment object.
+        # We compute a raw-index -> scheme-position-label mapping for UI alignment.
+        labels_by_raw_index: List[str] = [""] * len(s)
+        mapped: List[int] = []
         for i in range(len(s)):
             try:
                 p = ch.get_position_by_raw_index(i)
@@ -67,6 +69,7 @@ def number_variable_domain(seq: str, *, scheme: str = "kabat") -> Optional[Numbe
                 p = None
             if p is not None:
                 mapped.append(i)
+                labels_by_raw_index[i] = str(p)
 
         spans = {}
         if mapped:
@@ -79,7 +82,7 @@ def number_variable_domain(seq: str, *, scheme: str = "kabat") -> Optional[Numbe
         if getattr(ch, "warnings", None):
             warnings.extend([str(w) for w in ch.warnings])
 
-        return NumberingResult(
+        res = NumberingResult(
             scheme=scheme_l,
             chain_type=ctype,
             positions=pos_map,
@@ -87,6 +90,10 @@ def number_variable_domain(seq: str, *, scheme: str = "kabat") -> Optional[Numbe
             spans=spans,
             warnings=warnings,
         )
+        # Attach UI-friendly mapping without changing the public dataclass shape.
+        # (This gets serialized into DomainArtifact payload by services/numbering.py.)
+        setattr(res, "labels_by_raw_index", labels_by_raw_index)
+        return res
     except Exception as e:
         # Graceful failure: treat as unavailable
         return NumberingResult(

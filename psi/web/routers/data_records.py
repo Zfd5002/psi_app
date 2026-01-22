@@ -27,6 +27,10 @@ def new_data(
     program_id: Optional[int] = None,
     molecule_id: Optional[int] = None,
     batch_id: Optional[int] = None,
+    domain: Optional[str] = None,
+    data_type: Optional[str] = None,
+    method: Optional[str] = None,
+    title: Optional[str] = None,
     db: Session = Depends(get_db),
     rules_path=Depends(get_rules_path),
 ):
@@ -43,9 +47,19 @@ def new_data(
         **base,
         "request": request,
         "record": None,
+        "selected_program_id": program_id,
+        "selected_batch_id": batch_id,
         "domains": domains,
         "domain_evidence_types": domain_evidence_types,
-        "prefill": {"program_id": program_id, "molecule_id": molecule_id, "batch_id": batch_id},
+        "prefill": {
+            "program_id": program_id,
+            "molecule_id": molecule_id,
+            "batch_id": batch_id,
+            "domain": domain,
+            "data_type": data_type,
+            "method": method,
+            "title": title,
+        },
     }
     return templates.TemplateResponse("data/form.html", ctx)
 

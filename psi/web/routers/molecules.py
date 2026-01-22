@@ -8,7 +8,7 @@ from psi.web.deps import get_db, get_storage_cfg, get_templates
 from psi.services import molecules as svc
 from psi.services.computed import run_computed_properties
 from psi.services.numbering import trigger_numbering_for_molecule
-from psi.services.domains import upsert_user_domain_instance
+from psi.services.domains import extract_domains_for_molecule, upsert_user_domain_instance
 from psi.services import files as file_svc
 from psi.core.models import MoleculeComponent
 
@@ -36,12 +36,31 @@ def run_numbering(molecule_id: int, background_tasks: BackgroundTasks, scheme: s
 
         s = SessionLocal()
         try:
-            trigger_numbering_for_molecule(s, molecule_id=molecule_id, scheme=scheme)
+            trigger_numbering_for_molecule(s, molecule_id=molecule_id, scheme=scheme, force=True)
         finally:
             s.close()
 
     background_tasks.add_task(_bg)
     return RedirectResponse(url=f"/molecules/{molecule_id}?scheme={scheme}", status_code=303)
+
+
+@router.post("/molecules/{molecule_id}/domains/recompute")
+def recompute_domains(molecule_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    m = svc.get_molecule(db, molecule_id)
+    if not m:
+        raise HTTPException(404)
+
+    def _bg():
+        from psi.core.db import SessionLocal
+
+        s = SessionLocal()
+        try:
+            extract_domains_for_molecule(s, molecule_id)
+        finally:
+            s.close()
+
+    background_tasks.add_task(_bg)
+    return RedirectResponse(url=f"/molecules/{molecule_id}#domains", status_code=303)
 
 
 @router.post("/molecules/{molecule_id}/domains")
@@ -146,7 +165,7 @@ async def create_molecule(request: Request, background_tasks: BackgroundTasks, d
 
 
 @router.get("/molecules/{molecule_id}", response_class=HTMLResponse)
-def molecule_detail(molecule_id: int, request: Request, db: Session = Depends(get_db)):
+def molecule_detail(molecule_id: int, request: Request, tab: str = "overview", batch_id: int | None = None, db: Session = Depends(get_db)):
     templates = get_templates(request)
     try:
         mm = request.query_params.get("pdl1_mm", "")
@@ -164,6 +183,13 @@ def molecule_detail(molecule_id: int, request: Request, db: Session = Depends(ge
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request
+    ctx["tab"] = tab
+    if tab == "experimental":
+        try:
+            ctx.update(svc.get_molecule_experimental_context(db, molecule_id, selected_batch_id=batch_id))
+        except Exception:
+            pass
+
     return templates.TemplateResponse("molecules/detail.html", ctx)
 
 

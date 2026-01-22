@@ -9,7 +9,7 @@
         <label>Program</label>
         <select name="program_id" id="programSel" required>
           {% for p in programs %}
-            <option value="{{ p.id }}" {% if (record and p.id==record.program_id) or (not record and p.id==selected_program_id) %}selected{% endif %}>{{ p.name }}</option>
+            <option value="{{ p.id }}" {% if (record and p.id==record.program_id) or (not record and prefill.program_id and p.id==prefill.program_id) %}selected{% endif %}>{{ p.name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -25,7 +25,7 @@
         <select name="molecule_id" id="moleculeSel">
           <option value="">(none)</option>
           {% for m in molecules %}
-            <option value="{{ m.id }}" {% if record and record.molecule_id==m.id %}selected{% endif %}>{{ m.primary_id }}</option>
+            <option value="{{ m.id }}" {% if (record and record.molecule_id==m.id) or (not record and prefill.molecule_id and prefill.molecule_id==m.id) %}selected{% endif %}>{{ m.primary_id }}</option>
           {% endfor %}
         </select>
       </div>
@@ -34,7 +34,7 @@
         <select name="batch_id" id="batchSel">
           <option value="">(none)</option>
           {% for b in batches %}
-            <option value="{{ b.id }}" {% if (record and record.batch_id==b.id) or (not record and b.id==selected_batch_id) %}selected{% endif %}>{{ b.batch_id }}</option>
+            <option value="{{ b.id }}" {% if (record and record.batch_id==b.id) or (not record and prefill.batch_id and prefill.batch_id==b.id) %}selected{% endif %}>{{ b.batch_id }}</option>
           {% endfor %}
         </select>
         <div class="help">Enforced by UI registry for experimental data types (Binding, CellAssay, InVivo, CMC_Analytics).</div>
@@ -43,7 +43,7 @@
 
     <div class="field">
       <label>Title</label>
-      <input name="title" value="{{ record.title if record else '' }}" required />
+      <input name="title" value="{{ record.title if record else (prefill.title or '') }}" required />
     </div>
 
     <div class="grid cols-3">
@@ -51,7 +51,7 @@
         <label>Domain</label>
         <select name="domain" id="domainSel" required>
           {% for d in domains %}
-            <option value="{{ d }}" {% if record and record.domain==d %}selected{% endif %}>{{ d }}</option>
+            <option value="{{ d }}" {% if (record and record.domain==d) or (not record and prefill.domain==d) %}selected{% endif %}>{{ d }}</option>
           {% endfor %}
         </select>
       </div>
@@ -113,6 +113,7 @@
 <script>
 (async function(){
   const registry = await fetch('/api/registry').then(r=>r.json());
+  const prefill = {{ prefill|tojson }};
   const schemas = registry.data_schemas || {};
   const requiringBatch = new Set(registry.data_types_requiring_batch || []);
 
@@ -191,7 +192,7 @@
     const keys = Object.keys(schemas).sort();
     keys.forEach(k=> opt(dataTypeSel, k, k));
 
-    const preDt = "{{ record.data_type if record else '' }}";
+    const preDt = "{{ record.data_type if record else '' }}" || (prefill.data_type || "");
     if(preDt && schemas[preDt]) dataTypeSel.value = preDt;
     populateMethods();
   }
@@ -202,7 +203,7 @@
     const methods = dt && schemas[dt] ? Object.keys(schemas[dt]).sort() : [];
     methods.forEach(m=> opt(methodSel, m, m));
 
-    const preM = "{{ record.method if record else '' }}";
+    const preM = "{{ record.method if record else '' }}" || (prefill.method || "");
     if(preM && methods.includes(preM)) methodSel.value = preM;
     renderSchema();
   }

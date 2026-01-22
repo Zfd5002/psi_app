@@ -1,0 +1,183 @@
+# PSI_CONTEXT.md
+Purpose: Continuity + Context for ZIP-based PSI Development
+
+This file exists to preserve **critical architectural, dependency, and workflow context**
+when PSI is shared as a **code-only ZIP** (with large or external components removed).
+
+It is written primarily for:
+- ChatGPT / AI assistants helping develop PSI
+- The project maintainer (future me)
+- Any trusted collaborator reviewing the repo offline
+
+This file is **not user-facing documentation** and should remain in the repo root.
+
+---
+
+## 1. What PSI Is (High-level)
+
+PSI (Preclinical Systems Intelligence) is a **local-first scientific application**
+built for biologics R&D.
+
+Core goals:
+- Store biologic sequences (antibodies, fusions, etc.)
+- Compute deterministic annotations and predictions
+- Attach structured **experimental data** (batch-first)
+- Serve as a long-term foundation for **AI/ML applications**
+
+Stack:
+- Python
+- FastAPI
+- Jinja2 templates
+- SQLite (local)
+- No React/Vue
+- No background jobs or async pipelines
+- Deterministic rendering only
+
+---
+
+## 2. ZIP Overlay Workflow (Critical)
+
+PSI is developed and shared via **ZIP overlay updates**, not git patches.
+
+Rules:
+- ZIPs are **code-only**
+- ZIPs are applied via `rsync` or file overlay
+- ZIPs must NEVER include:
+  - `.git/`
+  - `.venv/`
+  - SQLite DB files (`*.db`, `*.sqlite`)
+  - uploads/
+  - caches or artifacts
+
+Expected workflow:
+1. User unzips overlay into a staging directory
+2. User overlays onto existing local repo using `rsync`
+3. Local DB, venv, and uploads persist untouched
+
+This is **intentional** and fundamental to PSI’s design.
+
+---
+
+## 3. ANARCI (Important: intentionally missing from ZIPs)
+
+ANARCI is a **vendored third-party dependency** used for:
+- Antibody numbering
+- Variable domain identification
+- IMGT-style residue mapping
+
+Key points:
+- ANARCI lives at: `vendor/anarci/`
+- It is often **excluded from shared ZIPs** due to size
+- When missing, treat ANARCI as a **black box dependency**
+
+Assumptions when ANARCI is not present:
+- PSI code that *calls* ANARCI is correct
+- Numbering outputs are deterministic
+- No changes are being made to ANARCI internals unless explicitly stated
+
+If ANARCI needs to be restored:
+- Rehydrate from the upstream source or local vendor copy
+- No schema or UI logic should depend on ANARCI internals
+
+Unless debugging ANARCI itself, its absence is **non-blocking**.
+
+---
+
+## 4. Local Environment Assumptions
+
+The following always exist **locally** but are not shared in ZIPs:
+
+- Python virtual environment: `.venv/`
+- SQLite database(s)
+- Uploaded experimental files
+- Local caches
+
+The app is expected to:
+- Create tables on startup (`ensure_schema`)
+- Gracefully handle existing data
+- Never require a clean DB unless explicitly stated
+
+---
+
+## 5. Batch-first Experimental Data Model (Design Contract)
+
+Experimental data in PSI is **batch-first**, not molecule-first.
+
+Identifier format:
+- Molecule code: `TCB001`
+- Batch code: `TCB001-001`, `TCB001-002`, etc.
+- Regex: `^[A-Z0-9]+-\d{3}$`
+
+Experimental data attaches to:
+- Batch → AssayRun → Files
+
+Initial assay types (v1.1.5):
+- SEC-HPLC
+- BLI / SPR
+- Endotoxin
+
+Assay data is stored as:
+- `payload_json` (full structured record)
+- `summary_json` (key metrics for UI + AI)
+
+This structure is intentional and should not be flattened.
+
+---
+
+## 6. Viewer v2 + Annotation System (Context)
+
+Sequence viewing uses **Viewer v2**, which supports:
+- Native text selection
+- Deterministic residue spans
+- Highlighting via `data-start` / `data-end`
+- Clipboard sanitization (AA-only)
+
+Annotations:
+- Use span-only wiring (no JSON blobs in HTML)
+- Are presentation-only in some contexts
+- Must never break wrapping or selection behavior
+
+---
+
+## 7. Versioning Philosophy
+
+PSI uses **semantic-ish versions**, but with emphasis on:
+- Additive changes
+- No destructive migrations
+- Backward compatibility with local data
+
+Examples:
+- v1.1.4 → Viewer + annotation wiring fixes
+- v1.1.5 → Batch-first experimental data foundation
+
+Version string lives in:
+- `psi/web/app.py` as `PSI_VERSION`
+
+---
+
+## 8. How to Read a ZIP Without Missing Pieces
+
+If something appears missing in a ZIP:
+1. Check whether it is intentionally excluded
+2. Consult this file
+3. Assume local-first design unless stated otherwise
+
+When in doubt:
+- Ask whether a component is **vendored**, **generated**, or **local-only**
+
+---
+
+## 9. Editing This File
+
+This file is expected to:
+- Grow over time
+- Be edited as architecture evolves
+- Stay high-signal and concise
+
+Do NOT remove it during compression.
+It exists specifically so context survives compression.
+
+---
+
+End of PSI_CONTEXT.md
+

@@ -5,7 +5,132 @@
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
     <div>
       <h1>{{ molecule.primary_id }}</h1>
+      <div class="tabs">
+        <a class="tab {% if tab != 'experimental' %}active{% endif %}" href="/molecules/{{ molecule.id }}?tab=overview">Overview</a>
+        <a class="tab {% if tab == 'experimental' %}active{% endif %}" href="/molecules/{{ molecule.id }}?tab=experimental">Experimental</a>
+      </div>
       <p class="muted">{{ molecule.title or '' }}</p>
+
+      {% if tab == "experimental" %}
+      <div id="experimental" class="card" style="margin-top:14px;">
+        <h2 style="margin-top:0;">Experimental</h2>
+
+        <div class="grid cols-2">
+          <div class="field">
+            <label>Batch</label>
+            <select id="expBatchSel">
+              {% for b in exp_batches %}
+                <option value="{{ b.id }}" {% if exp_selected_batch and b.id==exp_selected_batch.id %}selected{% endif %}>{{ b.batch_id }}</option>
+              {% endfor %}
+            </select>
+            <div class="help">Experimental data is batch-first. Create a new batch for each production run.</div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;">
+            <a class="btn" href="/batches/new?molecule_id={{ molecule.id }}">New batch</a>
+            {% if exp_selected_batch %}
+              <a class="btn primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ exp_selected_batch.id }}&domain=CMC&data_type=CMC_Analytics&method=SEC_HPLC&title=SEC-HPLC">Add SEC-HPLC</a>
+              <a class="btn primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ exp_selected_batch.id }}&domain=Biological&data_type=Binding&method=BLI&title=BLI%20binding">Add BLI/SPR</a>
+              <a class="btn primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ exp_selected_batch.id }}&domain=CMC&data_type=CMC_Analytics&method=Endotoxin&title=Endotoxin">Add endotoxin</a>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if not exp_selected_batch %}
+          <p class="muted">No batches yet. Create a batch to start entering experimental data.</p>
+        {% else %}
+          <div class="grid cols-3">
+            <div class="card" style="margin:0;">
+              <h3>Latest SEC-HPLC</h3>
+              {% if exp_latest_sec %}
+                {% set r = exp_latest_sec.record %}
+                {% set s = exp_latest_sec.summary %}
+                <div class="muted">{{ r.run_date or r.created_at.strftime("%Y-%m-%d") }} — {{ r.title }}</div>
+                <div><b>Monomer:</b> {{ s.monomer_pct if s.monomer_pct is not none else "—" }}{% if s.monomer_pct is not none %}%{% endif %}</div>
+                <div><b>HMW:</b> {{ s.hmw_pct if s.hmw_pct is not none else "—" }}{% if s.hmw_pct is not none %}%{% endif %}</div>
+                <div><b>LMW:</b> {{ s.lmw_pct if s.lmw_pct is not none else "—" }}{% if s.lmw_pct is not none %}%{% endif %}</div>
+                <div style="margin-top:8px;"><a class="btn mini" href="/data/{{ r.id }}">View</a></div>
+              {% else %}
+                <div class="muted">No SEC-HPLC entries yet.</div>
+              {% endif %}
+            </div>
+
+            <div class="card" style="margin:0;">
+              <h3>Latest BLI/SPR</h3>
+              {% if exp_latest_binding %}
+                {% set r = exp_latest_binding.record %}
+                {% set s = exp_latest_binding.summary %}
+                <div class="muted">{{ r.run_date or r.created_at.strftime("%Y-%m-%d") }} — {{ r.method }}</div>
+                <div><b>KD:</b> {{ s.kd_nM if s.kd_nM is not none else "—" }}{% if s.kd_nM is not none %} nM{% endif %}</div>
+                <div style="margin-top:8px;"><a class="btn mini" href="/data/{{ r.id }}">View</a></div>
+              {% else %}
+                <div class="muted">No binding entries yet.</div>
+              {% endif %}
+            </div>
+
+            <div class="card" style="margin:0;">
+              <h3>Latest endotoxin</h3>
+              {% if exp_latest_endotoxin %}
+                {% set r = exp_latest_endotoxin.record %}
+                {% set s = exp_latest_endotoxin.summary %}
+                <div class="muted">{{ r.run_date or r.created_at.strftime("%Y-%m-%d") }} — {{ r.title }}</div>
+                <div><b>EU/mL:</b> {{ s.value_eu_ml if s.value_eu_ml is not none else "—" }}</div>
+                <div><b>Limit:</b> {{ s.limit_eu_ml if s.limit_eu_ml is not none else "—" }}</div>
+                <div style="margin-top:8px;"><a class="btn mini" href="/data/{{ r.id }}">View</a></div>
+              {% else %}
+                <div class="muted">No endotoxin entries yet.</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:14px;">
+            <h3 style="margin-top:0;">Batch timeline</h3>
+            {% if exp_records and exp_records|length %}
+              <table class="table">
+                <thead><tr><th>Date</th><th>Assay</th><th>Key results</th><th></th></tr></thead>
+                <tbody>
+                  {% for item in exp_records %}
+                    {% set r = item.record %}
+                    {% set s = item.summary %}
+                    <tr>
+                      <td class="muted">{{ r.run_date or r.created_at.strftime("%Y-%m-%d") }}</td>
+                      <td><b>{{ r.data_type }}</b> — {{ r.method }}</td>
+                      <td class="muted">
+                        {% if r.data_type=="CMC_Analytics" and r.method in ["SEC_HPLC","SEC"] %}
+                          Monomer {{ s.monomer_pct if s.monomer_pct is not none else "—" }}{% if s.monomer_pct is not none %}%{% endif %}{% if s.hmw_pct is not none %}, HMW {{ s.hmw_pct }}%{% endif %}{% if s.lmw_pct is not none %}, LMW {{ s.lmw_pct }}%{% endif %}
+                        {% elif r.data_type=="Binding" and r.method in ["BLI","SPR"] %}
+                          KD {{ s.kd_nM if s.kd_nM is not none else "—" }}{% if s.kd_nM is not none %} nM{% endif %}
+                        {% elif r.data_type=="CMC_Analytics" and r.method=="Endotoxin" %}
+                          {{ s.value_eu_ml if s.value_eu_ml is not none else "—" }} EU/mL (limit {{ s.limit_eu_ml if s.limit_eu_ml is not none else "—" }})
+                        {% else %}
+                          —
+                        {% endif %}
+                      </td>
+                      <td><a class="btn mini" href="/data/{{ r.id }}">View</a></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <div class="muted">No experimental records yet for this batch.</div>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        <script>
+        (function(){
+          const sel = document.getElementById('expBatchSel');
+          if(!sel) return;
+          sel.addEventListener('change', ()=>{
+            const bid = sel.value;
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab','experimental');
+            url.searchParams.set('batch_id', bid);
+            window.location.href = url.toString();
+          });
+        })();
+        </script>
+      </div>
+      {% endif %}
       {% set user_desc = molecule.description_user or molecule.description %}
       {% if user_desc %}<p>{{ user_desc }}</p>{% endif %}
       {% if molecule.description_auto %}
@@ -24,7 +149,7 @@
     <a class="tab" href="#evidence">Evidence</a>
     <a class="tab" href="#files">Files</a>
     <a class="tab" href="#computed">Computed Results</a>
-    <a class="tab" href="#domains">Domains & Labels</a>
+    <a class="tab" href="#annotations">Annotations</a>
     <a class="tab" href="#audit">Audit</a>
   </div>
 
@@ -96,6 +221,12 @@
     </form>
   </div>
 
+  {% if not heavy_gate_numbering.ok %}
+    <div class="notice mini" style="margin:8px 0;">
+      {{ heavy_gate_numbering.reason }}. Install <code>requirements-heavy.txt</code> to enable.
+    </div>
+  {% endif %}
+
   {% if latest_run %}
     <div class="card" style="margin:10px 0;">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
@@ -118,32 +249,47 @@
         </tbody>
       </table>
 
-      <h3>Antibody numbering (manual, cached by domain)</h3>
-      {% set scheme = request.query_params.get('scheme','kabat') %}
-      {% if numbering_payload and (numbering_payload.VH or numbering_payload.VL) %}
-        {% if numbering_payload.pending %}<div class="muted">Numbering is still running for one or more domains. Refresh this page.</div>{% endif %}
-        {% for chain_name in ['VH','VL'] %}
-          {% set payload = numbering_payload[chain_name] %}
-          {% if payload %}
-            <h4>{{ chain_name }} ({{ scheme|upper }})</h4>
-            {% if payload.cdrs %}
-              <div class="muted">CDR1: {{ payload.cdrs.get('CDR1','') }} · CDR2: {{ payload.cdrs.get('CDR2','') }} · CDR3: {{ payload.cdrs.get('CDR3','') }}</div>
-            {% endif %}
-            <table class="table" style="margin-top:6px;">
-              <thead><tr><th>Position</th><th>Residue</th></tr></thead>
-              <tbody>
-                {% for pos, aa in payload.positions.items() %}
-                  <tr><td class="muted">{{ pos }}</td><td><code>{{ aa }}</code></td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% else %}
-            <div class="muted">{{ chain_name }}: not available yet (ensure domain extraction succeeded, then click “Compute numbering”).</div>
+      <details class="numbering-map-panel" style="margin-top:12px;">
+        <summary class="muted"><strong>Numbering map</strong> (wrapped, export-friendly)</summary>
+        <div style="margin-top:10px;">
+          {% if numbering_payload and numbering_payload.pending %}
+            <div class="notice mini">Numbering is still running for one or more domains. Refresh this page in a moment.</div>
           {% endif %}
-        {% endfor %}
-      {% else %}
-        <div class="muted">No numbering results yet. Click “Compute numbering” above to generate and cache results for this molecule’s VH/VL domains.</div>
-      {% endif %}
+
+          <div class="no-print" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;">
+            <label class="muted" style="margin:0;">Block size</label>
+            <select id="nm_block_size" style="width:140px;">
+              {% for n in [5,10,20,25,50] %}
+                <option value="{{ n }}" {% if n==10 %}selected{% endif %}>{{ n }} residues</option>
+              {% endfor %}
+            </select>
+            <span class="muted mini">Click any cell to highlight the column (within the block) and select that residue in the Viewer.</span>
+          </div>
+
+          {% set any_maps = false %}
+          {% for nm in numbering_maps %}
+            {% if nm.labels_by_raw_index and (nm.labels_by_raw_index|length) > 0 %}
+              {% set any_maps = true %}
+              <div class="card" style="margin:10px 0;">
+                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                  <div>
+                    <strong>{{ nm.domain_type }}</strong>
+                    <span class="muted">· {{ nm.component_role }} · span=[{{ nm.start_idx }}, {{ nm.end_idx }}) · {{ nm.scheme|upper }}</span>
+                  </div>
+                </div>
+                <div class="numbering-map" data-map='{{ nm | tojson }}'></div>
+              </div>
+            {% endif %}
+          {% endfor %}
+          {% if not any_maps %}
+            {% if not heavy_gate_numbering.ok %}
+              <div class="muted">No numbering results yet. {{ heavy_gate_numbering.reason }}. Install <code>requirements-heavy.txt</code> to enable.</div>
+            {% else %}
+              <div class="muted">No numbering results yet. Ensure domain extraction succeeded, then click “Compute numbering” above.</div>
+            {% endif %}
+          {% endif %}
+        </div>
+      </details>
     </div>
 
     <h3>Property run history</h3>
@@ -181,8 +327,17 @@
       {% endfor %}
     </tbody>
   </table>
-  <h2 id="domains">Domains & Labels</h2>
-  <p class="muted">Sequence-aligned feature tracks (domains + reference matches). Click a feature to highlight its residues.</p>
+  <h2 id="annotations">Annotations</h2>
+  <p class="muted">Selectable, copy-clean sequence viewer with an annotation sidebar. Click an annotation to highlight residues; copy always yields raw amino acids only.</p>
+
+  <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0;">
+    <form method="post" action="/molecules/{{ molecule.id }}/domains/recompute">
+      <button class="btn" type="submit">Recompute domains</button>
+    </form>
+    {% if not heavy_gate_domains.ok %}
+      <div class="notice mini">{{ heavy_gate_domains.reason }}. Install <code>requirements-heavy.txt</code> to enable.</div>
+    {% endif %}
+  </div>
 
   <div class="card no-print" style="margin:10px 0;">
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
@@ -199,43 +354,46 @@
     </div>
   </div>
 
-  <div class="grid" style="grid-template-columns: 1fr 320px; gap:14px;">
+  <div class="grid" style="grid-template-columns: 1fr 360px; gap:14px;">
     <div>
-      {% for t in feature_tracks %}
+      {% for t in viewer_v2_components %}
         <div class="card" style="margin:12px 0;">
-          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-end;">
             <div>
               <strong>{{ t.role }}</strong>
               <span class="muted">· length={{ t.length }}</span>
             </div>
-            <div class="muted mini">click-drag on residues to select</div>
+            <div class="no-print muted mini">Tip: click-drag to select; ⌘/Ctrl+C copies a clean AA sequence.</div>
           </div>
 
-          <div class="seq-scroll" data-component-id="{{ t.component_id }}" style="--len: {{ t.length }};">
-            {% for lane in t.lanes %}
+          <div class="seq-scroll viewer-v2" data-component-id="{{ t.component_id }}" data-molecule-id="{{ molecule.id }}" style="--len: {{ t.length }};" data-seq="{{ t.sequence }}">
+            <div class="lane">
+              <div class="lane-label muted">Pos</div>
+              <div class="num-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), 1ch);">
+                {% for aa in t.sequence %}
+                  <span class="num-cell" data-pos="{{ loop.index0 }}">{% if loop.index == 1 or (loop.index % 10) == 0 %}<span class="ruler-label">{{ loop.index }}</span>{% endif %}</span>
+                {% endfor %}
+              </div>
+            </div>
+
+            {% if t.has_ab_numbering %}
               <div class="lane">
-                <div class="lane-label muted">{{ lane.lane_name }}</div>
-                <div class="lane-grid" style="grid-template-columns: repeat({{ t.length }}, 1ch);">
-                  {% for f in lane.features %}
-                    <div
-                      class="feature-bar feat-{{ f.feature_type }}"
-                      style="grid-column: {{ f.start_idx + 1 }} / {{ f.end_idx + 1 }};"
-                      data-feature='{{ f | tojson }}'
-                      title="{{ f.name }} [{{ f.start_idx }}, {{ f.end_idx }})"
-                      tabindex="0"
-                    >
-                      {{ f.name }}
-                    </div>
+                <div class="lane-label muted">Ab #</div>
+                <div class="num-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), 1ch);">
+                  {% for lab in t.ab_labels %}
+                    {% if lab %}
+                      <span class="num-cell" data-pos="{{ loop.index0 }}" title="{{ lab }}">{{ lab[-1] }}</span>
+                    {% else %}
+                      <span class="num-cell blank" data-pos="{{ loop.index0 }}">.</span>
+                    {% endif %}
                   {% endfor %}
                 </div>
               </div>
-            {% else %}
-              <div class="muted" style="margin:8px 0;">No feature tracks for this component yet.</div>
-            {% endfor %}
+            {% endif %}
 
             <div class="lane">
               <div class="lane-label muted">Sequence</div>
-              <div class="seq-grid" style="grid-template-columns: repeat({{ t.length }}, 1ch);">
+              <div class="seq-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), 1ch);">
                 {% for aa in t.sequence %}
                   <span class="residue" data-pos="{{ loop.index0 }}">{{ aa }}</span>
                 {% endfor %}
@@ -270,20 +428,41 @@
     </div>
 
     <div>
-      <div class="card" id="feature_meta">
-        <h3 style="margin-top:0;">Selection</h3>
-        <div class="muted" id="feature_meta_hint">Click a feature bar (or select residues) to see details.</div>
-        <div id="feature_meta_body" style="display:none;">
-          <div class="kv" style="grid-template-columns:110px 1fr;">
-            <div class="k">Component</div><div id="meta_component"></div>
-            <div class="k">Name</div><div id="meta_name"></div>
-            <div class="k">Type</div><div id="meta_type"></div>
-            <div class="k">Span</div><div id="meta_span"></div>
-            <div class="k">Tool</div><div id="meta_tool"></div>
-            <div class="k">Method</div><div id="meta_method"></div>
-            <div class="k">Meta</div><div><pre id="meta_json" style="white-space:pre-wrap;margin:0;"></pre></div>
+      <div class="card" id="annotations_panel">
+        <h3 style="margin-top:0;">Annotations</h3>
+        <div class="muted mini" style="margin-top:-6px;">Click to highlight. Use “Copy” to copy only raw amino acids for the selected span(s).</div>
+
+        {% for t in viewer_v2_components %}
+          <div class="annot-comp" data-component-id="{{ t.component_id }}" style="margin-top:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+              <strong>{{ t.role }}</strong>
+              <span class="muted mini">len={{ t.length }}</span>
+            </div>
+
+            {% for g in t.annotations_groups %}
+              <details class="annot-group" {% if loop.index0 < 2 %}open{% endif %} style="margin-top:8px;">
+                <summary class="muted" style="cursor:pointer;"><strong>{{ g.group }}</strong> <span class="muted mini">({{ g["items"]|length }})</span></summary>
+                <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+                  {% for f in g["items"] %}
+                    {% set sp = (f.spans[0] if f.spans and (f.spans|length)>0 else {'start':0,'end':0}) %}
+                    <div class="annot-item" data-component-id="{{ t.component_id }}">
+                      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+                        <div>
+                          <div><strong>{{ f.name }}</strong></div>
+                          <div class="muted mini">[{{ sp.start }}, {{ sp.end }}) · {{ (f.confidence*100) | round(1) }}%</div>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                          <button class="btn mini" type="button" data-action="annot-highlight">Highlight</button>
+                          <button class="btn mini" type="button" data-action="annot-copy">Copy</button>
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </details>
+            {% endfor %}
           </div>
-        </div>
+        {% endfor %}
       </div>
     </div>
   </div>
@@ -352,84 +531,217 @@
 {% block scripts %}
 <script>
 (function(){
-  const metaHint = document.getElementById('feature_meta_hint');
-  const metaBody = document.getElementById('feature_meta_body');
-  const metaComp = document.getElementById('meta_component');
-  const metaName = document.getElementById('meta_name');
-  const metaType = document.getElementById('meta_type');
-  const metaSpan = document.getElementById('meta_span');
-  const metaTool = document.getElementById('meta_tool');
-  const metaMethod = document.getElementById('meta_method');
-  const metaJson = document.getElementById('meta_json');
-
-  function clearSelection(compEl){
-    compEl.querySelectorAll('.residue.selected').forEach(el => el.classList.remove('selected'));
+  function clearResidueHighlights(viewerEl){
+    viewerEl.querySelectorAll('.residue.selected').forEach(el => el.classList.remove('selected'));
   }
 
-  function selectRange(compEl, startIdx, endIdx){
+  function highlightRange(viewerEl, startIdx, endIdx){
+    const residues = viewerEl.querySelectorAll('.residue');
     const s = Math.max(0, parseInt(startIdx||0));
     const e = Math.max(s, parseInt(endIdx||0));
-    clearSelection(compEl);
-    const residues = compEl.querySelectorAll('.residue');
-    for(let i=s; i<e && i<residues.length; i++){
-      residues[i].classList.add('selected');
+    clearResidueHighlights(viewerEl);
+    for(let i=s; i<e && i<residues.length; i++) residues[i].classList.add('selected');
+
+    // Let other widgets (e.g., Numbering map) reflect the current selection.
+    try{
+      const moleculeId = viewerEl.dataset.moleculeId;
+      const componentId = viewerEl.dataset.componentId;
+      window.dispatchEvent(new CustomEvent('psi:viewer-selection', {detail:{moleculeId, componentId, start_idx:s, end_idx:e}}));
+    }catch(e){}
+  }
+
+  function charWidthPx(el){
+    const probe = document.createElement('span');
+    probe.textContent = 'M';
+    probe.style.visibility = 'hidden';
+    probe.style.position = 'absolute';
+    probe.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+    probe.style.fontSize = '12px';
+    el.appendChild(probe);
+    const w = probe.getBoundingClientRect().width || 10;
+    probe.remove();
+    return w;
+  }
+
+  function computeWrapCols(viewerEl){
+    // Compute based on the visible viewer container width (stable), not content width.
+    const w = viewerEl.clientWidth || (viewerEl.getBoundingClientRect && viewerEl.getBoundingClientRect().width) || 0;
+    if(!w) return 80;
+
+    let cw = charWidthPx(viewerEl);
+    // Guard against bad measurements (can happen in hidden/just-rendered contexts)
+    if(!cw || !isFinite(cw) || cw < 7) cw = 10;
+
+    const laneLabelGutter = 64;
+    const pad = 24;
+    let cols = Math.floor((w - laneLabelGutter - pad) / cw);
+    if(!cols || !isFinite(cols)) cols = 80;
+
+    // Hard clamps: prevents any overflow spiral
+    cols = Math.max(20, Math.min(120, cols));
+    return cols;
+  }
+
+  function setWrapCols(viewerEl){
+    const cols = computeWrapCols(viewerEl);
+    viewerEl.style.setProperty('--wrap-cols', String(cols));
+  }
+
+  function setWrapColsAll(){
+    const viewers = Array.from(document.querySelectorAll(".viewer-v2")).length
+      ? Array.from(document.querySelectorAll(".viewer-v2"))
+      : Array.from(document.querySelectorAll(".seq-grid")).map(g => g.closest("[data-component-id], .card, .lane, div") ).filter(Boolean);
+    for(const v of viewers){
+      try{
+        // skip hidden blocks (width 0) and try again later
+        const rect = v.getBoundingClientRect();
+        if(!rect || rect.width < 10) continue;
+        setWrapCols(v);
+      }catch(e){}
     }
   }
 
-  function showMeta(compEl, payload){
-    const role = (compEl.closest('.card')?.querySelector('strong')?.textContent || '').trim();
-    metaComp.textContent = role;
-    metaName.textContent = payload.name || '(selection)';
-    metaType.textContent = payload.feature_type || payload.type || 'range';
-    metaSpan.textContent = `[${payload.start_idx}, ${payload.end_idx})`;
-    const tool = (payload.tool_name ? payload.tool_name : '');
-    const ver = (payload.tool_version ? `@${payload.tool_version}` : '');
-    metaTool.textContent = tool + ver;
-    metaMethod.textContent = payload.method || '';
-    metaJson.textContent = payload.meta ? JSON.stringify(payload.meta, null, 2) : '';
+  // initial + reactive recompute (important when panels/components are collapsed then expanded)
+  setTimeout(setWrapColsAll, 0);
+  window.addEventListener("resize", () => setTimeout(setWrapColsAll, 0));
+  document.addEventListener("toggle", (e) => {
+    if(e && e.target && e.target.tagName === "DETAILS") setTimeout(setWrapColsAll, 0);
+  });
 
-    if(metaHint) metaHint.style.display = 'none';
-    if(metaBody) metaBody.style.display = 'block';
+
+  function selectionInside(el){
+    const sel = window.getSelection();
+    if(!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    const sc = range.startContainer;
+    const ec = range.endContainer;
+    if(!(sc instanceof Node) || !(ec instanceof Node)) return null;
+    if(!el.contains(sc) && !el.contains(ec)) return null;
+    return range;
   }
 
-  document.querySelectorAll('.seq-scroll').forEach((compEl) => {
-    // Feature clicks
-    compEl.querySelectorAll('.feature-bar').forEach((bar) => {
-      bar.addEventListener('click', () => {
-        let payload = {};
-        try{ payload = JSON.parse(bar.dataset.feature || '{}'); }catch(e){ payload = {}; }
-        if(typeof payload.start_idx === 'number' && typeof payload.end_idx === 'number'){
-          selectRange(compEl, payload.start_idx, payload.end_idx);
-          showMeta(compEl, payload);
-        }
+  function residuesFromRange(viewerEl, range){
+    const seqGrid = viewerEl.querySelector('.seq-grid');
+    if(!seqGrid) return {text:'', start:null, end:null};
+    const residues = Array.from(seqGrid.querySelectorAll('.residue'));
+    const hits = [];
+
+    // Intersect residues directly.
+    for(const r of residues){
+      try{ if(range.intersectsNode(r)) hits.push(parseInt(r.dataset.pos||'0')); }catch(e){}
+    }
+
+    // If the user selected only numbering cells, map those columns back to residues.
+    if(hits.length === 0){
+      const nums = Array.from(viewerEl.querySelectorAll('.num-cell[data-pos]'));
+      for(const n of nums){
+        try{ if(range.intersectsNode(n)) hits.push(parseInt(n.dataset.pos||'0')); }catch(e){}
+      }
+    }
+    if(hits.length === 0){
+      // Fallback: filter the selected plain text for AA characters.
+      const raw = String(range.toString() || '');
+      const filtered = raw.toUpperCase().replace(/[^A-Z\*\-]/g, '');
+      return {text:filtered, start:null, end:null};
+    }
+    hits.sort((a,b)=>a-b);
+    const s = hits[0];
+    const e = hits[hits.length-1] + 1;
+    const text = hits.map(i => residues[i]?.textContent || '').join('');
+    return {text, start:s, end:e};
+  }
+
+  async function copyText(text){
+    const t = String(text || '');
+    if(!t) return;
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(t);
+        return;
+      }
+    }catch(e){}
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = t;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    ta.remove();
+  }
+
+  // Viewer wiring
+  const viewers = Array.from(document.querySelectorAll('.seq-scroll.viewer-v2'));
+  viewers.forEach((viewerEl) => {
+    setWrapCols(viewerEl);
+    window.addEventListener('resize', () => setWrapCols(viewerEl));
+
+    // Manual selection => highlight residues (native selection remains untouched)
+    viewerEl.addEventListener('mouseup', () => {
+      const range = selectionInside(viewerEl);
+      if(!range) return;
+      const {start, end} = residuesFromRange(viewerEl, range);
+      if(start === null || end === null) return;
+      highlightRange(viewerEl, start, end);
+    });
+
+    // CRITICAL: copy sanitization (viewer-local).
+    viewerEl.addEventListener('copy', (ev) => {
+      const range = selectionInside(viewerEl);
+      if(!range) return;
+      const {text} = residuesFromRange(viewerEl, range);
+      if(!text) return;
+      try{
+        ev.clipboardData.setData('text/plain', text);
+        ev.preventDefault();
+      }catch(e){
+        // As a last resort, try async clipboard.
+        ev.preventDefault();
+        copyText(text);
+      }
+    });
+  });
+
+  // Annotations panel interactions
+  document.querySelectorAll('.annot-item').forEach((row) => {
+    const compId = row.dataset.componentId;
+    let feat = {};
+    try{ feat = JSON.parse(row.dataset.feature || '{}'); }catch(e){ feat = {}; }
+    const sp = (feat.spans && feat.spans.length) ? feat.spans[0] : null;
+    const viewerEl = document.querySelector(`.seq-scroll.viewer-v2[data-component-id="${compId}"]`);
+    if(!viewerEl || !sp) return;
+
+    const doHighlight = () => {
+      highlightRange(viewerEl, sp.start, sp.end);
+      // Scroll to the first selected residue (within the viewer block)
+      const first = viewerEl.querySelector(`.residue[data-pos="${sp.start}"]`);
+      if(first){
+        first.scrollIntoView({block:'nearest', inline:'nearest'});
+      }
+    };
+
+    row.querySelectorAll('[data-action="annot-highlight"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        doHighlight();
       });
     });
 
-    // Residue selection (click-drag)
-    let dragging = false;
-    let anchor = null;
-    compEl.addEventListener('mousedown', (ev) => {
-      const t = ev.target;
-      if(!t || !t.classList || !t.classList.contains('residue')) return;
-      dragging = true;
-      anchor = parseInt(t.dataset.pos || '0');
-      const payload = {name:'(manual selection)', feature_type:'range', start_idx:anchor, end_idx:anchor+1, tool_name:'', tool_version:'', method:'', meta:{}};
-      selectRange(compEl, payload.start_idx, payload.end_idx);
-      showMeta(compEl, payload);
-      ev.preventDefault();
+    row.querySelectorAll('[data-action="annot-copy"]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const s = Math.max(0, parseInt(sp.start||0));
+        const e2 = Math.max(s, parseInt(sp.end||0));
+        const residues = Array.from(viewerEl.querySelectorAll('.residue'));
+        let out = '';
+        for(let i=s; i<e2 && i<residues.length; i++) out += (residues[i]?.textContent || '');
+        out = out.toUpperCase().replace(/[^A-Z\*\-]/g, '');
+        await copyText(out);
+        doHighlight();
+      });
     });
-    compEl.addEventListener('mouseover', (ev) => {
-      if(!dragging) return;
-      const t = ev.target;
-      if(!t || !t.classList || !t.classList.contains('residue')) return;
-      const cur = parseInt(t.dataset.pos || '0');
-      const s = Math.min(anchor, cur);
-      const e = Math.max(anchor, cur) + 1;
-      const payload = {name:'(manual selection)', feature_type:'range', start_idx:s, end_idx:e, tool_name:'', tool_version:'', method:'', meta:{}};
-      selectRange(compEl, s, e);
-      showMeta(compEl, payload);
-    });
-    window.addEventListener('mouseup', () => { dragging = false; anchor = null; });
   });
 
   // Quality-of-life: auto-submit PD-L1 mismatch select
@@ -439,6 +751,168 @@
       mmSel.form && mmSel.form.submit();
     });
   }
+
+  // --- Numbering map (wrapped, block/tile layout) ---
+  function esc(s){
+    return (s === null || s === undefined) ? '' : String(s);
+  }
+
+  function buildTile(map, blockSize, offset){
+    const tile = document.createElement('div');
+    tile.className = 'nm-tile';
+    tile.style.setProperty('--nm-block', String(blockSize));
+
+    const end = Math.min(offset + blockSize, map.sequence.length);
+    const count = end - offset;
+
+    function mkRow(kind){
+      const row = document.createElement('div');
+      row.className = 'nm-row';
+      row.style.gridTemplateColumns = `repeat(${blockSize}, var(--nm-colw))`;
+      for(let j=0; j<blockSize; j++){
+        const idx = offset + j;
+        const cell = document.createElement('div');
+        cell.className = `nm-cell ${kind}`;
+        cell.dataset.col = String(j);
+        cell.dataset.abs = String(idx);
+        if(idx >= map.sequence.length){
+          cell.classList.add('blank');
+          cell.textContent = '';
+        }else{
+          if(kind === 'nm-seq'){
+            cell.textContent = map.sequence[idx] || '';
+          }else if(kind === 'nm-raw'){
+            cell.textContent = String(idx + 1);
+          }else if(kind === 'nm-ab'){
+            const lab = map.labels_by_raw_index[idx];
+            cell.textContent = lab ? String(lab) : '';
+            if(!lab) cell.classList.add('blank');
+          }
+        }
+        row.appendChild(cell);
+      }
+      return row;
+    }
+
+    tile.appendChild(mkRow('nm-ab'));
+    tile.appendChild(mkRow('nm-raw'));
+    tile.appendChild(mkRow('nm-seq'));
+
+    // Click interaction: highlight column within tile + select residue in Viewer v2.
+    tile.addEventListener('click', (ev) => {
+      const target = ev.target;
+      if(!(target instanceof HTMLElement)) return;
+      if(!target.classList.contains('nm-cell')) return;
+      const col = target.dataset.col;
+      const abs = parseInt(target.dataset.abs || '-1');
+      if(!Number.isFinite(abs) || abs < 0 || abs >= map.sequence.length) return;
+
+      // Column highlight within this tile only
+      tile.querySelectorAll('.nm-cell.selected').forEach(el => el.classList.remove('selected'));
+      tile.querySelectorAll(`.nm-cell[data-col="${col}"]`).forEach(el => el.classList.add('selected'));
+
+      // Select corresponding residue in Viewer v2 (component coordinates)
+      const viewerEl = document.querySelector(`.seq-scroll.viewer-v2[data-molecule-id="${map.molecule_id}"][data-component-id="${map.component_id}"]`);
+      if(viewerEl){
+        const compIdx = (map.start_idx || 0) + abs;
+        highlightRange(viewerEl, compIdx, compIdx + 1);
+      }
+    });
+
+    return tile;
+  }
+
+  function renderNumberingMap(container, map, blockSize){
+    container.innerHTML = '';
+    container.style.setProperty('--nm-block', String(blockSize));
+    for(let i=0; i<map.sequence.length; i += blockSize){
+      container.appendChild(buildTile(map, blockSize, i));
+    }
+  }
+
+  function getBlockSize(){
+    const sel = document.getElementById('nm_block_size');
+    const n = sel ? parseInt(sel.value || '10') : 10;
+    return [5,10,20,25,50].includes(n) ? n : 10;
+  }
+
+  function loadNmSize(){
+    try{
+      const raw = localStorage.getItem('psi:nm:block_size');
+      const n = parseInt(raw || '');
+      if([5,10,20,25,50].includes(n)) return n;
+    }catch(e){}
+    return 10;
+  }
+
+  function saveNmSize(n){
+    try{ localStorage.setItem('psi:nm:block_size', String(n)); }catch(e){}
+  }
+
+  // Render all maps on load
+  const nmContainers = Array.from(document.querySelectorAll('.numbering-map'));
+  if(nmContainers.length){
+    const sel = document.getElementById('nm_block_size');
+    const initial = loadNmSize();
+    if(sel) sel.value = String(initial);
+    const blockSize = initial;
+    nmContainers.forEach((el) => {
+      let map = {};
+      try{ map = JSON.parse(el.dataset.map || '{}'); }catch(e){ map = {}; }
+      map.molecule_id = esc({{ molecule.id }});
+      renderNumberingMap(el, map, blockSize);
+    });
+
+    if(sel){
+      sel.addEventListener('change', () => {
+        const n = getBlockSize();
+        saveNmSize(n);
+        nmContainers.forEach((el) => {
+          let map = {};
+          try{ map = JSON.parse(el.dataset.map || '{}'); }catch(e){ map = {}; }
+          map.molecule_id = esc({{ molecule.id }});
+          renderNumberingMap(el, map, n);
+        });
+      });
+    }
+  }
+
+  // Optional: reflect Viewer selection into the map (if map is open)
+  window.addEventListener('psi:viewer-selection', (ev) => {
+    try{
+      const d = ev.detail || {};
+      const componentId = String(d.componentId || d.component_id || '');
+      const s = parseInt(d.start_idx || '0');
+      const e = parseInt(d.end_idx || '0');
+      if(!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return;
+
+      const panel = document.querySelector('.numbering-map-panel');
+      if(panel && panel.open !== true) return;
+
+      document.querySelectorAll('.numbering-map').forEach((el) => {
+        let map = {};
+        try{ map = JSON.parse(el.dataset.map || '{}'); }catch(e){ map = {}; }
+        if(String(map.component_id) !== componentId) return;
+        const abs = s - (parseInt(map.start_idx || '0'));
+        if(abs < 0 || abs >= (map.sequence ? map.sequence.length : 0)) return;
+        // Find the tile containing this abs index and highlight its column
+        const blockSize = getBlockSize();
+        const tileIdx = Math.floor(abs / blockSize);
+        const col = String(abs % blockSize);
+        const tiles = Array.from(el.querySelectorAll('.nm-tile'));
+        const tile = tiles[tileIdx];
+        if(!tile) return;
+        tile.querySelectorAll('.nm-cell.selected').forEach(x => x.classList.remove('selected'));
+        tile.querySelectorAll(`.nm-cell[data-col="${col}"]`).forEach(x => x.classList.add('selected'));
+      });
+    }catch(e){}
+  });
 })();
 </script>
 {% endblock %}
+
+<script>
+try{ setTimeout(()=>{ 
+  if(typeof setWrapColsAll === "function") setWrapColsAll(); 
+}, 0); }catch(e){}
+</script>

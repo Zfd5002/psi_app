@@ -126,3 +126,23 @@ def set_artifact_failure(db: Session, art: DomainArtifact, error: str) -> Domain
     db.commit()
     db.refresh(art)
     return art
+
+
+def set_artifact_skipped(db: Session, art: DomainArtifact, *, code: str, reason: str, extra: dict | None = None) -> DomainArtifact:
+    """Mark an artifact as skipped.
+
+    We treat "skipped" as a first-class status without introducing schema
+    changes (status is stored as free text).
+    """
+    payload = {"skipped": True, "code": code, "reason": reason}
+    if extra:
+        payload["extra"] = extra
+
+    art.status = "skipped"
+    art.result_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    art.error = None
+    art.updated_at = now_utc()
+    db.add(art)
+    db.commit()
+    db.refresh(art)
+    return art

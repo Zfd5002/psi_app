@@ -1,0 +1,18 @@
+# Heavy compute dependencies for PSI (optional).
+#
+# Install core deps first:
+#   pip install -r requirements.txt
+#
+# Then install these heavy compute deps:
+#   pip install -r requirements-heavy.txt
+#
+# ANARCI note:
+# ANARCI is not reliably pip-wheel-installable across environments.
+# Install it using:
+#   ./scripts/install_anarci.sh
+#
+biopython==1.83
+abnumber==0.4.4
+
+# ANARCI (install via script; keep pin here for reproducibility/documentation)
+# git+https://github.com/oxpig/ANARCI.git@79f6c575056dedef86cb8f405ebb039197

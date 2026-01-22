@@ -23,10 +23,10 @@ EVIDENCE_TO_DATA_SOURCES: Dict[str, List[Dict[str, Any]]] = {
         {"data_type": "InVivo", "methods": ["NOD", "OtherMouse"]}
     ],
     "Purity_SEC": [
-        {"data_type": "CMC_Analytics", "methods": ["SEC"]}
+        {"data_type": "CMC_Analytics", "methods": ["SEC", "SEC_HPLC"]}
     ],
     "Aggregation_HMW": [
-        {"data_type": "CMC_Analytics", "methods": ["SEC", "DLS"]}
+        {"data_type": "CMC_Analytics", "methods": ["SEC", "SEC_HPLC", "DLS"]}
     ],
     "CRO_Quote": [
         {"data_type": "Execution", "methods": ["Quote"]}
@@ -46,22 +46,42 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
     "Binding": {
         "SPR": {
             "params_fields": [
+                {"key": "platform", "label": "Platform", "type": "select", "required": False, "options": ["SPR"]},
+                {"key": "instrument", "label": "Instrument", "type": "text", "required": False},
+                {"key": "interaction", "label": "Interaction", "type": "text", "required": False, "help": "e.g., PD-1:PD-L1"},
+                {"key": "orientation", "label": "Orientation", "type": "text", "required": False, "help": "e.g., ligand immobilized"},
+                {"key": "model", "label": "Fit model", "type": "text", "required": False, "help": "e.g., 1:1, bivalent"},
                 {"key": "analyte", "label": "Analyte", "type": "text", "required": True},
                 {"key": "ligand", "label": "Ligand", "type": "text", "required": True},
+                {"key": "temperature_C", "label": "Temperature", "type": "number", "required": False, "units": "°C"},
+                {"key": "buffer", "label": "Buffer", "type": "text", "required": False},
             ],
             "results_fields": [
                 {"key": "kd_nM", "label": "KD", "type": "number", "required": True, "units": "nM"},
-                {"key": "kon", "label": "kon", "type": "number", "required": False, "units": "1/Ms"},
+                {"key": "kon", "label": "kon", "type": "number", "required": False, "units": "1/M·s"},
                 {"key": "koff", "label": "koff", "type": "number", "required": False, "units": "1/s"},
-            ],
+                {"key": "rmax", "label": "Rmax", "type": "number", "required": False},
+                {"key": "chi2", "label": "Chi²", "type": "number", "required": False},
+            ] ,
         },
         "BLI": {
             "params_fields": [
+                {"key": "platform", "label": "Platform", "type": "select", "required": False, "options": ["BLI"]},
+                {"key": "instrument", "label": "Instrument", "type": "text", "required": False},
+                {"key": "interaction", "label": "Interaction", "type": "text", "required": False, "help": "e.g., PD-1:PD-L1"},
+                {"key": "orientation", "label": "Orientation", "type": "text", "required": False},
+                {"key": "model", "label": "Fit model", "type": "text", "required": False},
                 {"key": "sensor", "label": "Sensor", "type": "text", "required": False},
                 {"key": "analyte", "label": "Analyte", "type": "text", "required": True},
+                {"key": "temperature_C", "label": "Temperature", "type": "number", "required": False, "units": "°C"},
+                {"key": "buffer", "label": "Buffer", "type": "text", "required": False},
             ],
             "results_fields": [
                 {"key": "kd_nM", "label": "KD", "type": "number", "required": True, "units": "nM"},
+                {"key": "kon", "label": "kon", "type": "number", "required": False, "units": "1/M·s"},
+                {"key": "koff", "label": "koff", "type": "number", "required": False, "units": "1/s"},
+                {"key": "rmax", "label": "Rmax", "type": "number", "required": False},
+                {"key": "fit_quality", "label": "Fit quality", "type": "select", "required": False, "options": ["Good","OK","Poor"]},
             ],
         },
     },
@@ -117,6 +137,38 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
                 {"key": "monomer_pct", "label": "Monomer", "type": "number", "required": True, "units": "%"},
                 {"key": "hmw_pct", "label": "HMW", "type": "number", "required": False, "units": "%"},
                 {"key": "lmw_pct", "label": "LMW", "type": "number", "required": False, "units": "%"},
+            ],
+        },
+        "SEC_HPLC": {
+            "params_fields": [
+                {"key": "instrument", "label": "Instrument", "type": "text", "required": False},
+                {"key": "method_name", "label": "Method name", "type": "text", "required": False},
+                {"key": "column", "label": "Column", "type": "text", "required": True},
+                {"key": "mobile_phase", "label": "Mobile phase / buffer", "type": "text", "required": True},
+                {"key": "flow_rate_ml_min", "label": "Flow rate", "type": "number", "required": False, "units": "mL/min"},
+                {"key": "detection_nm", "label": "Detection", "type": "number", "required": False, "units": "nm"},
+                {"key": "injection_ul", "label": "Injection volume", "type": "number", "required": False, "units": "µL"},
+                {"key": "injection_ug", "label": "Injection mass", "type": "number", "required": False, "units": "µg"},
+            ],
+            "results_fields": [
+                {"key": "monomer_pct", "label": "Monomer", "type": "number", "required": True, "units": "%"},
+                {"key": "hmw_pct", "label": "HMW", "type": "number", "required": False, "units": "%"},
+                {"key": "lmw_pct", "label": "LMW", "type": "number", "required": False, "units": "%"},
+                {"key": "rt_monomer_min", "label": "Monomer RT", "type": "number", "required": False, "units": "min"},
+                {"key": "recovery_pct", "label": "Recovery", "type": "number", "required": False, "units": "%"},
+            ],
+        },
+        "Endotoxin": {
+            "params_fields": [
+                {"key": "method", "label": "Method", "type": "text", "required": True},
+                {"key": "kit_vendor", "label": "Kit vendor", "type": "text", "required": False},
+                {"key": "kit_lot", "label": "Kit lot", "type": "text", "required": False},
+                {"key": "dilution_factor", "label": "Dilution factor", "type": "number", "required": False},
+                {"key": "sample_matrix", "label": "Sample matrix / buffer", "type": "text", "required": False},
+            ],
+            "results_fields": [
+                {"key": "value_eu_ml", "label": "Endotoxin", "type": "number", "required": True, "units": "EU/mL"},
+                {"key": "limit_eu_ml", "label": "Acceptance limit", "type": "number", "required": True, "units": "EU/mL"},
             ],
         },
         "DLS": {

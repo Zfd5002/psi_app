@@ -12,6 +12,7 @@ from psi.core.biochem import liability_sites
 from psi.core.fasta import normalize_aa_sequence
 from psi.core.models import DomainInstance, Molecule, MoleculeComponent, SequenceEntity
 from psi.core.utils import now_utc
+from psi.core.deps import heavy_compute_available_for_molecule
 from psi.services.domain_artifacts import (
     ensure_domain_artifact_running,
     set_artifact_failure,
@@ -154,11 +155,64 @@ def extract_domains_for_molecule(db: Session, molecule_id: int) -> None:
     if not m:
         return
     fmt = (m.molecule_format or "").strip()
+
+    # Heavy compute gate.
+    # - scFv: component spans are explicit (no extra deps), but still respect
+    #   the per-molecule heavy toggle.
+    # - IgG: requires ANARCI.
+    req = () if fmt == "scFv" else ("anarci", "biopython")
+    gate = heavy_compute_available_for_molecule(m, require=req)
+
+    if not gate.ok:
+        # Normalize prior "failures" from missing optional deps into a clearer
+        # "skipped" state so the UI doesn't mislead users.
+        auto = (
+            db.execute(
+                select(DomainInstance)
+                .where(DomainInstance.molecule_id == molecule_id)
+                .where(DomainInstance.source == "auto")
+                .where(DomainInstance.domain_type.in_(["VH", "VL"]))
+            )
+            .scalars()
+            .all()
+        )
+        for inst in auto:
+            inst.status = "skipped"
+            inst.error = json.dumps({"skipped": True, "code": gate.code, "reason": gate.reason}, ensure_ascii=False)
+            inst.updated_at = now_utc()
+            db.add(inst)
+        db.commit()
+        return
     comps = db.execute(select(MoleculeComponent).where(MoleculeComponent.molecule_id == molecule_id)).scalars().all()
     by_role = {c.role: c for c in comps}
 
     for c in comps:
         ensure_component_sequence_entity(db, c)
+
+    # Heavy compute gate (domains):
+    # - scFv explicit domain components don't require ANARCI
+    # - IgG requires ANARCI
+    req = () if fmt == "scFv" else ("anarci", "biopython")
+    gate = heavy_compute_available_for_molecule(m, require=req)
+
+    def _mark_auto_domains_skipped(code: str, reason: str) -> None:
+        autos = db.execute(
+            select(DomainInstance)
+            .where(DomainInstance.molecule_id == molecule_id)
+            .where(DomainInstance.source == "auto")
+            .where(DomainInstance.domain_type.in_(["VH", "VL"]))
+        ).scalars().all()
+        for di in autos:
+            di.status = "skipped"
+            di.error = reason
+            di.warnings_json = json.dumps([f"SKIPPED:{code}", reason], ensure_ascii=False)
+            di.updated_at = now_utc()
+            db.add(di)
+        db.commit()
+
+    if not gate.ok:
+        _mark_auto_domains_skipped(gate.code, gate.reason)
+        return
 
     settings = {"purpose": "domain_extraction", "format": fmt, "policy": "vnext"}
     settings_hash = _settings_hash(settings)

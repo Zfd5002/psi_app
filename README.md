@@ -2,6 +2,20 @@
 
 Local-first scientific application built with FastAPI + Jinja2, SQLAlchemy, and SQLite.
 
+## Install
+
+Core (ELN + viewer):
+
+```bash
+pip install -r requirements.txt
+```
+
+Heavy compute (domains + numbering, etc.):
+
+```bash
+pip install -r requirements.txt -r requirements-heavy.txt
+```
+
 This repo was refactored from an MVP layout into a layered, extensible architecture designed for:
 
 - clean long-term growth by a small team

@@ -11,7 +11,7 @@
           <option value="{{ m.id }}" {% if (batch and m.id==batch.molecule_id) or (not batch and m.id==selected_molecule_id) %}selected{% endif %}>{{ m.primary_id }}{% if m.title %} — {{ m.title }}{% endif %}</option>
         {% endfor %}
       </select>
-      <div class="help">Batch ID will auto-increment (e.g., TCB-001-001).</div>
+      <div class="help">Batch ID will auto-increment (e.g., TCB001-001).</div>
     </div>
     <div class="field">
       <label>Title (optional)</label>

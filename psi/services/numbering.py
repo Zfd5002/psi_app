@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from psi.core.antibody_numbering import number_variable_domain
+from psi.core.deps import abnumber_available
 from psi.core.models import DomainArtifact, DomainInstance, SequenceEntity
 from psi.core.utils import now_utc
-from psi.services.domain_artifacts import ensure_domain_artifact_running, set_artifact_failure, set_artifact_success
+from psi.services.domain_artifacts import ensure_domain_artifact_running, set_artifact_failure, set_artifact_skipped, set_artifact_success
 
 
 def _settings_hash(settings: Any) -> str:
@@ -18,17 +19,24 @@ def _settings_hash(settings: Any) -> str:
     return sha256(blob.encode('utf-8')).hexdigest()
 
 
-def trigger_numbering_for_molecule(db: Session, *, molecule_id: int, scheme: str) -> list[DomainArtifact]:
-    """Ensure numbering artifacts exist for all VH/VL domain_instances on a molecule."""
+def trigger_numbering_for_molecule(db: Session, *, molecule_id: int, scheme: str, force: bool = False) -> list[DomainArtifact]:
+    """Compute (or recompute) numbering artifacts for all VH/VL domain_instances.
+
+    - Gated on optional dependencies.
+    - Safe to run multiple times (idempotent via deterministic keys).
+    """
     scheme_l = (scheme or "kabat").lower()
     settings = {"scheme": scheme_l}
     tool_name = "abnumber"
     tool_version = "unknown"
-    try:
-        import abnumber  # type: ignore
+    if abnumber_available():
+        try:
+            import abnumber  # type: ignore
 
-        tool_version = getattr(abnumber, "__version__", "unknown")
-    except Exception:
+            tool_version = getattr(abnumber, "__version__", "unknown")
+        except Exception:
+            tool_version = "unknown"
+    else:
         tool_version = "unavailable"
 
     instances = db.execute(
@@ -52,8 +60,23 @@ def trigger_numbering_for_molecule(db: Session, *, molecule_id: int, scheme: str
             settings=settings,
         )
         out.append(art)
-        if not created:
+        if not created and not force:
             continue
+
+        # Reset existing artifact to "running" when forcing recompute.
+        if not created and force:
+            art.status = "running"
+            art.error = None
+            art.updated_at = now_utc()
+            db.add(art)
+            db.commit()
+            db.refresh(art)
+
+        # Dependency gate (abnumber)
+        if not abnumber_available():
+            set_artifact_skipped(db, art, code="dependency_missing", reason="abnumber not installed (install requirements-heavy.txt)")
+            continue
+
         # Compute and store
         try:
             seq = db.get(SequenceEntity, inst.domain_sequence_id)
@@ -64,10 +87,18 @@ def trigger_numbering_for_molecule(db: Session, *, molecule_id: int, scheme: str
             if not res:
                 set_artifact_failure(db, art, "Numbering unavailable")
                 continue
+
+            labels = getattr(res, "labels_by_raw_index", None)
+            # Avoid misleading "success" artifacts: Viewer v2 requires labels.
+            if not labels or (isinstance(labels, list) and not any(bool(x) for x in labels)):
+                set_artifact_failure(db, art, "Numbering produced no labels")
+                continue
+
             payload = {
                 "scheme": scheme_l,
                 "chain_type": res.chain_type,
                 "positions": res.positions,
+                "labels_by_raw_index": labels,
                 "cdrs": res.cdrs,
                 "spans": res.spans,
                 "warnings": res.warnings,
@@ -90,7 +121,10 @@ def get_numbering_artifacts_for_molecule(db: Session, *, molecule_id: int, schem
         .where(DomainInstance.domain_type.in_(["VH", "VL"]))
         .where(DomainInstance.status == "success")
     ).scalars().all()
-    result: dict = {"VH": None, "VL": None, "pending": False}
+    # Backward compatible shape: result["VH"]/result["VL"] contain the latest
+    # successful payload (or None). We additionally provide artifact status and
+    # skip/failure details under result["artifacts"].
+    result: dict = {"VH": None, "VL": None, "pending": False, "artifacts": {}}
     for inst in instances:
         if not inst.domain_sequence_id:
             continue
@@ -107,9 +141,22 @@ def get_numbering_artifacts_for_molecule(db: Session, *, molecule_id: int, schem
             continue
         if art.status == "running":
             result["pending"] = True
-        if art.status == "success" and art.result_json:
+        # Always store latest artifact status for UI messaging.
+        meta = {"status": art.status, "updated_at": str(art.updated_at), "tool_version": art.tool_version}
+        if art.error:
+            meta["error"] = art.error
+
+        parsed = None
+        if art.result_json:
             try:
-                result[inst.domain_type] = json.loads(art.result_json)
+                parsed = json.loads(art.result_json)
             except Exception:
-                result[inst.domain_type] = art.result_json
+                parsed = art.result_json
+        if parsed is not None:
+            meta["result"] = parsed
+
+        result["artifacts"][inst.domain_type] = meta
+
+        if art.status == "success" and parsed is not None:
+            result[inst.domain_type] = parsed
     return result

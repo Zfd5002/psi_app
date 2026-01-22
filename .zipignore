@@ -1,0 +1,45 @@
+# Never include envs
+.venv/
+venv/
+env/
+**/.venv/
+**/venv/
+**/env/
+
+# Never include git metadata
+.git/
+**/.git/
+
+# Never include local DBs
+psi/psi.sqlite
+**/*.sqlite
+**/*.db
+
+# Never include uploads / user files (optional, but usually huge)
+uploads/
+**/uploads/
+
+# Python caches
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS/editor junk
+.DS_Store
+**/.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log

@@ -24,8 +24,8 @@ a:hover{text-decoration:underline}
 .badge.bad{border-color:rgba(255,102,102,.25);color:var(--bad)}
 .badge.warn{border-color:rgba(255,204,102,.25);color:var(--warn)}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.table{width:100%;border-collapse:separate;border-spacing:0}
-.table th,.table td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
+.table th,.table td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 .table th{text-align:left;color:#cfe2f5;font-weight:700}
 .table tr:hover td{background:rgba(255,255,255,.03)}
 .form{display:grid;gap:12px}
@@ -34,10 +34,14 @@ label{font-size:13px;color:#cfe2f5}
 input,select,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(7,13,24,.7);color:var(--text)}
 textarea{min-height:110px;resize:vertical}
 .help{font-size:12px;color:var(--muted)}
+
+/* Allow long unbroken strings (IDs, sequences) to wrap inside table cells. */
+.table td code,.table td pre{white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 .grid2{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
 @media (max-width:900px){.grid2{grid-template-columns:1fr}}
 .mini{font-size:12px;color:#cfe2f5}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--text);cursor:pointer}
+.btn.mini{padding:6px 8px;font-size:12px;border-radius:10px}
 .btn.primary{background:linear-gradient(135deg,rgba(0,76,151,.85),rgba(51,184,255,.55));border-color:rgba(51,184,255,.25)}
 .btn.danger{background:rgba(255,102,102,.14);border-color:rgba(255,102,102,.35)}
 .btn:hover{filter:brightness(1.07)}
@@ -52,17 +56,117 @@ textarea{min-height:110px;resize:vertical}
 .print-only{display:none}
 
 /* --- Sequence-aligned feature tracks (molecule detail) --- */
-.seq-scroll{margin-top:10px;overflow-x:auto;padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(7,13,24,.55)}
+.seq-scroll{margin-top:10px;overflow-x:hidden;padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(7,13,24,.55);max-width:100%;min-width:0;width:100%}
 .lane{margin:6px 0}
 .lane-label{font-size:12px;margin-bottom:4px}
-.lane-grid,.seq-grid{display:grid;gap:0;line-height:1.2}
-.seq-grid{padding:4px 0;user-select:none}
+.lane-grid,.seq-grid{display:grid;gap:0;line-height:1.2;grid-auto-rows:1.35em;align-content:start}
+.seq-grid{padding:4px 0;user-select:text}
+.num-grid{display:grid;gap:0;line-height:1.0;grid-auto-rows:1.25em;align-content:start}
+.num-cell{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:10px;display:inline-block;width:1ch;text-align:center;color:rgba(219,231,244,.70)}
+.num-cell.blank{color:transparent}
 .residue{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:12px;display:inline-block;width:1ch;text-align:center;color:#dbe7f4}
 .residue.selected{background:rgba(51,184,255,.22);border-radius:3px;outline:1px solid rgba(51,184,255,.35)}
+.feature-bar.hidden{display:none}
 .feature-bar{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:11px;line-height:1.1;padding:2px 4px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid rgba(255,255,255,.10)}
 .feature-bar:hover{filter:brightness(1.07)}
 .feat-domain_instance{background:rgba(0,76,151,.25);border-color:rgba(0,76,151,.45)}
 .feat-reference_match{background:rgba(51,184,255,.18);border-color:rgba(51,184,255,.35)}
 .feat-reference_subdomain{background:rgba(102,255,153,.14);border-color:rgba(102,255,153,.25)}
 
+/* --- Numbering map (wrapped, tiled) --- */
+.numbering-map-panel summary{cursor:pointer}
+.numbering-map{--nm-colw:4ch;--nm-block:10;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;overflow-x:hidden}
+.nm-tile{border:1px solid var(--line);border-radius:14px;background:rgba(7,13,24,.55);padding:10px}
+.nm-row{display:grid;gap:0;grid-template-columns:repeat(var(--nm-block), var(--nm-colw));font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;line-height:1.15}
+.nm-cell{display:flex;align-items:center;justify-content:center;min-height:18px;font-size:11px;color:#dbe7f4;border-radius:6px}
+.nm-cell.nm-raw{font-size:10px;color:rgba(219,231,244,.70)}
+.nm-cell.nm-ab{font-size:10px;color:rgba(219,231,244,.82)}
+.nm-cell.blank{color:transparent}
+.nm-cell.selected{background:rgba(51,184,255,.18);outline:1px solid rgba(51,184,255,.32)}
+.nm-tile:hover{filter:brightness(1.03)}
+
 @media print{.nav,.no-print{display:none !important}.print-only{display:block}.card{box-shadow:none;background:white;color:black;border-color:#ddd}body{background:white;color:black}a{color:#004C97}}
+
+/* Ruler labels: center multi-digit position numbers over residue columns */
+.ruler-label{position:relative;left:50%;transform:translateX(-50%);display:inline-block;white-space:nowrap;font-weight:600;color:rgba(219,231,244,.82)}
+.num-cell{overflow:visible}
+
+/* --- PSI v1.1.3: wrap long annotation sequences --- */
+.annotations code,
+.annotations .mono,
+.annotation-row code,
+.annotation-row .mono {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ensure flex children can shrink */
+.annotation-row > * {
+  min-width: 0;
+}
+
+/* --- PSI v1.1.3: harden wrapping for ALL Annotations (HC1/LC1/HC2/LC2/...) --- */
+
+/* Scope to the Annotations section so it applies regardless of per-component markup */
+#annotations code,
+#annotations .mono,
+#annotations pre,
+#annotations .seqwrap,
+#annotations .annotation-seq,
+#annotations .annotation-preview {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+/* If annotation rows are flex/grid, allow the text column to shrink instead of overflowing */
+#annotations .annotation-row,
+#annotations .row,
+#annotations .item,
+#annotations details,
+#annotations .panel {
+  min-width: 0;
+}
+
+#annotations .annotation-row > *,
+#annotations .row > *,
+#annotations .item > * {
+  min-width: 0;
+}
+
+/* Safety: prevent any child from forcing horizontal page growth */
+#annotations {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* --- Fix horizontal overflow in molecule detail 2-col grid --- */
+.grid[style*="grid-template-columns: 1fr 360px"] > * {
+  min-width: 0; /* critical for CSS grid items to allow shrinking */
+}
+
+.grid[style*="grid-template-columns: 1fr 360px"] {
+  max-width: 100%;
+}
+
+#annotations_panel {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* break long tokens inside annotation cards */
+#annotations_panel, #annotations_panel * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* --- Safety: never let viewer blocks force horizontal page growth --- */
+.seq-scroll.viewer-v2 {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.seq-scroll.viewer-v2 .num-grid,
+.seq-scroll.viewer-v2 .seq-grid {
+  max-width: 100%;
+}

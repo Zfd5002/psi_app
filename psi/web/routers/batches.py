@@ -5,6 +5,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from psi.services import batches as svc
+from psi.core.batch_id import next_batch_id
+from psi.core.models import Molecule
 from psi.services import files as file_svc
 from psi.web.deps import get_db, get_storage_cfg, get_templates
 
@@ -19,10 +21,16 @@ def list_batches(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/batches/new", response_class=HTMLResponse)
-def new_batch(request: Request, db: Session = Depends(get_db)):
+def new_batch(request: Request, molecule_id: int | None = None, db: Session = Depends(get_db)):
     templates = get_templates(request)
     _, molecules = svc.list_batches(db)
-    return templates.TemplateResponse("batches/form.html", {"request": request, "batch": None, "molecules": molecules, "suggested_batch_id": None})
+    selected_molecule_id = molecule_id
+    suggested_batch_id = None
+    if molecule_id:
+        mol = db.get(Molecule, molecule_id)
+        if mol:
+            suggested_batch_id = next_batch_id(db, mol)
+    return templates.TemplateResponse("batches/form.html", {"request": request, "batch": None, "molecules": molecules, "suggested_batch_id": suggested_batch_id, "selected_molecule_id": selected_molecule_id})
 
 
 @router.post("/batches/new")
