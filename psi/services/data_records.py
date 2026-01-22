@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
 from psi.core.models import AuditEvent, Batch, DataRecord, Evidence, EvidenceCitation, File as StoredFile, FileLink, Molecule, Program
-from psi.core.registry import REGISTRY
+from psi.core.registry import REGISTRY, normalize_data_record_for_storage
 from psi.core.utils import model_to_dict, now_utc
 from psi.services.files import attach_files
 
@@ -42,8 +42,14 @@ def create_data_record(
     storage=None,
     reason: Optional[str] = None,
 ) -> DataRecord:
+    # normalize domain/data_type/method when safe (keeps legacy values when not mappable)
+    domain, data_type, method = normalize_data_record_for_storage(domain, data_type, method)
+
     # enforce batch requirement for experimental types
-    if data_type not in REGISTRY.get("program_level_data_types", []) and not batch_id:
+    program_level = set(REGISTRY.get("program_level_data_types", [])) | set(REGISTRY.get("legacy_program_level_data_types", []))
+    requiring_batch = set(REGISTRY.get("data_types_requiring_batch", [])) | set(REGISTRY.get("legacy_data_types_requiring_batch", []))
+    if (data_type in requiring_batch or data_type not in program_level) and not batch_id:
+        # canonical: anything not explicitly program-level is treated as batch-scoped
         raise ValueError("batch_id is required for this data type")
 
     rec = DataRecord(
@@ -104,7 +110,12 @@ def update_data_record(
     if not rec:
         raise KeyError("DataRecord not found")
 
-    if data_type not in REGISTRY.get("program_level_data_types", []) and not batch_id:
+    # normalize domain/data_type/method when safe (keeps legacy values when not mappable)
+    domain, data_type, method = normalize_data_record_for_storage(domain, data_type, method)
+
+    program_level = set(REGISTRY.get("program_level_data_types", [])) | set(REGISTRY.get("legacy_program_level_data_types", []))
+    requiring_batch = set(REGISTRY.get("data_types_requiring_batch", [])) | set(REGISTRY.get("legacy_data_types_requiring_batch", []))
+    if (data_type in requiring_batch or data_type not in program_level) and not batch_id:
         raise ValueError("batch_id is required for this data type")
 
     before = model_to_dict(rec)

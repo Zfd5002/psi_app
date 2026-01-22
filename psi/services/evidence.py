@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from psi.core.audit import record_audit
 from psi.core.decision_engine import load_rules
 from psi.core.models import AuditEvent, Batch, DataRecord, Evidence, EvidenceCitation, Molecule, Program
-from psi.core.registry import get_allowed_data_sources_for_evidence
+from psi.core.registry import get_allowed_data_sources_for_evidence, normalize_data_type_method
 from psi.core.utils import model_to_dict, now_utc
 from psi.services.data_records import create_data_record, get_form_context
 
@@ -208,9 +208,20 @@ def _enforce_citation_restrictions(db: Session, evidence_type: str, cited_ids: l
         return
 
     allowed_pairs = {(d["data_type"], d["method"]) for d in allowed["allowed"]}
+
+    # also allow normalized comparison so legacy records can still be cited when they map cleanly
+    allowed_pairs_norm = set()
+    for (dt, m) in allowed_pairs:
+        dt2, m2 = normalize_data_type_method(dt, m)
+        allowed_pairs_norm.add((dt2, m2))
+
     for rid in cited_ids:
         dr = db.get(DataRecord, rid)
         if not dr:
             raise ValueError(f"Invalid DataRecord id {rid}")
-        if (dr.data_type, dr.method) not in allowed_pairs:
-            raise ValueError(f"DataRecord {rid} ({dr.data_type}/{dr.method}) cannot be cited for {evidence_type}")
+
+        dt_raw, m_raw = dr.data_type, dr.method
+        dt_norm, m_norm = normalize_data_type_method(dt_raw, m_raw)
+
+        if (dt_raw, m_raw) not in allowed_pairs and (dt_norm, m_norm) not in allowed_pairs_norm:
+            raise ValueError(f"DataRecord {rid} ({dt_raw}/{m_raw}) cannot be cited for {evidence_type}")
