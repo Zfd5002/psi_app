@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
 from psi.core.models import (
+    SequenceEntity,
     AuditEvent,
     Batch,
     DataRecord,
@@ -61,6 +62,86 @@ def _pack_segments(segments: list[dict]) -> list[list[dict]]:
         if not placed:
             rows.append([seg])
     return rows
+
+
+class DuplicateMoleculeError(Exception):
+    def __init__(self, existing_molecule_id: int, existing_primary_id: str):
+        super().__init__(f"Molecule already exists as {existing_primary_id}")
+        self.existing_molecule_id = int(existing_molecule_id)
+        self.existing_primary_id = str(existing_primary_id)
+
+
+def _next_chain_id(db: Session) -> str:
+    """Allocate next CHAINXXX id (local-first, monotonic best-effort)."""
+    import re
+    rows = db.query(SequenceEntity.chain_id).filter(SequenceEntity.chain_id.isnot(None)).all()
+    mx = 0
+    for (cid,) in rows:
+        if not cid:
+            continue
+        m = re.match(r'^CHAIN(\d+)$', cid)
+        if m:
+            mx = max(mx, int(m.group(1)))
+    return f"CHAIN{mx+1:03d}"
+
+
+def get_or_create_chain(
+    db: Session,
+    sequence_text: str,
+    *,
+    type_hint: str | None = None,
+    notes: str | None = None,
+) -> SequenceEntity:
+    """Global chain registry: de-dupe by sha256(sequence_norm) and ensure CHAINXXX."""
+    seq = normalize_aa_sequence(sequence_text or "")
+    if not seq:
+        raise ValueError("Empty sequence")
+
+    h = sha256_text(seq)
+    ent = db.query(SequenceEntity).filter(SequenceEntity.sha256 == h).first()
+
+    if ent is None:
+        ent = SequenceEntity(
+            sha256=h,
+            sequence_norm=seq,
+            length=len(seq),
+            alphabet="AA",
+            created_at=now_utc(),
+        )
+        ent.chain_id = _next_chain_id(db)
+        if type_hint:
+            ent.type_hint = type_hint
+        if notes:
+            ent.notes = notes
+        db.add(ent)
+        db.flush()
+        return ent
+
+    if not ent.chain_id:
+        ent.chain_id = _next_chain_id(db)
+        db.add(ent)
+
+    if type_hint and not ent.type_hint:
+        ent.type_hint = type_hint
+        db.add(ent)
+    if notes and not ent.notes:
+        ent.notes = notes
+        db.add(ent)
+
+    db.flush()
+    return ent
+
+
+def _canonical_composition(chain_by_role: dict[str, str | None]) -> dict[str, str | None]:
+    order = ['HC1','HC2','LC1','LC2']
+    return {k: chain_by_role.get(k) for k in order}
+
+
+def composition_sha256(chain_by_role: dict[str, str | None]) -> str:
+    import json as _json
+    canonical = _canonical_composition(chain_by_role)
+    payload = _json.dumps(canonical, sort_keys=True, separators=(',', ':'))
+    return sha256_text(payload)
 
 
 def list_molecules(db: Session) -> tuple[list[Molecule], list[Program]]:
@@ -524,6 +605,21 @@ def _background_domain_extraction(molecule_id: int) -> None:
         db.close()
 
 
+def _next_molecule_primary_id(db: Session) -> str:
+    """Allocate next TCBXXX id (best-effort)."""
+    import re as _re
+    pat = _re.compile(r"^TCB(\d{3})$")
+    max_n = 0
+    rows = db.query(Molecule.primary_id).all()
+    for (pid,) in rows:
+        if not pid:
+            continue
+        mm = pat.match(str(pid).strip())
+        if mm:
+            max_n = max(max_n, int(mm.group(1)))
+    return f"TCB{max_n + 1:03d}"
+
+
 def create_molecule(
     db: Session,
     *,
@@ -538,12 +634,24 @@ def create_molecule(
     components: dict[str, str] | None = None,
     background_tasks=None,
 ) -> Molecule:
+    """Create a molecule.
+
+    v1.2.0 semantics:
+    - Molecule identity is the canonical HC/LC role->CHAIN mapping (composition_sha256)
+    - Chains are globally de-duped via SequenceEntity (sha256)
+    - Duplicate molecule compositions are blocked
+    """
     # Backward compatibility: keep Molecule.description populated with user description.
     desc_user = (description_user if description_user is not None else description).strip() or None
 
+    pid = (primary_id or "").strip()
+    if not pid:
+        pid = _next_molecule_primary_id(db)
+
+    # Create molecule row early (but don't commit until collision check passes)
     m = Molecule(
         program_id=program_id,
-        primary_id=primary_id.strip(),
+        primary_id=pid,
         title=title.strip() or None,
         description=desc_user,
         description_user=desc_user,
@@ -553,40 +661,73 @@ def create_molecule(
         created_at=now_utc(),
         updated_at=now_utc(),
     )
-    db.add(m)
-    db.commit()
-    db.refresh(m)
 
-    # Structured components (v1.01)
+    # Structured components are the v1.2.0 source of truth. Legacy `sequences` remains populated.
+    role_order = ["HC1", "HC2", "LC1", "LC2"]
+    role_to_seq: dict[str, str] = {}
+
     if components:
-        for role, fasta in components.items():
-            fasta_n = normalize_aa_sequence(fasta)
-            if not fasta_n:
-                continue
+        # Only accept v1.2.0 user roles; ignore others (legacy remains readable).
+        for r in role_order:
+            if r in components:
+                role_to_seq[r] = components.get(r, "") or ""
+
+        # Default infer: HC2=HC1, LC2=LC1 when blank.
+        hc1 = normalize_aa_sequence(role_to_seq.get("HC1", ""))
+        lc1 = normalize_aa_sequence(role_to_seq.get("LC1", ""))
+        if not hc1 or not lc1:
+            raise ValueError("HC1 and LC1 are required for structured molecule creation")
+
+        hc2 = normalize_aa_sequence(role_to_seq.get("HC2", "")) or hc1
+        lc2 = normalize_aa_sequence(role_to_seq.get("LC2", "")) or lc1
+
+        role_to_seq = {"HC1": hc1, "HC2": hc2, "LC1": lc1, "LC2": lc2}
+
+        # Chain registry + composition hash
+        chains_by_role: dict[str, str | None] = {}
+        ents_by_role = {}
+        for role, seq in role_to_seq.items():
+            ent = get_or_create_chain(db, seq)
+            ents_by_role[role] = ent
+            chains_by_role[role] = getattr(ent, "chain_id", None)
+
+        comp_hash = composition_sha256(chains_by_role)
+        # Collision check (block creation)
+        existing = db.query(Molecule).filter(Molecule.composition_sha256 == comp_hash).first()
+        if existing is not None:
+            raise DuplicateMoleculeError(existing_molecule_id=existing.id, existing_primary_id=existing.primary_id)
+
+        m.composition_sha256 = comp_hash
+
+        # Populate legacy multi-FASTA
+        m.sequences = to_fasta([(r, role_to_seq[r]) for r in role_order]).strip() or None
+
+        db.add(m)
+        db.flush()  # assign id
+
+        # Create components as join records
+        for role in role_order:
+            seq = role_to_seq[role]
+            ent = ents_by_role[role]
             c = MoleculeComponent(
                 molecule_id=m.id,
                 role=role,
-                fasta=fasta_n,
-                sha256=sha256_text(fasta_n),
+                fasta=seq,
+                sha256=sha256_text(seq),
+                sequence_entity_id=ent.id,
                 created_at=now_utc(),
                 updated_at=now_utc(),
             )
             db.add(c)
-        db.commit()
 
-        # Ensure legacy sequences blob remains populated (derived multi-FASTA)
-        ordered = []
-        for role in ["HC1", "LC1", "HC2", "LC2", "VH", "VL", "linker", "fusion"]:
-            if role in components and normalize_aa_sequence(components.get(role, "")):
-                ordered.append((role, components[role]))
-        m.sequences = to_fasta(ordered).strip() or None
-        db.add(m)
         db.commit()
+        db.refresh(m)
     else:
-        # Legacy/unstructured path
+        # Legacy/unstructured path (no collision semantics)
         m.sequences = sequences.strip() or None
         db.add(m)
         db.commit()
+        db.refresh(m)
 
     record_audit(db, entity_type="Molecule", entity_id=m.id, action="create", before=None, after=model_to_dict(m))
     db.commit()
@@ -630,54 +771,100 @@ def update_molecule(
     sequences_changed = False
 
     if components is not None:
-        # Replace/update components per role (additive, role-unique)
-        existing = {c.role: c for c in db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == m.id).all()}
-        for role in list(existing.keys()):
-            if role not in components:
-                # Do not delete automatically; keep additive. User can clear by setting empty.
-                pass
-        for role, fasta in components.items():
-            fasta_n = normalize_aa_sequence(fasta)
-            if not fasta_n:
-                # Field was present but blank → user is clearing this role.
-                # Roles omitted from the form are left untouched (additive behavior).
-                if role in existing:
-                    db.delete(existing[role])
-                    sequences_changed = True
-                continue
-            if role in existing:
-                if existing[role].fasta != fasta_n:
-                    existing[role].fasta = fasta_n
-                    existing[role].sha256 = sha256_text(fasta_n)
-                    existing[role].updated_at = now_utc()
-                    db.add(existing[role])
-                    sequences_changed = True
-            else:
-                db.add(
-                    MoleculeComponent(
-                        molecule_id=m.id,
-                        role=role,
-                        fasta=fasta_n,
-                        sha256=sha256_text(fasta_n),
-                        created_at=now_utc(),
-                        updated_at=now_utc(),
-                    )
-                )
-                sequences_changed = True
-        db.commit()
+        # v1.2.0: only accept HC/LC user roles for structured edits.
+        role_order = ["HC1", "HC2", "LC1", "LC2"]
 
-        # Regenerate legacy sequences field (derived multi-FASTA) for compatibility
-        comps_now = db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == m.id).all()
-        ordered = []
-        for role in ["HC1", "LC1", "HC2", "LC2", "VH", "VL", "linker", "fusion"]:
-            for c in comps_now:
-                if c.role == role and c.fasta:
-                    ordered.append((c.role, c.fasta))
-        new_sequences = to_fasta(ordered).strip() or None
-        if (m.sequences or "") != (new_sequences or ""):
-            m.sequences = new_sequences
+        # Collect requested structured roles from the incoming payload.
+        requested = {r: (components.get(r, "") or "") for r in role_order if r in components}
+
+        # If the form submitted any of the structured roles, treat this as a structured edit.
+        if any(r in requested for r in ["HC1", "LC1", "HC2", "LC2"]):
+            hc1 = normalize_aa_sequence(requested.get("HC1", ""))
+            lc1 = normalize_aa_sequence(requested.get("LC1", ""))
+            if not hc1 or not lc1:
+                raise ValueError("HC1 and LC1 are required for structured molecule editing")
+
+            hc2 = normalize_aa_sequence(requested.get("HC2", "")) or hc1
+            lc2 = normalize_aa_sequence(requested.get("LC2", "")) or lc1
+
+            role_to_seq = {"HC1": hc1, "HC2": hc2, "LC1": lc1, "LC2": lc2}
+
+            # Chain registry + composition hash
+            chains_by_role: dict[str, str | None] = {}
+            ents_by_role = {}
+            for role, seq in role_to_seq.items():
+                ent = get_or_create_chain(db, seq)
+                ents_by_role[role] = ent
+                chains_by_role[role] = getattr(ent, "chain_id", None)
+
+            comp_hash = composition_sha256(chains_by_role)
+            existing = db.query(Molecule).filter(Molecule.composition_sha256 == comp_hash, Molecule.id != m.id).first()
+            if existing is not None:
+                raise DuplicateMoleculeError(existing_molecule_id=existing.id, existing_primary_id=existing.primary_id)
+
+            m.composition_sha256 = comp_hash
+
+            # Update components (role-unique)
+            existing_components = {c.role: c for c in db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == m.id).all()}
+            for role in role_order:
+                seq = role_to_seq[role]
+                ent = ents_by_role[role]
+                if role in existing_components:
+                    c = existing_components[role]
+                    if c.fasta != seq or c.sequence_entity_id != ent.id:
+                        c.fasta = seq
+                        c.sha256 = sha256_text(seq)
+                        c.sequence_entity_id = ent.id
+                        c.updated_at = now_utc()
+                        db.add(c)
+                        sequences_changed = True
+                else:
+                    db.add(
+                        MoleculeComponent(
+                            molecule_id=m.id,
+                            role=role,
+                            fasta=seq,
+                            sha256=sha256_text(seq),
+                            sequence_entity_id=ent.id,
+                            created_at=now_utc(),
+                            updated_at=now_utc(),
+                        )
+                    )
+                    sequences_changed = True
+
+            # Keep legacy FASTA blob populated
+            m.sequences = to_fasta([(r, role_to_seq[r]) for r in role_order]).strip() or None
             sequences_changed = True
-    else:
+        else:
+            # Additive legacy behavior for non-structured roles (kept for backwards compatibility)
+            existing = {c.role: c for c in db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == m.id).all()}
+            for role, fasta in components.items():
+                fasta_n = normalize_aa_sequence(fasta)
+                if not fasta_n:
+                    if role in existing:
+                        db.delete(existing[role])
+                        sequences_changed = True
+                    continue
+                if role in existing:
+                    if existing[role].fasta != fasta_n:
+                        existing[role].fasta = fasta_n
+                        existing[role].sha256 = sha256_text(fasta_n)
+                        existing[role].updated_at = now_utc()
+                        db.add(existing[role])
+                        sequences_changed = True
+                else:
+                    db.add(
+                        MoleculeComponent(
+                            molecule_id=m.id,
+                            role=role,
+                            fasta=fasta_n,
+                            sha256=sha256_text(fasta_n),
+                            created_at=now_utc(),
+                            updated_at=now_utc(),
+                        )
+                    )
+                    sequences_changed = True
+
         # Legacy/unstructured edit
         new_sequences = sequences.strip() or None
         if (m.sequences or "") != (new_sequences or ""):
