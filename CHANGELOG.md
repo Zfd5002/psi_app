@@ -36,3 +36,10 @@
 - Added SEC_HPLC and Endotoxin schemas; Purity/Aggregation evidence sources now include SEC_HPLC.
 - Data entry prefill support for /data/new query params (domain/data_type/method/title).
 - Batch ID microcopy updated to TCB001-001 format.
+
+## v1.1.9
+- Molecule detail: Latest run now shows quick-glance Developability + Immunogenicity summaries; raw computed properties table collapsed by default.
+- Sequence risk analyses now holds raw/audit outputs for developability and immunogenicity.
+
+## v1.1.9a
+- Hide redundant FAST developability outputs from “All computed properties (raw)” (already summarized in dashboard).

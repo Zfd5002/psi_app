@@ -136,13 +136,29 @@ def new_molecule(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("molecules/form.html", {"request": request, "molecule": None, "programs": programs})
 
 
-def _extract_components_from_form(form: dict) -> dict[str, str]:
-    roles = ["HC1", "LC1", "HC2", "LC2", "VH", "VL", "linker", "fusion"]
-    comps = {}
-    for role in roles:
-        val = (form.get(role) or "").strip()
-        if val:
-            comps[role] = val
+def _extract_components_from_form(form) -> dict[str, str]:
+    """
+    Extract component sequences from the molecule form.
+
+    Important: allow "clear" operations. If a field is present in the form but empty,
+    we include it with an empty string so the service layer can clear that role.
+    """
+    comps: dict[str, str] = {}
+    mapping = [
+        ("hc1", "HC1"),
+        ("lc1", "LC1"),
+        ("hc2", "HC2"),
+        ("lc2", "LC2"),
+        ("vh", "VH"),
+        ("vl", "VL"),
+        ("linker", "linker"),
+        ("fusion", "fusion"),
+    ]
+    for name, role in mapping:
+        raw = form.get(name)
+        if raw is None:
+            continue
+        comps[role] = (raw or "").strip()
     return comps
 
 

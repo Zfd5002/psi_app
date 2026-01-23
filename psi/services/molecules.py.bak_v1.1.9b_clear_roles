@@ -639,11 +639,7 @@ def update_molecule(
         for role, fasta in components.items():
             fasta_n = normalize_aa_sequence(fasta)
             if not fasta_n:
-                # Field was present but blank → user is clearing this role.
-                # Roles omitted from the form are left untouched (additive behavior).
-                if role in existing:
-                    db.delete(existing[role])
-                    sequences_changed = True
+                # If user cleared a role, keep existing record but blank? safer: set fasta empty? no, keep as is.
                 continue
             if role in existing:
                 if existing[role].fasta != fasta_n:
