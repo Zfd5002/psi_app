@@ -43,6 +43,7 @@ def ensure_schema() -> None:
             "id": "INTEGER",
             "program_id": "INTEGER",
             "primary_id": "TEXT",
+            "composition_sha256": "TEXT",
             "title": "TEXT",
             "description": "TEXT",
             "molecule_format": "TEXT",
@@ -66,7 +67,10 @@ def ensure_schema() -> None:
         "sequence_entities": {
             "id": "INTEGER",
             "sha256": "TEXT",
+            "chain_id": "TEXT",
             "sequence_norm": "TEXT",
+            "type_hint": "TEXT",
+            "notes": "TEXT",
             "length": "INTEGER",
             "alphabet": "TEXT",
             "created_at": "TEXT",
@@ -157,6 +161,11 @@ def ensure_schema() -> None:
             "notes": "TEXT",
             "params_json": "TEXT",
             "results_json": "TEXT",
+            "primary_result_text": "TEXT",
+            "raw_inputs_json": "TEXT",
+            "derived_outputs_json": "TEXT",
+            "is_included": "INTEGER",
+            "excluded_reason": "TEXT",
             "run_date": "TEXT",
             "created_at": "TEXT",
             "updated_at": "TEXT",
@@ -228,3 +237,9 @@ def ensure_schema() -> None:
             for col, coltype in cols.items():
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"))
+
+    # v1.2.0: required indexes (additive; SQLite-friendly)
+    with engine.connect() as conn:
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_sequence_entities_chain_id ON sequence_entities(chain_id)"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_molecules_composition_sha256 ON molecules(composition_sha256)"))
+        conn.commit()

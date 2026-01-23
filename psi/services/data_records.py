@@ -12,6 +12,35 @@ from psi.core.utils import model_to_dict, now_utc
 from psi.services.files import attach_files
 
 
+def _infer_primary_result_text(results_json: str) -> str | None:
+    """Best-effort primary result string for batch summaries."""
+    import json
+    if not results_json:
+        return None
+    try:
+        obj = json.loads(results_json)
+    except Exception:
+        return results_json.strip()[:200] or None
+    if isinstance(obj, dict):
+        for k in ("primary_result", "primary", "summary", "result", "value", "text"):
+            v = obj.get(k)
+            if isinstance(v, (str, int, float)):
+                s = str(v).strip()
+                if s:
+                    return s[:200]
+        # pick first scalar
+        for v in obj.values():
+            if isinstance(v, (str, int, float)):
+                s = str(v).strip()
+                if s:
+                    return s[:200]
+        return None
+    if isinstance(obj, (str, int, float)):
+        s = str(obj).strip()
+        return s[:200] or None
+    return None
+
+
 def list_data_records(db: Session) -> dict:
     records = db.query(DataRecord).order_by(DataRecord.created_at.desc()).limit(200).all()
     programs = db.query(Program).order_by(Program.name.asc()).all()
@@ -64,6 +93,11 @@ def create_data_record(
         run_date=run_date.strip() or None,
         params_json=params_json.strip() or "{}",
         results_json=results_json.strip() or "{}",
+        raw_inputs_json=params_json.strip() or "{}",
+        derived_outputs_json=results_json.strip() or "{}",
+        primary_result_text=_infer_primary_result_text(results_json.strip() or "{}"),
+        is_included=1,
+        excluded_reason=None,
         created_at=now_utc(),
         updated_at=now_utc(),
     )
@@ -130,6 +164,12 @@ def update_data_record(
     rec.run_date = run_date.strip() or None
     rec.params_json = params_json.strip() or "{}"
     rec.results_json = results_json.strip() or "{}"
+    rec.raw_inputs_json = params_json.strip() or "{}"
+    rec.derived_outputs_json = results_json.strip() or "{}"
+    rec.primary_result_text = _infer_primary_result_text(results_json.strip() or "{}")
+    rec.raw_inputs_json = params_json.strip() or "{}"
+    rec.derived_outputs_json = results_json.strip() or "{}"
+    rec.primary_result_text = _infer_primary_result_text(results_json.strip() or "{}")
     rec.updated_at = now_utc()
     db.add(rec)
     db.commit()

@@ -133,7 +133,10 @@ def list_molecules(request: Request, db: Session = Depends(get_db)):
 def new_molecule(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
     _, programs = svc.list_molecules(db)
-    return templates.TemplateResponse("molecules/form.html", {"request": request, "molecule": None, "programs": programs})
+    dup = request.query_params.get('duplicate')
+    existing_id = request.query_params.get('existing_id')
+    error = request.query_params.get('error')
+    return templates.TemplateResponse("molecules/form.html", {"request": request, "molecule": None, "programs": programs, "duplicate": dup, "existing_id": existing_id, "error": error})
 
 
 def _extract_components_from_form(form) -> dict[str, str]:
@@ -145,14 +148,10 @@ def _extract_components_from_form(form) -> dict[str, str]:
     """
     comps: dict[str, str] = {}
     mapping = [
-        ("hc1", "HC1"),
-        ("lc1", "LC1"),
-        ("hc2", "HC2"),
-        ("lc2", "LC2"),
-        ("vh", "VH"),
-        ("vl", "VL"),
-        ("linker", "linker"),
-        ("fusion", "fusion"),
+        ('hc1','HC1'),
+        ('lc1','LC1'),
+        ('hc2','HC2'),
+        ('lc2','LC2'),
     ]
     for name, role in mapping:
         raw = form.get(name)
@@ -174,9 +173,9 @@ def _parse_fasta_bundle(bundle: str) -> dict[str, str]:
         return out
     for r in parse_fasta(bundle):
         h = r.header.strip().upper().replace(" ", "")
-        for role in ["HC1", "HC2", "LC1", "LC2", "VH", "VL", "LINKER", "FUSION"]:
+        for role in ["HC1", "HC2", "LC1", "LC2"]:
             if h == role or h.endswith(role) or h.startswith(role):
-                out[role.replace("LINKER", "linker").replace("FUSION", "fusion")] = r.sequence
+                out[role] = r.sequence
                 break
     # normalize role casing
     norm: dict[str, str] = {}
@@ -205,19 +204,27 @@ async def create_molecule(request: Request, background_tasks: BackgroundTasks, d
     if bundle and not comps:
         comps = _parse_fasta_bundle(bundle)
 
-    m = svc.create_molecule(
-        db,
-        program_id=program_id,
-        primary_id=primary_id,
-        title=title,
-        description=description,
-        sequences=sequences,
-        molecule_format=molecule_format,
-        description_user=description_user,
-        heavy_compute_enabled=heavy_compute_enabled,
-        components=comps if comps else None,
-        background_tasks=background_tasks,
-    )
+
+    try:
+        m = svc.create_molecule(
+            db,
+            program_id=program_id,
+            primary_id=primary_id,
+            title=title,
+            description=description,
+            sequences=sequences,
+            molecule_format=molecule_format,
+            description_user=description_user,
+            heavy_compute_enabled=heavy_compute_enabled,
+            components=comps if comps else None,
+            background_tasks=background_tasks,
+        )
+    except DuplicateMoleculeError as e:
+        # Block duplicate composition; redirect back to form with a clear banner + link.
+        return RedirectResponse(url=f"/molecules/new?duplicate={e.existing_primary_id}&existing_id={e.existing_molecule_id}", status_code=303)
+    except ValueError as e:
+        return RedirectResponse(url=f"/molecules/new?error={str(e)}", status_code=303)
+
     return RedirectResponse(url=f"/molecules/{m.id}", status_code=303)
 
 

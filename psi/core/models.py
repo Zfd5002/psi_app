@@ -35,6 +35,8 @@ class Molecule(Base):
     program_id = Column(Integer, ForeignKey("programs.id"), nullable=False)
 
     primary_id = Column(Text, nullable=False)
+    composition_sha256 = Column(Text, nullable=True)  # v1.2.0: canonical HC/LC role→chain hash
+
     title = Column(Text, nullable=True)
     # Legacy user-provided description. Remains for backward compatibility.
     description = Column(Text, nullable=True)
@@ -93,8 +95,11 @@ class SequenceEntity(Base):
     __tablename__ = "sequence_entities"
 
     id = Column(Integer, primary_key=True)
+    chain_id = Column(Text, nullable=True, unique=True)  # v1.2.0: CHAINXXX
     sha256 = Column(Text, nullable=False, unique=True)
     sequence_norm = Column(Text, nullable=False)
+    type_hint = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
     length = Column(Integer, nullable=False)
     alphabet = Column(Text, nullable=False, default="AA")
     created_at = Column(DateTime, default=utcnow, nullable=False)
@@ -263,6 +268,13 @@ class DataRecord(Base):
 
     params_json = Column(Text, nullable=True)
     results_json = Column(Text, nullable=True)
+
+    # v1.2.0: Experiment v2 (batch-centric)
+    primary_result_text = Column(Text, nullable=True)
+    raw_inputs_json = Column(Text, nullable=True)
+    derived_outputs_json = Column(Text, nullable=True)
+    is_included = Column(Integer, nullable=False, default=1)
+    excluded_reason = Column(Text, nullable=True)
 
     run_date = Column(Text, nullable=True)  # ISO date string
     created_at = Column(DateTime, default=utcnow, nullable=False)

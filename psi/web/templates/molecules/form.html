@@ -3,6 +3,16 @@
 {% block content %}
 <div class="card">
   <h1>{% if molecule %}Edit Molecule{% else %}New Molecule{% endif %}</h1>
+
+  {% if duplicate %}
+  <div class="banner warn" style="margin:12px 0;">
+    This molecule already exists as <strong>{{ duplicate }}</strong>.
+    {% if existing_id %}<a href="/molecules/{{ existing_id }}" style="margin-left:8px;">Open existing molecule</a>{% endif %}
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="banner error" style="margin:12px 0;">{{ error }}</div>
+  {% endif %}
   <form class="form" method="post" action="{% if molecule %}/molecules/{{ molecule.id }}/edit{% else %}/molecules/new{% endif %}">
     <div class="field">
       <label>Program</label>
@@ -14,8 +24,8 @@
     </div>
     <div class="field">
       <label>Primary ID</label>
-      <input name="primary_id" value="{{ molecule.primary_id if molecule else '' }}" required placeholder="TCB-001" />
-      <div class="help">Stable identifier used for batch auto-increment (e.g., TCB-001-001).</div>
+      <input name="primary_id" value="{{ molecule.primary_id if molecule else  }}" placeholder="TCB001 (leave blank to auto-assign)" />
+      <div class="help">If left blank, PSI will assign the next available TCBXXX. Used for batch auto-increment (e.g., TCB001-001).</div>
     </div>
     <div class="field">
       <label>Title (optional)</label>
@@ -26,9 +36,8 @@
       <select name="molecule_format" id="molecule_format">
         <option value="" {% if molecule and not molecule.molecule_format %}selected{% endif %}>Legacy / Unstructured</option>
         <option value="IgG" {% if molecule and molecule.molecule_format=='IgG' %}selected{% endif %}>IgG</option>
-        <option value="scFv" {% if molecule and molecule.molecule_format=='scFv' %}selected{% endif %}>scFv</option>
-      </select>
-      <div class="help">Format-first entry: choose IgG or scFv to enable role-specific sequence inputs. Legacy keeps a single raw sequence blob.</div>
+              </select>
+      <div class="help">Format-first entry: choose IgG to enable role-specific sequence inputs. Legacy keeps a single raw sequence blob.</div>
     </div>
 
     <div class="field">
@@ -65,19 +74,7 @@
         </div>
       </div>
 
-      <div id="scfv_fields" style="display:none;">
-        <div class="grid2">
-          <div>
-            <label class="mini">VH (required)</label>
-            <textarea name="VH" rows="4" placeholder=">VH\n...">{{ components.get('VH','') if components is defined else '' }}</textarea>
-          </div>
-          <div>
-            <label class="mini">VL (required)</label>
-            <textarea name="VL" rows="4" placeholder=">VL\n...">{{ components.get('VL','') if components is defined else '' }}</textarea>
-          </div>
-        </div>
-        <div class="help">GS linker detection and conceptual VH–linker–VL assembly are handled automatically during computed annotation.</div>
-      </div>
+            </div>
 
       <div class="field">
         <label>Paste FASTA bundle helper (optional)</label>
@@ -85,12 +82,7 @@
         <div class="help">If role-specific fields are empty, PSI will best-effort assign sequences based on FASTA headers (e.g., &gt;HC1, &gt;VH).</div>
       </div>
 
-      <div class="field">
-        <label>Fusion sequence (optional)</label>
-        <textarea name="fusion" rows="3" placeholder=">fusion\n...">{{ components.get('fusion','') if components is defined else '' }}</textarea>
-        <div class="help">If present, PSI will classify architecture as IgG/scFv + fusion. (No structure predictions in v1.01.)</div>
       </div>
-    </div>
 
     <div class="field" id="legacy_sequences">
       <label>Legacy sequences (raw)</label>
@@ -125,17 +117,14 @@
     const structured = document.getElementById('structured_inputs');
     const legacy = document.getElementById('legacy_sequences');
     const igg = document.getElementById('igg_fields');
-    const scfv = document.getElementById('scfv_fields');
-    if (fmt === 'IgG' || fmt === 'scFv') {
+    if (fmt === 'IgG') {
       structured.style.display = '';
       legacy.style.display = 'none';
-      igg.style.display = (fmt === 'IgG') ? '' : 'none';
-      scfv.style.display = (fmt === 'scFv') ? '' : 'none';
+      igg.style.display = '';
     } else {
       structured.style.display = 'none';
       legacy.style.display = '';
       igg.style.display = 'none';
-      scfv.style.display = 'none';
     }
   }
   document.getElementById('molecule_format').addEventListener('change', updateFormatUI);
