@@ -311,33 +311,8 @@
         {% set dev = latest_values_by_key.get('fast.developability_risk') if latest_values_by_key else None %}
         {% if dev and dev.value %}
           <div>Overall: <strong>{{ dev.value.overall }}</strong> (score={{ dev.value.score }})</div>
-          {% if dev.value.metrics %}
-            <div class="muted mini" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:2px;">
-              {% if dev.value.metrics.net_charge_pH7 is not none %}
-                <span>net charge pH7=<strong>{{ dev.value.metrics.net_charge_pH7|round(2) }}</strong></span>
-              {% endif %}
-              {% if dev.value.metrics.hydrophobic_fraction is not none %}
-                <span>hydrophobic=<strong>{{ (dev.value.metrics.hydrophobic_fraction*100)|round(1) }}%</strong></span>
-              {% endif %}
-              {% if dev.value.metrics.n_gly_motifs is not none %}
-                <span>N-gly=<strong>{{ dev.value.metrics.n_gly_motifs }}</strong></span>
-              {% endif %}
-              {% if dev.value.metrics.deamidation_motifs is not none %}
-                <span>deamid=<strong>{{ dev.value.metrics.deamidation_motifs }}</strong></span>
-              {% endif %}
-              {% if dev.value.metrics.oxidation_susceptible_residues is not none %}
-                <span>ox sites=<strong>{{ dev.value.metrics.oxidation_susceptible_residues }}</strong></span>
-              {% endif %}
-              {% if dev.value.metrics.cysteine_count is not none %}
-                <span>Cys=<strong>{{ dev.value.metrics.cysteine_count }}</strong></span>
-              {% endif %}
-            </div>
-          {% endif %}
           {% if dev.value.flags and (dev.value.flags|length) > 0 %}
-            {% set shown_flags = dev.value.flags[:4] %}
-            <div class="muted mini">
-              Drivers: <strong>{{ shown_flags|join(', ')|replace('_',' ') }}</strong>{% if (dev.value.flags|length) > 4 %} (+{{ (dev.value.flags|length) - 4 }} more){% endif %}
-            </div>
+            <div class="muted mini">Flags: {{ dev.value.flags|join(', ') }}</div>
           {% endif %}
         {% else %}
           <div class="muted mini">Not available yet (run FAST compute).</div>
@@ -347,42 +322,7 @@
         {% if devc and devc.value %}
           <details style="margin-top:6px;">
             <summary class="muted mini" style="cursor:pointer;">By component</summary>
-            <table class="table" style="margin-top:8px;">
-              <thead>
-                <tr>
-                  <th>Component</th>
-                  <th>Overall</th>
-                  <th>Score</th>
-                  <th>Key counts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for comp, v in devc.value.items() %}
-                  {% if v %}
-                    <tr>
-                      <td><strong>{{ comp }}</strong></td>
-                      <td>{{ v.overall }}</td>
-                      <td>{{ v.score }}</td>
-                      <td class="muted">
-                        {% if v.metrics %}
-                          N-gly={{ v.metrics.n_gly_motifs if v.metrics.n_gly_motifs is not none else '—' }},
-                          deamid={{ v.metrics.deamidation_motifs if v.metrics.deamidation_motifs is not none else '—' }},
-                          ox={{ v.metrics.oxidation_susceptible_residues if v.metrics.oxidation_susceptible_residues is not none else '—' }},
-                          Cys={{ v.metrics.cysteine_count if v.metrics.cysteine_count is not none else '—' }}
-                        {% else %}
-                          —
-                        {% endif %}
-                      </td>
-                    </tr>
-                  {% endif %}
-                {% endfor %}
-              </tbody>
-            </table>
-
-            <details style="margin-top:8px;">
-              <summary class="muted mini" style="cursor:pointer;">Raw details (JSON)</summary>
-              <pre style="white-space:pre-wrap;margin:6px 0 0 0;">{{ devc.value }}</pre>
-            </details>
+            <pre style="white-space:pre-wrap;margin:6px 0 0 0;">{{ devc.value }}</pre>
           </details>
         {% endif %}
       </div>
@@ -391,70 +331,13 @@
         <div class="muted mini"><strong>Immunogenicity triage (MHC-I binding)</strong></div>
         {% set imm = immuno_values_by_key.get('immuno.mhci_binding_summary') if immuno_values_by_key else None %}
         {% if latest_immuno_run and imm and imm.value and latest_immuno_run.status == 'success' %}
-          {% set immc = immuno_values_by_key.get('immuno.mhci_binding_by_component') if immuno_values_by_key else None %}
-          {% set allele = imm.value.settings.allele if imm.value.settings and imm.value.settings.allele else 'unknown' %}
-          {% set frac = (imm.value.fraction_binders*100) if imm.value.fraction_binders is not none else None %}
-          {% set min_aff = None %}
-          {% if immc and immc.value %}
-            {% for comp, v in immc.value.items() %}
-              {% if v and v.top_binders %}
-                {% for hit in v.top_binders %}
-                  {% if hit and hit.affinity_nm is not none %}
-                    {% if min_aff is none or hit.affinity_nm < min_aff %}
-                      {% set min_aff = hit.affinity_nm %}
-                    {% endif %}
-                  {% endif %}
-                {% endfor %}
-              {% endif %}
-            {% endfor %}
-          {% endif %}
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:2px;">
-            <div class="muted mini">Last run: {{ latest_immuno_run.created_at }} · allele=<strong>{{ allele }}</strong></div>
-            <div>Binders: <strong>{{ imm.value.n_binders }}</strong> / {{ imm.value.n_peptides }}{% if frac is not none %} ({{ frac|round(2) }}%){% endif %}</div>
-            <div class="muted mini">min affinity: <strong>{% if min_aff is not none %}{{ min_aff|round(1) }} nM{% else %}—{% endif %}</strong></div>
-          </div>
-          {% if immc and immc.value %}
-            <details style="margin-top:6px;">
-              <summary class="muted mini" style="cursor:pointer;">Details (by component)</summary>
-              <table class="table" style="margin-top:8px;">
-                <thead>
-                  <tr>
-                    <th>Component</th>
-                    <th>Binders</th>
-                    <th>Fraction</th>
-                    <th>Top binder</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for comp, v in immc.value.items() %}
-                    {% if v %}
-                      {% set tb = (v.top_binders[0] if v.top_binders and (v.top_binders|length) > 0 else None) %}
-                      <tr>
-                        <td><strong>{{ comp }}</strong></td>
-                        <td>{{ v.n_binders }} / {{ v.n_peptides }}</td>
-                        <td>{{ (v.fraction_binders*100)|round(2) }}%</td>
-                        <td>
-                          {% if tb %}
-                            <code>{{ tb.peptide }}</code>
-                            <span class="muted">({{ tb.start }}–{{ tb.end }})</span>
-                            · <strong>{{ tb.affinity_nm|round(1) }} nM</strong>
-                          {% else %}
-                            <span class="muted">—</span>
-                          {% endif %}
-                        </td>
-                      </tr>
-                    {% endif %}
-                  {% endfor %}
-                </tbody>
-              </table>
-              <details style="margin-top:8px;">
-                <summary class="muted mini" style="cursor:pointer;">Raw details (JSON)</summary>
-                <pre style="white-space:pre-wrap;margin:6px 0 0 0;">{{ immc.value }}</pre>
-              </details>
-            </details>
-          {% else %}
-            <div class="muted mini" style="margin-top:6px;">No component details available.</div>
-          {% endif %}
+          <div class="muted mini">Last run: {{ latest_immuno_run.created_at }} · allele={{ imm.value.settings.allele }}</div>
+          <div>Binders: <strong>{{ imm.value.n_binders }}</strong> / {{ imm.value.n_peptides }} (fraction={{ (imm.value.fraction_binders*100)|round(2) }}%)</div>
+          <details style="margin-top:6px;">
+            <summary class="muted mini" style="cursor:pointer;">Details (by component)</summary>
+            {% set immc = immuno_values_by_key.get('immuno.mhci_binding_by_component') if immuno_values_by_key else None %}
+            <pre style="white-space:pre-wrap;margin:6px 0 0 0;">{{ immc.value if immc else '' }}</pre>
+          </details>
         {% elif latest_immuno_run and latest_immuno_run.status == 'failure' %}
           <div class="notice mini" style="margin-top:6px;">
             Immunogenicity run failed: {{ latest_immuno_run.error or 'unknown error' }}
@@ -1144,3 +1027,8 @@
 </script>
 {% endblock %}
 
+<script>
+try{ setTimeout(()=>{ 
+  if(typeof setWrapColsAll === "function") setWrapColsAll(); 
+}, 0); }catch(e){}
+</script>

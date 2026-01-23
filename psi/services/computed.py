@@ -15,6 +15,7 @@ from psi.core.biochem import (
     instability_index,
     molecular_weight_da,
     motif_heuristics,
+    developability_risk_heuristics,
     sequence_length,
     theoretical_pI,
 )
@@ -257,6 +258,19 @@ def run_computed_properties(
         _store_value(db, run=run, key="fast.motif_heuristics", label="Motif heuristics", value=motif_heuristics(assembled), tier=FAST_TIER)
         _store_value(db, run=run, key="fast.instability_index", label="Instability index", value=instability_index(assembled), tier=FAST_TIER)
         _store_value(db, run=run, key="fast.developability_proxies", label="Basic developability proxies", value=basic_developability_proxies(assembled), tier=FAST_TIER)
+        _store_value(db, run=run, key="fast.developability_risk", label="Developability risk (heuristics)", value=developability_risk_heuristics(assembled), tier=FAST_TIER)
+
+        # Component-level developability summary (useful for multi-chain molecules)
+        try:
+            comp_risk: Dict[str, Any] = {}
+            for c in comps_list:
+                seq_norm = normalize_aa_sequence(c.fasta)
+                if not seq_norm:
+                    continue
+                comp_risk[c.role] = developability_risk_heuristics(seq_norm)
+            _store_value(db, run=run, key="fast.developability_risk_by_component", label="Developability risk by component (heuristics)", value=comp_risk, tier=FAST_TIER)
+        except Exception as e:
+            _log_event(db, run=run, step="fast_props", level="warn", message="Component developability risk computation failed", payload={"error": str(e)})
         _store_value(db, run=run, key="fast.assembly_inference", label="Assembly inference", value=meta, tier=FAST_TIER)
 
         # vNext: positional liability sites cached per component (cheap, reusable)
@@ -332,3 +346,112 @@ def get_property_runs(db: Session, molecule_id: int) -> List[PropertyRun]:
 
 def get_run_values(db: Session, run_id: int) -> List[PropertyValue]:
     return db.query(PropertyValue).filter(PropertyValue.run_id == run_id).order_by(PropertyValue.id.asc()).all()
+
+
+def run_immunogenicity_mhci(
+    db: Session,
+    *,
+    molecule_id: int,
+    trigger_reason: str = "manual_immunogenicity",
+    allele: str = "HLA-A0201",
+    min_len: int = 8,
+    max_len: int = 11,
+    binder_threshold_nm: float = 500.0,
+    max_peptides: int = 20000,
+    top_k: int = 25,
+) -> PropertyRun:
+    """Manual-only MHC-I binder scan.
+
+    This is intentionally NOT part of automatic FAST/HEAVY runs.
+    It writes results into the existing PropertyRun/PropertyValue tables (no DB changes).
+
+    Requires `mhcflurry` to be installed and its models downloaded. If missing,
+    the run will complete with failure and a helpful error message.
+    """
+
+    import json
+    import hashlib
+
+    from psi.core.immunogenicity import scan_mhci_binding
+
+    m = db.get(Molecule, molecule_id)
+    if not m:
+        raise KeyError("Molecule not found")
+
+    comps_list = (
+        db.query(MoleculeComponent)
+        .filter(MoleculeComponent.molecule_id == molecule_id)
+        .order_by(MoleculeComponent.id.asc())
+        .all()
+    )
+    comps = {c.role: normalize_aa_sequence(c.fasta) for c in comps_list if normalize_aa_sequence(c.fasta)}
+
+    settings = {
+        "allele": allele,
+        "min_len": int(min_len),
+        "max_len": int(max_len),
+        "binder_threshold_nm": float(binder_threshold_nm),
+        "max_peptides": int(max_peptides),
+        "top_k": int(top_k),
+    }
+    input_blob = {
+        "molecule_id": molecule_id,
+        "components": {k: sha256_text(v) for k, v in comps.items()},
+        "settings": settings,
+    }
+    input_hash = hashlib.sha256(json.dumps(input_blob, sort_keys=True).encode("utf-8")).hexdigest()
+
+    run = PropertyRun(
+        molecule_id=molecule_id,
+        input_hash=input_hash,
+        trigger_reason=trigger_reason,
+        compute_tier="IMMUNO",
+        status="running",
+        created_at=now_utc(),
+        updated_at=now_utc(),
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
+    try:
+        by_component = {}
+        for role, seq in comps.items():
+            by_component[role] = scan_mhci_binding(
+                sequence=seq,
+                allele=allele,
+                min_len=min_len,
+                max_len=max_len,
+                binder_threshold_nm=binder_threshold_nm,
+                max_peptides=max_peptides,
+                top_k=top_k,
+            )
+
+        # Simple overall roll-up: sum peptides/binders
+        n_pep = sum(int(v.get("n_peptides", 0)) for v in by_component.values())
+        n_bind = sum(int(v.get("n_binders", 0)) for v in by_component.values())
+        frac = float(n_bind / max(1, n_pep))
+        summary = {
+            "status": "ok",
+            "settings": settings,
+            "n_peptides": int(n_pep),
+            "n_binders": int(n_bind),
+            "fraction_binders": frac,
+            "notes": "Predicted binders are not necessarily immunogenic; treat as triage-only.",
+        }
+
+        _store_value(db, run=run, key="immuno.mhci_binding_summary", label="MHC-I binding summary (mhcflurry)", value=summary, tier=HEAVY_TIER)
+        _store_value(db, run=run, key="immuno.mhci_binding_by_component", label="MHC-I binding by component (mhcflurry)", value=by_component, tier=HEAVY_TIER)
+
+        run.status = "success"
+        run.updated_at = now_utc()
+        db.add(run)
+        db.commit()
+        return run
+    except Exception as e:
+        run.status = "failure"
+        run.error = str(e)
+        run.updated_at = now_utc()
+        db.add(run)
+        db.commit()
+        return run

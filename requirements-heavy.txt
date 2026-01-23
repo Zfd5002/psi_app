@@ -14,5 +14,8 @@
 biopython==1.83
 abnumber==0.4.4
 
+# Optional (manual-only immunogenicity triage in PSI v1.1.8):
+# mhcflurry==2.0.0
+
 # ANARCI (install via script; keep pin here for reproducibility/documentation)
 # git+https://github.com/oxpig/ANARCI.git@79f6c575056dedef86cb8f405ebb039197

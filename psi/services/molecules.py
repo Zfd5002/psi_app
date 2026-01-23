@@ -108,8 +108,17 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
 
     # Computed results (latest + history)
     runs = get_property_runs(db, molecule_id)
-    latest_run = runs[0] if runs else None
+    latest_run = None
+    latest_immuno_run = None
+    for r in runs:
+        if (r.compute_tier or "").upper() == "IMMUNO" and latest_immuno_run is None:
+            latest_immuno_run = r
+            continue
+        if latest_run is None:
+            latest_run = r
+
     latest_values = get_run_values(db, latest_run.id) if latest_run else []
+    immuno_values = get_run_values(db, latest_immuno_run.id) if latest_immuno_run else []
     parsed_values = []
     by_key = {}
     for v in latest_values:
@@ -120,6 +129,17 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         item = {"key": v.property_key, "label": v.label, "value": parsed, "tier": v.tier}
         parsed_values.append(item)
         by_key[v.property_key] = item
+
+    immuno_parsed = []
+    immuno_by_key = {}
+    for v in immuno_values:
+        try:
+            parsed = json.loads(v.value_json) if v.value_json else None
+        except Exception:
+            parsed = v.value_json
+        item = {"key": v.property_key, "label": v.label, "value": parsed, "tier": v.tier}
+        immuno_parsed.append(item)
+        immuno_by_key[v.property_key] = item
 
     components = db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == molecule_id).all()
 
@@ -475,6 +495,10 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "latest_values": latest_values,
         "latest_values_parsed": parsed_values,
         "latest_values_by_key": by_key,
+        "latest_immuno_run": latest_immuno_run,
+        "immuno_values": immuno_values,
+        "immuno_values_parsed": immuno_parsed,
+        "immuno_values_by_key": immuno_by_key,
     }
 
 

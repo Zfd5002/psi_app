@@ -184,6 +184,115 @@ def basic_developability_proxies(seq: str) -> Dict[str, float]:
     }
 
 
+def developability_risk_heuristics(seq: str) -> dict:
+    """License-safe, CPU-cheap developability heuristics.
+
+    This is intentionally *not* a trained model. It is meant to:
+      - run quickly on low-powered machines
+      - be deterministic and explainable
+      - provide a compact "risk summary" for UI triage
+
+    Output schema is stable JSON.
+    """
+
+    s = normalize_aa_sequence(seq)
+    if not s:
+        return {
+            "overall": "unknown",
+            "score": 0,
+            "flags": [],
+            "metrics": {},
+        }
+
+    proxies = basic_developability_proxies(s)
+    motifs = motif_heuristics(s)
+    cys = cysteine_count(s)
+    instab = instability_index(s)
+
+    flags: list[str] = []
+    score = 0
+
+    # Hydrophobicity fraction (very rough proxy for aggregation / stickiness)
+    hyd = float(proxies.get("hydrophobic_fraction", 0.0))
+    if hyd >= 0.48:
+        flags.append("high_hydrophobic_fraction")
+        score += 3
+    elif hyd >= 0.45:
+        flags.append("moderate_hydrophobic_fraction")
+        score += 2
+    elif hyd >= 0.42:
+        score += 1
+
+    # Net charge at pH7 (extremes can correlate with solubility / viscosity issues)
+    netq = float(proxies.get("net_charge_pH7", 0.0))
+    if abs(netq) >= 25:
+        flags.append("extreme_net_charge_pH7")
+        score += 2
+    elif abs(netq) >= 18:
+        flags.append("high_net_charge_pH7")
+        score += 1
+
+    # Instability index (protein-level proxy)
+    if instab >= 55:
+        flags.append("high_instability_index")
+        score += 2
+    elif instab >= 45:
+        flags.append("moderate_instability_index")
+        score += 1
+
+    # Liability motifs
+    n_gly = int(motifs.get("n_gly_motifs", 0))
+    if n_gly >= 2:
+        flags.append("multiple_n_gly_motifs")
+        score += 2
+    elif n_gly == 1:
+        flags.append("n_gly_motif")
+        score += 1
+
+    deamid = int(motifs.get("deamidation_motifs", 0))
+    if deamid >= 4:
+        flags.append("many_deamidation_motifs")
+        score += 2
+    elif deamid >= 2:
+        flags.append("some_deamidation_motifs")
+        score += 1
+
+    ox = int(motifs.get("oxidation_susceptible_residues", 0))
+    if ox >= 20:
+        flags.append("many_oxidation_susceptible_residues")
+        score += 2
+    elif ox >= 10:
+        flags.append("some_oxidation_susceptible_residues")
+        score += 1
+
+    # Cysteines (unexpected extra cysteines can be a red flag depending on context)
+    if cys >= 12:
+        flags.append("high_cysteine_count")
+        score += 1
+
+    if score >= 8:
+        overall = "high"
+    elif score >= 4:
+        overall = "moderate"
+    else:
+        overall = "low"
+
+    return {
+        "overall": overall,
+        "score": int(score),
+        "flags": flags,
+        "metrics": {
+            "hydrophobic_fraction": hyd,
+            "net_charge_pH7": netq,
+            "instability_index": float(instab),
+            "n_gly_motifs": n_gly,
+            "deamidation_motifs": deamid,
+            "oxidation_susceptible_residues": ox,
+            "cysteine_count": int(cys),
+        },
+    }
+
+
 def motif_heuristics(seq: str) -> Dict[str, int]:
     """Detect simple sequence motifs relevant to liabilities."""
     s = normalize_aa_sequence(seq)

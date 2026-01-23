@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from psi.web.deps import get_db, get_storage_cfg, get_templates
 from psi.services import molecules as svc
-from psi.services.computed import run_computed_properties
+from psi.services.computed import run_computed_properties, run_immunogenicity_mhci
 from psi.services.numbering import trigger_numbering_for_molecule
 from psi.services.domains import extract_domains_for_molecule, upsert_user_domain_instance
 from psi.services import files as file_svc
@@ -42,6 +42,47 @@ def run_numbering(molecule_id: int, background_tasks: BackgroundTasks, scheme: s
 
     background_tasks.add_task(_bg)
     return RedirectResponse(url=f"/molecules/{molecule_id}?scheme={scheme}", status_code=303)
+
+
+@router.post("/molecules/{molecule_id}/immunogenicity/mhci")
+def run_immunogenicity_mhci_scan(
+    molecule_id: int,
+    background_tasks: BackgroundTasks,
+    allele: str = Form("HLA-A0201"),
+    min_len: int = Form(8),
+    max_len: int = Form(11),
+    binder_threshold_nm: float = Form(500.0),
+    db: Session = Depends(get_db),
+):
+    """Manual-only immunogenicity triage scan.
+
+    Runs in a background session and stores results in property_runs/property_values
+    (compute_tier=IMMUNO). This is off by default and only executes when a user clicks.
+    """
+
+    m = svc.get_molecule(db, molecule_id)
+    if not m:
+        raise HTTPException(404)
+
+    def _bg():
+        from psi.core.db import SessionLocal
+
+        s = SessionLocal()
+        try:
+            run_immunogenicity_mhci(
+                s,
+                molecule_id=molecule_id,
+                trigger_reason="manual_immunogenicity",
+                allele=str(allele or "HLA-A0201").strip() or "HLA-A0201",
+                min_len=int(min_len),
+                max_len=int(max_len),
+                binder_threshold_nm=float(binder_threshold_nm),
+            )
+        finally:
+            s.close()
+
+    background_tasks.add_task(_bg)
+    return RedirectResponse(url=f"/molecules/{molecule_id}#computed", status_code=303)
 
 
 @router.post("/molecules/{molecule_id}/domains/recompute")
