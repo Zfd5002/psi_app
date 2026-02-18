@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from psi.core.models import AuditEvent, Batch, DataRecord, Evidence, EvidenceCit
 from psi.core.registry import REGISTRY, normalize_data_record_for_storage
 from psi.core.utils import model_to_dict, now_utc
 from psi.services.files import attach_files
+from psi.services.measurements import extract_measurements, upsert_measurements, upsert_measurements_force
 
 
 def _infer_primary_result_text(results_json: str) -> str | None:
@@ -40,6 +42,67 @@ def _infer_primary_result_text(results_json: str) -> str | None:
         return s[:200] or None
     return None
 
+def _parse_run_at(run_at: Any) -> Optional[datetime]:
+    """
+    Parse run_at into a datetime or return None.
+
+    Accepts:
+      - None / "" -> None
+      - datetime -> returned as-is
+      - ISO strings:
+          "YYYY-MM-DD"
+          "YYYY-MM-DDTHH:MM:SS"
+          "YYYY-MM-DD HH:MM:SS"
+          (also tolerates trailing 'Z' by stripping it)
+    """
+    if run_at is None:
+        return None
+    if isinstance(run_at, str):
+        s = run_at.strip()
+        if not s:
+            return None
+        # tolerate common variants
+        s = s.replace(" ", "T")
+        if s.endswith("Z"):
+            s = s[:-1]
+        # date-only
+        if len(s) == 10:
+            # "YYYY-MM-DD"
+            return datetime.fromisoformat(s + "T00:00:00")
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            raise ValueError(f"Invalid run_at value: {run_at!r}")
+    if isinstance(run_at, datetime):
+        return run_at
+    raise ValueError(f"Invalid run_at type: {type(run_at).__name__}")
+
+
+def _jsonish_to_str(value: Any, *, default: str = "{}") -> str:
+    """Normalize JSON-ish inputs to a compact string.
+
+    Contract (v1.2.3b stabilization): callers may provide either a JSON string
+    *or* a Python object (dict/list/etc.). Storage remains TEXT containing JSON.
+
+    - None/"" -> default
+    - str -> stripped (if empty -> default)
+    - dict/list/number/bool -> json.dumps(...)
+
+    This is intentionally conservative and must not raise for typical inputs.
+    """
+    if value is None:
+        return default
+    if isinstance(value, str):
+        s = value.strip()
+        return s if s else default
+    try:
+        # Ensure stable JSON (helps idempotence + diffs)
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    except Exception:
+        # Last resort: store a string representation
+        s = str(value).strip()
+        return s if s else default
+
 
 def list_data_records(db: Session) -> dict:
     records = db.query(DataRecord).order_by(DataRecord.created_at.desc()).limit(200).all()
@@ -51,6 +114,8 @@ def list_data_records(db: Session) -> dict:
 
 def get_data_record(db: Session, record_id: int) -> DataRecord | None:
     return db.get(DataRecord, record_id)
+
+
 
 
 def create_data_record(
@@ -65,8 +130,9 @@ def create_data_record(
     title: str,
     notes: str = "",
     run_date: str = "",
-    params_json: str = "{}",
-    results_json: str = "{}",
+    run_at: str = "",
+    params_json: Any = "{}",
+    results_json: Any = "{}",
     uploads: Optional[list[tuple[str, str, bytes]]] = None,
     storage=None,
     reason: Optional[str] = None,
@@ -81,6 +147,9 @@ def create_data_record(
         # canonical: anything not explicitly program-level is treated as batch-scoped
         raise ValueError("batch_id is required for this data type")
 
+    params_s = _jsonish_to_str(params_json, default="{}")
+    results_s = _jsonish_to_str(results_json, default="{}")
+
     rec = DataRecord(
         program_id=program_id,
         molecule_id=molecule_id,
@@ -91,11 +160,12 @@ def create_data_record(
         title=title.strip(),
         notes=notes.strip() or None,
         run_date=run_date.strip() or None,
-        params_json=params_json.strip() or "{}",
-        results_json=results_json.strip() or "{}",
-        raw_inputs_json=params_json.strip() or "{}",
-        derived_outputs_json=results_json.strip() or "{}",
-        primary_result_text=_infer_primary_result_text(results_json.strip() or "{}"),
+        run_at=_parse_run_at(run_at),
+        params_json=params_s,
+        results_json=results_s,
+        raw_inputs_json=params_s,
+        derived_outputs_json=results_s,
+        primary_result_text=_infer_primary_result_text(results_s),
         is_included=1,
         excluded_reason=None,
         created_at=now_utc(),
@@ -104,6 +174,16 @@ def create_data_record(
     db.add(rec)
     db.commit()
     db.refresh(rec)
+
+    specs, suggested = extract_measurements(rec)
+    if specs:
+        # New record: safe upsert is fine.
+        upsert_measurements(db, rec, specs)
+        if suggested and not rec.primary_result_text:
+            rec.primary_result_text = suggested
+        db.add(rec)
+        db.commit()
+        db.refresh(rec)
 
     if uploads and storage is not None:
         attach_files(db, storage=storage, entity_type="DataRecord", entity_id=rec.id, uploads=uploads)
@@ -134,8 +214,9 @@ def update_data_record(
     title: str,
     notes: str = "",
     run_date: str = "",
-    params_json: str = "{}",
-    results_json: str = "{}",
+    run_at: str = "",
+    params_json: Any = "{}",
+    results_json: Any = "{}",
     uploads: Optional[list[tuple[str, str, bytes]]] = None,
     storage=None,
     reason: str = "",
@@ -152,6 +233,9 @@ def update_data_record(
     if (data_type in requiring_batch or data_type not in program_level) and not batch_id:
         raise ValueError("batch_id is required for this data type")
 
+    params_s = _jsonish_to_str(params_json, default="{}")
+    results_s = _jsonish_to_str(results_json, default="{}")
+
     before = model_to_dict(rec)
     rec.program_id = program_id
     rec.molecule_id = molecule_id
@@ -162,17 +246,25 @@ def update_data_record(
     rec.title = title.strip()
     rec.notes = notes.strip() or None
     rec.run_date = run_date.strip() or None
-    rec.params_json = params_json.strip() or "{}"
-    rec.results_json = results_json.strip() or "{}"
-    rec.raw_inputs_json = params_json.strip() or "{}"
-    rec.derived_outputs_json = results_json.strip() or "{}"
-    rec.primary_result_text = _infer_primary_result_text(results_json.strip() or "{}")
-    rec.raw_inputs_json = params_json.strip() or "{}"
-    rec.derived_outputs_json = results_json.strip() or "{}"
-    rec.primary_result_text = _infer_primary_result_text(results_json.strip() or "{}")
+    rec.run_at = _parse_run_at(run_at)
+    rec.params_json = params_s
+    rec.results_json = results_s
+    rec.raw_inputs_json = params_s
+    rec.derived_outputs_json = results_s
+    rec.primary_result_text = _infer_primary_result_text(results_s)
     rec.updated_at = now_utc()
     db.add(rec)
     db.commit()
+
+    specs, suggested = extract_measurements(rec)
+    if specs:
+        # Updating an existing record is an explicit user action; keep measurements in sync.
+        upsert_measurements_force(db, rec, specs)
+        if suggested and not rec.primary_result_text:
+            rec.primary_result_text = suggested
+        rec.updated_at = now_utc()
+        db.add(rec)
+        db.commit()
 
     if uploads and storage is not None:
         attach_files(db, storage=storage, entity_type="DataRecord", entity_id=rec.id, uploads=uploads)
@@ -217,9 +309,10 @@ def get_data_record_detail(db: Session, record_id: int) -> dict:
 
     return {
         "record": rec,
+        "measurements": list(rec.measurements) if getattr(rec, "measurements", None) is not None else [],
         "params": _load_json_field(rec.params_json),
         "results": _load_json_field(rec.results_json),
-        "evidence": evidence,
+        "evidence_citing": evidence,
         "file_links": file_links,
         "files_by_id": files_by_id,
         "audits": audits,
