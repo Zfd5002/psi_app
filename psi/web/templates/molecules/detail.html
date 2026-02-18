@@ -14,124 +14,38 @@
       {% if tab == "experimental" %}
       <div id="experimental" class="card" style="margin-top:14px;">
         <h2 style="margin-top:0;">Experimental</h2>
+        <p class="muted">Experimental data is batch-first. Use batches as the primary unit for interpreting results.</p>
 
-        <div class="grid cols-2">
-          <div class="field">
-            <label>Batch</label>
-            <select id="expBatchSel">
-              {% for b in exp_batches %}
-                <option value="{{ b.id }}" {% if exp_selected_batch and b.id==exp_selected_batch.id %}selected{% endif %}>{{ b.batch_id }}</option>
-              {% endfor %}
-            </select>
-            <div class="help">Experimental data is batch-first. Create a new batch for each production run.</div>
-          </div>
-          <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;">
-            <a class="btn" href="/batches/new?molecule_id={{ molecule.id }}">New batch</a>
-            {% if exp_selected_batch %}
-              <a class="btn primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ exp_selected_batch.id }}&domain=CMC&data_type=CMC_Analytics&method=SEC_HPLC&title=SEC-HPLC">Add SEC-HPLC</a>
-              <a class="btn primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ exp_selected_batch.id }}&domain=Biological&data_type=Binding&method=BLI&title=BLI%20binding">Add BLI/SPR</a>
-              <a class="btn primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ exp_selected_batch.id }}&domain=CMC&data_type=CMC_Analytics&method=Endotoxin&title=Endotoxin">Add endotoxin</a>
-            {% endif %}
-          </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0;">
+          <a class="btn" href="/batches/new?molecule_id={{ molecule.id }}">New batch</a>
         </div>
 
-        {% if not exp_selected_batch %}
-          <p class="muted">No batches yet. Create a batch to start entering experimental data.</p>
+        {% if exp_batches and exp_batches|length %}
+          <table class="table compact">
+            <thead><tr><th>Batch</th><th>Quick add</th><th class="muted">Notes</th></tr></thead>
+            <tbody>
+              {% for b in exp_batches %}
+                <tr>
+                  <td><a href="/batches/{{ b.id }}"><strong>{{ b.batch_id }}</strong></a></td>
+                  <td style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=CMC&data_type=CMC_Analytics&method=SEC_HPLC&title=SEC-HPLC">Add SEC-HPLC</a>
+                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=Biological&data_type=Binding&method=BLI&title=BLI%20binding">Add BLI/SPR</a>
+                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=CMC&data_type=CMC_Analytics&method=Endotoxin&title=Endotoxin">Add endotoxin</a>
+                  </td>
+                  <td class="muted">{{ b.title or "" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="muted mini" style="margin-top:8px;">
+            Full batch summaries and drill-down live in the <a href="#batches">Batches</a> section below.
+          </div>
         {% else %}
-          <div class="grid cols-3">
-            <div class="card" style="margin:0;">
-              <h3>Latest SEC-HPLC</h3>
-              {% if exp_latest_sec %}
-                {% set r = exp_latest_sec.record %}
-                {% set s = exp_latest_sec.summary %}
-                <div class="muted">{{ r.run_date or r.created_at.strftime("%Y-%m-%d") }} — {{ r.title }}</div>
-                <div><b>Monomer:</b> {{ s.monomer_pct if s.monomer_pct is not none else "—" }}{% if s.monomer_pct is not none %}%{% endif %}</div>
-                <div><b>HMW:</b> {{ s.hmw_pct if s.hmw_pct is not none else "—" }}{% if s.hmw_pct is not none %}%{% endif %}</div>
-                <div><b>LMW:</b> {{ s.lmw_pct if s.lmw_pct is not none else "—" }}{% if s.lmw_pct is not none %}%{% endif %}</div>
-                <div style="margin-top:8px;"><a class="btn mini" href="/data/{{ r.id }}">View</a></div>
-              {% else %}
-                <div class="muted">No SEC-HPLC entries yet.</div>
-              {% endif %}
-            </div>
-
-            <div class="card" style="margin:0;">
-              <h3>Latest BLI/SPR</h3>
-              {% if exp_latest_binding %}
-                {% set r = exp_latest_binding.record %}
-                {% set s = exp_latest_binding.summary %}
-                <div class="muted">{{ r.run_date or r.created_at.strftime("%Y-%m-%d") }} — {{ r.method }}</div>
-                <div><b>KD:</b> {{ s.kd_nM if s.kd_nM is not none else "—" }}{% if s.kd_nM is not none %} nM{% endif %}</div>
-                <div style="margin-top:8px;"><a class="btn mini" href="/data/{{ r.id }}">View</a></div>
-              {% else %}
-                <div class="muted">No binding entries yet.</div>
-              {% endif %}
-            </div>
-
-            <div class="card" style="margin:0;">
-              <h3>Latest endotoxin</h3>
-              {% if exp_latest_endotoxin %}
-                {% set r = exp_latest_endotoxin.record %}
-                {% set s = exp_latest_endotoxin.summary %}
-                <div class="muted">{{ r.run_date or r.created_at.strftime("%Y-%m-%d") }} — {{ r.title }}</div>
-                <div><b>EU/mL:</b> {{ s.value_eu_ml if s.value_eu_ml is not none else "—" }}</div>
-                <div><b>Limit:</b> {{ s.limit_eu_ml if s.limit_eu_ml is not none else "—" }}</div>
-                <div style="margin-top:8px;"><a class="btn mini" href="/data/{{ r.id }}">View</a></div>
-              {% else %}
-                <div class="muted">No endotoxin entries yet.</div>
-              {% endif %}
-            </div>
-          </div>
-
-          <div class="card" style="margin-top:14px;">
-            <h3 style="margin-top:0;">Batch timeline</h3>
-            {% if exp_records and exp_records|length %}
-              <table class="table">
-                <thead><tr><th>Date</th><th>Assay</th><th>Key results</th><th></th></tr></thead>
-                <tbody>
-                  {% for item in exp_records %}
-                    {% set r = item.record %}
-                    {% set s = item.summary %}
-                    <tr>
-                      <td class="muted">{{ r.run_date or r.created_at.strftime("%Y-%m-%d") }}</td>
-                      <td><b>{{ r.data_type }}</b> — {{ r.method }}</td>
-                      <td class="muted">
-                        {% if r.data_type=="CMC_Analytics" and r.method in ["SEC_HPLC","SEC"] %}
-                          Monomer {{ s.monomer_pct if s.monomer_pct is not none else "—" }}{% if s.monomer_pct is not none %}%{% endif %}{% if s.hmw_pct is not none %}, HMW {{ s.hmw_pct }}%{% endif %}{% if s.lmw_pct is not none %}, LMW {{ s.lmw_pct }}%{% endif %}
-                        {% elif r.data_type=="Binding" and r.method in ["BLI","SPR"] %}
-                          KD {{ s.kd_nM if s.kd_nM is not none else "—" }}{% if s.kd_nM is not none %} nM{% endif %}
-                        {% elif r.data_type=="CMC_Analytics" and r.method=="Endotoxin" %}
-                          {{ s.value_eu_ml if s.value_eu_ml is not none else "—" }} EU/mL (limit {{ s.limit_eu_ml if s.limit_eu_ml is not none else "—" }})
-                        {% else %}
-                          —
-                        {% endif %}
-                      </td>
-                      <td><a class="btn mini" href="/data/{{ r.id }}">View</a></td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            {% else %}
-              <div class="muted">No experimental records yet for this batch.</div>
-            {% endif %}
-          </div>
+          <p class="muted">No batches yet. Create a batch to start entering experimental data.</p>
         {% endif %}
-
-        <script>
-        (function(){
-          const sel = document.getElementById('expBatchSel');
-          if(!sel) return;
-          sel.addEventListener('change', ()=>{
-            const bid = sel.value;
-            const url = new URL(window.location.href);
-            url.searchParams.set('tab','experimental');
-            url.searchParams.set('batch_id', bid);
-            window.location.href = url.toString();
-          });
-        })();
-        </script>
       </div>
       {% endif %}
-      {% set user_desc = molecule.description_user or molecule.description %}
+{% set user_desc = molecule.description_user or molecule.description %}
       {% if user_desc %}<p>{{ user_desc }}</p>{% endif %}
       {% if molecule.description_auto %}
         <p class="muted"><strong>Auto description:</strong> {{ molecule.description_auto }}</p>
@@ -199,17 +113,21 @@
                         {% set s = item.summary %}
                         <tr>
                           <td>
-                            {% if s.kind=="SEC" %}
-                              <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong>
-                              <span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
-                            {% elif s.kind=="Binding" %}
-                              <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
-                              <span class="muted">{% if s.kon %} kon {{ s.kon }}{% endif %}{% if s.koff %} · koff {{ s.koff }}{% endif %}</span>
-                            {% elif s.kind=="Endotoxin" %}
-                              <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
-                              <span class="muted">{% if s.limit_eu_ml is not none %} (limit {{ s.limit_eu_ml }}){% endif %}</span>
+                            {% if item.result_text %}
+                              <strong>{{ item.result_text }}</strong>
                             {% else %}
-                              <strong>—</strong> <span class="muted">Result summary not defined for this assay yet.</span>
+                              {% if s.kind=="SEC" %}
+                                <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong>
+                                <span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
+                              {% elif s.kind=="Binding" %}
+                                <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
+                                <span class="muted">{% if s.kon %} kon {{ s.kon }}{% endif %}{% if s.koff %} · koff {{ s.koff }}{% endif %}</span>
+                              {% elif s.kind=="Endotoxin" %}
+                                <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
+                                <span class="muted">{% if s.limit_eu_ml is not none %} (limit {{ s.limit_eu_ml }}){% endif %}</span>
+                              {% else %}
+                                <strong>—</strong> <span class="muted">Result summary not defined for this assay yet.</span>
+                              {% endif %}
                             {% endif %}
                           </td>
                           <td class="muted">{{ r.run_date or "" }}</td>
@@ -244,14 +162,18 @@
         {% set s = item.summary %}
         <tr>
           <td>
-            {% if s.kind=="SEC" %}
-              <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong><span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
-            {% elif s.kind=="Binding" %}
-              <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
-            {% elif s.kind=="Endotoxin" %}
-              <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
+            {% if item.result_text %}
+              <strong>{{ item.result_text }}</strong>
             {% else %}
-              <span class="muted">—</span>
+              {% if s.kind=="SEC" %}
+                <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong><span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
+              {% elif s.kind=="Binding" %}
+                <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
+              {% elif s.kind=="Endotoxin" %}
+                <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
             {% endif %}
           </td>
           <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
@@ -648,8 +570,9 @@
       </details>
     </div>
 
-    <h3>Property run history</h3>
-    <table class="table">
+    <details class="card" style="margin:12px 0;">
+      <summary><h3 style="display:inline;">Property run history</h3></summary>
+      <table class="table">
       <thead><tr><th>When</th><th>Status</th><th>Reason</th><th>Tier</th><th>Input hash</th></tr></thead>
       <tbody>
         {% for r in property_runs %}
@@ -662,13 +585,15 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+      </table>
+    </details>
   {% else %}
     <p class="muted">No computed results yet. They will run automatically when the molecule is created or its sequences change.</p>
   {% endif %}
 
-  <h3 id="computed_log">Latest run log</h3>
-  <table class="table">
+  <details class="card" style="margin:12px 0;" id="computed_log_details">
+    <summary id="computed_log"><h3 style="display:inline;">Latest run log</h3></summary>
+    <table class="table">
     <thead><tr><th>Time</th><th>Step</th><th>Level</th><th>Message</th></tr></thead>
     <tbody>
       {% for ev in latest_run_events %}
@@ -682,7 +607,16 @@
         <tr><td colspan="4" class="muted">No log entries.</td></tr>
       {% endfor %}
     </tbody>
-  </table>
+    </table>
+  </details>
+  <script>
+  (function(){
+    if (window.location.hash === "#computed_log") {
+      var d = document.getElementById("computed_log_details");
+      if (d) d.open = true;
+    }
+  })();
+  </script>
   <h2 id="annotations">Annotations</h2>
   <p class="muted">Selectable, copy-clean sequence viewer with an annotation sidebar. Click an annotation to highlight residues; copy always yields raw amino acids only.</p>
 

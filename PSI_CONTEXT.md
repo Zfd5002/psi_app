@@ -180,4 +180,22 @@ It exists specifically so context survives compression.
 ---
 
 End of PSI_CONTEXT.md
+## Developer convenience scripts
 
+### Build a code-only ZIP (auto-versioned)
+From the repo root:
+
+- `./compress.sh`
+
+This auto-detects the current PSI version from `psi/web/app.py` (`PSI_VERSION`) and writes a ZIP to `~/Downloads/` named:
+- `psi_repo_update_<PSI_VERSION>_code_only.zip`
+
+### Install a desktop shortcut (Ubuntu/Linux)
+From the repo root:
+
+- `bash scripts/install_desktop_shortcut.sh`
+
+This creates `~/Desktop/PSI.desktop` that launches:
+- `uvicorn psi.web.app:create_app --factory --reload`
+
+If your desktop environment blocks launching, right-click the icon and choose **Allow Launching**.

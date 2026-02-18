@@ -903,6 +903,8 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
     """
     import json as _json
 
+    from psi.core import assays as assay_norm
+
     m = get_molecule(db, molecule_id)
     if not m:
         raise KeyError("Molecule not found")
@@ -942,15 +944,8 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
         return {"kind": "Other"}
 
     def _assay_bucket(r: DataRecord) -> str:
-        # UI-facing buckets. Keep descriptive, not interpretive.
-        if r.data_type == "CMC_Analytics" and r.method in ("SEC_HPLC", "SEC"):
-            return "SEC"
-        if r.data_type == "Binding" and r.method in ("SPR", "BLI"):
-            return "Binding"
-        if r.data_type == "CMC_Analytics" and r.method == "Endotoxin":
-            return "Endotoxin"
-        # Fall back to type/method (still useful).
-        return f"{r.data_type}/{r.method}"
+        # UI-facing buckets, normalized via psi.core.assays
+        return assay_norm.assay_key(r)
 
     def _normalize_params(p: dict) -> dict:
         # Remove empty strings/nulls for stable grouping.
@@ -1040,13 +1035,15 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
                     "record": r,
                     "params": _normalize_params(p),
                     "summary": _summary_for(r),
+                    "result_text": assay_norm.record_result_text(r),
                 }
             )
 
         # Create small "glance" summaries per assay+condition
         glance: dict[str, list[str]] = {}
         for assay, conds in assay_map.items():
-            glance[assay] = []
+            display = assay_norm.assay_display_name(assay)
+            glance[display] = []
             for fp, node in conds.items():
                 runs = node["runs"]
                 if not runs:
@@ -1077,22 +1074,22 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
                         parts.append(f"{hmw}% HMW")
                     if lmw is not None:
                         parts.append(f"{lmw}% LMW")
-                    glance[assay].append(f"{label}: " + " / ".join(parts) + f" (n={len(runs)})")
+                    glance[display].append(f"{label}: " + " / ".join(parts) + f" (n={len(runs)})")
                 elif s.get("kind") == "Binding":
                     kd = s.get("kd_nM")
                     if kd is not None:
-                        glance[assay].append(f"{label}: KD {kd} nM (n={len(runs)})")
+                        glance[display].append(f"{label}: KD {kd} nM (n={len(runs)})")
                     else:
-                        glance[assay].append(f"{label}: KD n/a (n={len(runs)})")
+                        glance[display].append(f"{label}: KD n/a (n={len(runs)})")
                 elif s.get("kind") == "Endotoxin":
                     val = s.get("value_eu_ml")
                     lim = s.get("limit_eu_ml")
                     if val is not None and lim is not None:
-                        glance[assay].append(f"{label}: {val} EU/mL (limit {lim}) (n={len(runs)})")
+                        glance[display].append(f"{label}: {val} EU/mL (limit {lim}) (n={len(runs)})")
                     else:
-                        glance[assay].append(f"{label} (n={len(runs)})")
+                        glance[display].append(f"{label} (n={len(runs)})")
                 else:
-                    glance[assay].append(f"{label} (n={len(runs)})")
+                    glance[display].append(f"{label} (n={len(runs)})")
 
         return {
             "batch": batch,
@@ -1112,7 +1109,7 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
         .limit(200)
         .all()
     )
-    molecule_level_enriched = [{"record": r, "summary": _summary_for(r), "params": _normalize_params(_load(r.params_json))} for r in molecule_level_records]
+    molecule_level_enriched = [{"record": r, "summary": _summary_for(r), "result_text": assay_norm.record_result_text(r), "params": _normalize_params(_load(r.params_json))} for r in molecule_level_records]
 
     return {
         "exp_batches": batches,

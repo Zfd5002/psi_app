@@ -1,4 +1,9 @@
 # Changelog
+## v1.2.1
+- Molecule detail: make **Property run history** and **Latest run log** collapsible using `<details>` (collapsed by default); `#computed_log` auto-opens the log section.
+- Experimental tab: batch-first quick-add (list batches; add SEC/BLI/Endotoxin per batch).
+- Assay schema normalization: add `psi/core/assays.py` and surface `result_text` for batch trees and molecule-level records to reduce assay-specific template logic.
+
 
 ## v1.1.0
 
