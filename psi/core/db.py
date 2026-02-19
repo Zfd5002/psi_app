@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import os
 from pathlib import Path
+from typing import Iterator, Optional
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DB_PATH = os.environ.get("PSI_DB_PATH", str(BASE_DIR / "psi.sqlite"))
@@ -19,19 +23,21 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 
 
-def ensure_schema() -> None:
+def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
     """Lightweight migration: create missing tables and add missing columns.
 
     This avoids Alembic while remaining backwards-compatible.
     """
     from .models import Base  # local import to avoid circular
 
+    eng = engine_override or engine
+
     # Create missing tables
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=eng)
 
     # Ensure data_measurements exists for fresh DBs (measurement services depend on it).
     # Historically this table has been managed outside ORM metadata, so we create it explicitly.
-    with engine.begin() as conn:
+    with eng.begin() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS data_measurements (
                 id INTEGER PRIMARY KEY,
@@ -283,7 +289,7 @@ def ensure_schema() -> None:
         ).first()
         return r is not None
 
-    with engine.begin() as conn:
+    with eng.begin() as conn:
         for table, cols in model_columns.items():
             if not _table_exists(conn, table):
                 continue
@@ -293,7 +299,40 @@ def ensure_schema() -> None:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"))
 
     # v1.2.0: required indexes (additive; SQLite-friendly)
-    with engine.connect() as conn:
+    with eng.connect() as conn:
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_sequence_entities_chain_id ON sequence_entities(chain_id)"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_molecules_composition_sha256 ON molecules(composition_sha256)"))
         conn.commit()
+
+
+@contextmanager
+def get_db(db_path: Optional[str] = None, *, ensure: bool = True) -> Iterator[Session]:
+    """Context-managed DB session for CLIs.
+
+    Web routes use a FastAPI dependency in :mod:`psi.web.deps`.
+    This helper is for scripts that must respect an explicit `--db` path.
+
+    When `db_path` is provided we create an isolated engine/sessionmaker for that
+    SQLite file without mutating the module globals (engine/SessionLocal).
+    """
+
+    if db_path:
+        p = Path(db_path).expanduser().resolve()
+        eng = create_engine(
+            f"sqlite:///{p}",
+            connect_args={"check_same_thread": False},
+            future=True,
+        )
+        if ensure:
+            ensure_schema(engine_override=eng)
+        SessionTmp = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)
+        db = SessionTmp()
+    else:
+        if ensure:
+            ensure_schema()
+        db = SessionLocal()
+
+    try:
+        yield db
+    finally:
+        db.close()

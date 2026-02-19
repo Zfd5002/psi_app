@@ -354,3 +354,13 @@ def export_wide_to_csv(
         "columns": len(header),
         "include_extras": options.include_extras,
     }
+    
+# Backwards/CLI compatibility: older scripts may import export_wide_csv
+def export_wide_csv(db: Session, out_path: str, include_extras: bool = False) -> str:
+    """
+    CLI compatibility wrapper.
+
+    The service API uses ExportWideOptions; the CLI historically passed include_extras directly.
+    """
+    opts = ExportWideOptions(include_extras=bool(include_extras))
+    return export_wide_to_csv(db=db, out_path=out_path, options=opts)
