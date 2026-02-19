@@ -20,7 +20,10 @@ It SHOULD include:
 
 - application code (`psi/`)
 - templates / static assets
-- vendor code (`vendor/`)
+
+It MAY exclude:
+
+- vendor code (`vendor/`) — if excluded, rehydrate separately (see Dependencies).
 
 ## Apply
 
@@ -55,5 +58,11 @@ Heavy compute (domains/numbering):
 
 ```bash
 pip install -r requirements.txt -r requirements-heavy.txt
+```
+
+If `vendor/` (ANARCI) is excluded from your update ZIP, rehydrate it:
+
+```bash
+./scripts/install_anarci.sh
 ```
 

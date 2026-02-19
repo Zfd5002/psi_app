@@ -18,6 +18,7 @@ from psi.web.routers import (
     programs,
     search,
     data_records,
+    qc,
 )
 
 
@@ -35,7 +36,7 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
 
     templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
     # Release string (shown in UI footer). Keep as a single source of truth.
-    templates.env.globals["PSI_VERSION"] = "v1.2.1"
+    templates.env.globals["PSI_VERSION"] = "v1.2.7"
     storage = StorageConfig(base_dir=base_dir)
     rules_path = base_dir / "psi_rules" / "psirules-0.1.0.yml"
 
@@ -64,5 +65,6 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
     app.include_router(decisions.router)
     app.include_router(files.router)
     app.include_router(search.router)
+    app.include_router(qc.router)
 
     return app

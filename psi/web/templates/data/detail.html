@@ -30,6 +30,109 @@
     </div>
   </div>
 
+<h2>Extracted measurements</h2>
+<p class="muted">These rows are generated from Results/Parameters and used by the wide exporter. QC actions are append-only and attributed.</p>
+
+{% if measurements and measurements|length %}
+<table class="table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Value</th>
+      <th>Unit</th>
+      <th>QC</th>
+      <th class="no-print">Review</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in measurements %}
+      {% set mid = m.id %}
+      {% set qc = (qc_by_measurement_id.get(mid) if qc_by_measurement_id is defined else None) %}
+      {% set status = (qc.status if qc else 'unreviewed') %}
+      {% set policy = (qc.ignore_policy if qc else 'include') %}
+      <tr>
+        <td class="mono">{{ m.name }}</td>
+        <td class="mono">
+          {% if m.value_num is not none %}{{ m.value_num }}{% else %}{{ m.value_text or '' }}{% endif %}
+        </td>
+        <td class="mono">{{ m.unit or '' }}</td>
+        <td>
+          <span class="badge"
+            style="
+              padding:2px 8px;border-radius:999px;border:1px solid rgba(0,0,0,.12);
+              {% if status=='approved' %}background:rgba(46,204,113,.15);
+              {% elif status=='rejected' %}background:rgba(231,76,60,.15);
+              {% elif status=='quarantined' %}background:rgba(241,196,15,.18);
+              {% else %}background:rgba(149,165,166,.15);{% endif %}
+            ">
+            {{ status }}
+          </span>
+          {% if policy and policy != 'include' %}
+            <span class="badge" style="margin-left:6px;padding:2px 8px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:rgba(52,152,219,.12);">
+              {{ policy }}
+            </span>
+          {% endif %}
+          {% if m.ignore_for_model %}
+            <span class="badge" style="margin-left:6px;padding:2px 8px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:rgba(52,73,94,.12);">
+              legacy ignore_for_model
+            </span>
+          {% endif %}
+        </td>
+        <td class="no-print">
+          <details>
+            <summary class="link">Review</summary>
+            <form method="post" action="/qc/measurement/{{ mid }}" style="margin-top:10px;display:grid;gap:8px;">
+              <input type="hidden" name="record_id" value="{{ record.id }}">
+              <input type="hidden" name="redirect_to" value="/data/{{ record.id }}">
+              <label>
+                Action
+                <select name="action">
+                  <option value="approve">approve</option>
+                  <option value="reject">reject</option>
+                  <option value="quarantine">quarantine</option>
+                  <option value="clear">clear</option>
+                  <option value="note">note</option>
+                </select>
+              </label>
+
+              <label>
+                Ignore policy (model)
+                <select name="ignore_policy">
+                  <option value="include">include</option>
+                  <option value="exclude_soft">exclude_soft</option>
+                  <option value="exclude_hard">exclude_hard</option>
+                  <option value="quarantine">quarantine</option>
+                </select>
+              </label>
+
+              <label>
+                Reviewer
+                <input name="actor" placeholder="e.g., Zach" required>
+              </label>
+
+              <label>
+                Note
+                <textarea name="note" rows="3" placeholder="QC rationale / context"></textarea>
+              </label>
+
+              <label style="display:flex;gap:8px;align-items:center;">
+                <input type="checkbox" name="clear_legacy_ignore" value="1">
+                Also clear legacy ignore_for_model when policy=include
+              </label>
+
+              <button class="btn primary" type="submit">Submit QC</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p class="muted">No extracted measurements found for this record.</p>
+{% endif %}
+
+
   <h2>Notes</h2>
   <pre>{{ record.notes or '' }}</pre>
 

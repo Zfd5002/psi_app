@@ -11,7 +11,8 @@ from psi.core.models import AuditEvent, Batch, DataRecord, Evidence, EvidenceCit
 from psi.core.registry import REGISTRY, normalize_data_record_for_storage
 from psi.core.utils import model_to_dict, now_utc
 from psi.services.files import attach_files
-from psi.services.measurements import extract_measurements, upsert_measurements, upsert_measurements_force
+from psi.services.measurements import extract_measurements, upsert_measurements, upsert_measurements_force, list_measurements_for_record
+from psi.services import qc as qc_svc
 
 
 def _infer_primary_result_text(results_json: str) -> str | None:
@@ -150,6 +151,13 @@ def create_data_record(
     params_s = _jsonish_to_str(params_json, default="{}")
     results_s = _jsonish_to_str(results_json, default="{}")
 
+    # Prefer explicit run_date (ISO date). If absent, derive from run_at when provided.
+    run_date_s = (run_date or '').strip() or None
+    if not run_date_s and (run_at or '').strip():
+        dt = _parse_run_at(run_at)
+        if dt is not None:
+            run_date_s = dt.date().isoformat()
+
     rec = DataRecord(
         program_id=program_id,
         molecule_id=molecule_id,
@@ -159,8 +167,7 @@ def create_data_record(
         method=method,
         title=title.strip(),
         notes=notes.strip() or None,
-        run_date=run_date.strip() or None,
-        run_at=_parse_run_at(run_at),
+        run_date=run_date_s,
         params_json=params_s,
         results_json=results_s,
         raw_inputs_json=params_s,
@@ -175,13 +182,15 @@ def create_data_record(
     db.commit()
     db.refresh(rec)
 
-    specs, suggested = extract_measurements(rec)
+    specs = extract_measurements(
+        data_type=rec.data_type,
+        method=rec.method,
+        results_json=rec.results_json,
+        params_json=rec.params_json,
+    )
     if specs:
         # New record: safe upsert is fine.
-        upsert_measurements(db, rec, specs)
-        if suggested and not rec.primary_result_text:
-            rec.primary_result_text = suggested
-        db.add(rec)
+        upsert_measurements(db, record_id=rec.id, measurements=specs)
         db.commit()
         db.refresh(rec)
 
@@ -245,8 +254,7 @@ def update_data_record(
     rec.method = method
     rec.title = title.strip()
     rec.notes = notes.strip() or None
-    rec.run_date = run_date.strip() or None
-    rec.run_at = _parse_run_at(run_at)
+    run_date=run_date_s,
     rec.params_json = params_s
     rec.results_json = results_s
     rec.raw_inputs_json = params_s
@@ -256,12 +264,15 @@ def update_data_record(
     db.add(rec)
     db.commit()
 
-    specs, suggested = extract_measurements(rec)
+    specs = extract_measurements(
+        data_type=rec.data_type,
+        method=rec.method,
+        results_json=rec.results_json,
+        params_json=rec.params_json,
+    )
     if specs:
         # Updating an existing record is an explicit user action; keep measurements in sync.
-        upsert_measurements_force(db, rec, specs)
-        if suggested and not rec.primary_result_text:
-            rec.primary_result_text = suggested
+        upsert_measurements_force(db, record_id=rec.id, measurements=specs)
         rec.updated_at = now_utc()
         db.add(rec)
         db.commit()
@@ -287,6 +298,10 @@ def get_data_record_detail(db: Session, record_id: int) -> dict:
     if not rec:
         raise KeyError("DataRecord not found")
 
+    # Extracted measurement rows (data_measurements) + QC state.
+    measurements = list_measurements_for_record(db, record_id=record_id)
+    qc_by_mid = qc_svc.get_qc_state_for_measurements(db, [m.get("id") for m in measurements if m.get("id") is not None])
+
     citations = db.query(EvidenceCitation).filter(EvidenceCitation.data_record_id == record_id).all()
     ev_ids = [c.evidence_id for c in citations]
     evidence = db.query(Evidence).filter(Evidence.id.in_(ev_ids)).all() if ev_ids else []
@@ -309,7 +324,8 @@ def get_data_record_detail(db: Session, record_id: int) -> dict:
 
     return {
         "record": rec,
-        "measurements": list(rec.measurements) if getattr(rec, "measurements", None) is not None else [],
+        "measurements": measurements,
+        "qc_by_measurement_id": qc_by_mid,
         "params": _load_json_field(rec.params_json),
         "results": _load_json_field(rec.results_json),
         "evidence_citing": evidence,

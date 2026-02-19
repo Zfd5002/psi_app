@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text, UniqueConstraint, Float
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -334,6 +334,18 @@ class File(Base):
     size_bytes = Column(Integer, nullable=False)
     mime = Column(Text, nullable=True)
     sha256 = Column(Text, nullable=False)
+
+    # v1.2.6: provenance foundation (all optional, additive)
+    source_kind = Column(Text, nullable=True)   # upload | import_path | generated
+    source_path = Column(Text, nullable=True)   # original location if imported
+    collected_at = Column(DateTime, nullable=True)
+    imported_at = Column(DateTime, nullable=True)
+    instrument = Column(Text, nullable=True)
+    operator = Column(Text, nullable=True)
+    run_id = Column(Text, nullable=True)
+    tags_json = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     links = relationship("FileLink", back_populates="file", cascade="all, delete-orphan")
@@ -346,10 +358,92 @@ class FileLink(Base):
     file_id = Column(Integer, ForeignKey("files.id"), nullable=False)
     entity_type = Column(Text, nullable=False)  # e.g., DataRecord
     entity_id = Column(Integer, nullable=False)
+
+    # v1.2.6: typed linkage
+    role = Column(Text, nullable=True)  # raw_input | processed_output | report | plot | protocol | other
+    label = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     file = relationship("File", back_populates="links")
 
+
+class FileDerivation(Base):
+    __tablename__ = "file_derivations"
+
+    id = Column(Integer, primary_key=True)
+    parent_file_id = Column(Integer, nullable=False, index=True)
+    child_file_id = Column(Integer, nullable=False, index=True)
+    transform = Column(Text, nullable=True)
+    tool_name = Column(Text, nullable=True)
+    tool_version = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+class MeasurementQCEvent(Base):
+    """Append-only QC event log for extracted measurements.
+
+    This is the source of truth for review/audit history. Do not UPDATE rows;
+    always INSERT new events.
+    """
+
+    __tablename__ = "measurement_qc_events"
+
+    id = Column(Integer, primary_key=True)
+
+    # data_measurements.id (managed outside ORM). Intentionally no FK.
+    measurement_id = Column(Integer, nullable=False, index=True)
+
+    # Optional convenience linkage for UI grouping.
+    record_id = Column(Integer, ForeignKey("data_records.id"), nullable=True, index=True)
+
+    # Optional: when targeting a conceptual metric rather than a specific row.
+    metric_key = Column(Text, nullable=True)
+
+    action = Column(Text, nullable=False)  # approve/reject/quarantine/clear/note
+    status_after = Column(Text, nullable=False)  # approved/rejected/quarantined/unreviewed
+
+    actor = Column(Text, nullable=False)
+    note = Column(Text, nullable=True)
+
+    # Model-safety policy metadata
+    ignore_policy = Column(Text, nullable=True)  # include/exclude_soft/exclude_hard/quarantine
+    ignore_reason_code = Column(Text, nullable=True)
+    ignore_note = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    record = relationship("DataRecord", lazy="joined")
+
+
+class MeasurementQC(Base):
+    """Latest-state cache for measurement QC.
+
+    This table may be UPDATED (it's derived). Governance truth remains in
+    MeasurementQCEvent.
+    """
+
+    __tablename__ = "measurement_qc"
+    __table_args__ = (UniqueConstraint("measurement_id", name="uq_measurement_qc_measurement_id"),)
+
+    id = Column(Integer, primary_key=True)
+
+    # data_measurements.id (managed outside ORM). Intentionally no FK.
+    measurement_id = Column(Integer, nullable=False, index=True)
+
+    # Optional convenience linkage for UI grouping.
+    record_id = Column(Integer, ForeignKey("data_records.id"), nullable=True, index=True)
+
+    metric_key = Column(Text, nullable=True)
+
+    status = Column(Text, nullable=False, default="unreviewed")  # unreviewed/approved/rejected/quarantined
+
+    ignore_policy = Column(Text, nullable=False, default="include")  # include/exclude_soft/exclude_hard/quarantine
+    ignore_reason_code = Column(Text, nullable=True)
+    ignore_note = Column(Text, nullable=True)
+
+    last_event_id = Column(Integer, nullable=True)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    record = relationship("DataRecord", lazy="joined")
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
@@ -380,6 +474,26 @@ class DecisionSnapshot(Base):
     outputs_json = Column(Text, nullable=False)
     evidence_ids_json = Column(Text, nullable=False)
 
+    as_of_ts = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     program = relationship("Program", back_populates="decisions")
+    outcomes = relationship("OutcomeLabel", back_populates="snapshot", cascade="all, delete-orphan")
+
+class OutcomeLabel(Base):
+    __tablename__ = "outcome_labels"
+
+    id = Column(Integer, primary_key=True)
+    snapshot_id = Column(Integer, ForeignKey("decision_snapshots.id"), nullable=False, index=True)
+
+    name = Column(Text, nullable=False, index=True)
+    value_text = Column(Text, nullable=True)
+    value_num = Column(Float, nullable=True)
+    value_bool = Column(Integer, nullable=True)
+
+    version = Column(Text, default="v1", nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    snapshot = relationship("DecisionSnapshot", back_populates="outcomes")

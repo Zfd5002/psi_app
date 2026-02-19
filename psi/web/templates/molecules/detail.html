@@ -67,126 +67,241 @@
     <a class="tab" href="#audit">Audit</a>
   </div>
 
-  <h2 id="batches">Batches</h2>
+  
+{% if data_overview %}
+  <div class="card" style="margin:14px 0;">
+    <h2 style="margin-top:0;">Data Overview</h2>
+    <div class="muted mini">Read-only summary (UI-only). Aggregates use latest-per-batch primary-like measurements when available. No unit conversions.</div>
+
+    <div class="grid cols-3" style="margin-top:10px;">
+      <div>
+        <div class="muted mini">Total batches</div>
+        <div><strong>{{ data_overview.total_batches }}</strong></div>
+      </div>
+      <div>
+        <div class="muted mini">Total data records</div>
+        <div><strong>{{ data_overview.total_records }}</strong></div>
+      </div>
+      <div>
+        <div class="muted mini">Total measurements</div>
+        <div><strong>{{ data_overview.total_measurements }}</strong></div>
+      </div>
+    </div>
+
+    <div class="grid cols-3" style="margin-top:10px;">
+      <div>
+        <div class="muted mini">Mean purity</div>
+        <div><strong>{% if data_overview.mean_purity is not none %}{{ "%.1f"|format(data_overview.mean_purity) }}%{% else %}N/A{% endif %}</strong></div>
+      </div>
+      <div>
+        <div class="muted mini">Mean KD</div>
+        <div><strong>{% if data_overview.mean_kd is not none %}{{ data_overview.mean_kd }}{% else %}N/A{% endif %}</strong></div>
+      </div>
+      <div>
+        <div class="muted mini">Mean titer</div>
+        <div><strong>{% if data_overview.mean_titer is not none %}{{ data_overview.mean_titer }}{% else %}N/A{% endif %}</strong></div>
+      </div>
+    </div>
+
+    {% if data_overview.outlier_count is not none %}
+      <div class="muted mini" style="margin-top:10px;">Outlier count: <strong>{{ data_overview.outlier_count }}</strong></div>
+    {% endif %}
+  </div>
+{% endif %}
+
+<h2 id="batches">Batches</h2>
   <p class="muted">Batch-first view. Expand a batch to see all experiments grouped by assay and structured condition (buffer/NaCl/etc). Results are shown first; metadata is secondary.</p>
 
-  <div class="batch-panels">
+  <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0;">
+    <button class="btn" type="button" id="batch_expand_all">Expand all</button>
+    <button class="btn" type="button" id="batch_collapse_all">Collapse all</button>
+    <span style="margin-left:8px;"></span>
+    <label class="muted mini" style="display:flex;align-items:center;gap:6px;">
+      QC view
+      <select id="qc_mode_select" style="font-size:12px;">
+        {% set qm = exp_qc_mode if exp_qc_mode is defined else (request.query_params.get('qc_mode','all')) %}
+        <option value="all" {% if qm=='all' %}selected{% endif %}>All</option>
+        <option value="model_safe" {% if qm=='model_safe' %}selected{% endif %}>Model-safe</option>
+        <option value="approved" {% if qm=='approved' %}selected{% endif %}>Approved-only</option>
+      </select>
+    </label>
+    <span class="muted mini">State is remembered per molecule.</span>
+  </div>
+
+  
+<div class="batch-panels">
     {% for panel in exp_batch_panels %}
       {% set b = panel.batch %}
-      <details class="batch-panel" {% if loop.index0 == 0 %}open{% endif %}>
+      {% set is_unassigned = (b is none) %}
+      {% set batch_label = panel.batch_label if is_unassigned else b.batch_id %}
+      {% set details_key = panel.details_key if panel.details_key is defined and panel.details_key else ("batch:" ~ batch_label) %}
+
+      <details class="batch-panel" data-psi-details-key="{{ details_key }}">
         <summary>
           <div class="batch-summary">
-            <div class="batch-id"><a href="/batches/{{ b.id }}">{{ b.batch_id }}</a></div>
-            <div class="muted mini">{{ b.title or "" }}</div>
-            <div class="muted mini">created {{ b.created_at }}</div>
+            <div class="batch-id">
+              {% if not is_unassigned %}
+                <a href="/batches/{{ b.id }}">{{ batch_label }}</a>
+              {% else %}
+                {{ batch_label }}
+              {% endif %}
+            </div>
+
+
+{% if panel.qc is defined and panel.qc and panel.qc.total %}
+  <div class="batch-qc-chip">
+    <span class="badge" style="padding:2px 8px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:rgba(149,165,166,.12);">
+      QC: {{ panel.qc.pending or 0 }} pending
+      {% if panel.qc.rejected %} / {{ panel.qc.rejected }} rejected{% endif %}
+      {% if panel.qc.quarantined %} / {{ panel.qc.quarantined }} quarantined{% endif %}
+    </span>
+  </div>
+{% endif %}
+
+            <div class="batch-headlines">
+              {% if panel.headline_items and panel.headline_items|length %}
+                {% for s in panel.headline_items %}
+                  <span class="chip">{{ s }}</span>
+                {% endfor %}
+              {% else %}
+                <span class="muted mini">No measurements recorded</span>
+              {% endif %}
+            </div>
+
+            <div class="muted mini" style="margin-top:2px;">
+              {{ panel.record_count or 0 }} record{{ "" if (panel.record_count or 0)==1 else "s" }}
+              {% if panel.measurement_count is not none %}
+                • {{ panel.measurement_count }} measurement{{ "" if panel.measurement_count==1 else "s" }}
+              {% endif %}
+              {% if not is_unassigned %}
+                • created {{ b.created_at }}
+              {% endif %}
+            </div>
+
+            {% if not is_unassigned and (b.title or "") %}
+              <div class="muted mini">{{ b.title }}</div>
+            {% endif %}
           </div>
         </summary>
 
-        <div class="batch-glance">
-          {% for assay, items in panel.glance.items() %}
-            {% if items and items|length > 0 %}
-              <div class="glance-row">
-                <div class="glance-label">{{ assay }}</div>
-                <div class="glance-items">
-                  {% for s in items %}
-                    <span class="chip">{{ s }}</span>
-                  {% endfor %}
-                </div>
-              </div>
-            {% endif %}
-          {% endfor %}
-          {% if panel.record_count == 0 %}<div class="muted">No data records linked to this batch yet.</div>{% endif %}
-        </div>
-
-        <div class="batch-tree">
-          {% for assay, conds in panel.assays.items() %}
-            <details class="assay-node">
-              <summary><strong>{{ assay }}</strong> <span class="muted mini">({{ conds|length }} conditions)</span></summary>
-              {% for fp, node in conds.items() %}
-                <details class="cond-node">
-                  <summary>{{ node.label }} <span class="muted mini">(n={{ node.runs|length }})</span></summary>
-                  <table class="table compact" style="margin-top:8px;">
-                    <thead><tr><th>Result</th><th class="muted">Run date</th><th class="muted">Type/Method</th><th class="muted">Title</th></tr></thead>
-                    <tbody>
-                      {% for item in node.runs %}
-                        {% set r = item.record %}
-                        {% set s = item.summary %}
-                        <tr>
-                          <td>
-                            {% if item.result_text %}
-                              <strong>{{ item.result_text }}</strong>
-                            {% else %}
-                              {% if s.kind=="SEC" %}
-                                <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong>
-                                <span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
-                              {% elif s.kind=="Binding" %}
-                                <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
-                                <span class="muted">{% if s.kon %} kon {{ s.kon }}{% endif %}{% if s.koff %} · koff {{ s.koff }}{% endif %}</span>
-                              {% elif s.kind=="Endotoxin" %}
-                                <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
-                                <span class="muted">{% if s.limit_eu_ml is not none %} (limit {{ s.limit_eu_ml }}){% endif %}</span>
-                              {% else %}
-                                <strong>—</strong> <span class="muted">Result summary not defined for this assay yet.</span>
-                              {% endif %}
-                            {% endif %}
-                          </td>
-                          <td class="muted">{{ r.run_date or "" }}</td>
-                          <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
-                          <td>
-                            <a href="/data/{{ r.id }}">{{ r.title }}</a>
-                            {% if r.notes %}<div class="muted mini">{{ r.notes }}</div>{% endif %}
-                          </td>
-                        </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
-                </details>
+        {% if is_unassigned %}
+          <div class="muted" style="margin:10px 0;">Data records not assigned to a batch.</div>
+          <table class="table">
+            <thead><tr><th>Result</th><th>Title</th><th>Domain</th><th>Type/Method</th><th>Run date</th></tr></thead>
+            <tbody>
+              {% for item in panel.unassigned_records %}
+                {% set r = item.record %}
+                {% set s = item.summary %}
+                <tr>
+                  <td>
+                    {% if item.result_text %}
+                      <strong>{{ item.result_text }}</strong>
+                    {% else %}
+                      {% if s.kind=="SEC" %}
+                        <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong><span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
+                      {% elif s.kind=="Binding" %}
+                        <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
+                      {% elif s.kind=="Endotoxin" %}
+                        <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
+                      {% else %}
+                        <span class="muted">—</span>
+                      {% endif %}
+                    {% endif %}
+                  </td>
+                  <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
+                  <td class="muted">{{ r.domain }}</td>
+                  <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
+                  <td class="muted">{{ r.run_date or "" }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="5" class="muted">No unassigned data records.</td></tr>
               {% endfor %}
-            </details>
-          {% else %}
-            <div class="muted">No experimental data linked to this batch yet.</div>
-          {% endfor %}
-        </div>
+            </tbody>
+          </table>
+        {% else %}
+          <div class="batch-glance">
+            {% for assay, items in panel.glance.items() %}
+              {% if items and items|length > 0 %}
+                <div class="glance-row">
+                  <div class="glance-label">{{ assay }}</div>
+                  <div class="glance-items">
+                    {% for s in items %}
+                      <span class="chip">{{ s }}</span>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endif %}
+            {% endfor %}
+            {% if panel.record_count == 0 %}<div class="muted">No data records linked to this batch yet.</div>{% endif %}
+          </div>
+
+          <div class="batch-tree">
+            {% for assay, conds in panel.assays.items() %}
+              <details class="assay-node" data-psi-details-key="{{ details_key }}:assay:{{ assay }}">
+                <summary><strong>{{ assay }}</strong> <span class="muted mini">({{ conds|length }} conditions)</span></summary>
+                {% for fp, node in conds.items() %}
+                  <details class="cond-node" data-psi-details-key="{{ details_key }}:assay:{{ assay }}:cond:{{ fp }}">
+                    <summary>{{ node.label }} <span class="muted mini">(n={{ node.runs|length }})</span></summary>
+                    <table class="table compact" style="margin-top:8px;">
+                      <thead><tr><th>Result</th><th class="muted">Run date</th><th class="muted">Type/Method</th><th class="muted">Title</th></tr></thead>
+                      <tbody>
+                        {% for item in node.runs %}
+                          {% set r = item.record %}
+                          {% set s = item.summary %}
+                          {% set q = (exp_run_qc.get(r.id) if exp_run_qc is defined and exp_run_qc else None) %}
+                          <tr>
+                            <td>
+                              {% if item.result_text %}
+                                <strong>{{ item.result_text }}</strong>
+                              {% else %}
+                                {% if s.kind=="SEC" %}
+                                  <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong>
+                                  <span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
+                                {% elif s.kind=="Binding" %}
+                                  <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
+                                  <span class="muted">{% if s.kon %} kon {{ s.kon }}{% endif %}{% if s.koff %} · koff {{ s.koff }}{% endif %}</span>
+                                {% elif s.kind=="Endotoxin" %}
+                                  <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
+                                  <span class="muted">{% if s.limit_eu_ml is not none %} (limit {{ s.limit_eu_ml }}){% endif %}</span>
+                                {% else %}
+                                  <strong>—</strong> <span class="muted">Result summary not defined for this assay yet.</span>
+                                {% endif %}
+                              {% endif %}
+
+                              {% if q and (q.rejected or q.quarantined or q.pending) %}
+                                <span class="badge" style="margin-left:8px;padding:1px 6px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:rgba(149,165,166,.12);font-size:11px;">
+                                  QC:{% if q.pending %} {{ q.pending }} pending{% endif %}{% if q.rejected %}{% if q.pending %} /{% endif %} {{ q.rejected }} rejected{% endif %}{% if q.quarantined %} / {{ q.quarantined }} quarantined{% endif %}
+                                </span>
+                              {% endif %}
+                            </td>
+                            <td class="muted">{{ r.run_date or "" }}</td>
+                            <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
+                            <td>
+                              <a href="/data/{{ r.id }}">{{ r.title }}</a>
+                              {% if r.notes %}<div class="muted mini">{{ r.notes }}</div>{% endif %}
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </details>
+                {% endfor %}
+              </details>
+            {% else %}
+              <div class="muted">No experimental data linked to this batch yet.</div>
+            {% endfor %}
+          </div>
+        {% endif %}
       </details>
     {% else %}
       <div class="muted">No batches yet.</div>
     {% endfor %}
   </div>
-  <h2 id="data">Data Records</h2>
-  <p class="muted">This section shows molecule-linked records that are <em>not</em> tied to a specific batch (batch_id is empty). Batch-linked data lives in the Batches section above.</p>
-  <table class="table">
-    <thead><tr><th>Result</th><th>Title</th><th>Domain</th><th>Type/Method</th><th>Run date</th></tr></thead>
-    <tbody>
-      {% for item in exp_molecule_level_records %}
-        {% set r = item.record %}
-        {% set s = item.summary %}
-        <tr>
-          <td>
-            {% if item.result_text %}
-              <strong>{{ item.result_text }}</strong>
-            {% else %}
-              {% if s.kind=="SEC" %}
-                <strong>{{ s.monomer_pct if s.monomer_pct is not none else "n/a" }}% monomer</strong><span class="muted"> / {{ s.hmw_pct if s.hmw_pct is not none else "n/a" }}% HMW / {{ s.lmw_pct if s.lmw_pct is not none else "n/a" }}% LMW</span>
-              {% elif s.kind=="Binding" %}
-                <strong>KD {{ s.kd_nM if s.kd_nM is not none else "n/a" }} nM</strong>
-              {% elif s.kind=="Endotoxin" %}
-                <strong>{{ s.value_eu_ml if s.value_eu_ml is not none else "n/a" }} EU/mL</strong>
-              {% else %}
-                <span class="muted">—</span>
-              {% endif %}
-            {% endif %}
-          </td>
-          <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
-          <td class="muted">{{ r.domain }}</td>
-          <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
-          <td class="muted">{{ r.run_date or "" }}</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="5" class="muted">No molecule-level (unbatched) data records.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <h2 id="evidence">Recent evidence</h2>
+</div>
+  
+<h2 id="data">Data Records</h2>
+<p class="muted">Data records are now displayed batch-first above. Records without a batch appear under the <strong>Unassigned</strong> panel.</p>
+<h2 id="evidence">Recent evidence</h2>
   <table class="table">
     <thead><tr><th>Evidence type</th><th>Domain</th><th>Strength</th><th>Summary</th></tr></thead>
     <tbody>
@@ -570,8 +685,9 @@
       </details>
     </div>
 
-    <details class="card" style="margin:12px 0;">
-      <summary><h3 style="display:inline;">Property run history</h3></summary>
+    <details class="card" style="margin:12px 0;" id="property_run_details" data-psi-details-key="property_run_details">
+      <summary style="cursor:pointer; font-weight:600;">Property run history</summary>
+
       <table class="table">
       <thead><tr><th>When</th><th>Status</th><th>Reason</th><th>Tier</th><th>Input hash</th></tr></thead>
       <tbody>
@@ -591,8 +707,9 @@
     <p class="muted">No computed results yet. They will run automatically when the molecule is created or its sequences change.</p>
   {% endif %}
 
-  <details class="card" style="margin:12px 0;" id="computed_log_details">
-    <summary id="computed_log"><h3 style="display:inline;">Latest run log</h3></summary>
+  <details class="card" style="margin:12px 0;" id="computed_log_details" data-psi-details-key="computed_log_details">
+    <summary id="computed_log" style="cursor:pointer; font-weight:600;">Latest run log</summary>
+
     <table class="table">
     <thead><tr><th>Time</th><th>Step</th><th>Level</th><th>Message</th></tr></thead>
     <tbody>
@@ -611,9 +728,110 @@
   </details>
   <script>
   (function(){
-    if (window.location.hash === "#computed_log") {
+    // Persist open/closed state for key <details> panels (molecule-scoped).
+    var moleculeId = "{{ molecule.id }}";
+    function storagePrefix(){ return "psi:m:" + moleculeId + ":details:"; }
+    function storageKey(detailsKey){ return storagePrefix() + detailsKey; }
+
+    function getDetailsKey(el){
+      if (!el) return null;
+      var k = el.getAttribute("data-psi-details-key");
+      if (k) return k;
+      return el.id || null;
+    }
+
+    function getStoredState(detailsKey){
+      try { return window.localStorage.getItem(storageKey(detailsKey)); } catch(e) { return null; }
+    }
+
+    function setStoredState(detailsKey, isOpen){
+      try { window.localStorage.setItem(storageKey(detailsKey), isOpen ? "open" : "closed"); } catch(e) {}
+    }
+
+    function migrateLegacyKey(detailsKey, legacyKey){
+      // Back-compat: migrate old global key (pre v1.2.3d) to molecule-scoped key.
+      if (getStoredState(detailsKey) != null) return;
+      var v = null;
+      try { v = window.localStorage.getItem(legacyKey); } catch(e) {}
+      if (v === "open" || v === "closed") {
+        setStoredState(detailsKey, v === "open");
+      }
+    }
+
+    // Migrate known legacy keys.
+    migrateLegacyKey("property_run_details", "psi.details.property_run_details");
+    migrateLegacyKey("computed_log_details", "psi.details.computed_log_details");
+
+    function restoreDetails(el){
+      var k = getDetailsKey(el);
+      if (!k) return;
+      var v = getStoredState(k);
+      if (v === "open") el.open = true;
+      else if (v === "closed") el.open = false;
+      // else: keep default as authored (conservative defaults should be collapsed)
+      el.addEventListener("toggle", function(){
+        setStoredState(k, el.open);
+      });
+    }
+
+    // Restore for all opt-in <details> on this page.
+    var all = document.querySelectorAll("details[data-psi-details-key]");
+    for (var i=0;i<all.length;i++) restoreDetails(all[i]);
+
+    // Deep link behavior: open log when anchored.
+    if (window.location.hash === "#computed_log" || window.location.hash === "#computed_log_details") {
       var d = document.getElementById("computed_log_details");
-      if (d) d.open = true;
+      if (d) { d.open = true; setStoredState(getDetailsKey(d) || "computed_log_details", true); }
+    }
+
+    // Expand/collapse all batch panels.
+    function setAllBatches(open){
+      var panels = document.querySelectorAll(".batch-panels details.batch-panel[data-psi-details-key]");
+      for (var j=0;j<panels.length;j++) {
+        panels[j].open = !!open;
+        var kk = getDetailsKey(panels[j]);
+        if (kk) setStoredState(kk, !!open);
+      }
+    }
+    var ex = document.getElementById("batch_expand_all");
+    var co = document.getElementById("batch_collapse_all");
+    if (ex) ex.addEventListener("click", function(){ setAllBatches(true); });
+    if (co) co.addEventListener("click", function(){ setAllBatches(false); });
+
+    // QC mode selector (affects headline metric selection; persisted per molecule).
+    function qcStorageKey(){ return "psi.molecule." + String({{ molecule.id }}) + ".qc_mode"; }
+    function getQcStored(){ try { return window.localStorage.getItem(qcStorageKey()); } catch(e) { return null; } }
+    function setQcStored(v){ try { window.localStorage.setItem(qcStorageKey(), v); } catch(e) {} }
+
+    var qcSel = document.getElementById("qc_mode_select");
+    if (qcSel) {
+      // If URL lacks qc_mode but storage has one, apply it (one-time redirect).
+      try {
+        var u0 = new URL(window.location.href);
+        var urlMode = (u0.searchParams.get("qc_mode") || "").trim();
+        var stored = (getQcStored() || "").trim();
+        if (!urlMode && stored && stored !== "all") {
+          u0.searchParams.set("qc_mode", stored);
+          window.location.replace(u0.toString());
+          return;
+        }
+      } catch(e) {}
+
+      qcSel.addEventListener("change", function(){
+        var v = String(qcSel.value || "all").trim();
+        if (v !== "all" && v !== "model_safe" && v !== "approved") v = "all";
+        setQcStored(v);
+        try {
+          var u = new URL(window.location.href);
+          if (v === "all") u.searchParams.delete("qc_mode");
+          else u.searchParams.set("qc_mode", v);
+          if (!u.hash) u.hash = "#batches";
+          window.location.assign(u.toString());
+        } catch(e) {
+          // Fallback: simple reload.
+          window.location.reload();
+        }
+      });
     }
   })();
   </script>
@@ -770,21 +988,57 @@
       <input type="file" name="files" multiple />
       <div class="help">Optional: you can attach supporting files directly to a molecule.</div>
     </div>
+    <div class="grid cols-3" style="margin-top:8px;">
+      <div class="field">
+        <label>Role</label>
+        <select name="file_role">
+          <option value="other" selected>other</option>
+          <option value="raw_input">raw_input</option>
+          <option value="processed_output">processed_output</option>
+          <option value="report">report</option>
+          <option value="plot">plot</option>
+          <option value="protocol">protocol</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Run ID</label>
+        <input type="text" name="run_id" placeholder="e.g. SEC_2026_02_19_001" />
+      </div>
+      <div class="field">
+        <label>Instrument</label>
+        <input type="text" name="instrument" placeholder="e.g. ÄKTA / HPLC" />
+      </div>
+    </div>
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div class="field">
+        <label>Collected at (ISO)</label>
+        <input type="text" name="collected_at" placeholder="YYYY-MM-DD or YYYY-MM-DDTHH:MM" />
+      </div>
+      <div class="field">
+        <label>Operator</label>
+        <input type="text" name="operator" placeholder="optional" />
+      </div>
+    </div>
+    <div class="field" style="margin-top:8px;">
+      <label>Notes</label>
+      <input type="text" name="notes" placeholder="optional" />
+    </div>
     <button class="btn" type="submit">Upload</button>
   </form>
 
   <table class="table">
-    <thead><tr><th>Filename</th><th>SHA256</th><th>Size</th></tr></thead>
+    <thead><tr><th>Filename</th><th>Role</th><th>SHA256</th><th>Size</th></tr></thead>
     <tbody>
       {% for fl in file_links %}
         {% set f = files_by_id.get(fl.file_id) %}
         <tr>
           <td>{% if f %}<a href="/files/{{ f.id }}/download">{{ f.original_name }}</a>{% else %}<span class="muted">(missing)</span>{% endif %}</td>
+          <td><span class="chip">{{ fl.role or "other" }}</span>{% if fl.label %}<span class="muted">{{ fl.label }}</span>{% endif %}</td>
           <td class="muted">{% if f %}{{ f.sha256 }}{% endif %}</td>
           <td class="muted">{% if f %}{{ f.size_bytes }}{% endif %}</td>
         </tr>
       {% else %}
-        <tr><td colspan="3" class="muted">No files attached.</td></tr>
+        <tr><td colspan="4" class="muted">No files attached.</td></tr>
       {% endfor %}
     </tbody>
   </table>

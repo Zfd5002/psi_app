@@ -16,6 +16,12 @@ psi/psi.sqlite
 **/*.sqlite3
 **/*.db
 
+# Vendored third-party deps (intentionally excluded from overlay ZIPs)
+vendor/
+**/vendor/
+vendor/**
+**/vendor/**
+
 # Never include uploads / user files (optional, but usually huge)
 uploads/
 **/uploads/
@@ -39,6 +45,16 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# Editor/backup artifacts
+*~
+**/*~
+*.bak
+**/*.bak
+*.bak~
+**/*.bak~
+*.swp
+**/*.swp
 
 # Build artifacts
 dist/

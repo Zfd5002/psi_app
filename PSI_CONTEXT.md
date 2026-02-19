@@ -56,6 +56,18 @@ Expected workflow:
 
 This is **intentional** and fundamental to PSI’s design.
 
+### Release checklist (REQUIRED for every overlay ZIP)
+
+1) **Version bump**: update `psi/web/app.py`:
+   - `templates.env.globals["PSI_VERSION"] = "vX.Y.Z..."`
+2) **Patch notes append-only**: add a new entry to `PATCH_NOTES.md` (never edit older entries).
+3) Run:
+   - `python -m psi.scripts.smoke_test`
+   - `./scripts/start_psi.sh --prod` (manual sanity: homepage loads)
+4) Build code-only overlay ZIP using `compress.sh` and verify it contains only changed files.
+
+Note: `smoke_test` enforces that `PATCH_NOTES.md` contains the current `PSI_VERSION`.
+
 ---
 
 ## 3. ANARCI (Important: intentionally missing from ZIPs)
@@ -67,7 +79,7 @@ ANARCI is a **vendored third-party dependency** used for:
 
 Key points:
 - ANARCI lives at: `vendor/anarci/`
-- It is often **excluded from shared ZIPs** due to size
+- It is intentionally **excluded from overlay ZIPs** (packaging hygiene)
 - When missing, treat ANARCI as a **black box dependency**
 
 Assumptions when ANARCI is not present:
@@ -199,3 +211,7 @@ This creates `~/Desktop/PSI.desktop` that launches:
 - `uvicorn psi.web.app:create_app --factory --reload`
 
 If your desktop environment blocks launching, right-click the icon and choose **Allow Launching**.
+
+## Release helper
+- To bump the UI footer version and append PATCH_NOTES stub:
+  python -m psi.scripts.bump_version v1.2.4a

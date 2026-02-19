@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
+import re
 
 
 def _set_ephemeral_db_path() -> None:
@@ -34,18 +35,42 @@ def _set_ephemeral_db_path() -> None:
 
 def main() -> None:
     _set_ephemeral_db_path()
+    # Smoke test needs explicit export enablement.
+    os.environ.setdefault("PSI_ENABLE_EXPORT", "1")
 
-    from sqlalchemy.orm import Session
+    from sqlalchemy.orm import Session, sessionmaker
+    from sqlalchemy import create_engine, text
 
     from psi.core.db import SessionLocal, ensure_schema
     from psi.core.models import Batch, Molecule, Program
     from psi.core.registry import DATA_SCHEMAS, REGISTRY
     from psi.services.batches import create_batch
     from psi.services.data_records import create_data_record
-    from psi.services.measurements import get_primary_measurement_for_record
+    from psi.services.measurements import get_primary_measurement_for_record, upsert_measurements
     from psi.services.molecules import DuplicateMoleculeError, create_molecule
     from psi.services.programs import create_program
     from psi.tools.export_measurements import export_csv
+
+    # --- Release guardrail ---
+    from psi.web.app import create_app
+    app = create_app()
+    psi_version = app.state.templates.env.globals.get("PSI_VERSION")
+    assert psi_version, "PSI_VERSION missing"
+    # Patch notes must include current version (append-only discipline).
+    root = Path(__file__).resolve().parents[2]
+    pn = root / "PATCH_NOTES.md"
+    assert pn.exists(), "PATCH_NOTES.md missing"
+    pn_text = pn.read_text(encoding="utf-8")
+    assert psi_version in pn_text, "PATCH_NOTES missing current version entry"
+
+    # Stronger guardrail: ensure the latest PATCH_NOTES header matches PSI_VERSION.
+    # Expected header format: "## YYYY-MM-DD — vX.Y.Z..."
+    headers = re.findall(r"^##\s+\d{4}-\d{2}-\d{2}\s+—\s+(v[^\s]+)\s*$", pn_text, flags=re.M)
+    assert headers, "PATCH_NOTES has no version headers"
+    latest = headers[-1]
+    assert (
+        latest == psi_version
+    ), f"PATCH_NOTES latest entry is {latest} but PSI_VERSION is {psi_version}"
 
     # --- Schema ---
     ensure_schema()
@@ -103,7 +128,82 @@ def main() -> None:
     # --- Ensure measurement parsed ---
     meas = get_primary_measurement_for_record(db, rec.id)
     assert meas is not None, "Primary measurement not created"
-    assert meas.value_num is not None, "Numeric parsing failed"
+    assert meas.get("value_num") is not None, "Numeric parsing failed"
+
+    # --- Measurement insert compatibility matrix (no migrations) ---
+    def _compat_db(path: Path, ddl: str) -> Session:
+        if path.exists():
+            path.unlink()
+        eng = create_engine(f"sqlite:///{path}")
+        with eng.begin() as conn:
+            conn.execute(text(ddl))
+        return sessionmaker(bind=eng)()
+
+    tmp_root = Path(tempfile.gettempdir()) / "psi_smoke"
+
+    # Variant A: older/alternate column names + extra NOT NULL flags
+    s1 = _compat_db(
+        tmp_root / "meas_compat_a.sqlite",
+        """
+        CREATE TABLE data_measurements (
+            id INTEGER PRIMARY KEY,
+            record_id INTEGER NOT NULL,
+            metric_key TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT,
+            comparator TEXT,
+            is_primary INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            is_extra_flag INTEGER NOT NULL
+        );
+        """,
+    )
+    # numeric-only
+    upsert_measurements(
+        s1,
+        record_id=1,
+        measurements=[{"name": "monomer_percent", "value_num": 98.0, "unit": "%"}],
+    )
+    # text-only
+    upsert_measurements(
+        s1,
+        record_id=1,
+        measurements=[{"name": "note", "value_text": "PASS"}],
+    )
+    pm1 = get_primary_measurement_for_record(s1, 1, include_qc=True)
+    assert pm1 is not None, "Compat A: primary measurement missing"
+    # Deterministic: first inserted becomes primary (is_primary exists)
+    assert pm1.get("name") == "monomer_percent", "Compat A: primary resolution not deterministic"
+
+    # Variant B: modern-ish names + different primary/timestamp column
+    s2 = _compat_db(
+        tmp_root / "meas_compat_b.sqlite",
+        """
+        CREATE TABLE data_measurements (
+            id INTEGER PRIMARY KEY,
+            data_record_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            value_num REAL,
+            value_text TEXT,
+            is_headline INTEGER NOT NULL,
+            timestamp TEXT NOT NULL
+        );
+        """,
+    )
+    # Insert without explicitly setting a primary (service handles it)
+    upsert_measurements(
+        s2,
+        record_id=42,
+        measurements=[
+            {"name": "b", "value_text": "Z"},
+            {"name": "a", "value_text": "A"},
+        ],
+    )
+    pm2 = get_primary_measurement_for_record(s2, 42, include_qc=True)
+    assert pm2 is not None, "Compat B: primary measurement missing"
+    # Deterministic: first inserted becomes primary when primary column exists
+    assert pm2.get("name") == "b", "Compat B: primary resolution not deterministic"
 
     # --- Minimal export sanity check ---
     import csv
