@@ -11,6 +11,14 @@ from sqlalchemy.orm import Session
 
 from psi.services.measurements import get_primary_measurement_for_record
 
+def _table_cols(db: Session, table: str) -> set[str]:
+    """Return column names for a table, or empty set if it doesn't exist."""
+    try:
+        rows = db.execute(text(f"PRAGMA table_info({table})")).mappings().all()
+    except Exception:
+        return set()
+    return {r.get('name') for r in rows if r.get('name')}
+
 
 def _require_export_enabled() -> None:
     if os.environ.get("PSI_ENABLE_EXPORT") != "1":
@@ -81,12 +89,24 @@ def export_csv(
         params["before"] = before_iso
 
     # Stable ordering: newest first, deterministic ties.
+    # Some historical DBs may not have run_at/created_at; degrade gracefully.
+    dr_cols = _table_cols(db, 'data_records')
+    select_cols = [
+        'id','program_id','molecule_id','batch_id','domain','data_type','method','title','run_date',
+    ]
+    if 'run_at' in dr_cols:
+        select_cols.append('run_at')
+    if 'created_at' in dr_cols:
+        select_cols.append('created_at')
+    order_by = 'id DESC'
+    if 'created_at' in dr_cols:
+        order_by = '(created_at IS NULL) ASC, created_at DESC, id DESC'
     q = text(
         f"""
-        SELECT id, program_id, molecule_id, batch_id, domain, data_type, method, title, run_date, run_at, created_at
+        SELECT {', '.join(select_cols)}
         FROM data_records
         WHERE {' AND '.join(where)}
-        ORDER BY created_at DESC, id DESC
+        ORDER BY {order_by}
         """
     )
     rows = db.execute(q, params).mappings().all()

@@ -29,6 +29,36 @@ def ensure_schema() -> None:
     # Create missing tables
     Base.metadata.create_all(bind=engine)
 
+    # Ensure data_measurements exists for fresh DBs (measurement services depend on it).
+    # Historically this table has been managed outside ORM metadata, so we create it explicitly.
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS data_measurements (
+                id INTEGER PRIMARY KEY,
+                data_record_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                value_num REAL,
+                value_text TEXT,
+                unit TEXT,
+                comparator TEXT,
+                is_primary INTEGER,
+                is_outlier INTEGER,
+                created_at TEXT,
+                updated_at TEXT,
+                qc_flag TEXT,
+                qc_note TEXT,
+                data_type TEXT,
+                method TEXT,
+                producer TEXT,
+                producer_version TEXT,
+                source_path TEXT,
+                run_id TEXT,
+                produced_at TEXT,
+                notes TEXT
+            );
+        """))
+
+
     # Add missing columns if model evolved (best-effort).
     # For SQLite, we can check PRAGMA table_info and ALTER TABLE ADD COLUMN.
     model_columns = {
@@ -170,6 +200,18 @@ def ensure_schema() -> None:
             "created_at": "TEXT",
             "updated_at": "TEXT",
         },
+
+        # v1.2.3g: per-measurement provenance (optional legacy table; additive columns only)
+        # NOTE: data_measurements is managed by PRAGMA-driven services in PSI and may pre-exist
+        # in older DBs. We only ALTER if the table exists.
+        "data_measurements": {
+            "producer": "TEXT",
+            "producer_version": "TEXT",
+            "source_path": "TEXT",
+            "run_id": "TEXT",
+            "produced_at": "TEXT",
+            "notes": "TEXT",
+        },
         "evidence": {
             "id": "INTEGER",
             "program_id": "INTEGER",
@@ -231,8 +273,20 @@ def ensure_schema() -> None:
         },
     }
 
+    # Additive column evolution: only ALTER tables that actually exist.
+    # This keeps ensure_schema tolerant of optional legacy tables that may exist
+    # in some DBs but are not part of SQLAlchemy Base metadata.
+    def _table_exists(conn, table: str) -> bool:
+        r = conn.execute(
+            text("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:t LIMIT 1"),
+            {"t": table},
+        ).first()
+        return r is not None
+
     with engine.begin() as conn:
         for table, cols in model_columns.items():
+            if not _table_exists(conn, table):
+                continue
             existing = {r[1] for r in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()}
             for col, coltype in cols.items():
                 if col not in existing:
