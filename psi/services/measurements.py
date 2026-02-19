@@ -114,6 +114,7 @@ def extract_measurements(
 # ---- DB reflection helpers (no ORM model required) ----
 
 _COL_CACHE: Optional[Dict[str, Optional[str]]] = None
+_ALL_COLS_CACHE: Optional[set[str]] = None
 
 
 def _measurement_cols(db: Session) -> Dict[str, Optional[str]]:
@@ -126,6 +127,8 @@ def _measurement_cols(db: Session) -> Dict[str, Optional[str]]:
 
     rows = db.execute(text("PRAGMA table_info(data_measurements)")).mappings().all()
     cols = {r["name"] for r in rows}
+    global _ALL_COLS_CACHE
+    _ALL_COLS_CACHE = set(cols)
 
     def pick(*names: str) -> Optional[str]:
         for n in names:
@@ -154,6 +157,83 @@ def _measurement_cols(db: Session) -> Dict[str, Optional[str]]:
         )
 
     return _COL_CACHE
+
+
+def _all_measurement_cols(db: Session) -> set[str]:
+    """Return the full set of column names for data_measurements."""
+    global _ALL_COLS_CACHE
+    if _ALL_COLS_CACHE is None:
+        _measurement_cols(db)
+    return _ALL_COLS_CACHE or set()
+
+
+def get_primary_measurement_for_record(
+    db: Session,
+    record_id: int,
+    include_qc: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Return a single "headline" measurement row for a data record.
+
+    - Always queries the DB (no relationship assumptions).
+    - If an is_primary-like column exists, prefer rows where it is 1.
+    - Otherwise choose deterministically via stable ordering.
+    - Excludes QC-flagged rows unless include_qc=True (when qc columns exist).
+
+    Returns a dict with stable keys (name/value_num/value_text/unit/comparator/qc_flag) when possible.
+    """
+
+    cols = _measurement_cols(db)
+    all_cols = _all_measurement_cols(db)
+
+    # Optional ordering columns
+    created_col = None
+    for cand in ("created_at", "updated_at", "timestamp", "ts"):
+        if cand in all_cols:
+            created_col = cand
+            break
+
+    where = [f"{cols['record_fk']}=:rid"]
+    params: Dict[str, Any] = {"rid": record_id}
+
+    qc_col = cols.get("qc_flag")
+    if qc_col and not include_qc:
+        # Treat NULL/0/'' as "not flagged"; anything else is flagged.
+        where.append(f"({qc_col} IS NULL OR {qc_col}=0 OR {qc_col}='0' OR {qc_col}='')")
+
+    order_parts: List[str] = []
+    if cols.get("is_primary"):
+        order_parts.append(f"{cols['is_primary']} DESC")
+    if created_col:
+        order_parts.append(f"{created_col} DESC")
+    if cols.get("id"):
+        order_parts.append(f"{cols['id']} DESC")
+    # final deterministic tie-breaker
+    order_parts.append(f"{cols['name']} ASC")
+
+    q = text(
+        f"SELECT * FROM data_measurements WHERE {' AND '.join(where)} ORDER BY {', '.join(order_parts)} LIMIT 1"
+    )
+    row = db.execute(q, params).mappings().first()
+    if not row:
+        return None
+
+    def get(colkey: str) -> Any:
+        col = cols.get(colkey)
+        return row.get(col) if col else None
+
+    return {
+        "id": row.get("id") or row.get(cols.get("id")) if cols.get("id") else None,
+        "record_id": record_id,
+        "name": get("name"),
+        "value_num": get("value_num"),
+        "value_text": get("value_text"),
+        "unit": get("unit"),
+        "comparator": get("comparator"),
+        "qc_flag": get("qc_flag"),
+        "qc_note": get("qc_note"),
+        "data_type": get("data_type"),
+        "method": get("method"),
+    }
 
 
 def _has_primary(db: Session, record_id: int, cols: Dict[str, Optional[str]]) -> bool:

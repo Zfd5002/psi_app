@@ -570,7 +570,7 @@
       </details>
     </div>
 
-    <details class="card" style="margin:12px 0;">
+    <details class="card" style="margin:12px 0;" id="property_run_details">
       <summary><h3 style="display:inline;">Property run history</h3></summary>
       <table class="table">
       <thead><tr><th>When</th><th>Status</th><th>Reason</th><th>Tier</th><th>Input hash</th></tr></thead>
@@ -611,6 +611,26 @@
   </details>
   <script>
   (function(){
+    // Persist open/closed state for collapsible diagnostic panels.
+    function keyFor(id){ return "psi.details." + id; }
+    function restore(id, defaultOpen){
+      var el = document.getElementById(id);
+      if (!el) return;
+      var v = null;
+      try { v = window.localStorage.getItem(keyFor(id)); } catch(e) {}
+      if (v === "open") el.open = true;
+      else if (v === "closed") el.open = false;
+      else el.open = !!defaultOpen;
+      el.addEventListener("toggle", function(){
+        try { window.localStorage.setItem(keyFor(id), el.open ? "open" : "closed"); } catch(e) {}
+      });
+    }
+
+    // Default collapsed unless user previously opened.
+    restore("property_run_details", false);
+    restore("computed_log_details", false);
+
+    // Deep link behavior: open log when anchored.
     if (window.location.hash === "#computed_log") {
       var d = document.getElementById("computed_log_details");
       if (d) d.open = true;

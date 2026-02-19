@@ -56,6 +56,18 @@ Expected workflow:
 
 This is **intentional** and fundamental to PSI’s design.
 
+### Release checklist (REQUIRED for every overlay ZIP)
+
+1) **Version bump**: update `psi/web/app.py`:
+   - `templates.env.globals["PSI_VERSION"] = "vX.Y.Z..."`
+2) **Patch notes append-only**: add a new entry to `PATCH_NOTES.md` (never edit older entries).
+3) Run:
+   - `python -m psi.scripts.smoke_test`
+   - `./scripts/start_psi.sh --prod` (manual sanity: homepage loads)
+4) Build code-only overlay ZIP using `compress.sh` and verify it contains only changed files.
+
+Note: `smoke_test` enforces that `PATCH_NOTES.md` contains the current `PSI_VERSION`.
+
 ---
 
 ## 3. ANARCI (Important: intentionally missing from ZIPs)

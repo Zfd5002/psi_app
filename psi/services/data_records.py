@@ -175,13 +175,15 @@ def create_data_record(
     db.commit()
     db.refresh(rec)
 
-    specs, suggested = extract_measurements(rec)
+    specs = extract_measurements(
+        data_type=rec.data_type,
+        method=rec.method,
+        results_json=rec.results_json,
+        params_json=rec.params_json,
+    )
     if specs:
         # New record: safe upsert is fine.
-        upsert_measurements(db, rec, specs)
-        if suggested and not rec.primary_result_text:
-            rec.primary_result_text = suggested
-        db.add(rec)
+        upsert_measurements(db, record_id=rec.id, measurements=specs)
         db.commit()
         db.refresh(rec)
 
@@ -256,12 +258,15 @@ def update_data_record(
     db.add(rec)
     db.commit()
 
-    specs, suggested = extract_measurements(rec)
+    specs = extract_measurements(
+        data_type=rec.data_type,
+        method=rec.method,
+        results_json=rec.results_json,
+        params_json=rec.params_json,
+    )
     if specs:
         # Updating an existing record is an explicit user action; keep measurements in sync.
-        upsert_measurements_force(db, rec, specs)
-        if suggested and not rec.primary_result_text:
-            rec.primary_result_text = suggested
+        upsert_measurements_force(db, record_id=rec.id, measurements=specs)
         rec.updated_at = now_utc()
         db.add(rec)
         db.commit()

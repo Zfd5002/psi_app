@@ -34,6 +34,8 @@ def _set_ephemeral_db_path() -> None:
 
 def main() -> None:
     _set_ephemeral_db_path()
+    # Smoke test needs explicit export enablement.
+    os.environ.setdefault("PSI_ENABLE_EXPORT", "1")
 
     from sqlalchemy.orm import Session
 
@@ -46,6 +48,17 @@ def main() -> None:
     from psi.services.molecules import DuplicateMoleculeError, create_molecule
     from psi.services.programs import create_program
     from psi.tools.export_measurements import export_csv
+
+    # --- Release guardrail ---
+    from psi.web.app import create_app
+    app = create_app()
+    psi_version = app.state.templates.env.globals.get("PSI_VERSION")
+    assert psi_version, "PSI_VERSION missing"
+    # Patch notes must include current version (append-only discipline).
+    root = Path(__file__).resolve().parents[2]
+    pn = root / "PATCH_NOTES.md"
+    assert pn.exists(), "PATCH_NOTES.md missing"
+    assert psi_version in pn.read_text(encoding="utf-8"), "PATCH_NOTES missing current version entry"
 
     # --- Schema ---
     ensure_schema()
@@ -103,7 +116,7 @@ def main() -> None:
     # --- Ensure measurement parsed ---
     meas = get_primary_measurement_for_record(db, rec.id)
     assert meas is not None, "Primary measurement not created"
-    assert meas.value_num is not None, "Numeric parsing failed"
+    assert meas.get("value_num") is not None, "Numeric parsing failed"
 
     # --- Minimal export sanity check ---
     import csv
