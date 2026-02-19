@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Files · PSI{% endblock %}
+
+{% block content %}
+  <h1>Files</h1>
+
+  <form method="get" class="row" style="gap:12px; align-items:flex-end;">
+    <div>
+      <label>Filename contains</label><br/>
+      <input type="text" name="q" value="{{ q }}" placeholder="e.g. chromatogram" />
+    </div>
+    <div>
+      <label>Source</label><br/>
+      <select name="source_kind">
+        <option value="" {% if not source_kind %}selected{% endif %}>(any)</option>
+        <option value="upload" {% if source_kind=='upload' %}selected{% endif %}>upload</option>
+        <option value="import_path" {% if source_kind=='import_path' %}selected{% endif %}>import_path</option>
+        <option value="generated" {% if source_kind=='generated' %}selected{% endif %}>generated</option>
+      </select>
+    </div>
+    <div>
+      <label>SHA prefix</label><br/>
+      <input type="text" name="sha" value="{{ sha }}" placeholder="e.g. a1b2c3" />
+    </div>
+    <div>
+      <button class="btn" type="submit">Search</button>
+      <a class="btn" href="/files">Reset</a>
+    </div>
+  </form>
+
+  <div class="card" style="margin-top:16px;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>SHA</th>
+          <th>Source</th>
+          <th>Run</th>
+          <th>Instrument</th>
+          <th>Size</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in files %}
+          <tr>
+            <td>
+              <a href="/files/{{ f.id }}/download">{{ f.original_name }}</a>
+              {% if f.notes %}<div class="muted" style="max-width:520px;">{{ f.notes }}</div>{% endif %}
+            </td>
+            <td class="mono">{{ (f.sha256 or '')[:12] }}</td>
+            <td>{{ f.source_kind or '' }}</td>
+            <td class="mono">{{ f.run_id or '' }}</td>
+            <td>{{ f.instrument or '' }}</td>
+            <td>{{ f.size_bytes }}</td>
+            <td class="mono">{{ f.created_at }}</td>
+          </tr>
+        {% endfor %}
+        {% if not files %}
+          <tr><td colspan="7" class="muted">No files found.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

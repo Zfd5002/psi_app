@@ -1,3 +1,16 @@
+## v1.2.6
+- Raw File Registry & Provenance foundation:
+  - Add provenance fields on `files` (source_kind/source_path/collected_at/imported_at/instrument/operator/run_id/tags_json/notes).
+  - Add typed link roles on `file_links` (role/label).
+  - Add `file_derivations` table for raw→derived lineage.
+- UI:
+  - Add Files registry page at `/files` with basic search/filters.
+  - Add role + provenance capture on Molecule and Batch file upload forms; show role badges in file tables.
+
+## v1.2.5b
+- Hotfix: fix indentation bug in export_wide QC attach block (SyntaxError return outside function).
+- Hotfix: ensure scripts/start_psi.sh is executable in overlays.
+
 # Changelog
 ## v1.2.1
 - Molecule detail: make **Property run history** and **Latest run log** collapsible using `<details>` (collapsed by default); `#computed_log` auto-opens the log section.
@@ -48,3 +61,7 @@
 
 ## v1.1.9a
 - Hide redundant FAST developability outputs from “All computed properties (raw)” (already summarized in dashboard).
+
+
+## v1.2.5a (2026-02-19)
+- Hotfix: fix SyntaxError in export_wide QC filtering block (indentation / continue outside loop).

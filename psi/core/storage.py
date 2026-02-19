@@ -34,6 +34,15 @@ def save_upload(
     filename: str,
     content_type: str,
     data: bytes,
+    # v1.2.6: optional provenance
+    source_kind: str | None = None,
+    source_path: str | None = None,
+    collected_at: str | None = None,
+    instrument: str | None = None,
+    operator: str | None = None,
+    run_id: str | None = None,
+    tags_json: str | None = None,
+    notes: str | None = None,
 ) -> StoredFile:
     """Persist a file to disk + create StoredFile row.
 
@@ -49,12 +58,35 @@ def save_upload(
     if not path.exists():
         path.write_bytes(data)
 
+    from datetime import datetime
+
+    def _parse_iso_dt(val: str | None):
+        if not val:
+            return None
+        s = str(val).strip()
+        if not s:
+            return None
+        # Accept 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM[:SS]'
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+
     f = StoredFile(
         stored_name=stored_name,
         original_name=filename,
         size_bytes=len(data),
         mime=content_type or "application/octet-stream",
         sha256=sha,
+        source_kind=(source_kind or "upload"),
+        source_path=(source_path or None),
+        collected_at=_parse_iso_dt(collected_at),
+        imported_at=now_utc(),
+        instrument=(instrument or None),
+        operator=(operator or None),
+        run_id=(run_id or None),
+        tags_json=(tags_json or None),
+        notes=(notes or None),
         created_at=now_utc(),
     )
     db.add(f)
@@ -69,12 +101,16 @@ def link_file(
     file_id: int,
     entity_type: str,
     entity_id: int,
+    role: str | None = None,
+    label: str | None = None,
     reason: Optional[str] = None,
 ) -> FileLink:
     link = FileLink(
         file_id=file_id,
         entity_type=entity_type,
         entity_id=entity_id,
+        role=(role or "other"),
+        label=(label or None),
         created_at=now_utc(),
     )
     db.add(link)
@@ -100,6 +136,17 @@ def add_files_to_entity(
     entity_type: str,
     entity_id: int,
     uploads: Sequence[tuple[str, str, bytes]],
+    # v1.2.6: typed linkage + optional provenance (applied to all uploads in call)
+    role: str | None = None,
+    label: str | None = None,
+    source_kind: str | None = None,
+    source_path: str | None = None,
+    collected_at: str | None = None,
+    instrument: str | None = None,
+    operator: str | None = None,
+    run_id: str | None = None,
+    tags_json: str | None = None,
+    notes: str | None = None,
 ) -> list[FileLink]:
     """Attach multiple uploaded files.
 
@@ -110,8 +157,30 @@ def add_files_to_entity(
     for filename, content_type, data in uploads:
         if not filename:
             continue
-        f = save_upload(db, cfg=cfg, filename=filename, content_type=content_type, data=data)
-        links.append(link_file(db, file_id=f.id, entity_type=entity_type, entity_id=entity_id, reason=f"attach to {entity_type}"))
+        f = save_upload(
+            db,
+            cfg=cfg,
+            filename=filename,
+            content_type=content_type,
+            data=data,
+            source_kind=source_kind,
+            source_path=source_path,
+            collected_at=collected_at,
+            instrument=instrument,
+            operator=operator,
+            run_id=run_id,
+            tags_json=tags_json,
+            notes=notes,
+        )
+        links.append(link_file(
+            db,
+            file_id=f.id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            role=role,
+            label=label,
+            reason=f"attach to {entity_type}",
+        ))
     return links
 
 

@@ -327,6 +327,35 @@ def get_primary_measurement_for_record(
         "produced_at": get("produced_at"),
         "notes": get("notes"),
     }
+def list_measurements_for_record(db: Session, *, record_id: int) -> List[Dict[str, Any]]:
+    """List raw extracted measurement rows for a DataRecord.
+
+    This is intended for UI + QC review. It reflects the current measurement table schema.
+    Ordering is deterministic.
+    """
+    _ensure_data_measurements_table(db)
+
+    mcols, _all = _measurement_cols(db)
+    record_fk = mcols.get("record_fk") or "data_record_id"
+    name_col = mcols.get("name") or "name"
+    id_col = mcols.get("id") or "id"
+    produced_at_col = mcols.get("produced_at")
+    created_at_col = mcols.get("created_at") or mcols.get("updated_at")
+
+    order_bits = [name_col]
+    if produced_at_col:
+        order_bits.append(produced_at_col)
+    if created_at_col and created_at_col not in order_bits:
+        order_bits.append(created_at_col)
+    if id_col and id_col not in order_bits:
+        order_bits.append(id_col)
+
+    order_sql = ", ".join([f"{c} ASC" for c in order_bits if c])
+
+    q = text(f"SELECT * FROM data_measurements WHERE {record_fk} = :rid ORDER BY {order_sql}")
+    rows = db.execute(q, {"rid": int(record_id)}).mappings().all()
+    return [dict(r) for r in rows]
+
 
 
 def _has_primary(db: Session, record_id: int, cols: Dict[str, Optional[str]]) -> bool:

@@ -68,6 +68,12 @@ def batch_detail(batch_id: int, request: Request, tab: str = "data", db: Session
 @router.post("/batches/{batch_id}/files")
 def batch_add_files(
     batch_id: int,
+    file_role: str = Form("other"),
+    instrument: str = Form(""),
+    operator: str = Form(""),
+    run_id: str = Form(""),
+    collected_at: str = Form(""),
+    notes: str = Form(""),
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     storage=Depends(get_storage_cfg),
@@ -82,7 +88,19 @@ def batch_add_files(
             uploads.append((uf.filename, uf.content_type or "application/octet-stream", uf.file.read()))
 
     if uploads:
-        file_svc.attach_files(db, storage=storage, entity_type="Batch", entity_id=batch_id, uploads=uploads)
+        file_svc.attach_files(
+            db,
+            storage=storage,
+            entity_type="Batch",
+            entity_id=batch_id,
+            uploads=uploads,
+            role=(file_role or "other"),
+            instrument=instrument or None,
+            operator=operator or None,
+            run_id=run_id or None,
+            collected_at=collected_at or None,
+            notes=notes or None,
+        )
 
     return RedirectResponse(url=f"/batches/{batch_id}", status_code=303)
 

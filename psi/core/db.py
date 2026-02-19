@@ -61,6 +61,7 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
                 run_id TEXT,
                 produced_at TEXT,
                 notes TEXT
+                ,ignore_for_model INTEGER NOT NULL DEFAULT 0
             );
         """))
 
@@ -217,6 +218,7 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "run_id": "TEXT",
             "produced_at": "TEXT",
             "notes": "TEXT",
+            "ignore_for_model": "INTEGER NOT NULL DEFAULT 0",
         },
         "evidence": {
             "id": "INTEGER",
@@ -244,6 +246,16 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "size_bytes": "INTEGER",
             "mime": "TEXT",
             "sha256": "TEXT",
+            # v1.2.6: provenance foundation (all optional)
+            "source_kind": "TEXT",
+            "source_path": "TEXT",
+            "collected_at": "TEXT",
+            "imported_at": "TEXT",
+            "instrument": "TEXT",
+            "operator": "TEXT",
+            "run_id": "TEXT",
+            "tags_json": "TEXT",
+            "notes": "TEXT",
             "created_at": "TEXT",
         },
         "file_links": {
@@ -251,6 +263,9 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "file_id": "INTEGER",
             "entity_type": "TEXT",
             "entity_id": "INTEGER",
+            # v1.2.6: typed linkage
+            "role": "TEXT",
+            "label": "TEXT",
             "created_at": "TEXT",
         },
         "audit_events": {
@@ -275,6 +290,8 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "inputs_json": "TEXT",
             "outputs_json": "TEXT",
             "evidence_ids_json": "TEXT",
+            "as_of_ts": "TEXT",
+            "notes": "TEXT",
             "created_at": "TEXT",
         },
     }
@@ -302,6 +319,13 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
     with eng.connect() as conn:
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_sequence_entities_chain_id ON sequence_entities(chain_id)"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_molecules_composition_sha256 ON molecules(composition_sha256)"))
+
+        # v1.2.6: file registry indexes (additive)
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_files_sha256 ON files(sha256)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_links_entity ON file_links(entity_type, entity_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_links_role ON file_links(role)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_deriv_parent ON file_derivations(parent_file_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_deriv_child ON file_derivations(child_file_id)"))
         conn.commit()
 
 

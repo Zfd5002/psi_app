@@ -1,4 +1,18 @@
+## v1.2.5b
+- Hotfix: fix indentation bug in export_wide QC attach block (SyntaxError return outside function).
+- Hotfix: ensure scripts/start_psi.sh is executable in overlays.
+
 # PSI Patch Notes (append-only)
+
+
+## 2026-02-19 — v1.2.5a
+- QC & Governance foundation:
+  - New append-only QC event log for measurements (`measurement_qc_events`) with reviewer attribution.
+  - Latest-state QC cache (`measurement_qc`) for fast UI badges.
+  - Data record detail: show extracted measurements and allow minimal QC review actions.
+  - Molecule batch panels: show per-batch QC counts (pending/rejected/quarantined).
+- Exporter: `psi/scripts/export_wide.py` supports `--qc-mode none|model_safe|strict` (default `none`).
+
 
 ## 2026-02-18 — v1.2.3f
 - UI (molecule detail): add Data Overview (counts + lightweight aggregates) and show batch header headline results.
@@ -45,3 +59,25 @@
 ## 2026-02-19 — v1.2.3g2
 - Measurement system evolution (export-ready): schema-driven registry + deterministic wide exporter + per-measurement provenance (additive, backward compatible).
 - Overlay workflow hardening: apply script no longer deletes local-only directories; safer rsync behavior.
+
+## 2026-02-19 — v1.2.4a
+- Export: --as-of leakage-safe wide export + ignore_for_model QC flag
+- DecisionSnapshot: add as_of_ts + notes; add OutcomeLabel table for supervised outcomes
+- Release: bump_version helper can update footer version automatically
+
+## v1.2.5a (2026-02-19)
+- Hotfix: fix SyntaxError in export_wide QC filtering block (indentation / continue outside loop).
+
+## 2026-02-19 — v1.2.6
+- Raw File Registry & Provenance foundation:
+  - Files: add provenance metadata columns (source_kind, source_path, collected_at, imported_at, instrument, operator, run_id, tags_json, notes).
+  - File links: add typed link roles + optional label (raw_input, processed_output, report, plot, protocol, other).
+  - Provenance graph: introduce file_derivations (parent→child) with optional transform/tool metadata.
+  - UI: add /files registry page with basic search + source_kind/sha prefix filters and deterministic ordering.
+  - UI: attachment lists display role badges; key upload forms capture role + provenance fields.
+  - CLI: add import-from-path helper (python -m psi.scripts.import_file) to register and link local raw files.
+
+## 2026-02-19 — v1.2.7
+- Molecule detail (batch-first): add QC selection mode toggle (All / Model-safe / Approved-only) that affects batch headline metric selection.
+- Molecule detail: show minimal per-run QC badges in batch tables when runs contain pending/rejected/quarantined measurements.
+- Performance: avoid per-batch measurement count queries by computing counts in a single grouped query.

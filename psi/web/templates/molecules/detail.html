@@ -115,6 +115,16 @@
   <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0;">
     <button class="btn" type="button" id="batch_expand_all">Expand all</button>
     <button class="btn" type="button" id="batch_collapse_all">Collapse all</button>
+    <span style="margin-left:8px;"></span>
+    <label class="muted mini" style="display:flex;align-items:center;gap:6px;">
+      QC view
+      <select id="qc_mode_select" style="font-size:12px;">
+        {% set qm = exp_qc_mode if exp_qc_mode is defined else (request.query_params.get('qc_mode','all')) %}
+        <option value="all" {% if qm=='all' %}selected{% endif %}>All</option>
+        <option value="model_safe" {% if qm=='model_safe' %}selected{% endif %}>Model-safe</option>
+        <option value="approved" {% if qm=='approved' %}selected{% endif %}>Approved-only</option>
+      </select>
+    </label>
     <span class="muted mini">State is remembered per molecule.</span>
   </div>
 
@@ -136,6 +146,17 @@
                 {{ batch_label }}
               {% endif %}
             </div>
+
+
+{% if panel.qc is defined and panel.qc and panel.qc.total %}
+  <div class="batch-qc-chip">
+    <span class="badge" style="padding:2px 8px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:rgba(149,165,166,.12);">
+      QC: {{ panel.qc.pending or 0 }} pending
+      {% if panel.qc.rejected %} / {{ panel.qc.rejected }} rejected{% endif %}
+      {% if panel.qc.quarantined %} / {{ panel.qc.quarantined }} quarantined{% endif %}
+    </span>
+  </div>
+{% endif %}
 
             <div class="batch-headlines">
               {% if panel.headline_items and panel.headline_items|length %}
@@ -227,6 +248,7 @@
                         {% for item in node.runs %}
                           {% set r = item.record %}
                           {% set s = item.summary %}
+                          {% set q = (exp_run_qc.get(r.id) if exp_run_qc is defined and exp_run_qc else None) %}
                           <tr>
                             <td>
                               {% if item.result_text %}
@@ -244,6 +266,12 @@
                                 {% else %}
                                   <strong>—</strong> <span class="muted">Result summary not defined for this assay yet.</span>
                                 {% endif %}
+                              {% endif %}
+
+                              {% if q and (q.rejected or q.quarantined or q.pending) %}
+                                <span class="badge" style="margin-left:8px;padding:1px 6px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:rgba(149,165,166,.12);font-size:11px;">
+                                  QC:{% if q.pending %} {{ q.pending }} pending{% endif %}{% if q.rejected %}{% if q.pending %} /{% endif %} {{ q.rejected }} rejected{% endif %}{% if q.quarantined %} / {{ q.quarantined }} quarantined{% endif %}
+                                </span>
                               {% endif %}
                             </td>
                             <td class="muted">{{ r.run_date or "" }}</td>
@@ -658,7 +686,8 @@
     </div>
 
     <details class="card" style="margin:12px 0;" id="property_run_details" data-psi-details-key="property_run_details">
-      <summary><h3 style="display:inline;">Property run history</h3></summary>
+      <summary style="cursor:pointer; font-weight:600;">Property run history</summary>
+
       <table class="table">
       <thead><tr><th>When</th><th>Status</th><th>Reason</th><th>Tier</th><th>Input hash</th></tr></thead>
       <tbody>
@@ -679,7 +708,8 @@
   {% endif %}
 
   <details class="card" style="margin:12px 0;" id="computed_log_details" data-psi-details-key="computed_log_details">
-    <summary id="computed_log"><h3 style="display:inline;">Latest run log</h3></summary>
+    <summary id="computed_log" style="cursor:pointer; font-weight:600;">Latest run log</summary>
+
     <table class="table">
     <thead><tr><th>Time</th><th>Step</th><th>Level</th><th>Message</th></tr></thead>
     <tbody>
@@ -767,6 +797,42 @@
     var co = document.getElementById("batch_collapse_all");
     if (ex) ex.addEventListener("click", function(){ setAllBatches(true); });
     if (co) co.addEventListener("click", function(){ setAllBatches(false); });
+
+    // QC mode selector (affects headline metric selection; persisted per molecule).
+    function qcStorageKey(){ return "psi.molecule." + String({{ molecule.id }}) + ".qc_mode"; }
+    function getQcStored(){ try { return window.localStorage.getItem(qcStorageKey()); } catch(e) { return null; } }
+    function setQcStored(v){ try { window.localStorage.setItem(qcStorageKey(), v); } catch(e) {} }
+
+    var qcSel = document.getElementById("qc_mode_select");
+    if (qcSel) {
+      // If URL lacks qc_mode but storage has one, apply it (one-time redirect).
+      try {
+        var u0 = new URL(window.location.href);
+        var urlMode = (u0.searchParams.get("qc_mode") || "").trim();
+        var stored = (getQcStored() || "").trim();
+        if (!urlMode && stored && stored !== "all") {
+          u0.searchParams.set("qc_mode", stored);
+          window.location.replace(u0.toString());
+          return;
+        }
+      } catch(e) {}
+
+      qcSel.addEventListener("change", function(){
+        var v = String(qcSel.value || "all").trim();
+        if (v !== "all" && v !== "model_safe" && v !== "approved") v = "all";
+        setQcStored(v);
+        try {
+          var u = new URL(window.location.href);
+          if (v === "all") u.searchParams.delete("qc_mode");
+          else u.searchParams.set("qc_mode", v);
+          if (!u.hash) u.hash = "#batches";
+          window.location.assign(u.toString());
+        } catch(e) {
+          // Fallback: simple reload.
+          window.location.reload();
+        }
+      });
+    }
   })();
   </script>
   <h2 id="annotations">Annotations</h2>
@@ -922,21 +988,57 @@
       <input type="file" name="files" multiple />
       <div class="help">Optional: you can attach supporting files directly to a molecule.</div>
     </div>
+    <div class="grid cols-3" style="margin-top:8px;">
+      <div class="field">
+        <label>Role</label>
+        <select name="file_role">
+          <option value="other" selected>other</option>
+          <option value="raw_input">raw_input</option>
+          <option value="processed_output">processed_output</option>
+          <option value="report">report</option>
+          <option value="plot">plot</option>
+          <option value="protocol">protocol</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Run ID</label>
+        <input type="text" name="run_id" placeholder="e.g. SEC_2026_02_19_001" />
+      </div>
+      <div class="field">
+        <label>Instrument</label>
+        <input type="text" name="instrument" placeholder="e.g. ÄKTA / HPLC" />
+      </div>
+    </div>
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div class="field">
+        <label>Collected at (ISO)</label>
+        <input type="text" name="collected_at" placeholder="YYYY-MM-DD or YYYY-MM-DDTHH:MM" />
+      </div>
+      <div class="field">
+        <label>Operator</label>
+        <input type="text" name="operator" placeholder="optional" />
+      </div>
+    </div>
+    <div class="field" style="margin-top:8px;">
+      <label>Notes</label>
+      <input type="text" name="notes" placeholder="optional" />
+    </div>
     <button class="btn" type="submit">Upload</button>
   </form>
 
   <table class="table">
-    <thead><tr><th>Filename</th><th>SHA256</th><th>Size</th></tr></thead>
+    <thead><tr><th>Filename</th><th>Role</th><th>SHA256</th><th>Size</th></tr></thead>
     <tbody>
       {% for fl in file_links %}
         {% set f = files_by_id.get(fl.file_id) %}
         <tr>
           <td>{% if f %}<a href="/files/{{ f.id }}/download">{{ f.original_name }}</a>{% else %}<span class="muted">(missing)</span>{% endif %}</td>
+          <td><span class="chip">{{ fl.role or "other" }}</span>{% if fl.label %}<span class="muted">{{ fl.label }}</span>{% endif %}</td>
           <td class="muted">{% if f %}{{ f.sha256 }}{% endif %}</td>
           <td class="muted">{% if f %}{{ f.size_bytes }}{% endif %}</td>
         </tr>
       {% else %}
-        <tr><td colspan="3" class="muted">No files attached.</td></tr>
+        <tr><td colspan="4" class="muted">No files attached.</td></tr>
       {% endfor %}
     </tbody>
   </table>

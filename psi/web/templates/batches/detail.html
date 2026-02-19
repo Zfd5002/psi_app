@@ -63,20 +63,56 @@
         <label>Attach files</label>
         <input type="file" name="files" multiple />
       </div>
+      <div class="grid cols-3" style="margin-top:8px;">
+        <div class="field">
+          <label>Role</label>
+          <select name="file_role">
+            <option value="other" selected>other</option>
+            <option value="raw_input">raw_input</option>
+            <option value="processed_output">processed_output</option>
+            <option value="report">report</option>
+            <option value="plot">plot</option>
+            <option value="protocol">protocol</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Run ID</label>
+          <input type="text" name="run_id" placeholder="e.g. SEC_2026_02_19_001" />
+        </div>
+        <div class="field">
+          <label>Instrument</label>
+          <input type="text" name="instrument" placeholder="e.g. ÄKTA / HPLC" />
+        </div>
+      </div>
+      <div class="grid cols-2" style="margin-top:8px;">
+        <div class="field">
+          <label>Collected at (ISO)</label>
+          <input type="text" name="collected_at" placeholder="YYYY-MM-DD or YYYY-MM-DDTHH:MM" />
+        </div>
+        <div class="field">
+          <label>Operator</label>
+          <input type="text" name="operator" placeholder="optional" />
+        </div>
+      </div>
+      <div class="field" style="margin-top:8px;">
+        <label>Notes</label>
+        <input type="text" name="notes" placeholder="optional" />
+      </div>
       <button class="btn" type="submit">Upload</button>
     </form>
     <table class="table">
-      <thead><tr><th>Filename</th><th>SHA256</th><th>Size</th></tr></thead>
+      <thead><tr><th>Filename</th><th>Role</th><th>SHA256</th><th>Size</th></tr></thead>
       <tbody>
         {% for fl in file_links %}
           {% set f = files_by_id.get(fl.file_id) %}
           <tr>
             <td>{% if f %}<a href="/files/{{ f.id }}/download">{{ f.original_name }}</a>{% else %}<span class="muted">(missing)</span>{% endif %}</td>
+            <td><span class="chip">{{ fl.role or "other" }}</span>{% if fl.label %}<span class="muted">{{ fl.label }}</span>{% endif %}</td>
             <td class="muted">{% if f %}{{ f.sha256 }}{% endif %}</td>
             <td class="muted">{% if f %}{{ f.size_bytes }}{% endif %}</td>
           </tr>
         {% else %}
-          <tr><td colspan="3" class="muted">No files attached.</td></tr>
+          <tr><td colspan="4" class="muted">No files attached.</td></tr>
         {% endfor %}
       </tbody>
     </table>

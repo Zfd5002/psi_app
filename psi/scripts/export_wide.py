@@ -9,10 +9,23 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime
 from pathlib import Path
 
 from psi.core.db import get_db
-from psi.services.export_wide import export_wide_csv
+from psi.services.export_wide import ExportWideOptions, export_wide_to_csv
+
+
+def _parse_as_of(s: str | None) -> datetime.datetime | None:
+    if not s:
+        return None
+    t = s.strip()
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    dt = datetime.datetime.fromisoformat(t)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def main() -> None:
@@ -20,6 +33,8 @@ def main() -> None:
     ap.add_argument("--db", required=True, help="Path to SQLite DB file (e.g., ./psi/psi.sqlite)")
     ap.add_argument("--out", required=True, help="Output CSV path")
     ap.add_argument("--include-extras", action="store_true", help="Include unregistered measurement keys as extras__* columns")
+    ap.add_argument("--qc-mode", default="none", choices=["none","model_safe","strict"], help="QC filtering mode for measurement selection (default: none)")
+    ap.add_argument("--as-of", default=None, help="ISO8601 timestamp. If set, export is leakage-safe as-of this time (e.g., 2026-02-01T00:00:00)")
     args = ap.parse_args()
 
     db_path = Path(args.db).expanduser().resolve()
@@ -31,7 +46,8 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with get_db(str(db_path)) as db:
-        export_wide_csv(db, out_path=str(out_path), include_extras=bool(args.include_extras))
+        opts = ExportWideOptions(include_extras=bool(args.include_extras), as_of_ts=_parse_as_of(args.as_of), qc_mode=str(args.qc_mode or 'none'))
+        export_wide_to_csv(db, out_path=str(out_path), options=opts)
 
     print(f"Wrote: {out_path}")
 

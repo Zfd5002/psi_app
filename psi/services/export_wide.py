@@ -15,6 +15,8 @@ from psi.core.models import Batch, DataRecord, Molecule
 @dataclass
 class ExportWideOptions:
     include_extras: bool = False
+    as_of_ts: Optional[datetime.datetime] = None
+    qc_mode: str = "none"  # none|model_safe|strict
 
 
 def _iso(x: Any) -> str:
@@ -40,6 +42,26 @@ def _safe_float(x: Any) -> Optional[float]:
         return float(s)
     except Exception:
         return None
+
+
+def _parse_dt(x: Any) -> Optional[datetime.datetime]:
+    if x is None:
+        return None
+    if isinstance(x, datetime.datetime):
+        dt = x
+    else:
+        s = str(x).strip()
+        if not s:
+            return None
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            dt = datetime.datetime.fromisoformat(s)
+        except Exception:
+            return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def _measurement_cols(db: Session) -> Tuple[Dict[str, Optional[str]], set[str]]:
@@ -70,6 +92,7 @@ def _measurement_cols(db: Session) -> Tuple[Dict[str, Optional[str]], set[str]]:
         "run_id": pick("run_id"),
         "produced_at": pick("produced_at"),
         "notes": pick("notes"),
+        "ignore_for_model": pick("ignore_for_model"),
     }
 
     if not mapping["record_fk"] or not mapping["name"]:
@@ -85,34 +108,110 @@ def _best_measurement_row(
     produced_at_col: Optional[str],
     created_at_col: Optional[str],
     id_col: Optional[str],
-) -> Dict[str, Any]:
+    ignore_col: Optional[str],
+    as_of_ts: Optional[datetime.datetime],
+    qc_mode: str = "none",
+    qc_status_key: str = "qc_status",
+    qc_policy_key: str = "qc_ignore_policy",
+) -> Optional[Dict[str, Any]]:
     """Pick a deterministic 'best' measurement among candidate rows.
 
-    Semantics: prefer is_primary when available, then newest produced_at/created_at, then highest id.
+    Semantics:
+      - If ignore_for_model is present and true -> excluded
+      - If as_of_ts is provided -> only consider rows with timestamp <= as_of_ts
+        (timestamp = produced_at if parseable else created_at if parseable; if neither parseable -> excluded)
+      - Prefer is_primary when available, then newest timestamp, then highest id.
     """
+    candidates: List[Tuple[Tuple[int, datetime.datetime, int], Dict[str, Any]]] = []
 
-    def score(r: Dict[str, Any]) -> Tuple[int, str, int]:
+    for r in rows:
+        if ignore_col:
+            try:
+                if int(r.get(ignore_col) or 0) == 1:
+                    continue
+            except Exception:
+                pass
+
+        # QC filtering (explicit; defaults are unchanged when qc_mode='none')
+        if qc_mode and qc_mode != 'none':
+            status = str(r.get(qc_status_key) or 'unreviewed').strip().lower()
+            pol = str(r.get(qc_policy_key) or 'include').strip().lower()
+            if qc_mode == 'model_safe':
+                if pol in ('exclude_soft', 'exclude_hard', 'quarantine'):
+                    continue
+                if status == 'quarantined':
+                    continue
+            elif qc_mode == 'strict':
+                if status != 'approved':
+                    continue
+                if pol != 'include':
+                    continue
+
+        dt = None
+        if produced_at_col:
+            dt = _parse_dt(r.get(produced_at_col))
+        if dt is None and created_at_col:
+            dt = _parse_dt(r.get(created_at_col))
+
+        if as_of_ts is not None:
+            if dt is None:
+                continue
+            if dt > as_of_ts:
+                continue
+
         pri = 0
         if is_primary_col:
             try:
                 pri = int(r.get(is_primary_col) or 0)
             except Exception:
                 pri = 0
-        ts = ""
-        if produced_at_col:
-            ts = str(r.get(produced_at_col) or "")
-        if not ts and created_at_col:
-            ts = str(r.get(created_at_col) or "")
+
         mid = 0
         if id_col:
             try:
                 mid = int(r.get(id_col) or 0)
             except Exception:
                 mid = 0
-        return (pri, ts, mid)
 
-    # max score wins
-    return sorted(rows, key=score, reverse=True)[0]
+        candidates.append(((pri, dt or datetime.datetime.min, mid), r))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
+
+
+
+def _record_effective_ts(rec: DataRecord) -> Optional[datetime.datetime]:
+    """Best-effort timestamp for leakage-safe --as-of filtering.
+
+    Priority:
+      - DataRecord.run_date (ISO date/datetime string)
+      - created_at
+      - updated_at
+    """
+    dt = _parse_dt(getattr(rec, "run_date", None))
+    if dt is None:
+        dt = _parse_dt(getattr(rec, "created_at", None))
+    if dt is None:
+        dt = _parse_dt(getattr(rec, "updated_at", None))
+    return dt
+
+
+def _filter_records_as_of(records: List[DataRecord], as_of_ts: datetime.datetime) -> List[DataRecord]:
+    """Filter DataRecord rows to those with timestamp <= as_of_ts.
+
+    If a record has no parseable timestamp, it is excluded (safer than leaking existence).
+    """
+    out: List[DataRecord] = []
+    for r in records:
+        dt = _record_effective_ts(r)
+        if dt is None:
+            continue
+        if dt <= as_of_ts:
+            out.append(r)
+    return out
 
 
 def export_wide_to_csv(
@@ -139,6 +238,9 @@ def export_wide_to_csv(
         .all()
     )
 
+    if options.as_of_ts is not None:
+        records = _filter_records_as_of(records, options.as_of_ts)
+
     # Prefetch molecules/batches in-memory (avoid N+1 without over-optimizing).
     mol_by_id: Dict[int, Molecule] = {m.id: m for m in db.query(Molecule).all()}
     batch_by_id: Dict[int, Batch] = {b.id: b for b in db.query(Batch).all()}
@@ -161,36 +263,68 @@ def export_wide_to_csv(
             )
             mrows.extend(db.execute(q, params).mappings().all())
 
-    # Group measurement rows by record_id and normalized key.
-    by_record: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
-    name_col = mcols["name"]
-    rec_col = mcols["record_fk"]
-    assert name_col and rec_col
+    # Attach QC latest-state (optional; only when explicitly requested).
+    if (options.qc_mode or "none") != "none" and mrows:
+        # Guard: tables may not exist on older DBs
+        has_qc = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='measurement_qc'")).scalar()
+        if has_qc:
+            mids = [int(r.get(mcols.get("id") or "id")) for r in mrows if r.get(mcols.get("id") or "id") is not None]
+            qc_map: Dict[int, Dict[str, Any]] = {}
+            if mids:
+                CHUNK2 = 900
+                for j in range(0, len(mids), CHUNK2):
+                    chunk = mids[j : j + CHUNK2]
+                    placeholders = ",".join([":m%d" % k for k in range(len(chunk))])
+                    params = {"m%d" % k: chunk[k] for k in range(len(chunk))}
+                    q2 = text(f"SELECT measurement_id, status, ignore_policy FROM measurement_qc WHERE measurement_id IN ({placeholders})")
+                    for r2 in db.execute(q2, params).mappings().all():
+                        qc_map[int(r2["measurement_id"])] = {
+                            "qc_status": (r2.get("status") or "unreviewed"),
+                            "qc_ignore_policy": (r2.get("ignore_policy") or "include"),
+                        }
+            for r in mrows:
+                try:
+                    mid = int(r.get(mcols.get("id") or "id"))
+                except Exception:
+                    continue
+                st = qc_map.get(mid)
+                if st:
+                    r["qc_status"] = st["qc_status"]
+                    r["qc_ignore_policy"] = st["qc_ignore_policy"]
+                else:
+                    r["qc_status"] = "unreviewed"
+                    r["qc_ignore_policy"] = "include"
 
-    extras_seen: set[str] = set()
+        # Group measurement rows by record_id and normalized key.
+        by_record: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
+        name_col = mcols["name"]
+        rec_col = mcols["record_fk"]
+        assert name_col and rec_col
 
-    for r in mrows:
-        rid = r.get(rec_col)
-        try:
-            rid_int = int(rid)
-        except Exception:
-            continue
+        extras_seen: set[str] = set()
 
-        raw_name = str(r.get(name_col) or "").strip()
-        if not raw_name:
-            continue
-
-        defn = resolve_def(raw_name)
-        if defn:
-            key = defn.canonical_key
-        else:
-            key = raw_name
-            if options.include_extras:
-                extras_seen.add(key)
-            else:
+        for r in mrows:
+            rid = r.get(rec_col)
+            try:
+                rid_int = int(rid)
+            except Exception:
                 continue
 
-        by_record.setdefault(rid_int, {}).setdefault(key, []).append(dict(r))
+            raw_name = str(r.get(name_col) or "").strip()
+            if not raw_name:
+                continue
+
+            defn = resolve_def(raw_name)
+            if defn:
+                key = defn.canonical_key
+            else:
+                key = raw_name
+                if options.include_extras:
+                    extras_seen.add(key)
+                else:
+                    continue
+
+            by_record.setdefault(rid_int, {}).setdefault(key, []).append(dict(r))
 
     # Build header (deterministic)
     core_cols = [
@@ -277,7 +411,12 @@ def export_wide_to_csv(
                     produced_at_col=mcols.get("produced_at"),
                     created_at_col=mcols.get("created_at") or mcols.get("updated_at"),
                     id_col=mcols.get("id"),
+                    ignore_col=mcols.get("ignore_for_model"),
+                    as_of_ts=options.as_of_ts,
+                    qc_mode=(options.qc_mode or "none"),
                 )
+                if not best:
+                    continue
 
                 raw_num = _safe_float(best.get(mcols.get("value_num") or ""))
                 raw_text = best.get(mcols.get("value_text") or "")
@@ -338,7 +477,13 @@ def export_wide_to_csv(
                         produced_at_col=mcols.get("produced_at"),
                         created_at_col=mcols.get("created_at") or mcols.get("updated_at"),
                         id_col=mcols.get("id"),
+                        ignore_col=mcols.get("ignore_for_model"),
+                        as_of_ts=options.as_of_ts,
+                    qc_mode=(options.qc_mode or "none"),
                     )
+                    if not best:
+                        out[col] = ""
+                        continue
                     raw_num = _safe_float(best.get(mcols.get("value_num") or ""))
                     raw_text = best.get(mcols.get("value_text") or "")
                     if raw_num is not None:

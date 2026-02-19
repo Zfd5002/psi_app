@@ -211,3 +211,7 @@ This creates `~/Desktop/PSI.desktop` that launches:
 - `uvicorn psi.web.app:create_app --factory --reload`
 
 If your desktop environment blocks launching, right-click the icon and choose **Allow Launching**.
+
+## Release helper
+- To bump the UI footer version and append PATCH_NOTES stub:
+  python -m psi.scripts.bump_version v1.2.4a

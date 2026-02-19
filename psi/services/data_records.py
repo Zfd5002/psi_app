@@ -11,7 +11,8 @@ from psi.core.models import AuditEvent, Batch, DataRecord, Evidence, EvidenceCit
 from psi.core.registry import REGISTRY, normalize_data_record_for_storage
 from psi.core.utils import model_to_dict, now_utc
 from psi.services.files import attach_files
-from psi.services.measurements import extract_measurements, upsert_measurements, upsert_measurements_force
+from psi.services.measurements import extract_measurements, upsert_measurements, upsert_measurements_force, list_measurements_for_record
+from psi.services import qc as qc_svc
 
 
 def _infer_primary_result_text(results_json: str) -> str | None:
@@ -297,6 +298,10 @@ def get_data_record_detail(db: Session, record_id: int) -> dict:
     if not rec:
         raise KeyError("DataRecord not found")
 
+    # Extracted measurement rows (data_measurements) + QC state.
+    measurements = list_measurements_for_record(db, record_id=record_id)
+    qc_by_mid = qc_svc.get_qc_state_for_measurements(db, [m.get("id") for m in measurements if m.get("id") is not None])
+
     citations = db.query(EvidenceCitation).filter(EvidenceCitation.data_record_id == record_id).all()
     ev_ids = [c.evidence_id for c in citations]
     evidence = db.query(Evidence).filter(Evidence.id.in_(ev_ids)).all() if ev_ids else []
@@ -319,7 +324,8 @@ def get_data_record_detail(db: Session, record_id: int) -> dict:
 
     return {
         "record": rec,
-        "measurements": list(rec.measurements) if getattr(rec, "measurements", None) is not None else [],
+        "measurements": measurements,
+        "qc_by_measurement_id": qc_by_mid,
         "params": _load_json_field(rec.params_json),
         "results": _load_json_field(rec.results_json),
         "evidence_citing": evidence,
