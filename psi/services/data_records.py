@@ -150,6 +150,13 @@ def create_data_record(
     params_s = _jsonish_to_str(params_json, default="{}")
     results_s = _jsonish_to_str(results_json, default="{}")
 
+    # Prefer explicit run_date (ISO date). If absent, derive from run_at when provided.
+    run_date_s = (run_date or '').strip() or None
+    if not run_date_s and (run_at or '').strip():
+        dt = _parse_run_at(run_at)
+        if dt is not None:
+            run_date_s = dt.date().isoformat()
+
     rec = DataRecord(
         program_id=program_id,
         molecule_id=molecule_id,
@@ -159,8 +166,7 @@ def create_data_record(
         method=method,
         title=title.strip(),
         notes=notes.strip() or None,
-        run_date=run_date.strip() or None,
-        run_at=_parse_run_at(run_at),
+        run_date=run_date_s,
         params_json=params_s,
         results_json=results_s,
         raw_inputs_json=params_s,
@@ -247,8 +253,7 @@ def update_data_record(
     rec.method = method
     rec.title = title.strip()
     rec.notes = notes.strip() or None
-    rec.run_date = run_date.strip() or None
-    rec.run_at = _parse_run_at(run_at)
+    run_date=run_date_s,
     rec.params_json = params_s
     rec.results_json = results_s
     rec.raw_inputs_json = params_s

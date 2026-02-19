@@ -89,6 +89,8 @@ fi
 zip -r "$ZIP" . \
   -x ".git/*" \
   -x ".venv/*" \
+  -x "vendor/*" \
+  -x "vendor/**" \
   -x "uploads/*" \
   -x "psi/uploads/*" \
   -x "*.sqlite" -x "*.db" \
@@ -103,12 +105,12 @@ ls -lh "$ZIP"
 
 echo
 echo "🔍 Verifying exclusions..."
-if zipinfo -1 "$ZIP" | egrep -i '(\.git/|\.venv/|uploads/|\.sqlite$|\.db$|__pycache__/|\.pyc$)' >/dev/null; then
+if zipinfo -1 "$ZIP" | egrep -i '(\.git/|\.venv/|vendor/|uploads/|\.sqlite$|\.db$|__pycache__/|\.pyc$)' >/dev/null; then
   echo "❌ ERROR: Forbidden files detected in ZIP"
-  zipinfo -1 "$ZIP" | egrep -i '(\.git/|\.venv/|uploads/|\.sqlite$|\.db$|__pycache__/|\.pyc$)'
+  zipinfo -1 "$ZIP" | egrep -i '(\.git/|\.venv/|vendor/|uploads/|\.sqlite$|\.db$|__pycache__/|\.pyc$)'
   exit 1
 else
-  echo "✅ ZIP is clean (no git, venv, DB, uploads, or caches)"
+  echo "✅ ZIP is clean (no git, venv, vendor, DB, uploads, or caches)"
 fi
 
 # Optional desktop shortcut install

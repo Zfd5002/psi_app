@@ -79,7 +79,7 @@ ANARCI is a **vendored third-party dependency** used for:
 
 Key points:
 - ANARCI lives at: `vendor/anarci/`
-- It is often **excluded from shared ZIPs** due to size
+- It is intentionally **excluded from overlay ZIPs** (packaging hygiene)
 - When missing, treat ANARCI as a **black box dependency**
 
 Assumptions when ANARCI is not present:

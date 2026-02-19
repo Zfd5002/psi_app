@@ -228,6 +228,213 @@ async def create_molecule(request: Request, background_tasks: BackgroundTasks, d
     return RedirectResponse(url=f"/molecules/{m.id}", status_code=303)
 
 
+
+# ---- v1.2.3f: batch-first molecule UX helpers (UI-only, read-only) ----
+
+def _batch_sort_key(batch_id: str) -> tuple:
+    """Deterministic batch sort.
+
+    - If batch_id ends with a numeric suffix like '-001', sort by that integer.
+    - Otherwise fall back to case-insensitive lexical sort.
+    """
+    s = (batch_id or "").strip()
+    try:
+        import re as _re
+        m = _re.search(r"-(\d{1,6})$", s)
+    except Exception:
+        m = None
+    if m:
+        try:
+            return (0, int(m.group(1)), s.lower())
+        except Exception:
+            pass
+    return (1, s.lower())
+
+
+def _reflect_measurement_cols(db: Session) -> dict:
+    """Best-effort reflection of the data_measurements schema (read-only)."""
+    from sqlalchemy import text as _text
+
+    try:
+        rows = db.execute(_text("PRAGMA table_info(data_measurements)")).mappings().all()
+    except Exception:
+        return {}
+
+    cols = {str(r["name"]): True for r in rows}
+
+    def pick(*names: str):
+        for n in names:
+            if n in cols:
+                return n
+        return None
+
+    out = {
+        "record_fk": pick("data_record_id", "record_id"),
+        "name": pick("metric_key", "name", "key"),
+        "value_num": pick("value_num", "numeric_value", "value"),
+        "value_text": pick("value_text", "text_value", "raw_value"),
+        "unit": pick("unit"),
+        "comparator": pick("comparator", "op"),
+        "is_primary": pick("is_primary", "primary", "is_headline"),
+        "is_outlier": pick("is_outlier"),
+        "qc_flag": pick("qc_flag", "qc_status"),
+        "id": pick("id"),
+        "created_at": pick("created_at", "updated_at", "timestamp", "ts"),
+        "_all": set(cols.keys()),
+    }
+    if not out["record_fk"] or not out["name"]:
+        return {}
+    return out
+
+
+def _fetch_measurements_for_record(db: Session, record_id: int, cols: dict) -> list[dict]:
+    """Fetch all measurement rows for a record with deterministic ordering, QC-safe."""
+    if not cols:
+        return []
+    from sqlalchemy import text as _text
+
+    where = [f"{cols['record_fk']}=:rid"]
+    params = {"rid": int(record_id)}
+
+    qc_col = cols.get("qc_flag")
+    if qc_col:
+        where.append(f"({qc_col} IS NULL OR {qc_col}=0 OR {qc_col}='0' OR {qc_col}='')")
+
+    order = []
+    if cols.get("is_primary"):
+        order.append(f"{cols['is_primary']} DESC")
+    if cols.get("created_at"):
+        order.append(f"{cols['created_at']} DESC")
+    if cols.get("id"):
+        order.append(f"{cols['id']} DESC")
+    order.append(f"{cols['name']} ASC")
+
+    q = _text(f"SELECT * FROM data_measurements WHERE {' AND '.join(where)} ORDER BY {', '.join(order)}")
+    rows = db.execute(q, params).mappings().all()
+
+    out = []
+    for r in rows:
+        def get(k):
+            c = cols.get(k)
+            return r.get(c) if c else None
+        out.append(
+            {
+                "id": get("id") or r.get("id"),
+                "record_id": record_id,
+                "name": get("name"),
+                "value_num": get("value_num"),
+                "value_text": get("value_text"),
+                "unit": get("unit"),
+                "comparator": get("comparator"),
+                "is_primary": get("is_primary") or 0,
+            }
+        )
+    return out
+
+
+def _fmt_num(v: float, *, sig: int = 3) -> str:
+    try:
+        x = float(v)
+    except Exception:
+        return str(v)
+    if x == 0:
+        return "0"
+    try:
+        import math
+        digits = sig - int(math.floor(math.log10(abs(x)))) - 1
+        digits = max(-2, min(6, digits))
+        return f"{x:.{digits}f}".rstrip("0").rstrip(".")
+    except Exception:
+        return str(v)
+
+
+def _fmt_percent(v: float) -> str:
+    try:
+        x = float(v)
+    except Exception:
+        return str(v)
+    if abs(x - round(x)) < 1e-9:
+        return f"{int(round(x))}%"
+    return f"{x:.1f}%"
+
+
+def _match_name(name: str, patterns: list) -> bool:
+    if not name:
+        return False
+    n = str(name).strip().lower()
+    for p in patterns:
+        if isinstance(p, str):
+            if p in n:
+                return True
+        else:
+            try:
+                if p.search(n):
+                    return True
+            except Exception:
+                continue
+    return False
+
+
+def _best_measurement(measurements: list[dict], patterns: list) -> dict | None:
+    cand = [m for m in measurements if _match_name(m.get("name"), patterns)]
+    if not cand:
+        return None
+
+    def score(m):
+        prim = 1 if (m.get("is_primary") in (1, True, "1")) else 0
+        has_num = 1 if (m.get("value_num") is not None) else 0
+        mid = m.get("id") or 0
+        midn = int(mid) if str(mid).isdigit() else 0
+        return (prim, has_num, midn, str(m.get("name") or "").lower())
+
+    cand.sort(key=score, reverse=True)
+    return cand[0]
+
+
+def _headline_items_for_record(measurements: list[dict]) -> list[str]:
+    """Return up to 3 headline strings (deterministic) from measurement rows."""
+    import re as _re
+
+    items: list[str] = []
+
+    # 1) SEC purity block (often monomer_pct/hmw_pct/lmw_pct)
+    purity = _best_measurement(measurements, ["monomer_pct", "purity", "sec_purity", _re.compile(r"\bmonomer\b")])
+    hmw = _best_measurement(measurements, ["hmw_pct", "sec_hmw", _re.compile(r"\bhmw\b")])
+    lmw = _best_measurement(measurements, ["lmw_pct", "sec_lmw", _re.compile(r"\blmw\b")])
+    if purity and purity.get("value_num") is not None:
+        items.append(f"Purity {_fmt_percent(purity['value_num'])}")
+        if hmw and hmw.get("value_num") is not None:
+            items.append(f"HMW {_fmt_percent(hmw['value_num'])}")
+        if lmw and lmw.get("value_num") is not None:
+            items.append(f"LMW {_fmt_percent(lmw['value_num'])}")
+
+    # 2) Binding/affinity potency
+    kd = _best_measurement(measurements, ["kd", "kd_nm", "kd_n", "affinity"])
+    ec50 = _best_measurement(measurements, ["ec50"])
+    ic50 = _best_measurement(measurements, ["ic50"])
+    if kd and kd.get("value_num") is not None and len(items) < 3:
+        unit = (kd.get("unit") or "").strip()
+        u = f" {unit}" if unit else ""
+        items.append(f"KD {_fmt_num(kd['value_num'])}{u}")
+    if ec50 and ec50.get("value_num") is not None and len(items) < 3:
+        unit = (ec50.get("unit") or "").strip()
+        u = f" {unit}" if unit else ""
+        items.append(f"EC50 {_fmt_num(ec50['value_num'])}{u}")
+    if ic50 and ic50.get("value_num") is not None and len(items) < 3:
+        unit = (ic50.get("unit") or "").strip()
+        u = f" {unit}" if unit else ""
+        items.append(f"IC50 {_fmt_num(ic50['value_num'])}{u}")
+
+    # 3) Expression / yield / concentration
+    titer = _best_measurement(measurements, ["titer", "expression", "yield", "concentration", "mg/l", "mg/ml"])
+    if titer and titer.get("value_num") is not None and len(items) < 3:
+        unit = (titer.get("unit") or "").strip()
+        u = f" {unit}" if unit else ""
+        items.append(f"Titer {_fmt_num(titer['value_num'])}{u}")
+
+    return items[:3]
+
+
 @router.get("/molecules/{molecule_id}", response_class=HTMLResponse)
 def molecule_detail(molecule_id: int, request: Request, tab: str = "overview", batch_id: int | None = None, db: Session = Depends(get_db)):
     templates = get_templates(request)
@@ -260,6 +467,215 @@ def molecule_detail(molecule_id: int, request: Request, tab: str = "overview", b
         )
     except Exception:
         pass
+
+    
+    # ---- v1.2.3f UI-only reshaping: Data Overview + batch headline results + Unassigned panel ----
+    try:
+        from sqlalchemy import text as _text
+        from psi.core.models import DataRecord
+
+        meas_cols = _reflect_measurement_cols(db)
+
+        # Total data records for this molecule (including unassigned).
+        total_records = (
+            db.query(DataRecord)
+            .filter(DataRecord.molecule_id == molecule_id)
+            .count()
+        )
+
+        total_measurements = 0
+        outlier_count = None
+        if meas_cols:
+            try:
+                total_measurements = int(
+                    db.execute(
+                        _text(
+                            f"""
+                            SELECT COUNT(1) AS n
+                            FROM data_measurements dm
+                            JOIN data_records dr ON dm.{meas_cols['record_fk']} = dr.id
+                            WHERE dr.molecule_id = :mid
+                            """
+                        ),
+                        {"mid": molecule_id},
+                    ).mappings().first()["n"]
+                )
+            except Exception:
+                total_measurements = 0
+
+            if meas_cols.get("is_outlier") and meas_cols.get("is_outlier") in meas_cols.get("_all", set()):
+                try:
+                    outlier_count = int(
+                        db.execute(
+                            _text(
+                                f"""
+                                SELECT COUNT(1) AS n
+                                FROM data_measurements dm
+                                JOIN data_records dr ON dm.{meas_cols['record_fk']} = dr.id
+                                WHERE dr.molecule_id = :mid AND dm.{meas_cols['is_outlier']}=1
+                                """
+                            ),
+                            {"mid": molecule_id},
+                        ).mappings().first()["n"]
+                    )
+                except Exception:
+                    outlier_count = None
+
+        # Re-shape batch panels deterministically and attach header headline items.
+        panels = list(ctx.get("exp_batch_panels") or [])
+        batches = list(ctx.get("exp_batches") or [])
+
+        # Deterministic batch ordering by batch_id (numeric suffix where possible).
+        panels.sort(key=lambda p: _batch_sort_key(getattr(p.get("batch"), "batch_id", "")))
+        batches.sort(key=lambda b: _batch_sort_key(getattr(b, "batch_id", "")))
+
+        # Helper: pick latest record id within a panel (run_date desc, created_at desc, id desc).
+        def _latest_record_id(panel: dict) -> int | None:
+            best = None
+            for _, conds in (panel.get("assays") or {}).items():
+                for _, node in (conds or {}).items():
+                    runs = node.get("runs") or []
+                    # ensure deterministic within node
+                    runs.sort(
+                        key=lambda item: (
+                            0 if (item.get("record") and item["record"].run_date) else 1,
+                            str(item.get("record").run_date or ""),
+                            item.get("record").created_at if item.get("record") else 0,
+                            int(getattr(item.get("record"), "id", 0)),
+                        ),
+                        reverse=True,
+                    )
+                    for item in runs:
+                        r = item.get("record")
+                        if not r:
+                            continue
+                        key = (
+                            0 if r.run_date else 1,
+                            str(r.run_date or ""),
+                            r.created_at,
+                            int(r.id),
+                        )
+                        if best is None or key > best[0]:
+                            best = (key, int(r.id))
+            return best[1] if best else None
+
+        batch_metric_values = {"purity": [], "kd": [], "titer": []}
+
+        for p in panels:
+            # Stabilize ordering of node runs (ensures refresh determinism).
+            for _, conds in (p.get("assays") or {}).items():
+                for _, node in (conds or {}).items():
+                    runs = node.get("runs") or []
+                    runs.sort(
+                        key=lambda item: (
+                            0 if (item.get("record") and item["record"].run_date) else 1,
+                            str(item.get("record").run_date or ""),
+                            item.get("record").created_at if item.get("record") else 0,
+                            int(getattr(item.get("record"), "id", 0)),
+                        ),
+                        reverse=True,
+                    )
+
+            rid = _latest_record_id(p)
+            headline_items = []
+            meas_count = None
+            if rid and meas_cols:
+                meas = _fetch_measurements_for_record(db, rid, meas_cols)
+                headline_items = _headline_items_for_record(meas)
+                if not headline_items:
+                    headline_items = ["No measurements recorded"]
+                # measurement count for this batch: cheap join count
+                try:
+                    bid = int(getattr(p.get("batch"), "id", 0))
+                    meas_count = int(
+                        db.execute(
+                            _text(
+                                f"""
+                                SELECT COUNT(1) AS n
+                                FROM data_measurements dm
+                                JOIN data_records dr ON dm.{meas_cols['record_fk']} = dr.id
+                                WHERE dr.batch_id = :bid
+                                """
+                            ),
+                            {"bid": bid},
+                        ).mappings().first()["n"]
+                    )
+                except Exception:
+                    meas_count = None
+
+                # Collect overview numeric values (latest-per-batch-per-metric).
+                import re as _re
+                purity = _best_measurement(meas, ["monomer_pct", "purity", "sec_purity", _re.compile(r"\bmonomer\b")])
+                kd = _best_measurement(meas, ["kd", "kd_nm", "kd_n", "affinity"])
+                titer = _best_measurement(meas, ["titer", "expression", "yield", "concentration"])
+                if purity and purity.get("value_num") is not None:
+                    batch_metric_values["purity"].append(float(purity["value_num"]))
+                if kd and kd.get("value_num") is not None:
+                    batch_metric_values["kd"].append(float(kd["value_num"]))
+                if titer and titer.get("value_num") is not None:
+                    batch_metric_values["titer"].append(float(titer["value_num"]))
+
+            p["headline_items"] = headline_items
+            p["measurement_count"] = meas_count
+
+        # Unassigned panel (records without a batch).
+        unassigned = list(ctx.get("exp_molecule_level_records") or [])
+        if unassigned:
+            # deterministic ordering: run_date desc, created_at desc, id desc
+            unassigned.sort(
+                key=lambda item: (
+                    0 if (item.get("record") and item["record"].run_date) else 1,
+                    str(item.get("record").run_date or ""),
+                    item.get("record").created_at if item.get("record") else 0,
+                    int(getattr(item.get("record"), "id", 0)),
+                ),
+                reverse=True,
+            )
+
+            panels.append(
+                {
+                    "batch": None,
+                    "batch_label": "Unassigned",
+                    "assays": {},  # no assay tree for unassigned (keeps patch small)
+                    "glance": {},
+                    "record_count": len(unassigned),
+                    "unassigned_records": unassigned,
+                    "headline_items": ["No batch assigned"],
+                    "measurement_count": None,
+                    "details_key": "batch:__unassigned__",
+                }
+            )
+
+        # Ensure Unassigned always last.
+        panels_non = [p for p in panels if p.get("batch") is not None]
+        panels_un = [p for p in panels if p.get("batch") is None]
+        panels = panels_non + panels_un
+
+        ctx["exp_batch_panels"] = panels
+        ctx["exp_batches"] = batches
+        ctx["exp_has_unassigned"] = bool(unassigned)
+
+        # Data Overview aggregates (Option A: latest-per-batch-per-metric).
+        def _mean(vals: list[float]) -> float | None:
+            if not vals:
+                return None
+            try:
+                return float(sum(vals) / len(vals))
+            except Exception:
+                return None
+
+        ctx["data_overview"] = {
+            "total_batches": len(batches) + (1 if unassigned else 0),
+            "total_records": int(total_records),
+            "total_measurements": int(total_measurements),
+            "mean_purity": _mean(batch_metric_values["purity"]),
+            "mean_kd": _mean(batch_metric_values["kd"]),
+            "mean_titer": _mean(batch_metric_values["titer"]),
+            "outlier_count": outlier_count,
+        }
+    except Exception:
+        # UI-only; never block page render.
+        ctx["data_overview"] = None
 
     return templates.TemplateResponse("molecules/detail.html", ctx)
 
