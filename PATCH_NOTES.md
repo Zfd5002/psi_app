@@ -94,3 +94,7 @@
 - Export (wide): fix default `qc_mode=none` runtime bug and centralize measurement table reflection/ensure logic to reduce drift.
 - Core: introduce `psi/core/measurement_schema.py` as canonical data_measurements schema/reflection helper.
 - Smoke test: now exercises the registry-driven wide exporter (default + profile) to prevent regressions.
+
+## 2026-02-20 — v1.2.9a
+- DI (Decision Intelligence) v0.1 (headless): introduce policy-as-data JSON + stable hashing, deterministic batch-first evidence selection, gate/blocker evaluation for `advance_to_in_vivo`, and snapshot persistence to `decision_snapshots` via CLI.
+- DI: adds `python -m psi.tools.run_di` to print deterministic JSON to stdout and write a DecisionSnapshot row without mutating measurements/QC.
