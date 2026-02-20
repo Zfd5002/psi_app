@@ -36,7 +36,7 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
 
     templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
     # Release string (shown in UI footer). Keep as a single source of truth.
-    templates.env.globals["PSI_VERSION"] = "v1.2.9a"
+    templates.env.globals["PSI_VERSION"] = "v1.2.9b"
     storage = StorageConfig(base_dir=base_dir)
     rules_path = base_dir / "psi_rules" / "psirules-0.1.0.yml"
 

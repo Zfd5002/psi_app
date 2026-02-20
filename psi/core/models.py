@@ -470,6 +470,12 @@ class DecisionSnapshot(Base):
 
     decision_key = Column(Text, nullable=False)
     rules_version = Column(Text, nullable=False)
+
+    # v1.2.9b: schema discrimination + provenance for DI snapshots.
+    # Additive, nullable to preserve older DBs and legacy snapshots.
+    engine_key = Column(Text, nullable=True)        # e.g. "di" vs NULL for legacy rules engine
+    schema_version = Column(Text, nullable=True)    # e.g. "di.snapshot.v0_1"
+
     inputs_json = Column(Text, nullable=False)
     outputs_json = Column(Text, nullable=False)
     evidence_ids_json = Column(Text, nullable=False)

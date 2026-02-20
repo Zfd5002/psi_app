@@ -1,114 +1,185 @@
-  <div class="grid cols-3" style="margin-top:12px;">
-    <div class="card" style="margin:0;">
-      <div class="muted">Verdict</div>
-      <div style="font-size:22px;font-weight:800;">{{ output.verdict }}</div>
-      <div class="muted">Confidence: {{ output.confidence }}</div>
+  {% if is_di %}
+    <div class="grid cols-3" style="margin-top:12px;">
+      <div class="card" style="margin:0;">
+        <div class="muted">Decision state</div>
+        <div style="font-size:22px;font-weight:800;">{{ output.decision_state }}</div>
+        <div class="muted">Engine: {{ output.engine.engine_id if output.engine is defined else (inputs.engine_id if inputs is defined else "") }}</div>
+      </div>
+      <div class="card" style="margin:0;">
+        <div class="muted">Policy</div>
+        <div><b>{{ output.policy.name if output.policy is defined else "" }}</b></div>
+        <div class="muted">{{ output.policy.version if output.policy is defined else "" }} · {{ (output.policy.hash if output.policy is defined else "")[:12] }}</div>
+        {% if output.policy.source is defined %}<div class="muted">Source: {{ output.policy.source }}</div>{% endif %}
+      </div>
+      <div class="card" style="margin:0;">
+        <div class="muted">Scope</div>
+        <div>Program: {{ snap.program_id }}</div>
+        <div>{% if snap.molecule_id %}Molecule: {{ snap.molecule_id }}{% else %}<span class="muted">Molecule: (none)</span>{% endif %}</div>
+        <div>{% if snap.batch_id %}Batch: {{ snap.batch_id }}{% else %}<span class="muted">Batch: (none)</span>{% endif %}</div>
+      </div>
     </div>
-    <div class="card" style="margin:0;">
-      <div class="muted">Domain scores</div>
-      <ul class="clean" style="margin-top:6px;">
-        {% for d, s in output.domain_scores.items() %}
-          <li><b>{{ d }}</b>: {{ s }}</li>
-        {% endfor %}
-      </ul>
-    </div>
-    <div class="card" style="margin:0;">
-      <div class="muted">Scope</div>
-      <div>Program: {{ snap.program_id }}</div>
-      <div>{% if snap.molecule_id %}Molecule: {{ snap.molecule_id }}{% else %}<span class="muted">Molecule: (none)</span>{% endif %}</div>
-      <div>{% if snap.batch_id %}Batch: {{ snap.batch_id }}{% else %}<span class="muted">Batch: (none)</span>{% endif %}</div>
-    </div>
-  </div>
 
-  {% if output.blockers and output.blockers|length %}
-  <div class="notice" style="border-color:var(--warn);margin-top:12px;">
-    <b>Blockers / hard stops:</b>
-    <ul class="clean" style="margin-top:6px;">
-      {% for b in output.blockers %}<li>{{ b }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
-  {% if output.ceilings_triggered and output.ceilings_triggered|length %}
-  <div class="notice" style="margin-top:12px;">
-    <b>Ceilings triggered:</b>
-    <ul class="clean" style="margin-top:6px;">
-      {% for c in output.ceilings_triggered %}<li>{{ c }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
-  {% if output.what_would_change and output.what_would_change|length %}
-  <div class="card" style="margin-top:12px;">
-    <h2 style="margin-top:0;">What would change this decision</h2>
-    <ul class="clean">
-      {% for s in output.what_would_change %}<li>{{ s }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
-  <div class="card" style="margin-top:12px;">
-    <h2 style="margin-top:0;">Decision report (traceability)</h2>
-    <div class="help">Decisions cite Evidence; Evidence cites Data Records; Data Records link to files.</div>
-
-    {% set ev_by_id = {} %}
-    {% for e in evidence %}{% set _ = ev_by_id.update({e.id: e}) %}{% endfor %}
-
-    {% for etype, info in output.evidence_by_type.items() %}
-      {% set eid = info.evidence_id %}
-      <div class="card" style="margin:10px 0 0 0;">
-        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;">
-          <div>
-            <b>{{ etype }}</b>
-            <span class="muted">(used strength {{ info.strength }})</span>
-          </div>
-          <div class="no-print">
-            <a class="btn" href="/evidence/{{ eid }}">Evidence #{{ eid }}</a>
-          </div>
-          <div class="print-only" style="display:none;">
-            <span class="muted">Evidence #{{ eid }}</span>
-          </div>
-        </div>
-        {% set e = ev_by_id.get(eid) %}
-        {% if e %}
-          <div style="margin-top:8px;">{{ e.summary }}</div>
-        {% endif %}
-
-        <div class="muted" style="margin-top:10px;">Cited Data Records</div>
+    {% if output.blockers and output.blockers|length %}
+      <div class="notice" style="border-color:var(--warn);margin-top:12px;">
+        <b>Blockers</b>
         <ul class="clean" style="margin-top:6px;">
-          {% for c in citations %}
-            {% if c.evidence_id == eid %}
-              {% for dr in data_records %}
-                {% if dr.id == c.data_record_id %}
-                  <li style="margin-bottom:6px;">
-                    <span class="no-print"><a href="/data/{{ dr.id }}">Data #{{ dr.id }}</a></span>
-                    <span class="print-only" style="display:none;">Data #{{ dr.id }}</span>
-                    — {{ dr.title }}
-                    <span class="muted">({{ dr.data_type }}/{{ dr.method }})</span>
-                    {% set fls = file_links_by_dr.get(dr.id, []) %}
-                    {% if fls|length %}
-                      <div class="muted" style="margin-top:4px;">Files:</div>
-                      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                        {% for fl in fls %}
-                          {% set f = files_by_id.get(fl.file_id) %}
-                          {% if f %}
-                            <span class="no-print"><a class="tag" href="/files/{{ f.id }}/download">{{ f.original_name }}</a></span>
-                            <span class="print-only" style="display:none;" class="tag">{{ f.original_name }}</span>
-                          {% endif %}
-                        {% endfor %}
-                      </div>
-                    {% endif %}
-                  </li>
-                {% endif %}
-              {% endfor %}
-            {% endif %}
+          {% for b in output.blockers %}<li>{{ b }}</li>{% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div class="card" style="margin-top:12px;">
+      <h2 style="margin-top:0;">Gates</h2>
+      {% if output.gates and output.gates|length %}
+        <table class="table">
+          <thead><tr><th>Gate</th><th>Status</th><th>Rationale</th></tr></thead>
+          <tbody>
+          {% for g in output.gates %}
+            <tr>
+              <td><b>{{ g.gate_key }}</b></td>
+              <td>{{ g.status }}</td>
+              <td>{{ g.rationale }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="muted">No gates.</div>
+      {% endif %}
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <h2 style="margin-top:0;">Evidence (measurements)</h2>
+      <div class="help">DI uses measurement IDs as evidence references (not legacy Evidence rows).</div>
+      {% set mids = output.measurement_ids_used if output.measurement_ids_used is defined else [] %}
+      {% if mids and mids|length %}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          {% for mid in mids %}<span class="tag">measurement #{{ mid }}</span>{% endfor %}
+        </div>
+      {% else %}
+        <div class="muted">No measurements used.</div>
+      {% endif %}
+      {% if inputs.policy_json_canonical is defined %}
+        <details style="margin-top:10px;">
+          <summary class="muted">Embedded policy (canonical JSON)</summary>
+          <pre style="white-space:pre-wrap;overflow:auto;max-height:360px;">{{ inputs.policy_json_canonical }}</pre>
+        </details>
+      {% endif %}
+    </div>
+
+  {% else %}
+    <div class="grid cols-3" style="margin-top:12px;">
+      <div class="card" style="margin:0;">
+        <div class="muted">Verdict</div>
+        <div style="font-size:22px;font-weight:800;">{{ output.verdict }}</div>
+        <div class="muted">Confidence: {{ output.confidence }}</div>
+      </div>
+      <div class="card" style="margin:0;">
+        <div class="muted">Domain scores</div>
+        <ul class="clean" style="margin-top:6px;">
+          {% for d, s in output.domain_scores.items() %}
+            <li><b>{{ d }}</b>: {{ s }}</li>
           {% endfor %}
         </ul>
       </div>
-    {% endfor %}
+      <div class="card" style="margin:0;">
+        <div class="muted">Scope</div>
+        <div>Program: {{ snap.program_id }}</div>
+        <div>{% if snap.molecule_id %}Molecule: {{ snap.molecule_id }}{% else %}<span class="muted">Molecule: (none)</span>{% endif %}</div>
+        <div>{% if snap.batch_id %}Batch: {{ snap.batch_id }}{% else %}<span class="muted">Batch: (none)</span>{% endif %}</div>
+      </div>
+    </div>
 
-    {% if output.evidence_by_type|length == 0 %}
-      <div class="muted" style="margin-top:8px;">No evidence in scope.</div>
+    {% if output.blockers and output.blockers|length %}
+    <div class="notice" style="border-color:var(--warn);margin-top:12px;">
+      <b>Blockers / hard stops:</b>
+      <ul class="clean" style="margin-top:6px;">
+        {% for b in output.blockers %}<li>{{ b }}</li>{% endfor %}
+      </ul>
+    </div>
     {% endif %}
 
-  </div>
+    {% if output.ceilings_triggered and output.ceilings_triggered|length %}
+    <div class="notice" style="margin-top:12px;">
+      <b>Ceilings triggered:</b>
+      <ul class="clean" style="margin-top:6px;">
+        {% for c in output.ceilings_triggered %}<li>{{ c }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if output.what_would_change and output.what_would_change|length %}
+    <div class="card" style="margin-top:12px;">
+      <h2 style="margin-top:0;">What would change this decision</h2>
+      <ul class="clean">
+        {% for s in output.what_would_change %}<li>{{ s }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="card" style="margin-top:12px;">
+      <h2 style="margin-top:0;">Decision report (traceability)</h2>
+      <div class="help">Decisions cite Evidence; Evidence cites Data Records; Data Records link to files.</div>
+
+      {% set ev_by_id = {} %}
+      {% for e in evidence %}{% set _ = ev_by_id.update({e.id: e}) %}{% endfor %}
+
+      {% for etype, info in output.evidence_by_type.items() %}
+        {% set eid = info.evidence_id %}
+        <div class="card" style="margin:10px 0 0 0;">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;">
+            <div>
+              <b>{{ etype }}</b>
+              <span class="muted">(used strength {{ info.strength }})</span>
+            </div>
+            <div class="no-print">
+              <a class="btn" href="/evidence/{{ eid }}">Evidence #{{ eid }}</a>
+            </div>
+            <div class="print-only" style="display:none;">
+              <span class="muted">Evidence #{{ eid }}</span>
+            </div>
+          </div>
+          {% set e = ev_by_id.get(eid) %}
+          {% if e %}
+            <div style="margin-top:8px;">{{ e.summary }}</div>
+          {% endif %}
+
+          <div class="muted" style="margin-top:10px;">Cited Data Records</div>
+          <ul class="clean" style="margin-top:6px;">
+            {% for c in citations %}
+              {% if c.evidence_id == eid %}
+                {% for dr in data_records %}
+                  {% if dr.id == c.data_record_id %}
+                    <li style="margin-bottom:6px;">
+                      <span class="no-print"><a href="/data/{{ dr.id }}">Data #{{ dr.id }}</a></span>
+                      <span class="print-only" style="display:none;">Data #{{ dr.id }}</span>
+                      — {{ dr.title }}
+                      <span class="muted">({{ dr.data_type }}/{{ dr.method }})</span>
+                      {% set fls = file_links_by_dr.get(dr.id, []) %}
+                      {% if fls|length %}
+                        <div class="muted" style="margin-top:4px;">Files:</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                          {% for fl in fls %}
+                            {% set f = files_by_id.get(fl.file_id) %}
+                            {% if f %}
+                              <span class="no-print"><a class="tag" href="/files/{{ f.id }}/download">{{ f.original_name }}</a></span>
+                              <span class="print-only" style="display:none;" class="tag">{{ f.original_name }}</span>
+                            {% endif %}
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    </li>
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+            {% endfor %}
+          </ul>
+        </div>
+      {% endfor %}
+
+      {% if output.evidence_by_type|length == 0 %}
+        <div class="muted" style="margin-top:8px;">No evidence in scope.</div>
+      {% endif %}
+
+    </div>
+  {% endif %}

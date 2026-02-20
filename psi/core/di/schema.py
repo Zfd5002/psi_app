@@ -27,6 +27,7 @@ class EvidenceRef:
     comparator: Optional[str] = None
     qc_status: str = "unknown"  # approved/unreviewed/rejected/quarantined/unknown
     qc_flag_raw: Optional[str] = None
+    qc_source: str = "unknown"  # measurement_qc | qc_flag_fallback | unknown
     is_primary: bool = False
     is_outlier: bool = False
     produced_at: Optional[str] = None

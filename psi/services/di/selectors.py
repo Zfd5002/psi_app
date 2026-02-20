@@ -127,6 +127,8 @@ def select_batch_measurements(
     ignored: List[IgnoredEvidence] = []
     warnings: List[Dict[str, Any]] = []
 
+    qc_source_counts_used: Dict[str, int] = {"measurement_qc": 0, "qc_flag_fallback": 0, "unknown": 0}
+
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for r in rows:
         mk_raw = r.get(name_col)
@@ -169,6 +171,12 @@ def select_batch_measurements(
                     continue
 
             qc_status = qc_map.get(mid) or _qc_status_from_flag(r.get(qc_flag_col) if qc_flag_col else None)
+            if mid in qc_map:
+                qc_source = "measurement_qc"
+            elif qc_flag_col:
+                qc_source = "qc_flag_fallback"
+            else:
+                qc_source = "unknown"
             ok, qc_reason = _accept_qc(qc_mode, qc_status, policy_qc)
             if not ok:
                 ignored.append(IgnoredEvidence(mid, drid, mk_raw, qc_reason or "qc_rejected"))
@@ -200,6 +208,7 @@ def select_batch_measurements(
                 comparator=(str(r.get(cols.get("comparator"))).strip() if cols.get("comparator") and r.get(cols.get("comparator")) is not None else None),
                 qc_status=qc_status,
                 qc_flag_raw=(str(r.get(qc_flag_col)) if qc_flag_col and r.get(qc_flag_col) is not None else None),
+                qc_source=qc_source,
                 is_primary=(bool(int(r.get(is_primary_col) or 0)) if is_primary_col else False),
                 is_outlier=(bool(int(r.get(is_outlier_col) or 0)) if is_outlier_col else False),
                 produced_at=(str(r.get(produced_col)) if produced_col and r.get(produced_col) is not None else None),
@@ -230,6 +239,7 @@ def select_batch_measurements(
         candidates.sort(key=sort_key, reverse=True)
         chosen_r, chosen_ev, _ = candidates[0]
         used_by_metric[canon] = chosen_ev
+        qc_source_counts_used[chosen_ev.qc_source] = qc_source_counts_used.get(chosen_ev.qc_source, 0) + 1
 
         for (r, ev, _) in candidates[1:]:
             ignored.append(
@@ -257,4 +267,8 @@ def select_batch_measurements(
         "ignored": ignored,
         "warnings": warnings,
         "alias_to_canonical": alias_to_canonical,
+        "selection_provenance": {
+            "qc_source_counts_used": qc_source_counts_used,
+            "tie_break": "is_primary_first_else_newest_timestamp_else_measurement_id",
+        },
     }

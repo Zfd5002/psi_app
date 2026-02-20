@@ -287,6 +287,9 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "batch_id": "INTEGER",
             "decision_key": "TEXT",
             "rules_version": "TEXT",
+            # v1.2.9b: schema discrimination for DI snapshots.
+            "engine_key": "TEXT",
+            "schema_version": "TEXT",
             "inputs_json": "TEXT",
             "outputs_json": "TEXT",
             "evidence_ids_json": "TEXT",

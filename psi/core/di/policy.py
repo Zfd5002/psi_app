@@ -13,6 +13,11 @@ def _canonical_json_bytes(obj: Any) -> bytes:
     return s.encode("utf-8")
 
 
+def canonical_policy_json(policy: Dict[str, Any]) -> str:
+    """Return the canonical JSON string used for hashing + snapshot embedding."""
+    return _canonical_json_bytes(policy).decode("utf-8")
+
+
 def policy_hash(policy: Dict[str, Any]) -> str:
     h = hashlib.sha256()
     h.update(_canonical_json_bytes(policy))
@@ -23,6 +28,8 @@ def policy_hash(policy: Dict[str, Any]) -> str:
 class LoadedPolicy:
     policy: Dict[str, Any]
     hash: str
+    canonical_json: str
+    source_name: str
 
     @property
     def name(self) -> str:
@@ -40,4 +47,4 @@ class LoadedPolicy:
 def load_policy(path: Path) -> LoadedPolicy:
     raw = json.loads(path.read_text(encoding="utf-8"))
     ph = policy_hash(raw)
-    return LoadedPolicy(policy=raw, hash=ph)
+    return LoadedPolicy(policy=raw, hash=ph, canonical_json=canonical_policy_json(raw), source_name=path.name)

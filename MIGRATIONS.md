@@ -1,3 +1,7 @@
+## 2026-02-20 — v1.2.9b
+- decision_snapshots: add nullable `engine_key`, `schema_version` (schema discrimination between DI and legacy snapshots).
+- Additive only; existing snapshots remain compatible (NULL allowed).
+
 ## v1.2.5b
 - Hotfix: fix indentation bug in export_wide QC attach block (SyntaxError return outside function).
 - Hotfix: ensure scripts/start_psi.sh is executable in overlays.

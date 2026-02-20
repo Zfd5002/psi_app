@@ -1,3 +1,11 @@
+## 2026-02-20 — v1.2.9b
+- DI snapshot contract hardening:
+  - Snapshots embed canonical policy JSON (`policy_json_canonical`) + policy_source + policy_hash for snapshot-alone reproducibility.
+  - Snapshot rows are schema-discriminated via nullable `engine_key` and `schema_version` (DI vs legacy).
+  - Snapshots record engine/selector/evaluator/schema identifiers for provenance and auditability.
+- UI: /decisions now renders both legacy rule-engine snapshots and DI snapshots safely (no schema collisions).
+- Determinism: snapshot JSON serialization remains stable; DI evidence list explicitly labeled `measurement_ids_used`.
+
 ## 2026-02-19 — v1.2.8c
 - Hotfix: smoke_test PATCH_NOTES guardrail now treats the topmost dated entry as the latest (PATCH_NOTES is newest-first).
 

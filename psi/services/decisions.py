@@ -186,26 +186,49 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
         raise KeyError("DecisionSnapshot not found")
 
     output = json.loads(snap.outputs_json)
-    evidence_ids = output.get("evidence_ids_used", [])
-    evidence = db.query(Evidence).filter(Evidence.id.in_(evidence_ids)).all() if evidence_ids else []
+    inputs = json.loads(snap.inputs_json) if snap.inputs_json else {}
 
-    citations = db.query(EvidenceCitation).filter(EvidenceCitation.evidence_id.in_(evidence_ids)).all() if evidence_ids else []
-    dr_ids = sorted({c.data_record_id for c in citations})
-    data_records = db.query(DataRecord).filter(DataRecord.id.in_(dr_ids)).all() if dr_ids else []
+    # DI snapshots share the DecisionSnapshot table but have a distinct output shape.
+    # Detect robustly to preserve backward compatibility (older DI rows may have NULL engine_key).
+    is_di = bool(
+        (getattr(snap, "engine_key", None) == "di")
+        or (str(getattr(snap, "schema_version", "") or "").startswith("di."))
+        or (isinstance(output, dict) and ("decision_state" in output) and ("gates" in output))
+        or (isinstance(inputs, dict) and (str(inputs.get("engine_key") or "").strip() == "di"))
+        or (isinstance(inputs, dict) and str(inputs.get("schema_version") or "").startswith("di."))
+    )
 
-    dr_file_links = db.query(FileLink).filter(FileLink.entity_type == "DataRecord", FileLink.entity_id.in_(dr_ids)).all() if dr_ids else []
-    file_ids = sorted({fl.file_id for fl in dr_file_links})
-    files = db.query(StoredFile).filter(StoredFile.id.in_(file_ids)).all() if file_ids else []
+    outcomes = db.query(OutcomeLabel).filter(OutcomeLabel.snapshot_id == snap.id).order_by(OutcomeLabel.created_at.asc()).all()
 
-    files_by_id = {f.id: f for f in files}
+    # Legacy rules-engine evidence tracing
+    evidence = []
+    citations = []
+    data_records = []
+    files_by_id = {}
     file_links_by_dr: dict[int, list[FileLink]] = {}
-    for fl in dr_file_links:
-        file_links_by_dr.setdefault(fl.entity_id, []).append(fl)
+
+    if not is_di:
+        evidence_ids = output.get("evidence_ids_used", []) if isinstance(output, dict) else []
+        evidence = db.query(Evidence).filter(Evidence.id.in_(evidence_ids)).all() if evidence_ids else []
+
+        citations = db.query(EvidenceCitation).filter(EvidenceCitation.evidence_id.in_(evidence_ids)).all() if evidence_ids else []
+        dr_ids = sorted({c.data_record_id for c in citations})
+        data_records = db.query(DataRecord).filter(DataRecord.id.in_(dr_ids)).all() if dr_ids else []
+
+        dr_file_links = db.query(FileLink).filter(FileLink.entity_type == "DataRecord", FileLink.entity_id.in_(dr_ids)).all() if dr_ids else []
+        file_ids = sorted({fl.file_id for fl in dr_file_links})
+        files = db.query(StoredFile).filter(StoredFile.id.in_(file_ids)).all() if file_ids else []
+
+        files_by_id = {f.id: f for f in files}
+        for fl in dr_file_links:
+            file_links_by_dr.setdefault(fl.entity_id, []).append(fl)
 
     return {
         "snap": snap,
         "outcomes": outcomes,
         "output": output,
+        "inputs": inputs,
+        "is_di": is_di,
         "evidence": evidence,
         "citations": citations,
         "data_records": data_records,

@@ -21,6 +21,14 @@ def _stable_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
+# v1.2.9b: DI snapshot contract identifiers (stable, explicit, portable)
+ENGINE_KEY = "di"
+ENGINE_ID = "di.engine.v0_1"
+SNAPSHOT_SCHEMA_VERSION = "di.snapshot.v0_1"
+SELECTOR_VERSION = "di.selector.v0_1"
+EVALUATOR_VERSION = "di.template.advance_to_in_vivo.v0_1"
+
+
 def _parse_asof_to_utc_naive(as_of_ts: Optional[str]) -> Optional[_dt.datetime]:
     if not as_of_ts:
         return None
@@ -85,6 +93,7 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
     used_by_metric = sel["used_by_metric"]
     ignored = sel["ignored"]
     warnings = sel["warnings"]
+    selection_provenance = sel.get("selection_provenance") or {}
 
     templ = eval_advance_to_in_vivo(
         used_by_metric=used_by_metric,
@@ -106,7 +115,18 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
 
     out = {
         "decision_state": decision_state,
-        "policy": {"name": pol.name, "version": pol.version, "hash": pol.hash},
+        "policy": {
+            "name": pol.name,
+            "version": pol.version,
+            "hash": pol.hash,
+            "source": pol.source_name,
+        },
+        "engine": {
+            "engine_id": ENGINE_ID,
+            "schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "selector_version": SELECTOR_VERSION,
+            "evaluator_version": EVALUATOR_VERSION,
+        },
         "provenance": {
             "as_of_ts": di_input.as_of_ts,
             "qc_mode": di_input.qc_mode,
@@ -115,6 +135,7 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
                 "outliers": "not_dropped_in_v0_1",
                 "primary": "is_primary_first_else_newest_timestamp",
             },
+            "selection_provenance": selection_provenance,
             "inputs_fingerprint": {
                 "decision_key": di_input.decision_key,
                 "scope_type": di_input.scope_type,
@@ -130,6 +151,8 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
         "gates": [g.__dict__ for g in templ["gates"]],
         "blockers": templ["blockers"],
         "risk_flags": templ["risk_flags"],
+        # v1.2.9b: clarify evidence_ids_json semantics for DI (measurement ids).
+        "measurement_ids_used": sorted([ev.measurement_id for ev in used_by_metric.values()]),
     }
 
     rules_version = f"{pol.name}:{pol.version}:{pol.hash[:12]}"
@@ -141,6 +164,15 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
             "as_of_ts": di_input.as_of_ts,
             "qc_mode": di_input.qc_mode,
             "context": di_input.context or {},
+            "engine_key": ENGINE_KEY,
+            "engine_id": ENGINE_ID,
+            "schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "selector_version": SELECTOR_VERSION,
+            "evaluator_version": EVALUATOR_VERSION,
+            "policy_hash": pol.hash,
+            "policy_source": pol.source_name,
+            "policy_json_canonical": pol.canonical_json,
+            # Non-authoritative, machine-local metadata (kept for debugging only).
             "policy_path": str(policy_path),
         }
     )
@@ -153,6 +185,8 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
         batch_id=int(di_input.scope_id),
         decision_key=di_input.decision_key,
         rules_version=rules_version,
+        engine_key=ENGINE_KEY,
+        schema_version=SNAPSHOT_SCHEMA_VERSION,
         inputs_json=inputs_json,
         outputs_json=outputs_json,
         evidence_ids_json=evidence_ids_json,
