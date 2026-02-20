@@ -71,7 +71,7 @@ else
   fi
 fi
 
-ZIP="$HOME/Downloads/psi_repo_update_${VERSION}_code_only.zip"
+ZIP="$HOME/Downloads/psi_repo_${VERSION}_code_only.zip"
 
 echo "📦 Building PSI code-only ZIP"
 echo "Repo: $REPO_ROOT"

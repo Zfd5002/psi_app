@@ -9,6 +9,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from psi.core.measurement_registry import MeasurementDef, ordered_defs, resolve_def, conversion_to_canonical
+from psi.core.export_profiles import get_profile, list_profiles
+from psi.core.measurement_schema import measurement_all_cols, measurement_cols
 from psi.core.models import Batch, DataRecord, Molecule
 
 
@@ -16,7 +18,10 @@ from psi.core.models import Batch, DataRecord, Molecule
 class ExportWideOptions:
     include_extras: bool = False
     as_of_ts: Optional[datetime.datetime] = None
-    qc_mode: str = "none"  # none|model_safe|strict
+    # If None, treated as "not specified" and may be filled by an export profile.
+    qc_mode: Optional[str] = None  # none|model_safe|strict
+    # Named export profile (optional). When set, controls column inclusion and QC defaults.
+    profile: Optional[str] = None
 
 
 def _iso(x: Any) -> str:
@@ -64,41 +69,20 @@ def _parse_dt(x: Any) -> Optional[datetime.datetime]:
     return dt
 
 
-def _measurement_cols(db: Session) -> Tuple[Dict[str, Optional[str]], set[str]]:
-    """Local reflection helper (mirrors psi.services.measurements but scoped to exporter)."""
-    rows = db.execute(text("PRAGMA table_info(data_measurements)")).mappings().all()
-    cols = {str(r["name"]) for r in rows}
+def _effective_qc_mode(options: ExportWideOptions, *, profile_name: Optional[str]) -> str:
+    """Resolve the QC mode to use.
 
-    def pick(*names: str) -> Optional[str]:
-        for n in names:
-            if n in cols:
-                return n
-        return None
-
-    mapping = {
-        "id": pick("id"),
-        "record_fk": pick("data_record_id", "record_id"),
-        "name": pick("metric_key", "name", "key"),
-        "value_num": pick("value_num", "numeric_value", "value"),
-        "value_text": pick("value_text", "text_value", "raw_value"),
-        "unit": pick("unit"),
-        "comparator": pick("comparator", "op"),
-        "is_primary": pick("is_primary", "primary", "is_headline"),
-        "created_at": pick("created_at"),
-        "updated_at": pick("updated_at"),
-        "producer": pick("producer", "tool_name", "producer_name"),
-        "producer_version": pick("producer_version", "tool_version"),
-        "source_path": pick("source_path", "source_id", "extraction_path"),
-        "run_id": pick("run_id"),
-        "produced_at": pick("produced_at"),
-        "notes": pick("notes"),
-        "ignore_for_model": pick("ignore_for_model"),
-    }
-
-    if not mapping["record_fk"] or not mapping["name"]:
-        raise RuntimeError(f"data_measurements schema missing expected columns. Found: {sorted(cols)}")
-
-    return mapping, cols
+    Rules:
+      - If caller explicitly set qc_mode, it wins.
+      - Else if a profile is selected and provides a default qc_mode, use it.
+      - Else default to "none" (backward-compatible).
+    """
+    if options.qc_mode is not None and str(options.qc_mode).strip() != "":
+        return str(options.qc_mode).strip()
+    prof = get_profile(profile_name)
+    if prof and prof.defaults.qc_mode:
+        return prof.defaults.qc_mode
+    return "none"
 
 
 def _best_measurement_row(
@@ -245,8 +229,20 @@ def export_wide_to_csv(
     mol_by_id: Dict[int, Molecule] = {m.id: m for m in db.query(Molecule).all()}
     batch_by_id: Dict[int, Batch] = {b.id: b for b in db.query(Batch).all()}
 
-    # Reflect measurement table.
-    mcols, all_cols = _measurement_cols(db)
+    # Resolve profile (if any).
+    profile = None
+    if options.profile:
+        profile = get_profile(options.profile)
+        if not profile:
+            raise ValueError(
+                f"Unknown export profile '{options.profile}'. Available: {', '.join(list_profiles())}"
+            )
+
+    qc_mode = _effective_qc_mode(options, profile_name=profile.name if profile else None)
+
+    # Reflect measurement table (canonicalized across PSI versions).
+    mcols = measurement_cols(db)
+    all_cols = measurement_all_cols(db)
 
     # Fetch all measurement rows for these records in one go.
     rids = [r.id for r in records]
@@ -263,8 +259,13 @@ def export_wide_to_csv(
             )
             mrows.extend(db.execute(q, params).mappings().all())
 
+    # SQLAlchemy returns RowMapping objects from .mappings(); they are immutable.
+    # Convert to plain dicts so we can safely enrich rows (qc_status, etc.).
+    if mrows:
+        mrows = [dict(r) for r in mrows]
+
     # Attach QC latest-state (optional; only when explicitly requested).
-    if (options.qc_mode or "none") != "none" and mrows:
+    if qc_mode != "none" and mrows:
         # Guard: tables may not exist on older DBs
         has_qc = db.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='measurement_qc'")).scalar()
         if has_qc:
@@ -295,39 +296,39 @@ def export_wide_to_csv(
                     r["qc_status"] = "unreviewed"
                     r["qc_ignore_policy"] = "include"
 
-        # Group measurement rows by record_id and normalized key.
-        by_record: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
-        name_col = mcols["name"]
-        rec_col = mcols["record_fk"]
-        assert name_col and rec_col
+    # Group measurement rows by record_id and normalized key.
+    by_record: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
+    name_col = mcols["name"]
+    rec_col = mcols["record_fk"]
+    assert name_col and rec_col
 
-        extras_seen: set[str] = set()
+    extras_seen: set[str] = set()
 
-        for r in mrows:
-            rid = r.get(rec_col)
-            try:
-                rid_int = int(rid)
-            except Exception:
-                continue
+    for r in mrows:
+        rid = r.get(rec_col)
+        try:
+            rid_int = int(rid)
+        except Exception:
+            continue
 
-            raw_name = str(r.get(name_col) or "").strip()
-            if not raw_name:
-                continue
+        raw_name = str(r.get(name_col) or "").strip()
+        if not raw_name:
+            continue
 
-            defn = resolve_def(raw_name)
-            if defn:
-                key = defn.canonical_key
+        defn = resolve_def(raw_name)
+        if defn:
+            key = defn.canonical_key
+        else:
+            key = raw_name
+            if options.include_extras:
+                extras_seen.add(key)
             else:
-                key = raw_name
-                if options.include_extras:
-                    extras_seen.add(key)
-                else:
-                    continue
+                continue
 
-            by_record.setdefault(rid_int, {}).setdefault(key, []).append(dict(r))
+        by_record.setdefault(rid_int, {}).setdefault(key, []).append(dict(r))
 
     # Build header (deterministic)
-    core_cols = [
+    default_core_cols = [
         "molecule_id",
         "molecule_primary_id",
         "molecule_title",
@@ -342,7 +343,17 @@ def export_wide_to_csv(
         "primary_result_text",
     ]
 
-    defs = list(ordered_defs())
+    core_cols = list(profile.core_columns) if (profile and profile.core_columns) else list(default_core_cols)
+
+    if profile:
+        defs: List[MeasurementDef] = []
+        for k in profile.measurement_keys:
+            d = resolve_def(k)
+            if not d:
+                raise RuntimeError(f"Profile '{profile.name}' references unknown measurement key '{k}'")
+            defs.append(d)
+    else:
+        defs = list(ordered_defs())
 
     meas_cols: List[str] = []
     for d in defs:
@@ -413,7 +424,7 @@ def export_wide_to_csv(
                     id_col=mcols.get("id"),
                     ignore_col=mcols.get("ignore_for_model"),
                     as_of_ts=options.as_of_ts,
-                    qc_mode=(options.qc_mode or "none"),
+                    qc_mode=qc_mode,
                 )
                 if not best:
                     continue
@@ -479,7 +490,7 @@ def export_wide_to_csv(
                         id_col=mcols.get("id"),
                         ignore_col=mcols.get("ignore_for_model"),
                         as_of_ts=options.as_of_ts,
-                    qc_mode=(options.qc_mode or "none"),
+                        qc_mode=qc_mode,
                     )
                     if not best:
                         out[col] = ""

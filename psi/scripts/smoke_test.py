@@ -50,6 +50,8 @@ def main() -> None:
     from psi.services.molecules import DuplicateMoleculeError, create_molecule
     from psi.services.programs import create_program
     from psi.tools.export_measurements import export_csv
+    from psi.services.export_wide import ExportWideOptions, export_wide_to_csv
+    from psi.core.export_profiles import validate_profiles
 
     # --- Release guardrail ---
     from psi.web.app import create_app
@@ -67,7 +69,8 @@ def main() -> None:
     # Expected header format: "## YYYY-MM-DD — vX.Y.Z..."
     headers = re.findall(r"^##\s+\d{4}-\d{2}-\d{2}\s+—\s+(v[^\s]+)\s*$", pn_text, flags=re.M)
     assert headers, "PATCH_NOTES has no version headers"
-    latest = headers[-1]
+    # PATCH_NOTES is maintained newest-first (top of file). The first matching header is the latest.
+    latest = headers[0]
     assert (
         latest == psi_version
     ), f"PATCH_NOTES latest entry is {latest} but PSI_VERSION is {psi_version}"
@@ -79,6 +82,9 @@ def main() -> None:
     assert isinstance(REGISTRY, dict), "REGISTRY is not a dict"
     assert "domains_ordered" in REGISTRY, "REGISTRY missing domains_ordered"
     assert isinstance(DATA_SCHEMAS, dict) and DATA_SCHEMAS, "DATA_SCHEMAS empty"
+
+    # --- Export profiles registry sanity ---
+    validate_profiles()
 
     db: Session = SessionLocal()
 
@@ -222,6 +228,24 @@ def main() -> None:
         reader = csv.reader(f)
         header = next(reader)
         assert any(str(c).startswith("primary_") for c in header), "Export missing primary_* columns"
+
+    # --- Deterministic wide exporter sanity (default + profile) ---
+    out_wide = Path(tempfile.gettempdir()) / "psi_smoke" / "export_wide_smoke.csv"
+    export_wide_to_csv(db, out_path=str(out_wide), options=ExportWideOptions())
+    with out_wide.open("r", newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        assert "record_id" in header, "Wide export missing core column record_id"
+        assert any(str(c).startswith("sec__monomer_pct") for c in header), "Wide export missing expected SEC column"
+
+    out_wide_prof = Path(tempfile.gettempdir()) / "psi_smoke" / "export_wide_profile_smoke.csv"
+    export_wide_to_csv(db, out_path=str(out_wide_prof), options=ExportWideOptions(profile="ML_core"))
+    with out_wide_prof.open("r", newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        # Profile should be a subset (still includes core)
+        assert "record_id" in header, "Profile wide export missing core column record_id"
+        assert "binding__kd_nM" in header or any("binding__kd_nM" == str(c) for c in header), "Profile wide export missing KD column"
 
     print("OK: smoke tests passed")
 

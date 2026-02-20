@@ -8,6 +8,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from psi.core.measurement_schema import (
+    ensure_data_measurements_table as _core_ensure_data_measurements_table,
+    measurement_all_cols as _core_measurement_all_cols,
+    measurement_cols as _core_measurement_cols,
+    measurement_schema as _core_measurement_schema,
+)
+
 
 _NUM_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
@@ -132,108 +139,23 @@ def _db_cache_key(db: Session) -> str:
 
 
 def _ensure_data_measurements_table(db: Session) -> None:
-    """Create a minimal data_measurements table if missing.
-
-    Fresh PSI DBs may not include this table in ORM metadata. We create a compatible
-    baseline schema so measurement services and smoke tests work.
-    """
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS data_measurements (
-                id INTEGER PRIMARY KEY,
-                data_record_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                value_num REAL,
-                value_text TEXT,
-                unit TEXT,
-                comparator TEXT,
-                is_primary INTEGER,
-                is_outlier INTEGER,
-                created_at TEXT,
-                updated_at TEXT,
-                qc_flag TEXT,
-                qc_note TEXT,
-                data_type TEXT,
-                method TEXT,
-                producer TEXT,
-                producer_version TEXT,
-                source_path TEXT,
-                run_id TEXT,
-                produced_at TEXT,
-                notes TEXT
-            );
-            """
-        )
-    )
-    db.commit()
+    """Back-compat wrapper; source of truth is psi.core.measurement_schema."""
+    _core_ensure_data_measurements_table(db)
 
 
 def _measurement_schema(db: Session) -> Dict[str, Dict[str, Any]]:
-    """Return PRAGMA table_info rows keyed by column name."""
-    key = _db_cache_key(db)
-    if key in _COL_INFO_CACHE_BY_DB:
-        return _COL_INFO_CACHE_BY_DB[key]
-
-    rows = db.execute(text("PRAGMA table_info(data_measurements)")).mappings().all()
-    if not rows:
-        _ensure_data_measurements_table(db)
-        rows = db.execute(text("PRAGMA table_info(data_measurements)")).mappings().all()
-    info: Dict[str, Dict[str, Any]] = {}
-    for r in rows:
-        info[str(r["name"]) ] = dict(r)
-    _COL_INFO_CACHE_BY_DB[key] = info
-    return info
+    """Back-compat wrapper; source of truth is psi.core.measurement_schema."""
+    return _core_measurement_schema(db)
 
 
 def _measurement_cols(db: Session) -> Dict[str, Optional[str]]:
-    """Detect column names in data_measurements so this code works across PSI versions."""
+    """Back-compat wrapper; source of truth is psi.core.measurement_schema."""
+    out = _core_measurement_cols(db)
+    # Maintain module-local caches for older call sites that rely on them.
+    # (Core caches are keyed by DB URL, so this remains safe.)
     key = _db_cache_key(db)
-    if key in _COL_CACHE_BY_DB:
-        return _COL_CACHE_BY_DB[key]
-
-    info = _measurement_schema(db)
-    cols = set(info.keys())
-    _ALL_COLS_CACHE_BY_DB[key] = set(cols)
-
-    def pick(*names: str) -> Optional[str]:
-        for n in names:
-            if n in cols:
-                return n
-        return None
-
-    out = {
-        "id": pick("id"),
-        "record_fk": pick("data_record_id", "record_id"),
-        "name": pick("metric_key", "name", "key"),
-        "value_num": pick("value_num", "numeric_value", "value"),
-        "value_text": pick("value_text", "text_value", "raw_value"),
-        "unit": pick("unit"),
-        "comparator": pick("comparator", "op"),
-        "is_primary": pick("is_primary", "primary", "is_headline"),
-        "is_outlier": pick("is_outlier"),
-        "created_at": pick("created_at"),
-        "updated_at": pick("updated_at"),
-        "qc_flag": pick("qc_flag", "qc_status"),
-        "qc_note": pick("qc_note", "qc_reason", "qc_message"),
-        "data_type": pick("data_type"),
-        "method": pick("method"),
-
-        # v1.2.3g: optional provenance columns (additive; may not exist in older DBs)
-        "producer": pick("producer", "tool_name", "producer_name"),
-        "producer_version": pick("producer_version", "tool_version"),
-        "source_path": pick("source_path", "source_id", "extraction_path"),
-        "run_id": pick("run_id"),
-        "produced_at": pick("produced_at"),
-        "notes": pick("notes"),
-    }
-
-    if not out["record_fk"] or not out["name"]:
-        raise RuntimeError(
-            f"data_measurements schema missing expected columns. Found: {sorted(cols)}"
-        )
-
     _COL_CACHE_BY_DB[key] = out
+    _ALL_COLS_CACHE_BY_DB[key] = set(_core_measurement_all_cols(db))
     return out
 
 
@@ -241,7 +163,7 @@ def _all_measurement_cols(db: Session) -> set[str]:
     """Return the full set of column names for data_measurements."""
     key = _db_cache_key(db)
     if key not in _ALL_COLS_CACHE_BY_DB:
-        _measurement_cols(db)
+        _ALL_COLS_CACHE_BY_DB[key] = set(_core_measurement_all_cols(db))
     return _ALL_COLS_CACHE_BY_DB.get(key, set())
 
 
@@ -335,7 +257,7 @@ def list_measurements_for_record(db: Session, *, record_id: int) -> List[Dict[st
     """
     _ensure_data_measurements_table(db)
 
-    mcols, _all = _measurement_cols(db)
+    mcols = _measurement_cols(db)
     record_fk = mcols.get("record_fk") or "data_record_id"
     name_col = mcols.get("name") or "name"
     id_col = mcols.get("id") or "id"

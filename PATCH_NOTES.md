@@ -1,3 +1,9 @@
+## 2026-02-19 — v1.2.8c
+- Hotfix: smoke_test PATCH_NOTES guardrail now treats the topmost dated entry as the latest (PATCH_NOTES is newest-first).
+
+## 2026-02-19 — v1.2.8a
+- Hotfix: wide exporter no longer crashes when enriching measurement rows (convert SQLAlchemy RowMapping to dict before attaching QC fields).
+
 ## v1.2.5b
 - Hotfix: fix indentation bug in export_wide QC attach block (SyntaxError return outside function).
 - Hotfix: ensure scripts/start_psi.sh is executable in overlays.
@@ -81,3 +87,10 @@
 - Molecule detail (batch-first): add QC selection mode toggle (All / Model-safe / Approved-only) that affects batch headline metric selection.
 - Molecule detail: show minimal per-run QC badges in batch tables when runs contain pending/rejected/quarantined measurements.
 - Performance: avoid per-batch measurement count queries by computing counts in a single grouped query.
+
+## 2026-02-19 — v1.2.8
+- Export (wide): add named, deterministic export profiles (`--profile ML_core|CMC_only|Binding_only`) with profile-specific default QC modes.
+  - Defaults apply only when a profile is selected; explicit `--qc-mode` always wins.
+- Export (wide): fix default `qc_mode=none` runtime bug and centralize measurement table reflection/ensure logic to reduce drift.
+- Core: introduce `psi/core/measurement_schema.py` as canonical data_measurements schema/reflection helper.
+- Smoke test: now exercises the registry-driven wide exporter (default + profile) to prevent regressions.
