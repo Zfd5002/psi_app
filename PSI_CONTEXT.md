@@ -58,8 +58,9 @@ This is **intentional** and fundamental to PSI’s design.
 
 ### Release checklist (REQUIRED for every overlay ZIP)
 
-1) **Version bump**: update `psi/web/app.py`:
-   - `templates.env.globals["PSI_VERSION"] = "vX.Y.Z..."`
+1) **Version bump**: update the canonical version constant in `psi/version.py`:
+   - `PSI_VERSION = "vX.Y.Z..."`
+   - Verify with: `python -m psi.tools.print_version`
 2) **Patch notes append-only**: add a new entry to `PATCH_NOTES.md` (never edit older entries).
 3) Run:
    - `python -m psi.scripts.smoke_test`
@@ -162,8 +163,19 @@ Examples:
 - v1.1.4 → Viewer + annotation wiring fixes
 - v1.1.5 → Batch-first experimental data foundation
 
-Version string lives in:
-- `psi/web/app.py` as `PSI_VERSION`
+### Version invariants (CANONICAL)
+
+The PSI version constant is defined **only** in:
+- `psi/version.py` as `PSI_VERSION`
+
+Any documentation or instructions that reference bumping the version anywhere else
+(including `psi/web/app.py`) are **incorrect**.
+
+Verification:
+- `python -m psi.tools.print_version`
+
+Code rule:
+- All tools, UI footers, smoke tests, and scripts must import `PSI_VERSION` from `psi.version`.
 
 ---
 
@@ -199,8 +211,8 @@ From the repo root:
 
 - `./compress.sh`
 
-This auto-detects the current PSI version from `psi/web/app.py` (`PSI_VERSION`) and writes a ZIP to `~/Downloads/` named:
-- `psi_repo_update_<PSI_VERSION>_code_only.zip`
+This auto-detects the current PSI version from `psi/version.py` (`PSI_VERSION`) and writes a ZIP to `~/Downloads/` named:
+- `psi_repo_<PSI_VERSION>_code_only.zip`
 
 ### Install a desktop shortcut (Ubuntu/Linux)
 From the repo root:
@@ -215,3 +227,32 @@ If your desktop environment blocks launching, right-click the icon and choose **
 ## Release helper
 - To bump the UI footer version and append PATCH_NOTES stub:
   python -m psi.scripts.bump_version v1.2.4a
+
+---
+
+## Version governance (permanent rule)
+
+- `psi/version.py` is the **only allowed location** where the PSI version string is defined.
+- No other file may hardcode a PSI version literal.
+- All tools, UI footers, smoke tests, and scripts must import `PSI_VERSION` from `psi.version`.
+- Version changes must modify **only** `psi/version.py` (docs like PATCH_NOTES remain append-only).
+
+---
+
+## 10. DI Mission & Roadmap (Authoritative)
+
+The authoritative PSI Decision Intelligence (DI) Mission & Roadmap is stored in-repo at:
+
+- `docs/DI_MISSION_AND_ROADMAP.docx`
+
+Future DI work must treat that document as the source of truth for:
+- DI mission statement
+- roadmap phases / version intent
+- scope creep boundaries
+
+This file is intentionally included in code-only overlay ZIPs.
+
+### DI snapshot integrity invariant (governance)
+
+- Snapshot integrity hashes are computed over **portable** payloads only.
+- Machine-local debug metadata (e.g. `inputs_json.policy_path`) MUST NOT contribute to integrity hashing.

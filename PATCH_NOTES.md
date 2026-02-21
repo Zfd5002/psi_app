@@ -1,3 +1,92 @@
+## 2026-02-20 — v1.2.9k
+- Snapshot Integrity (additive): embed deterministic `provenance.integrity` with `snapshot_content_hash` + `evidence_fingerprint`.
+- Snapshot Content Hash: sha256 over stable JSON of {inputs minus machine-local debug fields (e.g. policy_path), outputs with provenance.integrity removed, evidence_ids}.
+- Evidence Fingerprint: sha256 over stable JSON of sorted selected-evidence tuples (metric_key, measurement_id, qc_status, unit, comparator).
+- Verification CLI: add `python -m psi.tools.verify_snapshot --snapshot-id <id>` (read-only) to recompute integrity fields and classify drift deterministically.
+- Drift Classification: emits one of {VERIFIED, POLICY_DRIFT, DATA_DRIFT, QC_DRIFT, STRUCTURAL_DRIFT} with explainable booleans.
+- DI runner refactor (governance-only): split into pure `compute_di_output(...)` + persistence wrapper `run_di(...)` to support read-only verification.
+- Docs: update `docs/DI_SNAPSHOT_CONTRACT.md` to define integrity fields and hashing rules.
+- No DB changes. No migrations. No selector/gate/policy behavior changes.
+
+## 2026-02-20 — v1.2.9j
+- DI Governance Diagnostics: add deterministic evidence comparability + QC coherence reporting (no scoring; no gate behavior changes).
+- DI Outputs (additive): new top-level `comparability` object with `metric_level[]`, `qc_coherence[]`, and summary counts (always emitted; deterministic ordering).
+- DI Outputs (additive): new `confidence_degradation` object triggered only by high-severity comparability flags (structured reasons; no ranking).
+- Readiness integration (additive): comparability may append to `readiness.assumptions`; policy may optionally treat certain high-severity comparability issues as `blocking_reasons` via `comparability_rules` (warn|block). Gates remain unchanged.
+- Guardrails: extend `python -m psi.tools.di_contract_smoke` to assert comparability + confidence degradation presence and deterministic ordering.
+- Docs: update `docs/DI_SNAPSHOT_CONTRACT.md` to define comparability + confidence degradation schema and determinism requirements.
+- No DB changes. No migrations. Local-first. Overlay-safe.
+
+## 2026-02-20 — v1.2.9i
+- Maintenance + Formalization: resolve documentation drift (PSI_CONTEXT version invariants; DI snapshot contract aligned to current outputs).
+- DI runner structure: soft-refactor internal module split under `psi/services/di/` (selection/eval/enrich) with orchestrator-only `runner.py` (no selection/gate evaluation behavior changes).
+- Determinism guardrails: extend existing `python -m psi.tools.di_contract_smoke` to assert SoE v0.3 presence + readiness shape normalization + stable ordering.
+- DI Outputs (additive): add `state_of_evidence.soe_v0_3` (schema_version="0.3") with deterministic `evidence_summary` by metric_key.
+- DI Outputs (additive): readiness now includes normalized fields (`decision_context`, `readiness_level`, `blocking_gates`, `blocking_reasons`, `assumptions`, `required_next_steps`) while preserving existing readiness keys.
+- DI Outputs (additive): add policy-derived `suggestions` list (non-ranked; deterministic) derived only from missing evidence / method/unit incompatibilities.
+- Snapshot metadata (additive): outputs now include `engine.code_version` (from `psi/version.py`) and `engine.evaluation_version` alias for back-compat.
+- Policy governance: enforce allowed policy package schema versions; unknown schema emits deterministic NOT_READY snapshot with clear error (instead of raising).
+- No destructive DB changes. Local-first. Overlay-safe.
+
+## 2026-02-20 — v1.2.9h1
+- Release: permanent canonical version source at `psi/version.py`.
+- App: UI footer + smoke tests now import `PSI_VERSION` from `psi.version` (no scattered literals).
+- Tools: add `python -m psi.tools.print_version` as the stable verification entrypoint.
+- Packaging: `compress.sh` now auto-detects version from `psi/version.py`.
+- No DB changes. No migrations changes. No DI/selector/gate/policy behavior changes.
+
+## 2026-02-20 — v1.2.9h
+- DI Snapshot Diff (Roadmap v0.2): add `python -m psi.tools.di_snapshot_diff --id1 <id> --id2 <id>` to compute a deterministic, explainable diff between two DI DecisionSnapshots (read-only; no DB mutation).
+- Drift diagnostics: tool emits a derived-only drift label in {no_change,data_drift,qc_drift,policy_drift,structural_drift} based only on embedded snapshot signals (hashes, identifiers, readiness/gates/QC fields).
+- Guardrails: extend `python -m psi.tools.di_contract_smoke` to assert that diffing two deterministic reruns yields `no_change` and an empty change set.
+- Docs: embed DI Mission & Roadmap at `docs/DI_MISSION_AND_ROADMAP.docx` and reference it from `PSI_CONTEXT.md` so future code-only ZIPs include it automatically.
+- No DB changes. No migrations changes. No selector/gate/policy behavior changes.
+
+## 2026-02-20 — v1.2.9g
+- DI Readiness Formalization (Roadmap v0.2): add first-class `readiness` object to DI output (derived-only; no selector/gate/policy behavior changes).
+- Gate Outcome Normalization (reporting-only): add `gate_outcomes` map with per-gate status + required/present/missing metric lists (sorted deterministically).
+- Risk Flags (additive): add `risk_flags_enriched` with conservative category/severity/related_metrics fields (legacy `risk_flags` unchanged).
+- Coverage fingerprinting: add `coverage_fingerprint` (sha256 over stable JSON of blockers + coverage counts/ratio + gate_outcomes + comparability; excludes runtime-only values).
+- Guardrails: extend `python -m psi.tools.di_contract_smoke` to assert readiness presence, deterministic ordering, and stable coverage_fingerprint.
+- No DB changes. No migrations changes.
+
+## 2026-02-20 — v1.2.9f1
+- Hotfix: repair `psi/tools/di_contract_smoke.py` (IndentationError) and restore contract smoke execution.
+- Determinism harness: assert determinism over the DI output payload (excluding DB-assigned `snapshot_id`, which must vary per run because a new DecisionSnapshot row is inserted).
+- No DI behavior changes, no selector/gate changes, and no DB changes.
+
+## 2026-02-20 — v1.2.9f
+- DI State of Evidence: add additive `state_of_evidence.soe_v0_2` (descriptive only; no behavior change).
+- SoE v0.2 includes: requirements derived from policy gates, per-metric status (including "present via alias" explanation), per-gate coverage checklist, deterministic summary counts, QC summary (reuse existing QC semantics), and recency reporting (produced_at fallback to created_at; no thresholds).
+- Alias semantics: unchanged; existing policy `metric_alias_map` behavior is preserved and now explicitly explained in SoE output.
+- Guardrails: extend `python -m psi.tools.di_contract_smoke` to validate SoE v0.2 presence, key ordering determinism, allowed status enums, and snapshot determinism.
+- No DB changes.
+
+## 2026-02-20 — v1.2.9e
+- DI Constitution: add `docs/DI_CONSTITUTION.md` (v0.1 lock-in) documenting determinism, policy packaging, template ontology, selection semantics versioning, ignore taxonomy, and drift guards.
+- DI Policy Package: `advance_to_in_vivo_v0_1.json` now declares `template_structure` (ontology declaration) without changing evaluation semantics.
+- DI Selection Semantics: snapshots now emit `selection_semantics_version = di.selection.v0_1` in provenance + inputs.
+- Guardrails: harden `python -m psi.tools.di_contract_smoke` to validate ontology presence, selection semantics version, blocker taxonomy membership, and experiment suggestion integrity (sorted/deduped; keys exist in catalog).
+- No DB changes.
+
+## 2026-02-20 — v1.2.9d
+- DI Policy Packaging (dual-hash): policies are structured packages with both a semantics hash (policy_body) and an integrity hash (full package).
+- DI Snapshots: inputs_json includes policy_id/version/name/schema_version + policy_semantics_hash + policy_package_hash (additive only; policy_json_canonical retained).
+- DI UI: snapshot viewer shows policy_id/version + semantics hash + collapsible package hash + collapsible changelog.
+- DI Compare: distinguishes semantic policy changes vs metadata-only changes.
+- DI Experiment Catalog v0: add referenced experiment catalog (catalog_id/version/hash; catalog JSON not embedded in snapshots).
+- DI Outputs: add neutral blocker → experiment mapping (`experiment_suggestions`) with UI label "Experiments that address this blocker".
+- DI Ignored Evidence Taxonomy: selectors emit stable reason_key values with deterministic ordering; UI groups ignored evidence by reason_key.
+- Docs: update DI snapshot contract for policy packaging, catalog refs, and ignore taxonomy.
+- Guardrails: extend di_contract_smoke to validate dual-hash stability, catalog hash, and ignore reason key set.
+
+## 2026-02-20 — v1.2.9c
+- DI UI: dedicated DI snapshot viewer with gates/blockers/risk flags/provenance panels and an evidence table (read-only, snapshot-driven).
+- Decisions: add snapshot JSON export endpoint and UI button (local-first audit artifact).
+- Decisions: add DI snapshot compare page (DI-only) highlighting changes in policy hash, evidence set, gates, blockers, risk flags, and provenance.
+- Docs: add DI snapshot contract specification (docs/DI_SNAPSHOT_CONTRACT.md).
+- Guardrails: add lightweight DI contract smoke tool (python -m psi.tools.di_contract_smoke).
+
 ## 2026-02-20 — v1.2.9b
 - DI snapshot contract hardening:
   - Snapshots embed canonical policy JSON (`policy_json_canonical`) + policy_source + policy_hash for snapshot-alone reproducibility.

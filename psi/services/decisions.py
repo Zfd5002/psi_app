@@ -2,14 +2,30 @@ from __future__ import annotations
 
 import json
 import datetime
-from typing import Optional
+from typing import Optional, Any
 
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
 from psi.core.decision_engine import load_rules, run_decision
-from psi.core.models import Batch, DataRecord, DecisionSnapshot, Evidence, EvidenceCitation, File as StoredFile, FileLink, Molecule, Program, OutcomeLabel
+from psi.core.models import (
+    Batch,
+    DataRecord,
+    DecisionSnapshot,
+    Evidence,
+    EvidenceCitation,
+    File as StoredFile,
+    FileLink,
+    Molecule,
+    Program,
+    OutcomeLabel,
+)
 from psi.core.utils import json_dumps_compact, model_to_dict, now_utc
+
+
+def stable_json_dumps(obj: Any) -> str:
+    """Stable JSON serialization for exports/diffs (deterministic ordering, no whitespace drift)."""
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 def list_decision_snapshots(db: Session) -> list[DecisionSnapshot]:
@@ -73,12 +89,14 @@ def run_and_snapshot(
         batch_id=batch_id,
         decision_key=decision_key,
         rules_version=str(rules.get("version")),
-        inputs_json=json_dumps_compact({
-            "program_id": program_id,
-            "molecule_id": molecule_id,
-            "batch_id": batch_id,
-            "decision_key": decision_key,
-        }),
+        inputs_json=json_dumps_compact(
+            {
+                "program_id": program_id,
+                "molecule_id": molecule_id,
+                "batch_id": batch_id,
+                "decision_key": decision_key,
+            }
+        ),
         outputs_json=json_dumps_compact(result),
         evidence_ids_json=json_dumps_compact(result.get("evidence_ids_used", [])),
         created_at=now_utc(),
@@ -129,13 +147,15 @@ def create_snapshot_freeze(
         batch_id=batch_id,
         decision_key=decision_key,
         rules_version=rules_version,
-        inputs_json=json_dumps_compact({
-            "program_id": program_id,
-            "molecule_id": molecule_id,
-            "batch_id": batch_id,
-            "decision_key": decision_key,
-            "as_of_ts": as_of_ts,
-        }),
+        inputs_json=json_dumps_compact(
+            {
+                "program_id": program_id,
+                "molecule_id": molecule_id,
+                "batch_id": batch_id,
+                "decision_key": decision_key,
+                "as_of_ts": as_of_ts,
+            }
+        ),
         outputs_json=json_dumps_compact(outputs),
         evidence_ids_json=json_dumps_compact([]),
         created_at=now_utc(),
@@ -180,6 +200,18 @@ def add_outcome_label(
     return lab
 
 
+def _detect_is_di(snap: DecisionSnapshot, inputs: dict, output: dict) -> bool:
+    # DI snapshots share the DecisionSnapshot table but have a distinct output shape.
+    # Detect robustly to preserve backward compatibility (older DI rows may have NULL engine_key).
+    return bool(
+        (getattr(snap, "engine_key", None) == "di")
+        or (str(getattr(snap, "schema_version", "") or "").startswith("di."))
+        or (isinstance(output, dict) and ("decision_state" in output) and ("gates" in output))
+        or (isinstance(inputs, dict) and (str(inputs.get("engine_key") or "").strip() == "di"))
+        or (isinstance(inputs, dict) and str(inputs.get("schema_version") or "").startswith("di."))
+    )
+
+
 def get_snapshot_detail(db: Session, snap_id: int) -> dict:
     snap = db.get(DecisionSnapshot, snap_id)
     if not snap:
@@ -188,17 +220,14 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
     output = json.loads(snap.outputs_json)
     inputs = json.loads(snap.inputs_json) if snap.inputs_json else {}
 
-    # DI snapshots share the DecisionSnapshot table but have a distinct output shape.
-    # Detect robustly to preserve backward compatibility (older DI rows may have NULL engine_key).
-    is_di = bool(
-        (getattr(snap, "engine_key", None) == "di")
-        or (str(getattr(snap, "schema_version", "") or "").startswith("di."))
-        or (isinstance(output, dict) and ("decision_state" in output) and ("gates" in output))
-        or (isinstance(inputs, dict) and (str(inputs.get("engine_key") or "").strip() == "di"))
-        or (isinstance(inputs, dict) and str(inputs.get("schema_version") or "").startswith("di."))
-    )
+    is_di = _detect_is_di(snap, inputs, output)
 
-    outcomes = db.query(OutcomeLabel).filter(OutcomeLabel.snapshot_id == snap.id).order_by(OutcomeLabel.created_at.asc()).all()
+    outcomes = (
+        db.query(OutcomeLabel)
+        .filter(OutcomeLabel.snapshot_id == snap.id)
+        .order_by(OutcomeLabel.created_at.asc())
+        .all()
+    )
 
     # Legacy rules-engine evidence tracing
     evidence = []
@@ -211,11 +240,21 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
         evidence_ids = output.get("evidence_ids_used", []) if isinstance(output, dict) else []
         evidence = db.query(Evidence).filter(Evidence.id.in_(evidence_ids)).all() if evidence_ids else []
 
-        citations = db.query(EvidenceCitation).filter(EvidenceCitation.evidence_id.in_(evidence_ids)).all() if evidence_ids else []
+        citations = (
+            db.query(EvidenceCitation).filter(EvidenceCitation.evidence_id.in_(evidence_ids)).all()
+            if evidence_ids
+            else []
+        )
         dr_ids = sorted({c.data_record_id for c in citations})
         data_records = db.query(DataRecord).filter(DataRecord.id.in_(dr_ids)).all() if dr_ids else []
 
-        dr_file_links = db.query(FileLink).filter(FileLink.entity_type == "DataRecord", FileLink.entity_id.in_(dr_ids)).all() if dr_ids else []
+        dr_file_links = (
+            db.query(FileLink)
+            .filter(FileLink.entity_type == "DataRecord", FileLink.entity_id.in_(dr_ids))
+            .all()
+            if dr_ids
+            else []
+        )
         file_ids = sorted({fl.file_id for fl in dr_file_links})
         files = db.query(StoredFile).filter(StoredFile.id.in_(file_ids)).all() if file_ids else []
 
@@ -234,4 +273,201 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
         "data_records": data_records,
         "files_by_id": files_by_id,
         "file_links_by_dr": file_links_by_dr,
+    }
+
+
+def get_snapshot_export_payload(db: Session, snap_id: int) -> dict:
+    snap = db.get(DecisionSnapshot, snap_id)
+    if not snap:
+        raise KeyError("DecisionSnapshot not found")
+
+    inputs = json.loads(snap.inputs_json) if snap.inputs_json else {}
+    outputs = json.loads(snap.outputs_json) if snap.outputs_json else {}
+    evidence_ids = json.loads(snap.evidence_ids_json) if snap.evidence_ids_json else []
+
+    return {
+        "snapshot_meta": {
+            "id": snap.id,
+            "created_at": snap.created_at,
+            "decision_key": snap.decision_key,
+            "program_id": snap.program_id,
+            "molecule_id": snap.molecule_id,
+            "batch_id": snap.batch_id,
+            "rules_version": snap.rules_version,
+            "engine_key": getattr(snap, "engine_key", None),
+            "schema_version": getattr(snap, "schema_version", None),
+            "as_of_ts": getattr(snap, "as_of_ts", None),
+        },
+        "inputs": inputs,
+        "outputs": outputs,
+        "evidence_ids": evidence_ids,
+    }
+
+
+def _di_policy_from_output(out: dict) -> dict:
+    pol = out.get("policy") if isinstance(out, dict) else {}
+    if not isinstance(pol, dict):
+        pol = {}
+    return {
+        "policy_id": str(pol.get("policy_id") or ""),
+        "policy_name": str(pol.get("policy_name") or pol.get("name") or ""),
+        "policy_version": str(pol.get("policy_version") or pol.get("version") or ""),
+        "policy_schema_version": str(pol.get("policy_schema_version") or ""),
+        "policy_semantics_hash": str(pol.get("policy_semantics_hash") or pol.get("hash") or ""),
+        "policy_package_hash": str(pol.get("policy_package_hash") or ""),
+        "source": str(pol.get("source") or ""),
+        # Back-compat aliases used by older templates
+        "hash": str(pol.get("hash") or pol.get("policy_semantics_hash") or ""),
+        "name": str(pol.get("name") or pol.get("policy_name") or ""),
+        "version": str(pol.get("version") or pol.get("policy_version") or ""),
+    }
+
+
+def _keys_from_list(items: Any, key_name: str) -> list[str]:
+    out: set[str] = set()
+    if isinstance(items, list):
+        for it in items:
+            if isinstance(it, dict):
+                k = it.get(key_name)
+                if k:
+                    out.add(str(k))
+            elif isinstance(it, str):
+                out.add(it)
+    return sorted(out)
+
+
+def _gates_map(out: dict) -> dict[str, dict[str, str]]:
+    m: dict[str, dict[str, str]] = {}
+    gates = out.get("gates") if isinstance(out, dict) else []
+    if not isinstance(gates, list):
+        return m
+    for g in gates:
+        if not isinstance(g, dict):
+            continue
+        k = str(g.get("gate_key") or "")
+        if not k:
+            continue
+        m[k] = {
+            "status": str(g.get("status") or ""),
+            "rationale": str(g.get("rationale") or ""),
+        }
+    return m
+
+
+def _measurement_ids_used(out: dict) -> list[int]:
+    mids = out.get("measurement_ids_used") if isinstance(out, dict) else []
+    if isinstance(mids, list):
+        try:
+            return sorted([int(x) for x in mids])
+        except Exception:
+            return sorted([x for x in mids if isinstance(x, int)])
+    return []
+
+
+def get_snapshot_compare_context(db: Session, *, snap_a: int, snap_b: int) -> dict:
+    a = db.get(DecisionSnapshot, int(snap_a))
+    b = db.get(DecisionSnapshot, int(snap_b))
+    if not a or not b:
+        return {"error": "One or both snapshots not found.", "snap_a": a, "snap_b": b}
+
+    out_a = json.loads(a.outputs_json) if a.outputs_json else {}
+    out_b = json.loads(b.outputs_json) if b.outputs_json else {}
+    in_a = json.loads(a.inputs_json) if a.inputs_json else {}
+    in_b = json.loads(b.inputs_json) if b.inputs_json else {}
+
+    is_di_a = _detect_is_di(a, in_a, out_a)
+    is_di_b = _detect_is_di(b, in_b, out_b)
+
+    if not (is_di_a and is_di_b):
+        return {
+            "error": "DI compare is only supported for DI snapshots (engine_key=di / schema_version starts with di.).",
+            "snap_a": a,
+            "snap_b": b,
+        }
+
+    summary_banner = None
+    if (a.decision_key != b.decision_key) or (a.program_id != b.program_id) or (a.batch_id != b.batch_id):
+        summary_banner = "Note: snapshots differ in scope (decision_key/program/batch). Compare is still shown, but interpret with care."
+
+    policy_a = _di_policy_from_output(out_a)
+    policy_b = _di_policy_from_output(out_b)
+
+    # v1.2.9d: distinguish semantic vs metadata-only policy changes
+    sem_a = str(policy_a.get("policy_semantics_hash") or "")
+    sem_b = str(policy_b.get("policy_semantics_hash") or "")
+    pkg_a = str(policy_a.get("policy_package_hash") or "")
+    pkg_b = str(policy_b.get("policy_package_hash") or "")
+    policy_change_kind = "unknown"
+    if sem_a and sem_b:
+        if sem_a != sem_b:
+            policy_change_kind = "semantic_change"
+        elif pkg_a and pkg_b and pkg_a != pkg_b:
+            policy_change_kind = "metadata_only_change"
+        else:
+            policy_change_kind = "no_change"
+
+    mids_a = set(_measurement_ids_used(out_a))
+    mids_b = set(_measurement_ids_used(out_b))
+
+    gates_a = _gates_map(out_a)
+    gates_b = _gates_map(out_b)
+    gate_keys = sorted(set(gates_a.keys()) | set(gates_b.keys()))
+    gates_changed: list[dict[str, Any]] = []
+    for k in gate_keys:
+        ga = gates_a.get(k, {"status": "", "rationale": ""})
+        gb = gates_b.get(k, {"status": "", "rationale": ""})
+        if ga.get("status") != gb.get("status") or ga.get("rationale") != gb.get("rationale"):
+            gates_changed.append(
+                {
+                    "gate_key": k,
+                    "a_status": ga.get("status"),
+                    "b_status": gb.get("status"),
+                    "a_rationale": ga.get("rationale"),
+                    "b_rationale": gb.get("rationale"),
+                    "a_rationale_changed": ga.get("rationale") != gb.get("rationale"),
+                    "b_rationale_changed": ga.get("rationale") != gb.get("rationale"),
+                }
+            )
+
+    blockers_a = set(_keys_from_list(out_a.get("blockers"), "blocker_key"))
+    blockers_b = set(_keys_from_list(out_b.get("blockers"), "blocker_key"))
+    risks_a = set(_keys_from_list(out_a.get("risk_flags"), "risk_key"))
+    risks_b = set(_keys_from_list(out_b.get("risk_flags"), "risk_key"))
+
+    # Provenance diffs: only a small stable set of fields.
+    prov_a = out_a.get("provenance") if isinstance(out_a, dict) else {}
+    prov_b = out_b.get("provenance") if isinstance(out_b, dict) else {}
+    if not isinstance(prov_a, dict):
+        prov_a = {}
+    if not isinstance(prov_b, dict):
+        prov_b = {}
+
+    prov_fields = ["as_of_ts", "qc_mode"]
+    provenance_changed = []
+    for k in prov_fields:
+        va = prov_a.get(k)
+        vb = prov_b.get(k)
+        if str(va) != str(vb):
+            provenance_changed.append({"key": k, "a": va, "b": vb})
+
+    diff = {
+        "evidence_added": sorted(list(mids_b - mids_a)),
+        "evidence_removed": sorted(list(mids_a - mids_b)),
+        "gates_changed": gates_changed,
+        "blockers_added": sorted(list(blockers_b - blockers_a)),
+        "blockers_removed": sorted(list(blockers_a - blockers_b)),
+        "risks_added": sorted(list(risks_b - risks_a)),
+        "risks_removed": sorted(list(risks_a - risks_b)),
+        "provenance_changed": provenance_changed,
+    }
+
+    return {
+        "error": None,
+        "summary_banner": summary_banner,
+        "snap_a": a,
+        "snap_b": b,
+        "policy_a": policy_a,
+        "policy_b": policy_b,
+        "policy_change_kind": policy_change_kind,
+        "diff": diff,
     }

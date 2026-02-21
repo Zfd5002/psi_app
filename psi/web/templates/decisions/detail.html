@@ -7,8 +7,19 @@
       <h1 style="margin:0;">Decision #{{ snap.id }} ({{ snap.decision_key }})</h1>
       <div class="muted">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
       <a class="btn" href="/decisions">Back</a>
+      <a class="btn" href="/decisions/{{ snap.id }}/export">Export JSON</a>
+      {% if is_di %}
+        <form method="get" action="/decisions/compare" style="display:flex;gap:6px;align-items:flex-end;">
+          <input type="hidden" name="snap_a" value="{{ snap.id }}" />
+          <div>
+            <div class="muted" style="font-size:12px;">Compare to snapshot ID</div>
+            <input name="snap_b" placeholder="#" style="width:90px;" />
+          </div>
+          <button class="btn" type="submit">Compare</button>
+        </form>
+      {% endif %}
       <a class="btn primary" href="/decisions/{{ snap.id }}?print_view=1" target="_blank">Print view</a>
     </div>
   </div>

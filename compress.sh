@@ -11,7 +11,7 @@ set -euo pipefail
 #   ./compress.sh --no-desktop   # build zip only
 #
 # Notes:
-# - Version is sourced from psi/web/app.py (templates.env.globals["PSI_VERSION"] = "vX.Y.Z")
+# - Version is sourced from psi/version.py (PSI_VERSION = "vX.Y.Z")
 # - Desktop shortcut install is idempotent and safe to re-run.
 #
 
@@ -43,15 +43,15 @@ done
 
 # --- detect version from source of truth ---
 detect_version() {
-  local app_py="$REPO_ROOT/psi/web/app.py"
-  if [ ! -f "$app_py" ]; then
+  local version_py="$REPO_ROOT/psi/version.py"
+  if [ ! -f "$version_py" ]; then
     return 1
   fi
-  # Extract PSI_VERSION from the Jinja env global assignment
+  # Extract PSI_VERSION from the canonical constant
   # Example line:
-  # templates.env.globals["PSI_VERSION"] = "v1.2.1"
+  # PSI_VERSION = "v1.2.1"
   local v
-  v="$(grep -Eo 'PSI_VERSION"\][[:space:]]*=[[:space:]]*"v[^"]+"' "$app_py" | head -n 1 | sed -E 's/.*"((v[^"]+))".*/\1/')"
+  v="$(grep -Eo '^PSI_VERSION[[:space:]]*=[[:space:]]*"v[^"]+"' "$version_py" | head -n 1 | sed -E 's/.*"((v[^"]+))".*/\1/')"
   if [ -n "${v:-}" ]; then
     echo "$v"
     return 0
@@ -66,7 +66,7 @@ else
   if VERSION="$(detect_version)"; then
     :
   else
-    echo "⚠️  WARNING: Could not auto-detect PSI_VERSION from psi/web/app.py"
+    echo "⚠️  WARNING: Could not auto-detect PSI_VERSION from psi/version.py"
     VERSION="unknown"
   fi
 fi

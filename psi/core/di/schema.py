@@ -39,8 +39,9 @@ class IgnoredEvidence:
     measurement_id: int
     data_record_id: int
     metric_key: str
-    reason: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    reason_key: str
+    reason_detail: Optional[str] = None
+    qc_source: Optional[str] = None
 
 
 @dataclass

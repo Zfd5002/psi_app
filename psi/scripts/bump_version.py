@@ -4,7 +4,7 @@ Run:
   python -m psi.scripts.bump_version v1.2.3d
 
 Behavior:
-  - Updates PSI_VERSION in psi/web/app.py (source of truth for the UI footer)
+  - Updates PSI_VERSION in psi/version.py (single canonical source of truth)
   - Appends a new stub section to PATCH_NOTES.md (append-only discipline)
   - Prints a short checklist of next commands
 
@@ -25,7 +25,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Paths:
     repo_root: Path
-    app_py: Path
+    version_py: Path
     patch_notes: Path
 
 
@@ -33,7 +33,7 @@ def _paths() -> Paths:
     repo_root = Path(__file__).resolve().parents[2]
     return Paths(
         repo_root=repo_root,
-        app_py=repo_root / "psi" / "web" / "app.py",
+        version_py=repo_root / "psi" / "version.py",
         patch_notes=repo_root / "PATCH_NOTES.md",
     )
 
@@ -56,23 +56,21 @@ def _write_text(p: Path, s: str) -> None:
     p.write_text(s, encoding="utf-8")
 
 
-def _bump_app_version(app_py: Path, new_version: str) -> tuple[str, str]:
-    """Replace PSI_VERSION global assignment value.
+def _bump_version_py(version_py: Path, new_version: str) -> tuple[str, str]:
+    """Replace PSI_VERSION constant in psi/version.py.
 
     Returns: (old_version, new_contents)
     """
 
-    src = _read_text(app_py)
+    src = _read_text(version_py)
 
-    # Example:
-    # templates.env.globals["PSI_VERSION"] = "v1.2.3c"
-    pat = re.compile(
-        r'(templates\.env\.globals\["PSI_VERSION"\]\s*=\s*")(?P<v>v[^\"]+)(")'
-    )
+    # Example line:
+    # PSI_VERSION = "v1.2.3c"
+    pat = re.compile(r'^(PSI_VERSION\s*=\s*")(?P<v>v[^\"]+)("\s*)$', flags=re.M)
     m = pat.search(src)
     if not m:
         raise SystemExit(
-            f"Could not find PSI_VERSION assignment in {app_py}. Expected templates.env.globals['PSI_VERSION'] = 'v...'."
+            f"Could not find PSI_VERSION constant in {version_py}. Expected: PSI_VERSION = \"v...\""
         )
     old_version = m.group("v")
     if old_version == new_version:
@@ -119,16 +117,16 @@ def main(argv: list[str] | None = None) -> None:
     _validate_version(new_version)
 
     paths = _paths()
-    if not paths.app_py.exists():
-        raise SystemExit(f"Missing {paths.app_py}")
+    if not paths.version_py.exists():
+        raise SystemExit(f"Missing {paths.version_py}")
     if not paths.patch_notes.exists():
         raise SystemExit(f"Missing {paths.patch_notes}")
 
-    old_version, new_src = _bump_app_version(paths.app_py, new_version)
+    old_version, new_src = _bump_version_py(paths.version_py, new_version)
     if old_version == new_version:
-        print(f"PSI_VERSION already set to {new_version} in psi/web/app.py")
+        print(f"PSI_VERSION already set to {new_version} in psi/version.py")
     else:
-        _write_text(paths.app_py, new_src)
+        _write_text(paths.version_py, new_src)
         print(f"Updated PSI_VERSION: {old_version} -> {new_version}")
 
     appended = _append_patch_notes(paths.patch_notes, new_version)
@@ -137,7 +135,13 @@ def main(argv: list[str] | None = None) -> None:
     else:
         print(f"PATCH_NOTES.md already contains a header for {new_version} (no changes)")
 
-    print("\nNext:\n  python -m psi.scripts.smoke_test\n  ./scripts/start_psi.sh --prod\n  ./compress.sh\n")
+    print(
+        "\nNext:\n"
+        "  python -m psi.tools.print_version\n"
+        "  python -m psi.scripts.smoke_test\n"
+        "  ./scripts/start_psi.sh --prod\n"
+        "  ./compress.sh\n"
+    )
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from psi.services import decisions as svc
@@ -51,6 +51,14 @@ def decisions_run(
     return RedirectResponse(url=f"/decisions/{snap.id}", status_code=303)
 
 
+@router.get("/decisions/compare", response_class=HTMLResponse)
+def decisions_compare(request: Request, snap_a: int, snap_b: int, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    ctx = svc.get_snapshot_compare_context(db, snap_a=snap_a, snap_b=snap_b)
+    ctx["request"] = request
+    return templates.TemplateResponse("decisions/compare.html", ctx)
+
+
 @router.get("/decisions/{snap_id}", response_class=HTMLResponse)
 def decisions_detail(snap_id: int, request: Request, print_view: int = 0, db: Session = Depends(get_db)):
     templates = get_templates(request)
@@ -62,3 +70,19 @@ def decisions_detail(snap_id: int, request: Request, print_view: int = 0, db: Se
     tmpl = "decisions/detail_print.html" if print_view else "decisions/detail.html"
     ctx["request"] = request
     return templates.TemplateResponse(tmpl, ctx)
+
+
+@router.get("/decisions/{snap_id}/export")
+def decisions_export(snap_id: int, db: Session = Depends(get_db)):
+    try:
+        payload = svc.get_snapshot_export_payload(db, snap_id)
+    except KeyError:
+        raise HTTPException(404)
+
+    body = svc.stable_json_dumps(payload)
+    filename = f"decision_snapshot_{snap_id}.json"
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

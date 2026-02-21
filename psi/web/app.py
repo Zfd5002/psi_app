@@ -21,6 +21,12 @@ from psi.web.routers import (
     qc,
 )
 
+# Canonical, importable, grep-friendly version source.
+from psi.version import PSI_VERSION as _PSI_VERSION
+
+# Backward-compat alias – do not redefine version here.
+PSI_VERSION = _PSI_VERSION
+
 
 def create_app(*, base_dir: Path | None = None) -> FastAPI:
     """Application factory.
@@ -35,8 +41,8 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="PSI (Preclinical Systems Intelligence)")
 
     templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
-    # Release string (shown in UI footer). Keep as a single source of truth.
-    templates.env.globals["PSI_VERSION"] = "v1.2.9b"
+    # Release string (shown in UI footer). Single source of truth: psi/version.py
+    templates.env.globals["PSI_VERSION"] = PSI_VERSION
     storage = StorageConfig(base_dir=base_dir)
     rules_path = base_dir / "psi_rules" / "psirules-0.1.0.yml"
 

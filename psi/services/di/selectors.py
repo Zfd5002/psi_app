@@ -11,6 +11,20 @@ from psi.core.models import MeasurementQC
 from psi.core.di.schema import EvidenceRef, IgnoredEvidence
 
 
+# v1.2.9d: stable ignored-evidence taxonomy (no ad-hoc strings)
+ALLOWED_IGNORE_REASON_KEYS = {
+    "qc_failed",
+    "qc_unreviewed_strict",
+    "superseded_by_primary",
+    "superseded_by_newer",
+    "outlier_policy",
+    "metric_not_applicable",
+    "unit_inconvertible",
+    "method_incomparable",
+    "as_of_excluded",
+}
+
+
 def _parse_iso(ts: Optional[str]) -> Optional[_dt.datetime]:
     if not ts:
         return None
@@ -50,7 +64,7 @@ def _accept_qc(qc_mode: str, qc_status: str, policy_qc: Dict[str, Any]) -> Tuple
     treat_unreviewed_as = str(conf.get("treat_unreviewed_as") or "accept")
 
     if qc_status in reject:
-        return False, "qc_rejected"
+        return False, "qc_failed"
     if qc_status == "unreviewed" and m == "strict":
         return False, "qc_unreviewed_strict"
     if qc_status in accept:
@@ -60,7 +74,7 @@ def _accept_qc(qc_mode: str, qc_status: str, policy_qc: Dict[str, Any]) -> Tuple
 
     # unknown status: strict rejects; others accept but flag
     if m == "strict":
-        return False, "qc_unknown_strict"
+        return False, "qc_unreviewed_strict"
     return True, "qc_unknown_accepted"
 
 
@@ -160,14 +174,14 @@ def select_batch_measurements(
             metric_key_source = "canonical" if mk_raw == canon else f"alias:{mk_raw}"
 
             if ignore_col and int(r.get(ignore_col) or 0) == 1:
-                ignored.append(IgnoredEvidence(mid, drid, mk_raw, "ignore_for_model"))
+                ignored.append(IgnoredEvidence(mid, drid, canon, "outlier_policy", reason_detail="ignore_for_model", qc_source=None))
                 continue
 
             dp, dc = row_dt(r)
             if dt_asof is not None:
                 chk = dp or dc
                 if chk is not None and chk > dt_asof:
-                    ignored.append(IgnoredEvidence(mid, drid, mk_raw, "after_as_of", {"as_of": as_of_ts}))
+                    ignored.append(IgnoredEvidence(mid, drid, canon, "as_of_excluded", reason_detail=str(as_of_ts or ""), qc_source=None))
                     continue
 
             qc_status = qc_map.get(mid) or _qc_status_from_flag(r.get(qc_flag_col) if qc_flag_col else None)
@@ -179,7 +193,10 @@ def select_batch_measurements(
                 qc_source = "unknown"
             ok, qc_reason = _accept_qc(qc_mode, qc_status, policy_qc)
             if not ok:
-                ignored.append(IgnoredEvidence(mid, drid, mk_raw, qc_reason or "qc_rejected"))
+                rk = str(qc_reason or "qc_failed")
+                if rk not in ALLOWED_IGNORE_REASON_KEYS:
+                    rk = "qc_failed"
+                ignored.append(IgnoredEvidence(mid, drid, canon, rk, reason_detail=None, qc_source=qc_source))
                 continue
 
             val_num = r.get(cols.get("value_num"))
@@ -242,15 +259,9 @@ def select_batch_measurements(
         qc_source_counts_used[chosen_ev.qc_source] = qc_source_counts_used.get(chosen_ev.qc_source, 0) + 1
 
         for (r, ev, _) in candidates[1:]:
-            ignored.append(
-                IgnoredEvidence(
-                    ev.measurement_id,
-                    ev.data_record_id,
-                    str(r.get(name_col)).strip(),
-                    "older_duplicate_or_non_primary",
-                    {"chosen_measurement_id": chosen_ev.measurement_id},
-                )
-            )
+            rk = "superseded_by_primary" if (chosen_ev.is_primary and not ev.is_primary) else "superseded_by_newer"
+            reason_detail = f"chosen_measurement_id={chosen_ev.measurement_id}"
+            ignored.append(IgnoredEvidence(ev.measurement_id, ev.data_record_id, canon, rk, reason_detail=reason_detail, qc_source=ev.qc_source))
 
     # flag: outlier present anywhere in used evidence
     if any(ev.is_outlier for ev in used_by_metric.values()):
@@ -261,6 +272,9 @@ def select_batch_measurements(
         raw_keys = sorted({str(r.get(name_col)).strip() for r in rs if r.get(name_col) is not None})
         if canon in raw_keys and any(k != canon for k in raw_keys):
             warnings.append({"kind": "conflicting_metrics", "metric_key": canon, "detail": {"raw_keys": raw_keys}})
+
+    # Deterministic ordering for ignored evidence
+    ignored.sort(key=lambda x: (str(x.metric_key), int(x.measurement_id)))
 
     return {
         "used_by_metric": used_by_metric,
