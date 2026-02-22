@@ -46,6 +46,32 @@ def evidence_fingerprint_payload(
     return [[a, b, c, d, e] for (a, b, c, d, e) in metric_tuples]
 
 
+
+def extract_evidence_tuples_from_used(used_by_metric: Dict[str, Any]) -> List[List[str]]:
+    """Canonical evidence tuple surface used for fingerprinting and drift explain.
+
+    Tuple fields:
+      [metric_key, measurement_id, qc_status, unit, comparator]
+
+    All None values are normalized to "" for stability.
+    Supports evidence objects and dict-like evidence for robustness.
+    """
+    tuples: List[List[str]] = []
+    for mk in sorted(list((used_by_metric or {}).keys())):
+        ev = used_by_metric[mk]
+        if isinstance(ev, dict):
+            measurement_id = str(ev.get("measurement_id") or "")
+            qc_status = str(ev.get("qc_status") or "")
+            unit = str(ev.get("unit") or "")
+            comparator = str(ev.get("comparator") or "")
+        else:
+            measurement_id = str(getattr(ev, "measurement_id", "") or "")
+            qc_status = str(getattr(ev, "qc_status", "") or "")
+            unit = str(getattr(ev, "unit", "") or "")
+            comparator = str(getattr(ev, "comparator", "") or "")
+        tuples.append([str(mk), measurement_id, qc_status, unit, comparator])
+    return tuples
+
 def compute_evidence_fingerprint(*, used_by_metric: Dict[str, Any]) -> str:
     """Compute a deterministic fingerprint over *selected evidence only*.
 
@@ -58,17 +84,7 @@ def compute_evidence_fingerprint(*, used_by_metric: Dict[str, Any]) -> str:
 
     All None values are normalized to "" for stability.
     """
-
-    tuples: List[Tuple[str, str, str, str, str]] = []
-    for mk in sorted(list((used_by_metric or {}).keys())):
-        ev = used_by_metric[mk]
-        measurement_id = str(getattr(ev, "measurement_id", "") or "")
-        qc_status = str(getattr(ev, "qc_status", "") or "")
-        unit = str(getattr(ev, "unit", "") or "")
-        comparator = str(getattr(ev, "comparator", "") or "")
-        tuples.append((str(mk), measurement_id, qc_status, unit, comparator))
-
-    payload = evidence_fingerprint_payload(metric_tuples=tuples)
+    payload = extract_evidence_tuples_from_used(used_by_metric)
     return _sha256_hex(_stable_json(payload))
 
 

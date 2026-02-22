@@ -24,6 +24,7 @@ from psi.core.di.policy import load_policy
 from psi.core.di.schema import DIInput
 from psi.core.models import DecisionSnapshot, MeasurementQC
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2
+from psi.services.di.integrity import extract_evidence_tuples_from_used
 from psi.services.di.compute import _compute_di_from_used_by_metric
 from psi.services.di.runner import compute_di_output
 
@@ -618,23 +619,6 @@ def _resolve_policy_from_repo(*, policy_id: str, policy_version: str) -> Tuple[A
     return matches[0]
 
 
-def _extract_evidence_tuples_from_used(used_by_metric: Dict[str, Any]) -> List[List[str]]:
-    tuples: List[List[str]] = []
-    for mk in sorted(list((used_by_metric or {}).keys())):
-        ev = used_by_metric[mk]
-        if isinstance(ev, dict):
-            measurement_id = str(ev.get("measurement_id") or "")
-            qc_status = str(ev.get("qc_status") or "")
-            unit = str(ev.get("unit") or "")
-            comparator = str(ev.get("comparator") or "")
-        else:
-            measurement_id = str(getattr(ev, "measurement_id", "") or "")
-            qc_status = str(getattr(ev, "qc_status", "") or "")
-            unit = str(getattr(ev, "unit", "") or "")
-            comparator = str(getattr(ev, "comparator", "") or "")
-        tuples.append([str(mk), measurement_id, qc_status, unit, comparator])
-    return tuples
-
 
 def _drift_classification(
     *,
@@ -906,14 +890,14 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
         soe = outputs_obj.get("state_of_evidence")
         if isinstance(soe, dict) and isinstance(soe.get("used"), dict):
             stored_used = soe.get("used") or {}
-    stored_evidence_tuples = _extract_evidence_tuples_from_used(stored_used)
+    stored_evidence_tuples = extract_evidence_tuples_from_used(stored_used)
 
     recomputed_used: Dict[str, Any] = {}
     if isinstance(recomputed_out, dict):
         rsoe = recomputed_out.get("state_of_evidence")
         if isinstance(rsoe, dict) and isinstance(rsoe.get("used"), dict):
             recomputed_used = rsoe.get("used") or {}
-    recomputed_evidence_tuples = _extract_evidence_tuples_from_used(recomputed_used)
+    recomputed_evidence_tuples = extract_evidence_tuples_from_used(recomputed_used)
 
     # --- Optional anchored replay (verification-only): bypass selector using stored used measurement IDs ---
     anchored = _compute_anchored_replay(
@@ -955,7 +939,7 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
         a_soe = anchored_out.get("state_of_evidence") if isinstance(anchored_out.get("state_of_evidence"), dict) else {}
         if isinstance(a_soe.get("used"), dict):
             a_used = a_soe.get("used") or {}
-        anchored_evidence_tuples = _extract_evidence_tuples_from_used(a_used)
+        anchored_evidence_tuples = extract_evidence_tuples_from_used(a_used)
 
     # Drift classifications (stored vs current-world recompute is the primary)
     anchored_classification = None
