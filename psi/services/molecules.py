@@ -213,6 +213,9 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
                 "decision_key": s.decision_key,
                 "batch_id": int(s.batch_id) if s.batch_id is not None else None,
                 "batch_label": batch_label_by_id.get(int(s.batch_id or 0), str(s.batch_id or "")) if s.batch_id else "",
+                "is_superseded": int(s.is_superseded) if s.is_superseded is not None else None,
+                "superseded_by_snapshot_id": int(s.superseded_by_snapshot_id) if s.superseded_by_snapshot_id is not None else None,
+                "superseded_at": s.superseded_at,
                 "policy_id": str(policy.get("policy_id") or ""),
                 "policy_version": str(policy.get("policy_version") or ""),
                 "summary": {

@@ -84,7 +84,12 @@ def get_program_detail(db: Session, program_id: int) -> dict:
 
     status_counts = {"READY": 0, "BLOCKED": 0, "UNKNOWN": 0}
     blocker_counts: dict[str, int] = {}
-    missing_metric_counts: dict[str, int] = {}
+    gate_fail_counts: dict[str, int] = {}
+    metric_present_counts: dict[str, int] = {}
+    metric_missing_counts: dict[str, int] = {}
+    ignore_reason_counts: dict[str, int] = {}
+    qc_failed_metric_counts: dict[str, int] = {}
+    qc_unreviewed_metric_counts: dict[str, int] = {}
     molecule_rollup: list[dict] = []
 
     for m in molecules:
@@ -126,16 +131,45 @@ def get_program_detail(db: Session, program_id: int) -> dict:
                 if k:
                     blocker_counts[k] = blocker_counts.get(k, 0) + 1
 
+        gates = out.get("gates") if isinstance(out.get("gates"), list) else []
+        for g in gates:
+            if not isinstance(g, dict):
+                continue
+            gk = str(g.get("gate_key") or "").strip()
+            st = str(g.get("status") or g.get("outcome") or "").strip().lower()
+            if gk and st and st != "pass":
+                gate_fail_counts[gk] = gate_fail_counts.get(gk, 0) + 1
+
         soe = out.get("state_of_evidence") if isinstance(out.get("state_of_evidence"), dict) else {}
         soe3 = soe.get("soe_v0_3") if isinstance(soe.get("soe_v0_3"), dict) else {}
         cov = soe3.get("coverage") if isinstance(soe3.get("coverage"), dict) else {}
+        present = cov.get("metrics_present") if isinstance(cov.get("metrics_present"), list) else []
         missing = cov.get("metrics_missing") if isinstance(cov.get("metrics_missing"), list) else []
+        for mk in present:
+            if mk is None:
+                continue
+            key = str(mk)
+            if key:
+                metric_present_counts[key] = metric_present_counts.get(key, 0) + 1
         for mk in missing:
             if mk is None:
                 continue
             key = str(mk)
             if key:
-                missing_metric_counts[key] = missing_metric_counts.get(key, 0) + 1
+                metric_missing_counts[key] = metric_missing_counts.get(key, 0) + 1
+
+        ignored = soe.get("ignored_evidence") if isinstance(soe.get("ignored_evidence"), list) else []
+        for ig in ignored:
+            if not isinstance(ig, dict):
+                continue
+            rk = str(ig.get("reason_key") or ig.get("reason") or "").strip()
+            mk = str(ig.get("metric_key") or "").strip()
+            if rk:
+                ignore_reason_counts[rk] = ignore_reason_counts.get(rk, 0) + 1
+            if mk and rk == "qc_failed":
+                qc_failed_metric_counts[mk] = qc_failed_metric_counts.get(mk, 0) + 1
+            if mk and rk == "qc_unreviewed_strict":
+                qc_unreviewed_metric_counts[mk] = qc_unreviewed_metric_counts.get(mk, 0) + 1
 
         molecule_rollup.append(
             {
@@ -150,10 +184,32 @@ def get_program_detail(db: Session, program_id: int) -> dict:
             }
         )
 
+    total_molecules = len(latest_by_mol)
+    metric_keys = set(metric_present_counts.keys()) | set(metric_missing_counts.keys())
+    metric_coverage = []
+    for mk in sorted(metric_keys):
+        present = int(metric_present_counts.get(mk, 0))
+        missing = int(metric_missing_counts.get(mk, 0))
+        pct = round((present / float(total_molecules)), 1) if total_molecules > 0 else 0.0
+        metric_coverage.append(
+            {
+                "metric_key": mk,
+                "present_count": present,
+                "missing_count": missing,
+                "percent_present": pct,
+            }
+        )
+    metric_coverage = sorted(metric_coverage, key=lambda r: (-int(r.get("missing_count") or 0), str(r.get("metric_key") or "")))
+
     di_dashboard = {
         "counts": status_counts,
         "top_blockers": sorted(blocker_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:15],
-        "top_missing_metrics": sorted(missing_metric_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20],
+        "top_missing_metrics": sorted(metric_missing_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20],
+        "top_failing_gates": sorted(gate_fail_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20],
+        "metric_coverage": metric_coverage,
+        "qc_ignore_reasons": sorted(ignore_reason_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20],
+        "qc_failed_metrics": sorted(qc_failed_metric_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20],
+        "qc_unreviewed_metrics": sorted(qc_unreviewed_metric_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20],
         "molecule_rollup": sorted(molecule_rollup, key=lambda r: str(r.get("primary_id") or "")),
     }
 

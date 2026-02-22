@@ -1,3 +1,15 @@
+## v1.2.9t
+
+Why:
+- Finish deterministic, read-only portfolio analytics surfaces and clarify decision lifecycle in molecule history.
+
+What changed:
+- `psi/services/programs.py` + `psi/web/templates/programs/detail.html`: add gate failure frequency, metric coverage frequency, and QC instability summaries (counts only).
+- `psi/services/molecules.py` + `psi/web/templates/molecules/detail.html`: surface superseded status in decision history.
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No DB writes or schema changes.
+
 ## v1.2.9s3
 
 Why:

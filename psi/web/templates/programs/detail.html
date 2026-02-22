@@ -120,6 +120,82 @@
     </div>
   </div>
 
+  <div class="grid cols-2" style="margin-top:12px;">
+    <div>
+      <h3>Most common failing gates</h3>
+      <table class="table mini">
+        <thead><tr><th>gate_key</th><th>count</th></tr></thead>
+        <tbody>
+          {% for k,v in di_dashboard.top_failing_gates %}
+            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">—</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Metric coverage frequency</h3>
+      <table class="table mini">
+        <thead><tr><th>metric_key</th><th>present</th><th>missing</th><th>% present</th></tr></thead>
+        <tbody>
+          {% for row in di_dashboard.metric_coverage %}
+            <tr>
+              <td>{{ row.metric_key }}</td>
+              <td class="muted">{{ row.present_count }}</td>
+              <td class="muted">{{ row.missing_count }}</td>
+              <td class="muted">{{ row.percent_present }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="muted">—</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid cols-3" style="margin-top:12px;">
+    <div>
+      <h3>QC ignore reasons</h3>
+      <table class="table mini">
+        <thead><tr><th>reason_key</th><th>count</th></tr></thead>
+        <tbody>
+          {% for k,v in di_dashboard.qc_ignore_reasons %}
+            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">—</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>QC failed metrics</h3>
+      <table class="table mini">
+        <thead><tr><th>metric_key</th><th>count</th></tr></thead>
+        <tbody>
+          {% for k,v in di_dashboard.qc_failed_metrics %}
+            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">—</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>QC unreviewed (strict)</h3>
+      <table class="table mini">
+        <thead><tr><th>metric_key</th><th>count</th></tr></thead>
+        <tbody>
+          {% for k,v in di_dashboard.qc_unreviewed_metrics %}
+            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">—</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <h3 style="margin-top:12px;">Molecule rollup</h3>
   <table class="table">
     <thead>

@@ -310,6 +310,7 @@
       <thead>
         <tr>
           <th>snapshot_id</th>
+          <th>status</th>
           <th>created_at</th>
           <th>decision_key</th>
           <th>batch</th>
@@ -323,6 +324,18 @@
         {% for row in di_history %}
           <tr>
             <td><a href="/decisions/{{ row.snapshot_id }}"><b>#{{ row.snapshot_id }}</b></a></td>
+            <td>
+              {% if row.is_superseded == 1 %}
+                <div><span class="chip">SUPERSEDED</span></div>
+                {% if row.superseded_by_snapshot_id %}
+                  <div class="muted"><a href="/decisions/{{ row.superseded_by_snapshot_id }}">by #{{ row.superseded_by_snapshot_id }}</a></div>
+                {% elif row.superseded_at %}
+                  <div class="muted">{{ row.superseded_at }}</div>
+                {% endif %}
+              {% else %}
+                <span class="chip">ACTIVE</span>
+              {% endif %}
+            </td>
             <td class="muted">{{ row.created_at }}</td>
             <td>{{ row.decision_key }}</td>
             <td>
