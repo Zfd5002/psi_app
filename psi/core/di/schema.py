@@ -13,6 +13,10 @@ class DIInput:
     qc_mode: str = "model_safe"  # strict/model_safe/none
     context: Dict[str, Any] = field(default_factory=dict)  # store-only in v0.1
 
+    def __post_init__(self) -> None:
+        # Enforce int type at construction; catch str(b.id) callers early.
+        object.__setattr__(self, "scope_id", int(self.scope_id))
+
 
 @dataclass
 class EvidenceRef:

@@ -123,7 +123,7 @@ def derive_readiness(
     if not isinstance(gates, dict):
         gates = {}
 
-    required_gate_keys = ["G1_purity", "G2_endotoxin", "G3_functional", "G4_binding"]
+    required_gate_keys = ["G1_material_readiness", "G2_purity_integrity", "G3_endotoxin", "G4_functional"]
     required_metrics_set: set[str] = set()
     optional_metrics_set: set[str] = set()
     for gk, gd in gates.items():

@@ -19,6 +19,10 @@
           </div>
           <button class="btn" type="submit">Compare</button>
         </form>
+
+        <form method="post" action="/decisions/{{ snap.id }}/verify" style="display:flex;align-items:flex-end;">
+          <button class="btn" type="submit">Verify snapshot</button>
+        </form>
       {% endif %}
       <a class="btn primary" href="/decisions/{{ snap.id }}?print_view=1" target="_blank">Print view</a>
     </div>

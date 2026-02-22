@@ -250,7 +250,7 @@ def select_batch_measurements(
                 1 if ev.is_primary else 0,
                 norm(dp),
                 norm(dc),
-                row_id(r),
+                -row_id(r),
             )
 
         candidates.sort(key=sort_key, reverse=True)
@@ -283,6 +283,6 @@ def select_batch_measurements(
         "alias_to_canonical": alias_to_canonical,
         "selection_provenance": {
             "qc_source_counts_used": qc_source_counts_used,
-            "tie_break": "is_primary_first_else_newest_timestamp_else_measurement_id",
+            "tie_break": "is_primary_first_else_newest_timestamp_else_smallest_measurement_id",
         },
     }

@@ -75,6 +75,81 @@
     </div>
   </div>
 
+  <h2>DI portfolio status (latest snapshot per molecule)</h2>
+  <div class="grid cols-3">
+    <div class="card">
+      <div class="muted">READY</div>
+      <div style="font-size:28px;font-weight:700;">{{ di_dashboard.counts.READY }}</div>
+    </div>
+    <div class="card">
+      <div class="muted">BLOCKED</div>
+      <div style="font-size:28px;font-weight:700;">{{ di_dashboard.counts.BLOCKED }}</div>
+    </div>
+    <div class="card">
+      <div class="muted">UNKNOWN</div>
+      <div style="font-size:28px;font-weight:700;">{{ di_dashboard.counts.UNKNOWN }}</div>
+    </div>
+  </div>
+
+  <div class="grid cols-2" style="margin-top:12px;">
+    <div>
+      <h3>Most common blockers</h3>
+      <table class="table mini">
+        <thead><tr><th>blocker_key</th><th>count</th></tr></thead>
+        <tbody>
+          {% for k,v in di_dashboard.top_blockers %}
+            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">—</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Most common missing required metrics</h3>
+      <table class="table mini">
+        <thead><tr><th>metric_key</th><th>count</th></tr></thead>
+        <tbody>
+          {% for k,v in di_dashboard.top_missing_metrics %}
+            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">—</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3 style="margin-top:12px;">Molecule rollup</h3>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>molecule</th>
+        <th>latest snapshot</th>
+        <th>state</th>
+        <th>blockers</th>
+        <th>policy</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in di_dashboard.molecule_rollup %}
+        <tr>
+          <td><a href="/molecules/{{ r.molecule_id }}">{{ r.primary_id }}</a> <span class="muted">{{ r.title or '' }}</span></td>
+          <td>
+            {% if r.latest_snapshot_id %}
+              <a href="/decisions/{{ r.latest_snapshot_id }}">#{{ r.latest_snapshot_id }}</a>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td><span class="chip">{{ r.readiness_state }}</span></td>
+          <td class="muted">{{ r.blocker_count }}</td>
+          <td class="muted">{{ r.policy_version or '' }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
   <h2 id="audit">Audit</h2>
   {% include "partials/audit_table.html" %}
 </div>

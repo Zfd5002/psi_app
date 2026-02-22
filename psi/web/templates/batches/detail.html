@@ -18,6 +18,7 @@
   <div class="tabs no-print">
     <a class="tab {% if tab=='data' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=data">Data Records</a>
     <a class="tab {% if tab=='evidence' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=evidence">Evidence</a>
+    <a class="tab {% if tab=='decisions' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=decisions">Decisions</a>
     <a class="tab {% if tab=='files' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=files">Files</a>
     <a class="tab {% if tab=='audit' %}active{% endif %}" href="/batches/{{ batch.id }}?tab=audit">Audit</a>
   </div>
@@ -53,6 +54,49 @@
         </tr>
         {% else %}
         <tr><td colspan="4" class="muted">No evidence yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% elif tab=='decisions' %}
+    <h2>Decision snapshots for this batch</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>snapshot</th>
+          <th>created_at</th>
+          <th>decision_key</th>
+          <th>policy</th>
+          <th>outcome</th>
+          <th class="no-print">drift vs prev</th>
+          <th class="no-print">integrity</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in di_history %}
+          <tr>
+            <td><a href="/decisions/{{ row.snapshot_id }}">#{{ row.snapshot_id }}</a></td>
+            <td class="muted">{{ row.created_at }}</td>
+            <td>{{ row.decision_key }}</td>
+            <td class="muted">{{ row.policy_id }}@{{ row.policy_version }}</td>
+            <td>
+              <div><b>{{ row.summary.decision_state }}</b></div>
+              <div class="muted">gates: {{ row.summary.gates_pass }} pass / {{ row.summary.gates_nonpass }} non-pass · blockers: {{ row.summary.blockers }}</div>
+            </td>
+            <td class="no-print">
+              {% if row.drift_vs_prev and row.prev_snapshot_id %}
+                <div><span class="chip">{{ row.drift_vs_prev }}</span></div>
+                <div class="muted"><a href="/decisions/compare?snap_a={{ row.prev_snapshot_id }}&snap_b={{ row.snapshot_id }}">compare</a></div>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td class="no-print">
+              <div class="muted">evidence_fp: {{ (row.integrity.evidence_fingerprint[:12] if row.integrity.evidence_fingerprint else '—') }}</div>
+              <div class="muted">content_hash: {{ (row.integrity.snapshot_content_hash[:12] if row.integrity.snapshot_content_hash else '—') }}</div>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="muted">No decision snapshots for this batch yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -120,6 +164,7 @@
     <h2>Audit</h2>
     {% include "partials/audit_table.html" %}
   {% endif %}
+
 
   <div class="card" style="margin-top:16px;">
     <h3>Batch notes</h3>

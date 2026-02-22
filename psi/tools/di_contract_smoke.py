@@ -172,6 +172,7 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
 
     from psi.core.di.schema import DIInput
     from psi.services.di.runner import run_di
+    from psi.services.di.verify import verify_snapshot
 
     ensure_schema()
     db = SessionLocal()
@@ -261,7 +262,7 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     di_input = DIInput(
         decision_key="advance_to_in_vivo",
         scope_type="batch",
-        scope_id=str(b.id),
+        scope_id=int(b.id),
         as_of_ts=None,
         qc_mode="model_safe",
         context={},
@@ -301,6 +302,19 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     _assert(dr.drift_label == "no_change", "di_snapshot_diff must classify deterministic reruns as no_change")
     _assert(not (dr.changes or {}), "di_snapshot_diff changes must be empty for deterministic reruns")
 
+    # v1.2.9n: anchored replay must match runner output for all compute-derived fingerprints after a clean run
+    rep = verify_snapshot(db=db, snapshot_id=int(out1.get("snapshot_id")), debug=False)
+    ar = (rep.get("anchored_replay") or {}) if isinstance(rep, dict) else {}
+    _assert(bool(ar.get("available")), "anchored replay must be available for smoke snapshot")
+    stored = (rep.get("stored") or {}) if isinstance(rep, dict) else {}
+    replay = ((ar.get("replay") or {}) if isinstance(ar.get("replay"), dict) else {})
+
+    for k in ("snapshot_content_hash", "evidence_fingerprint", "decision_output_hash_v2_effective", "semantic_fingerprint"):
+        sv = str(stored.get(k) or "")
+        rv = str(replay.get(k) or "")
+        _assert(bool(sv) and bool(rv), f"stored + replay {k} must be non-empty")
+        _assert(sv == rv, f"anchored replay {k} must equal stored {k}")
+
 
     out_payload = out1.get("output") or {}
 
@@ -308,6 +322,11 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     readiness = out_payload.get("readiness")
     _assert(isinstance(readiness, dict), "output.readiness must exist and be a dict")
     _assert(readiness.get("state") in ("ready", "not_ready", "blocked", "insufficient_evidence"), "readiness.state enum invalid")
+
+    # v1.2.9m8: coverage.required_total must be > 0 when policy has required gates
+    cov = readiness.get("coverage")
+    _assert(isinstance(cov, dict), "readiness.coverage must exist and be a dict")
+    _assert(int(cov.get("required_total") or 0) > 0, "coverage.required_total must be > 0")
 
     # v1.2.9i: normalized readiness fields must exist (empty arrays must be present)
     _assert(isinstance(readiness.get("decision_context"), str) and readiness.get("decision_context"), "readiness.decision_context must be a non-empty string")
@@ -333,6 +352,25 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
 
     cov_fp = out_payload.get("coverage_fingerprint")
     _assert(isinstance(cov_fp, str) and len(cov_fp) == 64, "coverage_fingerprint must be sha256 hex")
+
+    # v1.2.9m8: selector tie-break invariant
+    #
+    # NOTE: Some PSI DB schemas enforce uniqueness for (data_record_id, metric_key) (e.g. UNIQUE INDEX
+    # on (data_record_id, metric_key)), meaning you cannot store two monomer_pct rows for the same record.
+    # In those schemas, it is impossible to exercise an in-DB tie on identical timestamps.
+    #
+    # To keep this smoke test schema-agnostic (and without modifying selector/engine logic), we lock the
+    # tie-break behavior by asserting it is encoded in selector source:
+    #   candidates.sort(..., reverse=True) with -row_id(r) included in the sort key
+    import inspect, re
+    import psi.services.di.selectors as selectors_mod
+
+    _src = inspect.getsource(selectors_mod)
+    _assert(
+        re.search(r"candidates\.sort\(key=sort_key,\s*reverse=True\)", _src) is not None
+        and re.search(r"\-row_id\(r\)", _src) is not None,
+        "selector tie-break invariant not found (expected smallest measurement id to win ties)",
+    )
 
     gate_outcomes = out_payload.get("gate_outcomes") or {}
     _assert(isinstance(gate_outcomes, dict), "gate_outcomes must exist and be a dict")

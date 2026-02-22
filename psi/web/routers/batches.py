@@ -57,6 +57,8 @@ def create_batch(
 @router.get("/batches/{batch_id}", response_class=HTMLResponse)
 def batch_detail(batch_id: int, request: Request, tab: str = "data", db: Session = Depends(get_db)):
     templates = get_templates(request)
+    if tab not in ("data", "evidence", "files", "decisions", "audit"):
+        tab = "data"
     try:
         ctx = svc.get_batch_detail(db, batch_id)
     except KeyError:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
@@ -57,6 +59,104 @@ def get_program_detail(db: Session, program_id: int) -> dict:
         .all()
     )
 
+    # v1.2.9m: deterministic DI rollups (latest snapshot per molecule)
+    all_snaps = (
+        db.query(DecisionSnapshot)
+        .filter(DecisionSnapshot.program_id == program_id)
+        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
+        .all()
+    )
+
+    latest_by_mol: dict[int, DecisionSnapshot] = {}
+    for s in all_snaps:
+        if s.molecule_id is None:
+            continue
+        mid = int(s.molecule_id)
+        if mid not in latest_by_mol:
+            latest_by_mol[mid] = s
+
+    def _safe_json(s: str | None) -> dict:
+        try:
+            obj = json.loads(s or "{}")
+            return obj if isinstance(obj, dict) else {}
+        except Exception:
+            return {}
+
+    status_counts = {"READY": 0, "BLOCKED": 0, "UNKNOWN": 0}
+    blocker_counts: dict[str, int] = {}
+    missing_metric_counts: dict[str, int] = {}
+    molecule_rollup: list[dict] = []
+
+    for m in molecules:
+        snap = latest_by_mol.get(int(m.id))
+        if not snap:
+            molecule_rollup.append(
+                {
+                    "molecule_id": int(m.id),
+                    "primary_id": m.primary_id,
+                    "title": m.title,
+                    "latest_snapshot_id": None,
+                    "decision_state": None,
+                    "readiness_state": "UNKNOWN",
+                    "blocker_count": 0,
+                    "policy_version": None,
+                }
+            )
+            status_counts["UNKNOWN"] += 1
+            continue
+
+        out = _safe_json(snap.outputs_json)
+        pol = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+        readiness = out.get("readiness") if isinstance(out.get("readiness"), dict) else {}
+        decision_state = str(out.get("decision_state") or "")
+        readiness_state = str(readiness.get("state") or "").lower()
+
+        if readiness_state == "ready" or decision_state == "ready":
+            bucket = "READY"
+        elif readiness_state == "blocked" or decision_state == "blocked":
+            bucket = "BLOCKED"
+        else:
+            bucket = "UNKNOWN"
+        status_counts[bucket] += 1
+
+        blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
+        for b in blockers:
+            if isinstance(b, dict):
+                k = str(b.get("blocker_key") or b.get("key") or "")
+                if k:
+                    blocker_counts[k] = blocker_counts.get(k, 0) + 1
+
+        soe = out.get("state_of_evidence") if isinstance(out.get("state_of_evidence"), dict) else {}
+        soe3 = soe.get("soe_v0_3") if isinstance(soe.get("soe_v0_3"), dict) else {}
+        cov = soe3.get("coverage") if isinstance(soe3.get("coverage"), dict) else {}
+        missing = cov.get("metrics_missing") if isinstance(cov.get("metrics_missing"), list) else []
+        for mk in missing:
+            if mk is None:
+                continue
+            key = str(mk)
+            if key:
+                missing_metric_counts[key] = missing_metric_counts.get(key, 0) + 1
+
+        molecule_rollup.append(
+            {
+                "molecule_id": int(m.id),
+                "primary_id": m.primary_id,
+                "title": m.title,
+                "latest_snapshot_id": int(snap.id),
+                "decision_state": decision_state,
+                "readiness_state": bucket,
+                "blocker_count": int(len(blockers)),
+                "policy_version": str(pol.get("policy_version") or ""),
+            }
+        )
+
+    di_dashboard = {
+        "counts": status_counts,
+        "top_blockers": sorted(blocker_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:15],
+        "top_missing_metrics": sorted(missing_metric_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20],
+        "molecule_rollup": sorted(molecule_rollup, key=lambda r: str(r.get("primary_id") or "")),
+    }
+
     return {
         "program": p,
         "molecules": molecules,
@@ -64,6 +164,7 @@ def get_program_detail(db: Session, program_id: int) -> dict:
         "recent_data": recent_data,
         "recent_evidence": recent_evidence,
         "recent_decisions": recent_decisions,
+        "di_dashboard": di_dashboard,
         "audits": audits,
     }
 

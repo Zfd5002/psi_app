@@ -15,17 +15,9 @@ from psi.core.di.schema import DIInput
 from psi.core.models import DecisionSnapshot, Program
 from psi.core.utils import now_utc
 from psi.services.di.selection import select_batch_measurements
-from psi.services.di.templates.advance_to_in_vivo import evaluate as eval_advance_to_in_vivo
-from psi.services.di.eval import derive_gate_outcomes, derive_readiness
-from psi.services.di.comparability import compute_comparability
-from psi.services.di.enrich import (
-    build_soe_v0_2,
-    build_soe_v0_3,
-    coverage_fingerprint_payload,
-    derive_risk_flags_enriched,
-    derive_suggestions,
-)
-from psi.services.di.integrity import compute_evidence_fingerprint, compute_snapshot_content_hash
+from psi.services.di.compute import _compute_di_from_used_by_metric
+from psi.services.di.enrich import coverage_fingerprint_payload
+from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2, compute_evidence_fingerprint, compute_snapshot_content_hash
 from psi.version import PSI_VERSION
 
 
@@ -104,7 +96,7 @@ def _policy_schema_mismatch_output(*, di_input: DIInput, pol: Any, mismatch: str
             "inputs_fingerprint": {
                 "decision_key": di_input.decision_key,
                 "scope_type": di_input.scope_type,
-                "scope_id": di_input.scope_id,
+                "scope_id": int(di_input.scope_id),
                 "context_keys": sorted(list((di_input.context or {}).keys())),
             },
         },
@@ -267,7 +259,7 @@ def compute_di_output(
         inputs_obj = {
             "decision_key": di_input.decision_key,
             "scope_type": di_input.scope_type,
-            "scope_id": di_input.scope_id,
+            "scope_id": int(di_input.scope_id),
             "as_of_ts": di_input.as_of_ts,
             "qc_mode": di_input.qc_mode,
             "context": di_input.context or {},
@@ -303,6 +295,11 @@ def compute_di_output(
                 outputs_obj=out,
                 evidence_ids=evidence_ids,
             )
+            integrity["decision_output_hash"] = compute_decision_output_hash(inputs_obj=inputs_obj, outputs_obj=out)
+            integrity["decision_output_hash_v2"] = compute_decision_output_hash_v2(
+                inputs_obj=inputs_obj,
+                outputs_obj=out,
+            )
             prov["integrity"] = integrity
 
         return {"rules_version": rules_version, "inputs_obj": inputs_obj, "output": out, "evidence_ids": evidence_ids}
@@ -321,50 +318,6 @@ def compute_di_output(
     warnings = sel["warnings"]
     selection_provenance = sel.get("selection_provenance") or {}
 
-    templ = eval_advance_to_in_vivo(used_by_metric=used_by_metric, policy=pol.policy_body, context=di_input.context or {})
-
-    # strict-mode cannot_assess heuristic: nothing usable and strict QC blocked candidates
-    strict_blocked = (
-        (di_input.qc_mode == "strict")
-        and (len(used_by_metric) == 0)
-        and any(ig.reason_key in ("qc_unreviewed_strict", "qc_failed") for ig in ignored)
-    )
-
-    decision_state = templ["decision_state"]
-    if strict_blocked:
-        decision_state = "cannot_assess"
-        templ["blockers"].insert(
-            0,
-            {
-                "blocker_key": "unreviewed_qc_required_metric",
-                "detail": {"qc_mode": "strict", "note": "No acceptable evidence under strict QC."},
-            },
-        )
-
-    # State of Evidence v0.2 (descriptive extension; no behavior change)
-    soe_v0_2 = build_soe_v0_2(
-        db,
-        batch_id=int(di_input.scope_id),
-        decision_key=di_input.decision_key,
-        policy_body=(pol.policy_body or {}),
-        used_by_metric=used_by_metric,
-        ignored=ignored,
-        warnings=warnings,
-        qc_mode=di_input.qc_mode,
-        context=di_input.context or {},
-    )
-
-    # State of Evidence v0.3 (additive summary; no evaluation change)
-    soe_v0_3 = build_soe_v0_3(
-        db,
-        batch_id=int(di_input.scope_id),
-        as_of_ts=di_input.as_of_ts,
-        qc_mode=di_input.qc_mode,
-        policy_body=(pol.policy_body or {}),
-        used_by_metric=used_by_metric,
-        ignored=ignored,
-    )
-
     # Catalog reference + hash (catalog JSON is NOT embedded in snapshots).
     cat_ref = pol.experiment_catalog_ref
     catalog_id = str(cat_ref.get("catalog_id") or "")
@@ -379,129 +332,11 @@ def compute_di_output(
             )
         catalog_hash = cat.catalog_hash
 
-    # Blocker -> experiment mapping (neutral; sorted/deduped; no prioritization logic)
-    experiment_suggestions: Dict[str, Any] = {}
-    blocker_suggestions = pol.policy_body.get("blocker_suggestions") if isinstance(pol.policy_body, dict) else {}
-    if isinstance(blocker_suggestions, dict):
-        for bk, exps in blocker_suggestions.items():
-            if isinstance(exps, list):
-                seen = set()
-                out_list = []
-                for x in exps:
-                    sx = str(x).strip()
-                    if not sx or sx in seen:
-                        continue
-                    seen.add(sx)
-                    out_list.append(sx)
-                experiment_suggestions[str(bk)] = sorted(out_list)
-
-    out: Dict[str, Any] = {
-        "decision_state": decision_state,
-        "policy": {
-            "policy_id": pol.policy_id,
-            "policy_name": pol.name,
-            "policy_version": pol.version,
-            "policy_schema_version": pol.schema_version,
-            "policy_semantics_hash": pol.policy_semantics_hash,
-            "policy_package_hash": pol.policy_package_hash,
-            "name": pol.name,
-            "version": pol.version,
-            "hash": pol.policy_semantics_hash,
-            "source": pol.source_name,
-            "changelog": pol.changelog if pol.changelog is not None else [],
-        },
-        "engine": {
-            "engine_id": ENGINE_ID,
-            "schema_version": SNAPSHOT_SCHEMA_VERSION,
-            "selector_version": SELECTOR_VERSION,
-            "evaluator_version": EVALUATOR_VERSION,
-            # additive hardening
-            "evaluation_version": EVALUATOR_VERSION,
-            "code_version": PSI_VERSION,
-        },
-        "provenance": {
-            "as_of_ts": di_input.as_of_ts,
-            "qc_mode": di_input.qc_mode,
-            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
-            "experiment_catalog": {"catalog_id": catalog_id, "catalog_version": catalog_version, "catalog_hash": catalog_hash},
-            "selection_semantics": {
-                "ignore_for_model": "always_ignored",
-                "outliers": "not_dropped_in_v0_1",
-                "primary": "is_primary_first_else_newest_timestamp",
-            },
-            "selection_provenance": selection_provenance,
-            "inputs_fingerprint": {
-                "decision_key": di_input.decision_key,
-                "scope_type": di_input.scope_type,
-                "scope_id": di_input.scope_id,
-                "context_keys": sorted(list((di_input.context or {}).keys())),
-            },
-        },
-        "state_of_evidence": {
-            "used": {k: v.__dict__ for k, v in used_by_metric.items()},
-            "ignored_evidence": [ig.__dict__ for ig in ignored],
-            "warnings": warnings,
-            "soe_v0_2": soe_v0_2,
-            "soe_v0_3": soe_v0_3,
-        },
-        "gates": [g.__dict__ for g in templ["gates"]],
-        "blockers": templ["blockers"],
-        "risk_flags": templ["risk_flags"],
-        "risk_flags_enriched": derive_risk_flags_enriched(
-            risk_flags=templ["risk_flags"],
-            used_by_metric=used_by_metric,
-            policy_body=(pol.policy_body or {}),
-        ),
-        "experiment_suggestions": experiment_suggestions,
-        "measurement_ids_used": sorted([ev.measurement_id for ev in used_by_metric.values()]),
-    }
-
-    gate_outcomes = derive_gate_outcomes(policy_body=(pol.policy_body or {}), gate_results=templ["gates"], used_by_metric=used_by_metric)
-
-    readiness = derive_readiness(
-        decision_state=decision_state,
-        decision_key=di_input.decision_key,
-        policy_body=(pol.policy_body or {}),
-        gate_results=templ["gates"],
-        templ_blockers=templ["blockers"],
-        used_by_metric=used_by_metric,
-        ignored=ignored,
-        warnings=warnings,
-        qc_mode=di_input.qc_mode,
-    )
-
-    # v1.2.9j: evidence comparability + QC coherence diagnostics (additive; no behavior change)
-    comp_pack = compute_comparability(
-        db,
-        batch_id=int(di_input.scope_id),
-        as_of_ts=di_input.as_of_ts,
-        metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}) if isinstance(pol.policy_body, dict) else {},
-        policy_body=(pol.policy_body or {}) if isinstance(pol.policy_body, dict) else {},
-    )
-    comparability = comp_pack.get("comparability") or {"metric_level": [], "qc_coherence": [], "summary": {"total_flags": 0, "high_severity_count": 0}}
-    confidence_degradation = comp_pack.get("confidence_degradation") or {"triggered": False, "reasons": []}
-
-    # Readiness integration is additive-only: assumptions + optional blocking_reasons if policy says block.
-    ra = (comp_pack.get("readiness_additions") or {})
-    if isinstance(readiness, dict):
-        if isinstance(ra.get("assumptions"), list):
-            readiness["assumptions"] = sorted(list(set((readiness.get("assumptions") or []) + ra.get("assumptions"))))
-        if isinstance(ra.get("blocking_reasons"), list):
-            readiness["blocking_reasons"] = sorted(list(set((readiness.get("blocking_reasons") or []) + ra.get("blocking_reasons"))))
-
-    out["gate_outcomes"] = gate_outcomes
-    out["readiness"] = readiness
-    out["comparability"] = comparability
-    out["confidence_degradation"] = confidence_degradation
-    out["coverage_fingerprint"] = _sha256_of_stable_json(coverage_fingerprint_payload(readiness=readiness, gate_outcomes=gate_outcomes))
-
-    # v1.2.9i: formalized suggestions (non-ranked; policy-derived only)
-    out["suggestions"] = derive_suggestions(gate_outcomes=gate_outcomes, readiness=readiness, ignored=ignored)
 
     inputs_obj = {
         "decision_key": di_input.decision_key,
         "scope_type": di_input.scope_type,
-        "scope_id": di_input.scope_id,
+        "scope_id": int(di_input.scope_id),
         "as_of_ts": di_input.as_of_ts,
         "qc_mode": di_input.qc_mode,
         "context": di_input.context or {},
@@ -530,17 +365,17 @@ def compute_di_output(
         "policy_path": str(policy_path) if policy_path is not None else "",
     }
 
-    evidence_ids = sorted([ev.measurement_id for ev in used_by_metric.values()])
+    out = _compute_di_from_used_by_metric(
+        db,
+        di_in=di_input,
+        pol=pol,
+        used_by_metric=used_by_metric,
+        inputs_obj=inputs_obj,
+        ignored=ignored,
+        warnings=warnings,
+        selection_provenance=selection_provenance,
+    )
 
-    # v1.2.9k integrity (additive only)
-    prov = out.get("provenance")
-    if isinstance(prov, dict):
-        integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric=used_by_metric)}
-        integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
-            inputs_obj=inputs_obj,
-            outputs_obj=out,
-            evidence_ids=evidence_ids,
-        )
-        prov["integrity"] = integrity
+    evidence_ids = sorted([ev.measurement_id for ev in used_by_metric.values()])
 
     return {"rules_version": rules_version, "inputs_obj": inputs_obj, "output": out, "evidence_ids": evidence_ids}

@@ -20,6 +20,7 @@ from psi.core.models import (
     Program,
     OutcomeLabel,
 )
+
 from psi.core.utils import json_dumps_compact, model_to_dict, now_utc
 
 
@@ -365,6 +366,10 @@ def _measurement_ids_used(out: dict) -> list[int]:
 
 
 def get_snapshot_compare_context(db: Session, *, snap_a: int, snap_b: int) -> dict:
+    # Local import to avoid circular import:
+    # snapshot_diff depends on stable_json_dumps from this module.
+    from psi.services.di.snapshot_diff import compute_snapshot_diff_by_id
+
     a = db.get(DecisionSnapshot, int(snap_a))
     b = db.get(DecisionSnapshot, int(snap_b))
     if not a or not b:
@@ -392,73 +397,22 @@ def get_snapshot_compare_context(db: Session, *, snap_a: int, snap_b: int) -> di
     policy_a = _di_policy_from_output(out_a)
     policy_b = _di_policy_from_output(out_b)
 
-    # v1.2.9d: distinguish semantic vs metadata-only policy changes
-    sem_a = str(policy_a.get("policy_semantics_hash") or "")
-    sem_b = str(policy_b.get("policy_semantics_hash") or "")
-    pkg_a = str(policy_a.get("policy_package_hash") or "")
-    pkg_b = str(policy_b.get("policy_package_hash") or "")
-    policy_change_kind = "unknown"
-    if sem_a and sem_b:
-        if sem_a != sem_b:
-            policy_change_kind = "semantic_change"
-        elif pkg_a and pkg_b and pkg_a != pkg_b:
-            policy_change_kind = "metadata_only_change"
-        else:
-            policy_change_kind = "no_change"
+    # Deterministic shared diff (CLI + web)
+    dr = compute_snapshot_diff_by_id(db=db, id1=int(a.id), id2=int(b.id))
 
-    mids_a = set(_measurement_ids_used(out_a))
-    mids_b = set(_measurement_ids_used(out_b))
-
-    gates_a = _gates_map(out_a)
-    gates_b = _gates_map(out_b)
-    gate_keys = sorted(set(gates_a.keys()) | set(gates_b.keys()))
-    gates_changed: list[dict[str, Any]] = []
-    for k in gate_keys:
-        ga = gates_a.get(k, {"status": "", "rationale": ""})
-        gb = gates_b.get(k, {"status": "", "rationale": ""})
-        if ga.get("status") != gb.get("status") or ga.get("rationale") != gb.get("rationale"):
-            gates_changed.append(
-                {
-                    "gate_key": k,
-                    "a_status": ga.get("status"),
-                    "b_status": gb.get("status"),
-                    "a_rationale": ga.get("rationale"),
-                    "b_rationale": gb.get("rationale"),
-                    "a_rationale_changed": ga.get("rationale") != gb.get("rationale"),
-                    "b_rationale_changed": ga.get("rationale") != gb.get("rationale"),
-                }
-            )
-
-    blockers_a = set(_keys_from_list(out_a.get("blockers"), "blocker_key"))
-    blockers_b = set(_keys_from_list(out_b.get("blockers"), "blocker_key"))
-    risks_a = set(_keys_from_list(out_a.get("risk_flags"), "risk_key"))
-    risks_b = set(_keys_from_list(out_b.get("risk_flags"), "risk_key"))
-
-    # Provenance diffs: only a small stable set of fields.
-    prov_a = out_a.get("provenance") if isinstance(out_a, dict) else {}
-    prov_b = out_b.get("provenance") if isinstance(out_b, dict) else {}
-    if not isinstance(prov_a, dict):
-        prov_a = {}
-    if not isinstance(prov_b, dict):
-        prov_b = {}
-
-    prov_fields = ["as_of_ts", "qc_mode"]
-    provenance_changed = []
-    for k in prov_fields:
-        va = prov_a.get(k)
-        vb = prov_b.get(k)
-        if str(va) != str(vb):
-            provenance_changed.append({"key": k, "a": va, "b": vb})
+    drift_map = {
+        "no_change": "VERIFIED",
+        "policy_drift": "POLICY_DRIFT",
+        "data_drift": "DATA_DRIFT",
+        "qc_drift": "QC_DRIFT",
+        "structural_drift": "STRUCTURAL_DRIFT",
+    }
+    drift_label = drift_map.get(str(dr.drift_label or ""), "STRUCTURAL_DRIFT")
 
     diff = {
-        "evidence_added": sorted(list(mids_b - mids_a)),
-        "evidence_removed": sorted(list(mids_a - mids_b)),
-        "gates_changed": gates_changed,
-        "blockers_added": sorted(list(blockers_b - blockers_a)),
-        "blockers_removed": sorted(list(blockers_a - blockers_b)),
-        "risks_added": sorted(list(risks_b - risks_a)),
-        "risks_removed": sorted(list(risks_a - risks_b)),
-        "provenance_changed": provenance_changed,
+        "drift_label": drift_label,
+        "summary": dr.summary,
+        "changes": dr.changes,
     }
 
     return {
@@ -468,6 +422,5 @@ def get_snapshot_compare_context(db: Session, *, snap_a: int, snap_b: int) -> di
         "snap_b": b,
         "policy_a": policy_a,
         "policy_b": policy_b,
-        "policy_change_kind": policy_change_kind,
         "diff": diff,
     }

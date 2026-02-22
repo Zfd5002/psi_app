@@ -3,6 +3,7 @@
 {% set engine = output.engine if output.engine is defined else {} %}
 {% set policy = output.policy if output.policy is defined else {} %}
 {% set prov = output.provenance if output.provenance is defined else {} %}
+{% set integ = prov.integrity if prov is defined and prov.integrity is defined else {} %}
 {% set soe = output.state_of_evidence if output.state_of_evidence is defined else {} %}
 {% set used = soe.used if soe is defined and soe.used is defined else {} %}
 {% set ignored = soe.ignored_evidence if soe is defined and soe.ignored_evidence is defined else [] %}
@@ -61,6 +62,29 @@
       <tr><td><b>Evaluator</b></td><td>{{ engine.evaluator_version if engine.evaluator_version is defined else (inputs.evaluator_version if inputs is defined else '') }}</td></tr>
       <tr><td><b>as_of_ts</b></td><td>{{ prov.as_of_ts if prov.as_of_ts is defined else (inputs.as_of_ts if inputs is defined else '') }}</td></tr>
       <tr><td><b>qc_mode</b></td><td>{{ prov.qc_mode if prov.qc_mode is defined else (inputs.qc_mode if inputs is defined else '') }}</td></tr>
+
+      {% if integ is defined and (integ.evidence_fingerprint is defined or integ.snapshot_content_hash is defined) %}
+        <tr>
+          <td><b>evidence_fingerprint</b></td>
+          <td>
+            {% if integ.evidence_fingerprint is defined and integ.evidence_fingerprint %}
+              <details><summary class="muted">{{ integ.evidence_fingerprint[:12] }}</summary>
+                <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px;">{{ integ.evidence_fingerprint }}</div>
+              </details>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td><b>snapshot_content_hash</b></td>
+          <td>
+            {% if integ.snapshot_content_hash is defined and integ.snapshot_content_hash %}
+              <details><summary class="muted">{{ integ.snapshot_content_hash[:12] }}</summary>
+                <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px;">{{ integ.snapshot_content_hash }}</div>
+              </details>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+      {% endif %}
     </tbody>
   </table>
 </div>

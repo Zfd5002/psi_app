@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
+from typing import Any
 
 from psi.core.audit import record_audit
 from psi.core.models import (
     SequenceEntity,
     AuditEvent,
     Batch,
+    DecisionSnapshot,
     DataRecord,
     Evidence,
     File as StoredFile,
@@ -20,6 +22,7 @@ from psi.core.models import (
     PropertyRun,
     PropertyValue,
 )
+from psi.services.di.snapshot_diff import compute_snapshot_diff_struct
 from psi.core.utils import model_to_dict, now_utc
 import json
 from psi.core.fasta import normalize_aa_sequence, sha256_text, to_fasta
@@ -161,6 +164,102 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         raise KeyError("Molecule not found")
 
     batches = db.query(Batch).filter(Batch.molecule_id == molecule_id).order_by(Batch.created_at.desc()).all()
+
+    batch_label_by_id = {int(b.id): (str(getattr(b, "batch_id", "") or b.id)) for b in batches}
+
+    # v1.2.9m: molecule-level DI decision history + drift vs previous (read-only)
+    snaps = (
+        db.query(DecisionSnapshot)
+        .filter(DecisionSnapshot.molecule_id == molecule_id)
+        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
+        .all()
+    )
+
+    # We compute drift vs previous snapshot (same decision_key) deterministically using the
+    # shared snapshot diff module (no engine/policy changes; UI surface only).
+    _tmp: list[dict[str, Any]] = []
+    for s in snaps:
+        try:
+            out = json.loads(s.outputs_json or "{}")
+        except Exception:
+            out = {}
+        try:
+            inn = json.loads(s.inputs_json or "{}")
+        except Exception:
+            inn = {}
+        if not isinstance(out, dict) or not out.get("decision_state"):
+            continue
+
+        policy = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+        prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+        integ = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+
+        gate_outcomes = out.get("gate_outcomes") if isinstance(out.get("gate_outcomes"), dict) else {}
+        if not gate_outcomes and isinstance(out.get("gates"), list):
+            gate_outcomes = {
+                str(g.get("gate_key")): {"status": g.get("status")}
+                for g in out.get("gates")
+                if isinstance(g, dict) and g.get("gate_key")
+            }
+        statuses = [str(v.get("status") or "") for v in (gate_outcomes or {}).values() if isinstance(v, dict)]
+        pass_n = sum(1 for x in statuses if x == "pass")
+        nonpass_n = sum(1 for x in statuses if x and x != "pass")
+        blocker_n = len(out.get("blockers") or []) if isinstance(out.get("blockers"), list) else 0
+
+        _tmp.append(
+            {
+                "snapshot_id": int(s.id),
+                "created_at": s.created_at,
+                "decision_key": s.decision_key,
+                "batch_id": int(s.batch_id) if s.batch_id is not None else None,
+                "batch_label": batch_label_by_id.get(int(s.batch_id or 0), str(s.batch_id or "")) if s.batch_id else "",
+                "policy_id": str(policy.get("policy_id") or ""),
+                "policy_version": str(policy.get("policy_version") or ""),
+                "summary": {
+                    "decision_state": str(out.get("decision_state") or ""),
+                    "gates_pass": int(pass_n),
+                    "gates_nonpass": int(nonpass_n),
+                    "blockers": int(blocker_n),
+                },
+                "integrity": {
+                    "snapshot_content_hash": str(integ.get("snapshot_content_hash") or ""),
+                    "evidence_fingerprint": str(integ.get("evidence_fingerprint") or ""),
+                },
+                "_out": out,
+                "_in": inn,
+            }
+        )
+
+    # Sort chronologically for "vs previous" computations, then return newest-first for display.
+    _tmp_sorted = sorted(_tmp, key=lambda r: (r.get("created_at") or "", int(r.get("snapshot_id") or 0)))
+    prev_by_decision_key: dict[str, dict[str, Any]] = {}
+    for row in _tmp_sorted:
+        dk = str(row.get("decision_key") or "")
+        prev = prev_by_decision_key.get(dk)
+        if prev is not None:
+            try:
+                dr = compute_snapshot_diff_struct(
+                    out1=prev.get("_out") or {},
+                    in1=prev.get("_in") or {},
+                    out2=row.get("_out") or {},
+                    in2=row.get("_in") or {},
+                )
+                row["prev_snapshot_id"] = int(prev.get("snapshot_id") or 0)
+                row["drift_vs_prev"] = str(dr.drift_label)
+            except Exception:
+                row["prev_snapshot_id"] = None
+                row["drift_vs_prev"] = None
+        else:
+            row["prev_snapshot_id"] = None
+            row["drift_vs_prev"] = None
+        prev_by_decision_key[dk] = row
+
+    # Final display ordering: newest first.
+    di_history: list[dict[str, Any]] = []
+    for row in sorted(_tmp_sorted, key=lambda r: (r.get("created_at") or "", int(r.get("snapshot_id") or 0)), reverse=True):
+        row.pop("_out", None)
+        row.pop("_in", None)
+        di_history.append(row)
 
     qc_counts_by_batch = qc_svc.get_qc_counts_for_batches(db, molecule_id=molecule_id)
 
@@ -559,6 +658,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     return {
         "molecule": m,
         "batches": batches,
+        "di_history": di_history,
         "data_records": data_records,
         "evidence": evidence,
         "file_links": file_links,

@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from psi.services import decisions as svc
+from psi.services.di.verify import verify_snapshot
 from psi.web.deps import get_db, get_rules_path, get_templates
 
 router = APIRouter()
@@ -70,6 +71,24 @@ def decisions_detail(snap_id: int, request: Request, print_view: int = 0, db: Se
     tmpl = "decisions/detail_print.html" if print_view else "decisions/detail.html"
     ctx["request"] = request
     return templates.TemplateResponse(tmpl, ctx)
+
+
+@router.post("/decisions/{snap_id}/verify", response_class=HTMLResponse)
+def decisions_verify(snap_id: int, request: Request, debug: int = 0, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    try:
+        snap_ctx = svc.get_snapshot_detail(db, snap_id)
+    except KeyError:
+        raise HTTPException(404)
+
+    report = verify_snapshot(db=db, snapshot_id=int(snap_id), debug=bool(int(debug) if debug is not None else 0))
+
+    ctx = {
+        "request": request,
+        "snap": snap_ctx.get("snap"),
+        "report": report,
+    }
+    return templates.TemplateResponse("decisions/verify.html", ctx)
 
 
 @router.get("/decisions/{snap_id}/export")

@@ -5,7 +5,7 @@
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end;">
     <div>
       <h1 style="margin:0;">Compare snapshots</h1>
-      <div class="muted">DI-only compare · read-only</div>
+      <div class="muted">DI-only compare · read-only · deterministic diff</div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
       <a class="btn" href="/decisions">Back</a>
@@ -19,6 +19,9 @@
       <b>Cannot compare:</b> {{ error }}
     </div>
   {% else %}
+
+    {% set ch = diff.changes if diff is defined and diff.changes is defined else {} %}
+    {% set summ = diff.summary if diff is defined and diff.summary is defined else {} %}
 
     <div class="grid cols-2" style="margin-top:12px;">
       <div class="card" style="margin:0;">
@@ -35,28 +38,12 @@
       </div>
     </div>
 
-    {% if summary_banner %}
-      <div class="notice" style="margin-top:12px;">
-        {{ summary_banner }}
-      </div>
-    {% endif %}
-
-    {% if policy_change_kind == 'semantic_change' %}
-      <div class="notice" style="margin-top:12px;border-color:var(--warn);">
-        <b>Policy change:</b> semantic change (policy_semantics_hash differs)
-      </div>
-    {% elif policy_change_kind == 'metadata_only_change' %}
-      <div class="notice" style="margin-top:12px;">
-        <b>Policy change:</b> metadata-only change (policy_package_hash differs; semantics hash same)
-      </div>
-    {% elif policy_change_kind == 'no_change' %}
-      <div class="notice" style="margin-top:12px;">
-        <b>Policy change:</b> none (hashes identical)
-      </div>
-    {% endif %}
+    <div class="notice" style="margin-top:12px;{% if diff.drift_label != 'VERIFIED' %}border-color:var(--warn);{% endif %}">
+      <b>Drift classification:</b> {{ diff.drift_label }}
+    </div>
 
     <div class="card" style="margin-top:12px;">
-      <h2 style="margin-top:0;">Policy</h2>
+      <h2 style="margin-top:0;">Policy & integrity</h2>
       <table class="table">
         <thead><tr><th></th><th>A</th><th>B</th></tr></thead>
         <tbody>
@@ -64,89 +51,122 @@
           <tr><td><b>policy_version</b></td><td>{{ policy_a.policy_version }}</td><td>{{ policy_b.policy_version }}</td></tr>
           <tr><td><b>policy_semantics_hash</b></td><td>{{ policy_a.policy_semantics_hash }}</td><td>{{ policy_b.policy_semantics_hash }}</td></tr>
           <tr><td><b>policy_package_hash</b></td><td>{{ policy_a.policy_package_hash }}</td><td>{{ policy_b.policy_package_hash }}</td></tr>
-          <tr><td><b>source</b></td><td>{{ policy_a.source }}</td><td>{{ policy_b.source }}</td></tr>
-          <tr><td><b>policy_name</b></td><td>{{ policy_a.policy_name }}</td><td>{{ policy_b.policy_name }}</td></tr>
+          <tr><td><b>catalog_hash</b></td><td>{{ summ.catalog_hash.id1 if summ.catalog_hash is defined else '' }}</td><td>{{ summ.catalog_hash.id2 if summ.catalog_hash is defined else '' }}</td></tr>
+          <tr><td><b>evidence_fingerprint</b></td><td>{{ summ.integrity.id1.evidence_fingerprint if summ.integrity is defined and summ.integrity.id1 is defined else '' }}</td><td>{{ summ.integrity.id2.evidence_fingerprint if summ.integrity is defined and summ.integrity.id2 is defined else '' }}</td></tr>
+          <tr><td><b>snapshot_content_hash</b></td><td>{{ summ.integrity.id1.snapshot_content_hash if summ.integrity is defined and summ.integrity.id1 is defined else '' }}</td><td>{{ summ.integrity.id2.snapshot_content_hash if summ.integrity is defined and summ.integrity.id2 is defined else '' }}</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="card" style="margin-top:12px;">
-      <h2 style="margin-top:0;">Changes</h2>
+      <h2 style="margin-top:0;">Diff summary</h2>
 
-      <h3 style="margin-bottom:6px;">Measurement evidence</h3>
-      <div class="grid cols-2" style="gap:10px;">
-        <div>
-          <div class="muted">Added in B</div>
-          {% if diff.evidence_added|length %}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              {% for mid in diff.evidence_added %}<span class="tag">#{{ mid }}</span>{% endfor %}
-            </div>
-          {% else %}<div class="muted">(none)</div>{% endif %}
-        </div>
-        <div>
-          <div class="muted">Removed in B</div>
-          {% if diff.evidence_removed|length %}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              {% for mid in diff.evidence_removed %}<span class="tag">#{{ mid }}</span>{% endfor %}
-            </div>
-          {% else %}<div class="muted">(none)</div>{% endif %}
-        </div>
-      </div>
-
-      <h3 style="margin-top:14px;margin-bottom:6px;">Gates</h3>
-      {% if diff.gates_changed|length %}
+      <h3 style="margin-bottom:6px;">Gates</h3>
+      {% if ch.gate_outcomes is defined and ch.gate_outcomes|length %}
         <table class="table">
-          <thead><tr><th>gate</th><th>A</th><th>B</th></tr></thead>
+          <thead><tr><th>gate</th><th>change</th></tr></thead>
           <tbody>
-            {% for g in diff.gates_changed %}
+            {% for gate_key, g in ch.gate_outcomes|dictsort %}
               <tr>
-                <td><b>{{ g.gate_key }}</b></td>
-                <td>{{ g.a_status }}{% if g.a_rationale_changed %}<div class="muted">{{ g.a_rationale }}</div>{% endif %}</td>
-                <td>{{ g.b_status }}{% if g.b_rationale_changed %}<div class="muted">{{ g.b_rationale }}</div>{% endif %}</td>
+                <td><b>{{ gate_key }}</b></td>
+                <td>
+                  {% if g.added is defined %}
+                    <span class="tag">added</span> {{ g.added | tojson }}
+                  {% elif g.removed is defined %}
+                    <span class="tag">removed</span> {{ g.removed | tojson }}
+                  {% else %}
+                    {% if g.status is defined %}<div><b>status:</b> {{ g.status.from }} → {{ g.status.to }}</div>{% endif %}
+                    {% if g.required_metrics is defined %}<div class="muted">required_metrics: -{{ g.required_metrics.removed|length }} +{{ g.required_metrics.added|length }}</div>{% endif %}
+                    {% if g.present_metrics is defined %}<div class="muted">present_metrics: -{{ g.present_metrics.removed|length }} +{{ g.present_metrics.added|length }}</div>{% endif %}
+                    {% if g.missing_metrics is defined %}<div class="muted">missing_metrics: -{{ g.missing_metrics.removed|length }} +{{ g.missing_metrics.added|length }}</div>{% endif %}
+                    {% if g.qc_notes is defined %}<div class="muted">qc_notes: -{{ g.qc_notes.removed|length }} +{{ g.qc_notes.added|length }}</div>{% endif %}
+                  {% endif %}
+                </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       {% else %}
-        <div class="muted">No gate status/rationale changes.</div>
+        <div class="muted">No gate deltas.</div>
       {% endif %}
 
       <h3 style="margin-top:14px;margin-bottom:6px;">Blockers</h3>
-      <div class="grid cols-2" style="gap:10px;">
-        <div>
-          <div class="muted">Added in B</div>
-          {% if diff.blockers_added|length %}<ul class="clean">{% for k in diff.blockers_added %}<li><b>{{ k }}</b></li>{% endfor %}</ul>{% else %}<div class="muted">(none)</div>{% endif %}
+      {% if ch.readiness is defined and ch.readiness.blockers is defined %}
+        <div class="grid cols-2" style="gap:10px;">
+          <div>
+            <div class="muted">Added in B</div>
+            {% if ch.readiness.blockers.added|length %}
+              <ul class="clean">{% for b in ch.readiness.blockers.added %}<li><b>{{ b.key }}</b>{% if b.explanation %}<span class="muted"> — {{ b.explanation }}</span>{% endif %}</li>{% endfor %}</ul>
+            {% else %}<div class="muted">(none)</div>{% endif %}
+          </div>
+          <div>
+            <div class="muted">Removed in B</div>
+            {% if ch.readiness.blockers.removed|length %}
+              <ul class="clean">{% for b in ch.readiness.blockers.removed %}<li><b>{{ b.key }}</b>{% if b.explanation %}<span class="muted"> — {{ b.explanation }}</span>{% endif %}</li>{% endfor %}</ul>
+            {% else %}<div class="muted">(none)</div>{% endif %}
+          </div>
         </div>
-        <div>
-          <div class="muted">Removed in B</div>
-          {% if diff.blockers_removed|length %}<ul class="clean">{% for k in diff.blockers_removed %}<li><b>{{ k }}</b></li>{% endfor %}</ul>{% else %}<div class="muted">(none)</div>{% endif %}
-        </div>
-      </div>
-
-      <h3 style="margin-top:14px;margin-bottom:6px;">Risk flags</h3>
-      <div class="grid cols-2" style="gap:10px;">
-        <div>
-          <div class="muted">Added in B</div>
-          {% if diff.risks_added|length %}<ul class="clean">{% for k in diff.risks_added %}<li><b>{{ k }}</b></li>{% endfor %}</ul>{% else %}<div class="muted">(none)</div>{% endif %}
-        </div>
-        <div>
-          <div class="muted">Removed in B</div>
-          {% if diff.risks_removed|length %}<ul class="clean">{% for k in diff.risks_removed %}<li><b>{{ k }}</b></li>{% endfor %}</ul>{% else %}<div class="muted">(none)</div>{% endif %}
-        </div>
-      </div>
-
-      <h3 style="margin-top:14px;margin-bottom:6px;">Provenance</h3>
-      {% if diff.provenance_changed|length %}
-        <table class="table">
-          <thead><tr><th>field</th><th>A</th><th>B</th></tr></thead>
-          <tbody>
-            {% for row in diff.provenance_changed %}
-              <tr><td><b>{{ row.key }}</b></td><td>{{ row.a }}</td><td>{{ row.b }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
       {% else %}
-        <div class="muted">No provenance differences.</div>
+        <div class="muted">No blocker deltas.</div>
+      {% endif %}
+
+      <h3 style="margin-top:14px;margin-bottom:6px;">Evidence deltas (metric-level)</h3>
+      {% if ch.evidence_by_metric is defined %}
+        <div class="grid cols-2" style="gap:10px;">
+          <div>
+            <div class="muted">Added metrics</div>
+            {% if ch.evidence_by_metric.added|length %}
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">{% for mk in ch.evidence_by_metric.added %}<span class="tag">{{ mk }}</span>{% endfor %}</div>
+            {% else %}<div class="muted">(none)</div>{% endif %}
+          </div>
+          <div>
+            <div class="muted">Removed metrics</div>
+            {% if ch.evidence_by_metric.removed|length %}
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">{% for mk in ch.evidence_by_metric.removed %}<span class="tag">{{ mk }}</span>{% endfor %}</div>
+            {% else %}<div class="muted">(none)</div>{% endif %}
+          </div>
+        </div>
+
+        {% if ch.evidence_by_metric.changed is defined and ch.evidence_by_metric.changed|length %}
+          <table class="table" style="margin-top:10px;">
+            <thead><tr><th>metric_key</th><th>field</th><th>A</th><th>B</th></tr></thead>
+            <tbody>
+              {% for mk, fields in ch.evidence_by_metric.changed|dictsort %}
+                {% for field, delta in fields|dictsort %}
+                  <tr>
+                    <td><b>{{ mk }}</b></td>
+                    <td>{{ field }}</td>
+                    <td>{{ delta.from }}</td>
+                    <td>{{ delta.to }}</td>
+                  </tr>
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      {% else %}
+        <div class="muted">No evidence deltas.</div>
+      {% endif %}
+
+      <h3 style="margin-top:14px;margin-bottom:6px;">QC state changes</h3>
+      <div class="grid cols-2" style="gap:10px;">
+        <div>
+          <div class="muted">qc_mode</div>
+          {% if ch.identifiers is defined and ch.identifiers.qc_mode is defined %}
+            <div><b>{{ ch.identifiers.qc_mode.from }}</b> → <b>{{ ch.identifiers.qc_mode.to }}</b></div>
+          {% else %}<div class="muted">(no change)</div>{% endif %}
+        </div>
+        <div>
+          <div class="muted">qc_confidence</div>
+          {% if ch.readiness is defined and ch.readiness.qc_confidence is defined %}
+            <pre style="white-space:pre-wrap;overflow:auto;max-height:220px;">{{ ch.readiness.qc_confidence | tojson(indent=2) }}</pre>
+          {% else %}<div class="muted">(no change)</div>{% endif %}
+        </div>
+      </div>
+
+      {% if ch.integrity is defined %}
+        <h3 style="margin-top:14px;margin-bottom:6px;">Integrity</h3>
+        <pre style="white-space:pre-wrap;overflow:auto;max-height:220px;">{{ ch.integrity | tojson(indent=2) }}</pre>
       {% endif %}
 
     </div>
