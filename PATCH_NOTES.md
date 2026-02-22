@@ -1,3 +1,14 @@
+## v1.2.9s3
+
+Why:
+- Make replay regression harness startup clearer and fail fast on invalid explicit DB paths.
+
+What changed:
+- `psi/tools/di_replay_regression.py`: print PSI version + read-only mode; fail fast if `--db` path is missing.
+
+What did NOT change:
+- No DI logic changes. No DB writes. No schema changes.
+
 ## v1.2.9s2
 
 Why:

@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from psi.core.db import DB_PATH, get_db
 from psi.core.models import DecisionSnapshot
 from psi.services.di.verify import verify_snapshot
+from psi.version import PSI_VERSION
 
 # Internal verifier helpers (kept in verify.py so web + CLI share semantics).
 from psi.services.di import verify as verify_mod
@@ -223,6 +224,12 @@ def main() -> None:
         resolved_db = Path(DB_PATH).expanduser().resolve()
 
     print(f"replay_regression: db={resolved_db}")
+    print(f"replay_regression: psi_version={PSI_VERSION}")
+    print("replay_regression: mode=read-only ensure=False")
+
+    if args.db.strip() and not resolved_db.is_file():
+        print(f"replay_regression: ERROR: db file not found: {resolved_db}", file=sys.stderr)
+        sys.exit(2)
 
     tested = 0
     passed = 0
