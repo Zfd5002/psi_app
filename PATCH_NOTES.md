@@ -1,3 +1,14 @@
+## v1.2.9s2
+
+Why:
+- Clarify which SQLite DB path the replay regression harness opens, and enforce read-only posture.
+
+What changed:
+- `psi/tools/di_replay_regression.py`: print resolved DB path at startup; open DB with `ensure=False`.
+
+What did NOT change:
+- No DB schema changes. No DB writes. No DI logic changes.
+
 ## v1.2.9s
 
 Why:

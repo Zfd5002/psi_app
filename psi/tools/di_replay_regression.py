@@ -21,12 +21,13 @@ This tool is an orchestrator and report renderer.
 
 import argparse
 import json
+from pathlib import Path
 import sys
 from typing import Any, Dict, Iterable, List, Tuple
 
 from sqlalchemy.orm import Session
 
-from psi.core.db import get_db
+from psi.core.db import DB_PATH, get_db
 from psi.core.models import DecisionSnapshot
 from psi.services.di.verify import verify_snapshot
 
@@ -216,6 +217,13 @@ def main() -> None:
     decision_key = args.decision_key.strip() or None
     limit = None if bool(args.all) else int(args.limit)
 
+    if args.db.strip():
+        resolved_db = Path(args.db.strip()).expanduser().resolve()
+    else:
+        resolved_db = Path(DB_PATH).expanduser().resolve()
+
+    print(f"replay_regression: db={resolved_db}")
+
     tested = 0
     passed = 0
     failed = 0
@@ -223,7 +231,7 @@ def main() -> None:
 
     failures: List[Dict[str, Any]] = []
 
-    with get_db(args.db.strip() or None, ensure=True) as db:
+    with get_db(args.db.strip() or None, ensure=False) as db:
         snaps = _iter_snapshots(
             db,
             decision_key=decision_key,
