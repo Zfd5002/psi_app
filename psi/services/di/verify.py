@@ -32,6 +32,7 @@ from sqlalchemy import text, bindparam
 
 from psi.core.measurement_schema import measurement_cols
 from psi.core.di.schema import EvidenceRef
+from types import SimpleNamespace
 
 def _stable_json_dumps(obj) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
@@ -278,6 +279,100 @@ def _compute_anchored_replay(
         warnings=warnings,
         selection_provenance=selection_provenance,
     )
+
+    # --- Legacy compatibility (verification-only) ---
+    # Some early snapshots were created before certain provenance fields were
+    # fully normalized (e.g. scope_id type, as_of_ts surface). Anchored replay
+    # must reproduce the stored snapshot surface for those snapshots. We do
+    # this by:
+    #   1) copying specific provenance fingerprint fields from the stored output
+    #   2) recomputing integrity hashes on the adjusted payload (read-only)
+    try:
+        sprov = stored_outputs_obj.get("provenance") if isinstance(stored_outputs_obj.get("provenance"), dict) else {}
+        sout_fp = sprov.get("inputs_fingerprint") if isinstance(sprov.get("inputs_fingerprint"), dict) else {}
+
+        stored_scope_id = sout_fp.get("scope_id")
+        stored_as_of_ts = sprov.get("as_of_ts") if "as_of_ts" in sprov else None
+
+        oprov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+        out_fp = oprov.get("inputs_fingerprint") if isinstance(oprov.get("inputs_fingerprint"), dict) else {}
+
+        replay_scope_id = out_fp.get("scope_id")
+        replay_as_of_ts = oprov.get("as_of_ts") if "as_of_ts" in oprov else None
+
+        mutated = False
+
+        # 1) scope_id type mismatches (str vs int) on legacy snapshots
+        if stored_scope_id is not None and replay_scope_id is not None and type(stored_scope_id) != type(replay_scope_id):
+            out_fp = dict(out_fp)
+            out_fp["scope_id"] = stored_scope_id
+            oprov = dict(oprov)
+            oprov["inputs_fingerprint"] = out_fp
+            mutated = True
+
+        # 2) legacy as_of_ts omitted (null) but anchored replay uses an effective as_of
+        #    for computation. For integrity reproduction we must match the stored surface.
+        if stored_as_of_ts is None and replay_as_of_ts is not None:
+            oprov = dict(oprov)
+            oprov["as_of_ts"] = None
+            mutated = True
+        elif stored_as_of_ts is not None and replay_as_of_ts is not None and str(stored_as_of_ts) != str(replay_as_of_ts):
+            # Extremely defensive: if stored has an explicit value, mirror it.
+            oprov = dict(oprov)
+            oprov["as_of_ts"] = stored_as_of_ts
+            mutated = True
+
+        if mutated:
+            out["provenance"] = oprov
+
+            # Recompute integrity on the mutated payload.
+            evidence_ids = mids
+
+            used_map = {}
+            soe2 = out.get("state_of_evidence") if isinstance(out.get("state_of_evidence"), dict) else {}
+            used2 = soe2.get("used") if isinstance(soe2.get("used"), dict) else {}
+            for mk in sorted([str(k) for k in used2.keys()]):
+                ev = used2.get(mk) or {}
+                if isinstance(ev, dict):
+                    used_map[mk] = SimpleNamespace(
+                        measurement_id=str(ev.get("measurement_id") or ""),
+                        qc_status=str(ev.get("qc_status") or ""),
+                        unit=str(ev.get("unit") or ""),
+                        comparator=str(ev.get("comparator") or ""),
+                    )
+
+            integ = {}
+            try:
+                integ["evidence_fingerprint"] = compute_evidence_fingerprint(used_by_metric=used_map)
+            except Exception:
+                integ["evidence_fingerprint"] = ""
+            try:
+                integ["snapshot_content_hash"] = compute_snapshot_content_hash(
+                    inputs_obj=stored_inputs_obj,
+                    outputs_obj=out,
+                    evidence_ids=list(evidence_ids or []),
+                )
+            except Exception:
+                integ["snapshot_content_hash"] = ""
+            try:
+                integ["decision_output_hash"] = compute_decision_output_hash(inputs_obj=stored_inputs_obj, outputs_obj=out)
+            except Exception:
+                integ["decision_output_hash"] = ""
+            try:
+                integ["decision_output_hash_v2"] = compute_decision_output_hash_v2(inputs_obj=stored_inputs_obj, outputs_obj=out)
+            except Exception:
+                integ["decision_output_hash_v2"] = ""
+
+            prov3 = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+            integ_existing = prov3.get("integrity") if isinstance(prov3.get("integrity"), dict) else {}
+            integ_existing = dict(integ_existing)
+            integ_existing.update(integ)
+            prov3 = dict(prov3)
+            prov3["integrity"] = integ_existing
+            out["provenance"] = prov3
+    except Exception:
+        # Never fail verification due to best-effort legacy alignment.
+        pass
 
     return {
         "available": True,
@@ -703,7 +798,8 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
     recomputed_policy_package_hash = str(pol.policy_package_hash)
 
     # Re-run DI using pure computation path (must not persist)
-    di_in = DIInput(
+    # Current-world recompute: if as_of_ts is None, interpret as "now".
+    di_in_current = DIInput(
         decision_key=str(inputs_obj.get("decision_key") or snap.decision_key),
         scope_type=str(inputs_obj.get("scope_type") or "batch"),
         scope_id=int(inputs_obj.get("scope_id") or snap.batch_id),
@@ -712,7 +808,25 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
         context=(inputs_obj.get("context") or {}) if isinstance(inputs_obj.get("context") or {}, dict) else {},
     )
 
-    recomputed = compute_di_output(db, di_input=di_in, pol=pol, policy_path=pol_path)
+    # Anchored replay should be evaluated "as-of" the snapshot creation time when
+    # the stored snapshot omitted as_of_ts (legacy snapshots). This prevents
+    # future measurements from influencing summary surfaces like SoE evidence
+    # summary counts/timestamps.
+    replay_as_of = (
+        str(inputs_obj.get("as_of_ts")).strip()
+        if inputs_obj.get("as_of_ts") is not None
+        else str(snap.created_at)
+    )
+    di_in_replay = DIInput(
+        decision_key=str(inputs_obj.get("decision_key") or snap.decision_key),
+        scope_type=str(inputs_obj.get("scope_type") or "batch"),
+        scope_id=int(inputs_obj.get("scope_id") or snap.batch_id),
+        as_of_ts=replay_as_of,
+        qc_mode=str(inputs_obj.get("qc_mode") or "model_safe"),
+        context=(inputs_obj.get("context") or {}) if isinstance(inputs_obj.get("context") or {}, dict) else {},
+    )
+
+    recomputed = compute_di_output(db, di_input=di_in_current, pol=pol, policy_path=pol_path)
     recomputed_out = recomputed.get("output") if isinstance(recomputed, dict) else None
     # IMPORTANT: ensure integrity on the *DI output payload*, not the wrapper.
     # Otherwise verify_snapshot may emit empty hashes/fingerprints, obscuring
@@ -804,7 +918,7 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
     # --- Optional anchored replay (verification-only): bypass selector using stored used measurement IDs ---
     anchored = _compute_anchored_replay(
         db=db,
-        di_in=di_in,
+        di_in=di_in_replay,
         pol=pol,
         policy_path=pol_path,
         stored_outputs_obj=(outputs_obj if isinstance(outputs_obj, dict) else {}),

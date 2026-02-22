@@ -495,6 +495,140 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
 
 
 
+
+def test_cross_version_snapshot_content_hash_stability() -> None:
+    """Regression: snapshot_content_hash must be stable across code version bumps.
+
+    We simulate a version bump by patching module-level PSI_VERSION constants used by
+    DI output construction (runner/compute) between snapshot creation and verification.
+    """
+    if os.environ.get("PSI_DB_PATH"):
+        db_path = os.environ["PSI_DB_PATH"]
+    else:
+        root = Path(tempfile.gettempdir()) / "psi_di_contract_xver"
+        root.mkdir(parents=True, exist_ok=True)
+        db_path = str(root / "psi_di_contract_xver.sqlite")
+        os.environ["PSI_DB_PATH"] = db_path
+
+    from psi.core.db import SessionLocal, ensure_schema
+    from psi.core.models import Batch, Molecule, Program
+    from psi.services.programs import create_program
+    from psi.services.molecules import create_molecule
+    from psi.services.batches import create_batch
+    from psi.services.data_records import create_data_record
+    from psi.services.measurements import upsert_measurements
+
+    from psi.core.di.schema import DIInput
+    from psi.services.di.runner import run_di
+    from psi.services.di.verify import verify_snapshot
+
+    ensure_schema()
+    db = SessionLocal()
+
+    # Program
+    p = db.query(Program).filter(Program.name == "DI_SMOKE_XVER").first()
+    if p is None:
+        p = create_program(db, name="DI_SMOKE_XVER", description="DI cross-version smoke")
+
+    # Molecule
+    m = db.query(Molecule).filter(Molecule.program_id == p.id).first()
+    if m is None:
+        hc = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISWNSGSTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCARGGGG"
+        lc = "DIQMTQSPSSLSASVGDRVTITCRASQSISSSYLAWYQQKPGKAPKLLIYDASTRATGIPDRFSGSGSGTDFTLTISSLQPEDFATYYCQQSYSTPYTFGQGTKVEIK"
+        m = create_molecule(db, program_id=p.id, primary_id="DI-SMOKE-XVER-0001", title="DI Smoke Xver molecule", components={"HC1": hc, "LC1": lc})
+
+    # Batch
+    b = db.query(Batch).filter(Batch.molecule_id == m.id).first()
+    if b is None:
+        b = create_batch(db=db, molecule_id=m.id, title="DI Smoke Xver batch", expression_notes="", purification_notes="")
+
+    # Measurements (minimal)
+    dr = create_data_record(
+        db=db,
+        program_id=p.id,
+        molecule_id=None,
+        batch_id=b.id,
+        domain="generic",
+        data_type="generic",
+        method="generic",
+        title="DI cross-version contract record",
+        params_json={},
+        results_json={},
+    )
+    upsert_measurements(
+        db=db,
+        record_id=dr.id,
+        measurements=[
+            {
+                "name": "monomer_pct",
+                "value_num": 98.0,
+                "value_text": "98.0",
+                "unit": "%",
+                "comparator": None,
+                "data_type": dr.data_type,
+                "method": dr.method,
+            },
+            {
+                "name": "hmw_pct",
+                "value_num": 1.0,
+                "value_text": "1.0",
+                "unit": "%",
+                "comparator": None,
+                "data_type": dr.data_type,
+                "method": dr.method,
+            },
+        ],
+    )
+
+    # Policy path (repo-local)
+    policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_1.json"
+
+    di_input = DIInput(
+        decision_key="advance_to_in_vivo",
+        scope_type="batch",
+        scope_id=int(b.id),
+        as_of_ts=None,
+        qc_mode="model_safe",
+        context={},
+    )
+
+    out = run_di(db, di_input=di_input, policy_path=policy_path)
+    snapshot_id = int(out.get("snapshot_id"))
+
+    # Simulate a version bump between creation and verification
+    import psi.services.di.compute as di_compute
+    import psi.services.di.runner as di_runner
+
+    old_compute_ver = getattr(di_compute, "PSI_VERSION", None)
+    old_runner_ver = getattr(di_runner, "PSI_VERSION", None)
+    try:
+        di_compute.PSI_VERSION = "v9.9.9-test"
+        di_runner.PSI_VERSION = "v9.9.9-test"
+
+        rep = verify_snapshot(db=db, snapshot_id=snapshot_id, debug=False)
+
+        # verify_snapshot() historically returned {"ok": true/false, ...}; newer versions report
+        # classification fields without an explicit ok flag. Treat VERIFIED as pass.
+        ok = False
+        if isinstance(rep, dict):
+            if "ok" in rep:
+                ok = bool(rep.get("ok"))
+            else:
+                cls = str(rep.get("classification") or "")
+                ar = rep.get("anchored_replay") if isinstance(rep.get("anchored_replay"), dict) else {}
+                svr = str(ar.get("stored_vs_replay_classification") or "")
+                rvc = str(ar.get("replay_vs_current_classification") or "")
+                ok = (cls == "VERIFIED" and svr == "VERIFIED" and rvc == "VERIFIED")
+
+        _assert(ok, f"cross-version verify should pass; report={rep}")
+    finally:
+        if old_compute_ver is not None:
+            di_compute.PSI_VERSION = old_compute_ver
+        if old_runner_ver is not None:
+            di_runner.PSI_VERSION = old_runner_ver
+
+    db.close()
+
 def main() -> int:
     try:
         test_policy_canonicalization_and_hash()
@@ -506,6 +640,7 @@ def main() -> int:
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()
         test_soe_v0_2_contract_snapshot_shape_and_determinism()
+        test_cross_version_snapshot_content_hash_stability()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")
         return 1

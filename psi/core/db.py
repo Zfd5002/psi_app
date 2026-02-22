@@ -290,6 +290,10 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             # v1.2.9b: schema discrimination for DI snapshots.
             "engine_key": "TEXT",
             "schema_version": "TEXT",
+            # v1.2.9q: snapshot supersession governance.
+            "is_superseded": "INTEGER",
+            "superseded_by_snapshot_id": "INTEGER",
+            "superseded_at": "TEXT",
             "inputs_json": "TEXT",
             "outputs_json": "TEXT",
             "evidence_ids_json": "TEXT",
@@ -318,10 +322,95 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"))
 
+
+    # v1.2.9q: backfill snapshot supersession metadata (deterministic).
+    # Goal: ensure at most one ACTIVE snapshot per scope (decision_key, program_id, molecule_id, batch_id).
+    # ACTIVE is defined as is_superseded == 0 (NULL treated as 0 for legacy rows).
+    with eng.begin() as conn:
+        try:
+            cols = {r[1] for r in conn.execute(text("PRAGMA table_info(decision_snapshots)")).fetchall()}
+        except Exception:
+            cols = set()
+
+        if "is_superseded" in cols:
+            # Normalize NULL -> 0 for legacy rows.
+            conn.execute(text("UPDATE decision_snapshots SET is_superseded=0 WHERE is_superseded IS NULL"))
+
+            groups = conn.execute(
+                text(
+                    '''
+                    SELECT
+                      decision_key,
+                      program_id,
+                      COALESCE(molecule_id, 0) AS mol_id0,
+                      COALESCE(batch_id, 0) AS batch_id0,
+                      COUNT(*) AS n
+                    FROM decision_snapshots
+                    WHERE is_superseded = 0
+                    GROUP BY decision_key, program_id, COALESCE(molecule_id, 0), COALESCE(batch_id, 0)
+                    HAVING n > 1
+                    '''
+                )
+            ).fetchall()
+
+            for g in groups:
+                dk, pid, mol0, bat0, _n = g
+                rows = conn.execute(
+                    text(
+                        '''
+                        SELECT id, created_at
+                        FROM decision_snapshots
+                        WHERE decision_key = :dk
+                          AND program_id = :pid
+                          AND COALESCE(molecule_id, 0) = :mol0
+                          AND COALESCE(batch_id, 0) = :bat0
+                          AND is_superseded = 0
+                        ORDER BY created_at DESC, id DESC
+                        '''
+                    ),
+                    {"dk": dk, "pid": pid, "mol0": mol0, "bat0": bat0},
+                ).fetchall()
+
+                if not rows:
+                    continue
+
+                keep_id = int(rows[0][0])
+                supersede_ids = [int(r[0]) for r in rows[1:]]
+                if supersede_ids:
+                    placeholders = ",".join(str(x) for x in supersede_ids)
+                    conn.execute(
+                        text(
+                            f'''
+                            UPDATE decision_snapshots
+                            SET
+                              is_superseded = 1,
+                              superseded_at = CURRENT_TIMESTAMP,
+                              superseded_by_snapshot_id = :keep_id
+                            WHERE id IN ({placeholders})
+                            '''
+                        ),
+                        {"keep_id": keep_id},
+                    )
+
     # v1.2.0: required indexes (additive; SQLite-friendly)
     with eng.connect() as conn:
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_sequence_entities_chain_id ON sequence_entities(chain_id)"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_molecules_composition_sha256 ON molecules(composition_sha256)"))
+
+        # v1.2.9q: snapshot supersession indexes + single-ACTIVE constraint (additive).
+        # Note: uses COALESCE to treat NULL scope IDs as 0 so uniqueness is enforced under SQLite UNIQUE semantics.
+        try:
+            cols = {r[1] for r in conn.execute(text("PRAGMA table_info(decision_snapshots)")).fetchall()}
+        except Exception:
+            cols = set()
+
+        if "is_superseded" in cols:
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_decision_snapshots_one_active_per_scope "
+                "ON decision_snapshots(decision_key, program_id, COALESCE(molecule_id,0), COALESCE(batch_id,0)) "
+                "WHERE is_superseded = 0"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_decision_snapshots_superseded_by ON decision_snapshots(superseded_by_snapshot_id)"))
 
         # v1.2.6: file registry indexes (additive)
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_files_sha256 ON files(sha256)"))

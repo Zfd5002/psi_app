@@ -4,6 +4,7 @@ import json
 import datetime
 from typing import Optional, Any
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
@@ -84,12 +85,48 @@ def run_and_snapshot(
     evidence = q.all()
     result = run_decision(rules, decision_key, evidence)
 
+
+
+    # v1.2.9q: supersede prior ACTIVE snapshots for this exact scope, transactionally.
+    active_ids = [
+        int(r[0])
+        for r in db.execute(
+            text(
+                '''
+                SELECT id
+                FROM decision_snapshots
+                WHERE decision_key = :dk
+                  AND program_id = :pid
+                  AND COALESCE(molecule_id, 0) = COALESCE(:mid, 0)
+                  AND COALESCE(batch_id, 0) = COALESCE(:bid, 0)
+                  AND (is_superseded IS NULL OR is_superseded = 0)
+                '''
+            ),
+            {"dk": decision_key, "pid": int(program_id), "mid": molecule_id, "bid": batch_id},
+        ).fetchall()
+    ]
+
+    if active_ids:
+        placeholders = ",".join(str(x) for x in active_ids)
+        db.execute(
+            text(
+                f'''
+                UPDATE decision_snapshots
+                SET is_superseded = 1,
+                    superseded_at = CURRENT_TIMESTAMP,
+                    superseded_by_snapshot_id = NULL
+                WHERE id IN ({placeholders})
+                '''
+            )
+        )
+
     snap = DecisionSnapshot(
         program_id=program_id,
         molecule_id=molecule_id,
         batch_id=batch_id,
         decision_key=decision_key,
         rules_version=str(rules.get("version")),
+        is_superseded=0,
         inputs_json=json_dumps_compact(
             {
                 "program_id": program_id,
@@ -103,6 +140,21 @@ def run_and_snapshot(
         created_at=now_utc(),
     )
     db.add(snap)
+    db.flush()
+
+    if active_ids:
+        placeholders = ",".join(str(x) for x in active_ids)
+        db.execute(
+            text(
+                f'''
+                UPDATE decision_snapshots
+                SET superseded_by_snapshot_id = :new_id
+                WHERE id IN ({placeholders})
+                '''
+            ),
+            {"new_id": int(snap.id)},
+        )
+
     db.commit()
     db.refresh(snap)
 
@@ -164,6 +216,8 @@ def create_snapshot_freeze(
         notes=notes,
     )
     db.add(snap)
+    db.flush()
+
     db.commit()
     db.refresh(snap)
 

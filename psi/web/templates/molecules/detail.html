@@ -53,6 +53,7 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
       <a class="btn primary" href="/batches/new?molecule_id={{ molecule.id }}">New Batch</a>
+      <a class="btn" href="/decisions/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}">Run DI</a>
       <a class="btn" href="/molecules/{{ molecule.id }}/edit">Edit</a>
     </div>
   </div>

@@ -1,3 +1,205 @@
+## v1.2.9r3
+
+Why:
+- Constitution hardening: clarify DI scope, patch governance, and the legacy YAML engine boundary.
+
+What changed:
+- `docs/DI_CONSTITUTION.md`
+  - Add explicit scope + canonical DI surfaces list (what the Constitution governs).
+  - Add patch governance requirements (required sanity commands + second-pass review triggers).
+  - Clarify legacy YAML rules engine boundary vs canonical DI engine.
+  - Refine Drift Guards wording: disallow scoring/ranking/adaptive tables while permitting deterministic audit/provenance/labeling tables (e.g. `OutcomeLabel`).
+
+What did NOT change:
+- Docs-only patch: no DI engine changes, no policy changes, no selector changes.
+- No DB changes / migrations.
+- No snapshot contract changes.
+
+## v1.2.9r2
+
+Why:
+- Restore DI Snapshot Contract invariant: anchored replay must reproduce the stored `snapshot_content_hash` exactly.
+- v1.2.9r1 correctly prevented legacy anchored replay from "seeing the future" by using an effective `as_of_ts=snapshot.created_at`, but this changed the replay output surface (`provenance.as_of_ts`) for snapshots that originally stored `as_of_ts=null`, causing a contract smoke regression.
+
+What changed:
+- `psi/services/di/verify.py`
+  - Anchored replay still computes with an effective `as_of_ts` for legacy snapshots (prevents future influence).
+  - Verification-only surface alignment now mirrors stored `provenance.as_of_ts` (including `null`) onto the anchored replay output and recomputes integrity hashes on the adjusted payload.
+
+What did NOT change:
+- No policy changes. No selector changes. No DB changes / migrations.
+
+## v1.2.9r1
+
+Why:
+- Fix anchored replay determinism for legacy snapshots where `inputs_json.as_of_ts` is null.
+- Without an explicit as-of timestamp, replay runs at "now" and can drift on summary surfaces (e.g. SoE evidence_summary timestamps/counts), even when the anchored evidence IDs are unchanged.
+
+What changed:
+- `psi/services/di/verify.py`
+  - Split verification into two DI inputs:
+    - current-world recompute keeps `as_of_ts=None` (interpreted as "now")
+    - anchored replay uses `as_of_ts=snapshot.created_at` when the snapshot omitted `as_of_ts`
+  - Add a small verification-only legacy alignment step for anchored replay when the stored snapshot has a type mismatch in `provenance.inputs_fingerprint.scope_id`:
+    - copy the stored value into the replay output
+    - recompute integrity hashes on the adjusted payload (read-only)
+
+What did NOT change:
+- No schema changes. No migrations.
+- No DI engine / policy / selector logic changes.
+- No mutation of existing snapshots.
+
+## v1.2.9r
+
+Why:
+- Add an institutional replay regression harness to continuously validate that persisted DI snapshots can be deterministically replayed via the anchored replay path.
+- This is a read-only hardening layer: it does not change DI governance rules, policy semantics, selector semantics, or snapshot persistence.
+
+What changed:
+- New CLI tool: `python -m psi.tools.di_replay_regression`
+  - Enumerates stored `decision_snapshots` deterministically.
+  - For each snapshot, runs the existing verification service anchored replay path and gates on `stored_vs_replay_classification == VERIFIED`.
+  - Emits a clear, deterministic report with per-snapshot failures and a minimal semantic diff snippet (excluding volatile fields).
+  - Exit code 0 if all pass; non-zero if any fail.
+
+Determinism + governance notes:
+- Replay is read-only and must not write new snapshots or mutate existing snapshots.
+- Policy is resolved by the snapshot-stored `policy_id` + `policy_version` (no fallback to latest).
+- Semantic diff ignores explicitly-volatile fields (as defined by the verifier):
+  - `outputs.engine.code_version`
+  - `outputs.provenance.integrity`
+
+What did NOT change:
+- No schema changes. No migrations.
+- No DI engine logic changes. No policy changes. No selector changes.
+- No changes to integrity hashing functions or verification classifications.
+
+## v1.2.9q8a
+
+Why:
+- Hotfix: v1.2.9q8 patch for `psi/services/decisions.py` was missing `from sqlalchemy import text`, causing a runtime `NameError` when the legacy `run_and_snapshot()` path executes.
+- This hotfix adds the missing import only. No logic changes beyond v1.2.9q8.
+
+## v1.2.9q8
+
+Why:
+- Fix two logic bugs in `psi/services/decisions.py` introduced by the v1.2.9q
+  supersession patch. Both are runtime failures; neither is a syntax error and
+  neither is caught by compileall.
+
+Bug 1 — `run_and_snapshot` never creates a snapshot on the first run:
+  The snapshot creation block (`snap = DecisionSnapshot(...)` and all code
+  after it) was accidentally nested inside `if active_ids:`. On the first run
+  for any scope, `active_ids` is empty, the branch is skipped, and the function
+  returns `None`. The web router then crashes with AttributeError accessing
+  `snap.id` on None. Every first-time "Run DI" or legacy decision button press
+  would 500.
+  Fix: move `snap = DecisionSnapshot(...)` and everything following it to
+  function scope. The mark-superseded UPDATE stays conditional (only runs when
+  there are prior actives). Snapshot creation is now unconditional.
+
+Bug 2 — `create_snapshot_freeze` raises NameError at runtime:
+  The function referenced `active_ids` at lines 220–221, a variable that only
+  exists in `run_and_snapshot`. `create_snapshot_freeze` never queries for
+  prior snapshots and has no `active_ids` of its own. Any call to this function
+  would raise `NameError: name 'active_ids' is not defined`.
+  Fix: remove the stray `if active_ids:` block entirely from
+  `create_snapshot_freeze`. The function now creates the snapshot and commits
+  without attempting supersession (which it was never intended to do).
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No selector changes.
+- No schema changes. No migrations.
+- runner.py supersession logic is untouched (it was correct).
+- db.py is untouched.
+- models.py is untouched.
+
+## v1.2.9q7
+- Hotfix: fix runtime NameError in `psi/services/di/runner.py` (`scope_batch_id` undefined inside `compute_di_output()`).
+- Structural-only change: define `scope_batch_id = int(di_input.scope_id)` within `compute_di_output()` so selection calls are self-contained; no governance logic changes.
+## v1.2.9q5
+- Hotfix: fix v1.2.9q overlay corruption in `psi/services/di/runner.py` that deindented the governed snapshot return path, causing `SyntaxError: 'return' outside function`.
+- Structural-only change: restore correct block structure so snapshot creation + supersession update executes inside the intended function (no logic changes).
+## v1.2.9q6
+- Hotfix: restore structural correctness in `psi/services/di/runner.py` (supersession + snapshot creation code re-indented inside `run_di()`).
+- No logic changes beyond repairing overlay corruption; governance additions preserved.
+## v1.2.9q4
+- Hotfix: fix remaining v1.2.9q overlay corruption in `psi/services/decisions.py` where the supersession block was deindented to module scope, causing `SyntaxError: 'return' outside function`.
+- Structural-only change: re-indent the governed snapshot path so all logic executes inside `run_and_snapshot()`.
+
+## v1.2.9q3
+- Hotfix: restore syntactically valid `psi/services/decisions.py` after v1.2.9q overlay corruption caused `SyntaxError: 'return' outside function`.
+- No logic changes intended; file content restored to the v1.2.9q governed snapshot path with correct block structure.
+
+## v1.2.9q2 — Hotfix: Restore schema/model structural integrity (no logic changes)
+
+Fixes patch-overlay structural corruption introduced in v1.2.9q:
+
+- `psi/core/db.py`: ensure v1.2.9q supersession backfill + index creation stays inside `ensure_schema()` / proper `with eng.begin()` scope (prevents `IndentationError` / stray module-level execution).
+- `psi/core/models.py`: restore truncated `DataRecord.raw_inputs_json` line and place snapshot supersession columns inside `DecisionSnapshot` where they belong (fixes syntax break + correct ORM placement).
+
+No behavior changes beyond restoring intended code placement and importability.
+
+
+## v1.2.9q
+
+Why:
+- Governance hardening: institutionalize snapshot lifecycle clarity without changing DI logic or replay determinism.
+
+What changed:
+- Add snapshot supersession metadata (`is_superseded`, `superseded_by_snapshot_id`, `superseded_at`) (additive).
+- Enforce single ACTIVE snapshot per scope `(decision_key, program_id, molecule_id, batch_id)` transactionally on snapshot insert.
+- Add deterministic backfill to mark older snapshots as superseded per scope on existing DBs.
+- Add a partial unique expression index to guarantee at most one ACTIVE snapshot per scope under SQLite NULL semantics.
+- UI: Decisions list + detail pages display ACTIVE/SUPERSEDED status and (when present) the superseding snapshot link.
+- Smoke test: future-proof cross-version patching to include verify module PSI_VERSION if it is ever introduced.
+
+Notes:
+- Snapshot content immutability is preserved: governance fields are metadata and are excluded from DI semantic hashes.
+
+## v1.2.9p
+
+Why:
+- Complete the remaining DI v0.6 UI transparency surfaces without changing DI engine behavior.
+
+What changed:
+- Molecule detail UI: add a contextual **Run DI** entry point linking to `/decisions/new` with `program_id` + `molecule_id` prefilled.
+- Batch Decisions tab UI: add **Run DI for this batch** entry point (and show it even when there are no snapshots yet) with `program_id` + `molecule_id` + `batch_id` prefilled.
+- Decisions "Run Decision" form UI: parse query params (`program_id`, `molecule_id`, `batch_id`) to preselect scope inputs deterministically (navigation-only; no DI logic changes).
+- Snapshot detail UI (`decisions/_di_snapshot.html`):
+  - Add **SoE Coverage** section rendering stored `soe_v0_3` (or `soe_v0_2` fallback) metric status + required/optional grouping + gate coverage, with deterministic ordering.
+  - Add `decision_output_hash_v2_effective` display in the integrity section.
+
+Governance hygiene:
+- Verified `compress.sh` includes `docs/DI_MISSION_AND_ROADMAP.docx` and `PSI_CONTEXT.md` accurately reflects this (no changes required).
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No selector changes.
+- No DB changes / migrations.
+
+
+## v1.2.9o2
+- Fix DI contract smoke cross-version test to use current create_data_record/upsert_measurements signatures.
+- Ensure cross-version test references packaged advance_to_in_vivo_v0_1 policy path.
+
+## v1.2.9o
+
+Why:
+- Normalize the snapshot integrity surface so `snapshot_content_hash` remains stable across code version upgrades.
+- Prevent false drift / verification noise caused by `outputs.engine.code_version` changing between releases.
+
+What changed:
+- `psi/services/di/integrity.py`: exclude `outputs.engine.code_version` from `snapshot_content_hash` payload (while keeping it in stored outputs JSON).
+- `docs/DI_SNAPSHOT_CONTRACT.md`: document `outputs.engine.code_version` as metadata excluded from `snapshot_content_hash`.
+- `psi/tools/di_contract_smoke.py`: add regression test simulating a cross-version verify by patching module PSI_VERSION between snapshot creation and verification.
+
+What did NOT change:
+- No readiness logic changes. No gate changes.
+- No policy JSON changes. No selector changes.
+- No DB changes / migrations.
+- No UI changes.
+
+
 ## v1.2.9n5
 
 Why:
@@ -63,3 +265,9 @@ What did NOT change:
 - No policy changes.
 - No selector changes.
 - No DB changes / migrations.
+
+## v1.2.9o4
+- Hotfix: di_contract_smoke cross-version test now passes policy_path as Path (fixes str.read_text crash) and restores valid module syntax.
+
+## v1.2.9o5
+- Hotfix: di_contract_smoke cross-version test now treats classification==VERIFIED as pass when verify_snapshot omits legacy 'ok' flag.

@@ -93,6 +93,15 @@ def compute_snapshot_content_hash(
     canon_inputs = canonical_inputs_for_integrity(inputs_obj or {})
 
     out_copy = copy.deepcopy(outputs_obj or {})
+    # Exclude additive engine metadata that may legitimately change across releases
+    # without changing decision meaning. This preserves cross-version snapshot
+    # reproducibility (DI Constitution: determinism + portability).
+    eng = out_copy.get("engine")
+    if isinstance(eng, dict):
+        eng = dict(eng)
+        eng.pop("code_version", None)
+        out_copy["engine"] = eng
+
     prov = out_copy.get("provenance")
     if isinstance(prov, dict) and "integrity" in prov:
         prov = dict(prov)

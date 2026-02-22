@@ -63,7 +63,7 @@
       <tr><td><b>as_of_ts</b></td><td>{{ prov.as_of_ts if prov.as_of_ts is defined else (inputs.as_of_ts if inputs is defined else '') }}</td></tr>
       <tr><td><b>qc_mode</b></td><td>{{ prov.qc_mode if prov.qc_mode is defined else (inputs.qc_mode if inputs is defined else '') }}</td></tr>
 
-      {% if integ is defined and (integ.evidence_fingerprint is defined or integ.snapshot_content_hash is defined) %}
+      {% if integ is defined and (integ.evidence_fingerprint is defined or integ.snapshot_content_hash is defined or integ.decision_output_hash_v2_effective is defined) %}
         <tr>
           <td><b>evidence_fingerprint</b></td>
           <td>
@@ -84,10 +84,108 @@
             {% else %}<span class="muted">—</span>{% endif %}
           </td>
         </tr>
+        <tr>
+          <td><b>decision_output_hash_v2_effective</b></td>
+          <td>
+            {% if integ.decision_output_hash_v2_effective is defined and integ.decision_output_hash_v2_effective %}
+              <details><summary class="muted">{{ integ.decision_output_hash_v2_effective[:12] }}</summary>
+                <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px;">{{ integ.decision_output_hash_v2_effective }}</div>
+              </details>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
       {% endif %}
     </tbody>
   </table>
 </div>
+
+{% set soe_cov = (soe.soe_v0_3 if soe is defined and soe.soe_v0_3 is defined and soe.soe_v0_3.metric_status is defined else (soe.soe_v0_2 if soe is defined and soe.soe_v0_2 is defined else {})) %}
+{% set metric_status = (soe_cov.metric_status if soe_cov is defined and soe_cov.metric_status is defined else {}) %}
+{% set gate_cov = (soe_cov.gate_coverage if soe_cov is defined and soe_cov.gate_coverage is defined else {}) %}
+{% set req_by_gate = (soe_cov.requirements.by_gate if soe_cov is defined and soe_cov.requirements is defined and soe_cov.requirements.by_gate is defined else {}) %}
+{% set cov_summary = (soe_cov.summary if soe_cov is defined and soe_cov.summary is defined else {}) %}
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">SoE Coverage</h2>
+  <div class="muted mini">Read-only rendering of stored snapshot State-of-Evidence coverage. No recomputation.</div>
+
+  {% if cov_summary.metrics is defined %}
+    <div class="grid cols-3" style="margin-top:10px;">
+      <div>
+        <div class="muted mini">Metrics referenced</div>
+        <div style="font-size:20px;font-weight:800;">{{ cov_summary.metrics.referenced_total }}</div>
+        <div class="muted mini">present: {{ cov_summary.metrics.present }} · missing: {{ cov_summary.metrics.missing }}</div>
+        {% if cov_summary.metrics.present_but_ignored is defined or cov_summary.metrics.present_but_non_numeric is defined %}
+          <div class="muted mini">ignored: {{ cov_summary.metrics.present_but_ignored if cov_summary.metrics.present_but_ignored is defined else 0 }} · non-numeric: {{ cov_summary.metrics.present_but_non_numeric if cov_summary.metrics.present_but_non_numeric is defined else 0 }}</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted mini">Gate coverage</div>
+        {% if cov_summary.gates is defined %}
+          <div style="font-size:20px;font-weight:800;">{{ cov_summary.gates.coverage_satisfied }} / {{ cov_summary.gates.total }}</div>
+          <div class="muted mini">satisfied / total</div>
+        {% else %}
+          <div class="muted">—</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted mini">SoE schema</div>
+        <div style="font-size:20px;font-weight:800;">{% if soe_cov is mapping and soe_cov is not none %}{{ 'v0.3' if soe.soe_v0_3 is defined and soe.soe_v0_3.metric_status is defined else ('v0.2' if soe.soe_v0_2 is defined else '—') }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% set ns = namespace(required=[]) %}
+  {% for gk, reqs in req_by_gate|dictsort %}
+    {% if reqs is mapping %}
+      {% set lst = (reqs.require_all if reqs.require_all is defined else (reqs.require_any if reqs.require_any is defined else [])) %}
+      {% for mk in lst %}
+        {% if mk is string and mk not in ns.required %}{% set _ = ns.required.append(mk) %}{% endif %}
+      {% endfor %}
+    {% endif %}
+  {% endfor %}
+
+  {% if metric_status and metric_status|length %}
+    <h3 style="margin-top:14px;">Per-metric status</h3>
+    <table class="table compact">
+      <thead><tr><th>metric_key</th><th>required?</th><th>status</th><th>measurement_id</th><th>qc</th><th>timestamp_used</th><th class="muted">notes</th></tr></thead>
+      <tbody>
+        {% for mk, ms in metric_status|dictsort %}
+          <tr>
+            <td><b>{{ mk }}</b></td>
+            <td>{% if mk in ns.required %}<span class="chip">required</span>{% else %}<span class="chip">optional</span>{% endif %}</td>
+            <td>{{ ms.status if ms is mapping and ms.status is defined else (ms.get('status') if ms is mapping else '—') }}</td>
+            <td class="muted">{% if ms is mapping and ms.selected_measurement_id is defined and ms.selected_measurement_id %}{{ ms.selected_measurement_id }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if ms is mapping and ms.qc_status is defined and ms.qc_status %}{{ ms.qc_status }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if ms is mapping and ms.timestamp_used is defined and ms.timestamp_used %}{{ ms.timestamp_used }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if ms is mapping and ms.notes is defined and ms.notes %}{{ ms.notes|join('; ') }}{% else %}—{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="muted" style="margin-top:10px;">No metric coverage data present in this snapshot.</div>
+  {% endif %}
+
+  {% if gate_cov and gate_cov|length %}
+    <h3 style="margin-top:14px;">Gate coverage</h3>
+    <table class="table compact">
+      <thead><tr><th>gate_key</th><th>requirement</th><th>present</th><th>missing</th><th>satisfied</th></tr></thead>
+      <tbody>
+        {% for gk, gd in gate_cov|dictsort %}
+          <tr>
+            <td><b>{{ gk }}</b></td>
+            <td class="muted">{% if gd is mapping and gd.requirement_type is defined %}{{ gd.requirement_type }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if gd is mapping and gd.present is defined and gd.present %}{{ gd.present|join(', ') }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if gd is mapping and gd.missing is defined and gd.missing %}{{ gd.missing|join(', ') }}{% else %}—{% endif %}</td>
+            <td>{% if gd is mapping and gd.satisfied is defined and gd.satisfied %}<span class="chip">yes</span>{% else %}<span class="chip">no</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>
+
 
 {% if output.gates and output.gates|length %}
   <div class="card" style="margin-top:12px;">

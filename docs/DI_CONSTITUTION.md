@@ -20,6 +20,35 @@ DI does NOT:
 
 ---
 
+### 1.1 Scope & Canonical DI Surfaces (Constitution-Governed)
+
+This Constitution governs the **DI engine** and the minimal set of surfaces that can affect deterministic DI execution, verification, and snapshot auditability.
+
+**In-scope (canonical DI surfaces):**
+
+* `psi/services/di/**` (engine execution, policy evaluation, selection semantics, SoE construction)
+* DI integrity + verification surfaces (e.g. `integrity.py`, `verify.py`, and any helpers they call)
+* DI CLI tools that execute, validate, or regress DI determinism (e.g. `psi/tools/di_contract_smoke.py`, `psi/tools/di_replay_regression.py`, and successors)
+* DI snapshot persistence surfaces in `psi/core/models.py` / `psi/core/db.py` **only as they relate to DI snapshots** (`decision_snapshots`, DI-related provenance fields, and deterministic storage semantics)
+* DI policy packages (IDs, versions, packaging hashes, and any on-disk package layout)
+
+**Out-of-scope:**
+
+Files outside the list above are out-of-scope **unless they route into DI engine execution or mutate DI snapshot state**. If an out-of-scope surface begins to influence DI outcomes (directly or indirectly), it must be explicitly promoted into scope via a deliberate Constitution update.
+
+
+
+### 1.2 Legacy YAML Engine Boundary (Non-Constitution-Governed)
+
+PSI historically included a **legacy YAML rules engine** path (e.g. `psi/services/decisions.py`). That path is **not Constitution-governed**.
+
+**Governance boundary:**
+
+* The DI engine (`psi/services/di/**`) is the **canonical governed engine**.
+* If PSI supports multiple decision engines concurrently, **snapshots must be explicitly labeled by engine** (legacy YAML vs DI) so comparisons are not accidental.
+* Any transition where the UI routes a decision workflow from legacy YAML to DI must be **explicit, versioned, and documented** (not an incidental refactor).
+* This boundary remains in place until the legacy YAML engine is formally deprecated and removed under a dedicated deprecation plan.
+
 ### 2. Determinism Guarantee
 
 Same PSI DB state + same policy package + same selection semantics version + same as-of timestamp ⇒ identical DI output JSON.
@@ -174,5 +203,37 @@ Rules:
 * No scoring
 * No ranking
 * No planner heuristics
-* No new DB tables
+* No new database tables for scoring, ranking, adaptive logic, learned thresholds, or probabilistic reasoning.
+* Deterministic audit/provenance/labeling support tables are permitted (e.g. `OutcomeLabel`).
 * No mutation of QC/source data
+
+---
+
+### 9.1 Patch Governance
+
+Before producing any **DI-related patch ZIP** (including docs-only governance updates), the patch is **invalid** unless these commands pass in a clean environment:
+
+```
+python -m compileall -q psi
+python -m psi.tools.di_contract_smoke
+python -m psi.tools.di_replay_regression --limit 50
+```
+
+If any command fails, **do not ship the patch**.
+
+Second-pass logic review is required if the patch touches any of the following high-risk surfaces:
+
+* `psi/services/di/runner.py`
+* `psi/services/di/verify.py`
+* `psi/services/di/integrity.py`
+* `psi/core/models.py`
+* `psi/core/db.py`
+* any code path that writes to `decision_snapshots`
+
+The second pass must explicitly re-validate:
+
+* determinism invariants
+* snapshot immutability (no mutation of stored snapshots)
+* anchored replay fidelity
+* hash surface stability (especially cross-version replay noise)
+

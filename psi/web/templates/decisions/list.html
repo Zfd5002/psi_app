@@ -22,7 +22,14 @@
       {% for s in snaps %}
       <tr>
         <td><a href="/decisions/{{ s.id }}">#{{ s.id }}</a></td>
-        <td>{{ s.decision_key }}</td>
+        <td>
+          {{ s.decision_key }}
+          {% if s.is_superseded %}
+            <span style="margin-left:8px;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #999;">SUPERSEDED</span>
+          {% else %}
+            <span style="margin-left:8px;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #999;">ACTIVE</span>
+          {% endif %}
+        </td>
         <td>
           Program {{ s.program_id }}
           {% if s.molecule_id %}· Mol {{ s.molecule_id }}{% endif %}

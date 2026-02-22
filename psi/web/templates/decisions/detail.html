@@ -5,6 +5,16 @@
   <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
     <div>
       <h1 style="margin:0;">Decision #{{ snap.id }} ({{ snap.decision_key }})</h1>
+      <div style="margin-top:6px;">
+        {% if snap.is_superseded %}
+          <span style="padding:2px 10px;border-radius:999px;font-size:12px;border:1px solid #999;">SUPERSEDED</span>
+          {% if snap.superseded_by_snapshot_id %}
+            <span class="muted" style="margin-left:10px;">Superseded by <a href="/decisions/{{ snap.superseded_by_snapshot_id }}">#{{ snap.superseded_by_snapshot_id }}</a></span>
+          {% endif %}
+        {% else %}
+          <span style="padding:2px 10px;border-radius:999px;font-size:12px;border:1px solid #999;">ACTIVE</span>
+        {% endif %}
+      </div>
       <div class="muted">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
