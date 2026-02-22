@@ -200,6 +200,7 @@ def create_snapshot_freeze(
         batch_id=batch_id,
         decision_key=decision_key,
         rules_version=rules_version,
+        is_superseded=0,  # v1.2.9s: always explicit; NULL rows cause backfill collision
         inputs_json=json_dumps_compact(
             {
                 "program_id": program_id,

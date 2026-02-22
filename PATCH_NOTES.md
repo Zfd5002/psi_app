@@ -1,3 +1,45 @@
+## v1.2.9s
+
+Why:
+- Fix a startup crash (`IntegrityError: UNIQUE constraint failed:
+  ux_decision_snapshots_one_active_per_scope`) that fires on every PSI
+  startup after the first time the q-series supersession index was created.
+
+Root cause:
+- `ensure_schema()` in `psi/core/db.py` ran a blanket
+  `UPDATE decision_snapshots SET is_superseded=0 WHERE is_superseded IS NULL`
+  on every startup. On the first run this was safe (the unique index did not
+  exist yet). On every subsequent run the unique index already exists, and if
+  any rows had `is_superseded IS NULL` (produced by `create_snapshot_freeze`
+  or any pre-q-series snapshot), converting them all to 0 simultaneously
+  violates the index when two or more such rows share the same scope tuple.
+  The dedup step that would have cleaned up duplicates ran after the blanket
+  conversion — too late.
+
+- Secondary cause: `create_snapshot_freeze` never set `is_superseded` at all,
+  leaving every freeze snapshot with `is_superseded IS NULL`. These silently
+  accumulated and triggered the crash on the next startup.
+
+What changed:
+- `psi/core/db.py` (`ensure_schema`): replace the blanket NULL→0 backfill
+  with a safe per-scope algorithm:
+    1. Early-exit if no NULL rows exist (idempotent, zero cost on clean DBs).
+    2. For each affected scope, fetch all candidate-active rows (NULL or 0)
+       ordered newest-first.
+    3. Mark all losers `is_superseded=1` FIRST — this only removes rows from
+       the active set and can never violate the unique index.
+    4. Set the remaining NULLs (now guaranteed: at most one per scope) to 0.
+  This is safe on first run, safe on all subsequent runs, and idempotent.
+
+- `psi/services/decisions.py` (`create_snapshot_freeze`): explicitly set
+  `is_superseded=0` on every new freeze snapshot. Prevents future NULL
+  accumulation from this path.
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No selector changes.
+- No snapshot content changes. No integrity hash changes.
+- `runner.py` supersession logic is untouched (already correct).
+
 ## v1.2.9r3
 
 Why:

@@ -333,64 +333,93 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             cols = set()
 
         if "is_superseded" in cols:
-            # Normalize NULL -> 0 for legacy rows.
-            conn.execute(text("UPDATE decision_snapshots SET is_superseded=0 WHERE is_superseded IS NULL"))
+            # v1.2.9s: Safe backfill — never do a blanket NULL->0 conversion while the
+            # unique index already exists.  The old approach (SET all NULL to 0, then dedup)
+            # fires the unique constraint on every startup after the first because the index
+            # persists but the blanket update runs before dedup.
+            #
+            # Correct order:
+            #   1. Treat NULL as "candidate active".  Combine NULLs + existing 0-rows.
+            #   2. For each scope, keep the single newest row as the winner.
+            #   3. Mark all losers is_superseded=1 FIRST (this can never violate uniqueness).
+            #   4. Then set the winner to 0 if it was NULL (now guaranteed: at most one per scope).
+            #
+            # This is idempotent: if all rows are already 0 or 1 and at most one active
+            # per scope, all queries return empty result sets and no UPDATEs fire.
 
-            groups = conn.execute(
-                text(
-                    '''
-                    SELECT
-                      decision_key,
-                      program_id,
-                      COALESCE(molecule_id, 0) AS mol_id0,
-                      COALESCE(batch_id, 0) AS batch_id0,
-                      COUNT(*) AS n
-                    FROM decision_snapshots
-                    WHERE is_superseded = 0
-                    GROUP BY decision_key, program_id, COALESCE(molecule_id, 0), COALESCE(batch_id, 0)
-                    HAVING n > 1
-                    '''
-                )
-            ).fetchall()
+            # Early-exit: nothing to do if there are no NULL rows.
+            null_count = conn.execute(
+                text("SELECT COUNT(*) FROM decision_snapshots WHERE is_superseded IS NULL")
+            ).scalar()
 
-            for g in groups:
-                dk, pid, mol0, bat0, _n = g
-                rows = conn.execute(
+            if null_count and null_count > 0:
+                # Step 1: Find every scope that has any NULL or 0 (candidate-active) rows.
+                groups = conn.execute(
                     text(
                         '''
-                        SELECT id, created_at
+                        SELECT
+                          decision_key,
+                          program_id,
+                          COALESCE(molecule_id, 0) AS mol_id0,
+                          COALESCE(batch_id, 0) AS batch_id0
                         FROM decision_snapshots
-                        WHERE decision_key = :dk
-                          AND program_id = :pid
-                          AND COALESCE(molecule_id, 0) = :mol0
-                          AND COALESCE(batch_id, 0) = :bat0
-                          AND is_superseded = 0
-                        ORDER BY created_at DESC, id DESC
+                        WHERE is_superseded IS NULL OR is_superseded = 0
+                        GROUP BY decision_key, program_id,
+                                 COALESCE(molecule_id, 0), COALESCE(batch_id, 0)
                         '''
-                    ),
-                    {"dk": dk, "pid": pid, "mol0": mol0, "bat0": bat0},
+                    )
                 ).fetchall()
 
-                if not rows:
-                    continue
-
-                keep_id = int(rows[0][0])
-                supersede_ids = [int(r[0]) for r in rows[1:]]
-                if supersede_ids:
-                    placeholders = ",".join(str(x) for x in supersede_ids)
-                    conn.execute(
+                for g in groups:
+                    dk, pid, mol0, bat0 = g
+                    # Fetch all candidate-active rows for this scope, newest first.
+                    rows = conn.execute(
                         text(
-                            f'''
-                            UPDATE decision_snapshots
-                            SET
-                              is_superseded = 1,
-                              superseded_at = CURRENT_TIMESTAMP,
-                              superseded_by_snapshot_id = :keep_id
-                            WHERE id IN ({placeholders})
+                            '''
+                            SELECT id
+                            FROM decision_snapshots
+                            WHERE decision_key = :dk
+                              AND program_id = :pid
+                              AND COALESCE(molecule_id, 0) = :mol0
+                              AND COALESCE(batch_id, 0) = :bat0
+                              AND (is_superseded IS NULL OR is_superseded = 0)
+                            ORDER BY created_at DESC, id DESC
                             '''
                         ),
-                        {"keep_id": keep_id},
-                    )
+                        {"dk": dk, "pid": pid, "mol0": mol0, "bat0": bat0},
+                    ).fetchall()
+
+                    if not rows:
+                        continue
+
+                    keep_id = int(rows[0][0])
+                    loser_ids = [int(r[0]) for r in rows[1:]]
+
+                    # Step 2: Mark all losers superseded BEFORE touching the winner.
+                    # This can never violate the unique index because we are only
+                    # setting rows to 1 (removing them from the active set).
+                    if loser_ids:
+                        placeholders = ",".join(str(x) for x in loser_ids)
+                        conn.execute(
+                            text(
+                                f'''
+                                UPDATE decision_snapshots
+                                SET
+                                  is_superseded = 1,
+                                  superseded_at = CURRENT_TIMESTAMP,
+                                  superseded_by_snapshot_id = :keep_id
+                                WHERE id IN ({placeholders})
+                                '''
+                            ),
+                            {"keep_id": keep_id},
+                        )
+
+                # Step 3: Set remaining NULLs (the winners) to 0.
+                # At this point each scope has at most one NULL row, so this
+                # conversion is safe even with the unique index in place.
+                conn.execute(
+                    text("UPDATE decision_snapshots SET is_superseded=0 WHERE is_superseded IS NULL")
+                )
 
     # v1.2.0: required indexes (additive; SQLite-friendly)
     with eng.connect() as conn:
