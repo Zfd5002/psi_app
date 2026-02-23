@@ -629,3 +629,17 @@ What changed:
 What did NOT change:
 - No DI logic changes. No policy changes. No selector changes.
 - No DB changes / migrations. No UI changes.
+
+## 2026-02-23 — v1.2.9v27
+Why:
+- Document WAL journal-mode expectations for writable databases.
+
+What changed:
+- Version bump only (WAL pragmas already enforced on writable connections).
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No UI changes.
+
+Notes:
+- Writable SQLite connections attempt `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL`.
