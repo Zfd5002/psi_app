@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import text
@@ -15,7 +15,7 @@ VALID_POLICIES = {"include", "exclude_soft", "exclude_hard", "quarantine"}
 
 
 def _now_utc() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def get_qc_state_for_measurements(db: Session, measurement_ids: Iterable[int]) -> Dict[int, Dict[str, Any]]:

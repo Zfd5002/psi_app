@@ -2,14 +2,32 @@ from __future__ import annotations
 
 import json
 import datetime
-from typing import Optional
+from typing import Optional, Any
 
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
 from psi.core.decision_engine import load_rules, run_decision
-from psi.core.models import Batch, DataRecord, DecisionSnapshot, Evidence, EvidenceCitation, File as StoredFile, FileLink, Molecule, Program, OutcomeLabel
+from psi.core.models import (
+    Batch,
+    DataRecord,
+    DecisionSnapshot,
+    Evidence,
+    EvidenceCitation,
+    File as StoredFile,
+    FileLink,
+    Molecule,
+    Program,
+    OutcomeLabel,
+)
+
 from psi.core.utils import json_dumps_compact, model_to_dict, now_utc
+
+
+def stable_json_dumps(obj: Any) -> str:
+    """Stable JSON serialization for exports/diffs (deterministic ordering, no whitespace drift)."""
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 def list_decision_snapshots(db: Session) -> list[DecisionSnapshot]:
@@ -67,23 +85,71 @@ def run_and_snapshot(
     evidence = q.all()
     result = run_decision(rules, decision_key, evidence)
 
+
+
+    # v1.2.9q: supersede prior ACTIVE snapshots for this exact scope, transactionally.
+    active_ids = [
+        int(r[0])
+        for r in db.execute(
+            text(
+                '''
+                SELECT id
+                FROM decision_snapshots
+                WHERE decision_key = :dk
+                  AND program_id = :pid
+                  AND COALESCE(molecule_id, 0) = COALESCE(:mid, 0)
+                  AND COALESCE(batch_id, 0) = COALESCE(:bid, 0)
+                  AND (is_superseded IS NULL OR is_superseded = 0)
+                '''
+            ),
+            {"dk": decision_key, "pid": int(program_id), "mid": molecule_id, "bid": batch_id},
+        ).fetchall()
+    ]
+
+    if active_ids:
+        q = text(
+            '''
+            UPDATE decision_snapshots
+            SET is_superseded = 1,
+                superseded_at = CURRENT_TIMESTAMP,
+                superseded_by_snapshot_id = NULL
+            WHERE id IN :ids
+            '''
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"ids": list(active_ids)})
+
     snap = DecisionSnapshot(
         program_id=program_id,
         molecule_id=molecule_id,
         batch_id=batch_id,
         decision_key=decision_key,
         rules_version=str(rules.get("version")),
-        inputs_json=json_dumps_compact({
-            "program_id": program_id,
-            "molecule_id": molecule_id,
-            "batch_id": batch_id,
-            "decision_key": decision_key,
-        }),
+        is_superseded=0,
+        inputs_json=json_dumps_compact(
+            {
+                "program_id": program_id,
+                "molecule_id": molecule_id,
+                "batch_id": batch_id,
+                "decision_key": decision_key,
+            }
+        ),
         outputs_json=json_dumps_compact(result),
         evidence_ids_json=json_dumps_compact(result.get("evidence_ids_used", [])),
         created_at=now_utc(),
     )
     db.add(snap)
+    db.flush()
+
+    if active_ids:
+        q = text(
+            '''
+            UPDATE decision_snapshots
+            SET superseded_by_snapshot_id = :new_id
+            WHERE id IN :ids
+            '''
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"new_id": int(snap.id), "ids": list(active_ids)})
+
     db.commit()
     db.refresh(snap)
 
@@ -129,13 +195,16 @@ def create_snapshot_freeze(
         batch_id=batch_id,
         decision_key=decision_key,
         rules_version=rules_version,
-        inputs_json=json_dumps_compact({
-            "program_id": program_id,
-            "molecule_id": molecule_id,
-            "batch_id": batch_id,
-            "decision_key": decision_key,
-            "as_of_ts": as_of_ts,
-        }),
+        is_superseded=0,  # v1.2.9s: always explicit; NULL rows cause backfill collision
+        inputs_json=json_dumps_compact(
+            {
+                "program_id": program_id,
+                "molecule_id": molecule_id,
+                "batch_id": batch_id,
+                "decision_key": decision_key,
+                "as_of_ts": as_of_ts,
+            }
+        ),
         outputs_json=json_dumps_compact(outputs),
         evidence_ids_json=json_dumps_compact([]),
         created_at=now_utc(),
@@ -143,6 +212,8 @@ def create_snapshot_freeze(
         notes=notes,
     )
     db.add(snap)
+    db.flush()
+
     db.commit()
     db.refresh(snap)
 
@@ -180,35 +251,226 @@ def add_outcome_label(
     return lab
 
 
+def _detect_is_di(snap: DecisionSnapshot, inputs: dict, output: dict) -> bool:
+    # DI snapshots share the DecisionSnapshot table but have a distinct output shape.
+    # Detect robustly to preserve backward compatibility (older DI rows may have NULL engine_key).
+    return bool(
+        (getattr(snap, "engine_key", None) == "di")
+        or (str(getattr(snap, "schema_version", "") or "").startswith("di."))
+        or (isinstance(output, dict) and ("decision_state" in output) and ("gates" in output))
+        or (isinstance(inputs, dict) and (str(inputs.get("engine_key") or "").strip() == "di"))
+        or (isinstance(inputs, dict) and str(inputs.get("schema_version") or "").startswith("di."))
+    )
+
+
 def get_snapshot_detail(db: Session, snap_id: int) -> dict:
     snap = db.get(DecisionSnapshot, snap_id)
     if not snap:
         raise KeyError("DecisionSnapshot not found")
 
     output = json.loads(snap.outputs_json)
-    evidence_ids = output.get("evidence_ids_used", [])
-    evidence = db.query(Evidence).filter(Evidence.id.in_(evidence_ids)).all() if evidence_ids else []
+    inputs = json.loads(snap.inputs_json) if snap.inputs_json else {}
 
-    citations = db.query(EvidenceCitation).filter(EvidenceCitation.evidence_id.in_(evidence_ids)).all() if evidence_ids else []
-    dr_ids = sorted({c.data_record_id for c in citations})
-    data_records = db.query(DataRecord).filter(DataRecord.id.in_(dr_ids)).all() if dr_ids else []
+    is_di = _detect_is_di(snap, inputs, output)
 
-    dr_file_links = db.query(FileLink).filter(FileLink.entity_type == "DataRecord", FileLink.entity_id.in_(dr_ids)).all() if dr_ids else []
-    file_ids = sorted({fl.file_id for fl in dr_file_links})
-    files = db.query(StoredFile).filter(StoredFile.id.in_(file_ids)).all() if file_ids else []
+    outcomes = (
+        db.query(OutcomeLabel)
+        .filter(OutcomeLabel.snapshot_id == snap.id)
+        .order_by(OutcomeLabel.created_at.asc())
+        .all()
+    )
 
-    files_by_id = {f.id: f for f in files}
+    # Legacy rules-engine evidence tracing
+    evidence = []
+    citations = []
+    data_records = []
+    files_by_id = {}
     file_links_by_dr: dict[int, list[FileLink]] = {}
-    for fl in dr_file_links:
-        file_links_by_dr.setdefault(fl.entity_id, []).append(fl)
+
+    if not is_di:
+        evidence_ids = output.get("evidence_ids_used", []) if isinstance(output, dict) else []
+        evidence = db.query(Evidence).filter(Evidence.id.in_(evidence_ids)).all() if evidence_ids else []
+
+        citations = (
+            db.query(EvidenceCitation).filter(EvidenceCitation.evidence_id.in_(evidence_ids)).all()
+            if evidence_ids
+            else []
+        )
+        dr_ids = sorted({c.data_record_id for c in citations})
+        data_records = db.query(DataRecord).filter(DataRecord.id.in_(dr_ids)).all() if dr_ids else []
+
+        dr_file_links = (
+            db.query(FileLink)
+            .filter(FileLink.entity_type == "DataRecord", FileLink.entity_id.in_(dr_ids))
+            .all()
+            if dr_ids
+            else []
+        )
+        file_ids = sorted({fl.file_id for fl in dr_file_links})
+        files = db.query(StoredFile).filter(StoredFile.id.in_(file_ids)).all() if file_ids else []
+
+        files_by_id = {f.id: f for f in files}
+        for fl in dr_file_links:
+            file_links_by_dr.setdefault(fl.entity_id, []).append(fl)
 
     return {
         "snap": snap,
         "outcomes": outcomes,
         "output": output,
+        "inputs": inputs,
+        "is_di": is_di,
         "evidence": evidence,
         "citations": citations,
         "data_records": data_records,
         "files_by_id": files_by_id,
         "file_links_by_dr": file_links_by_dr,
+    }
+
+
+def get_snapshot_export_payload(db: Session, snap_id: int) -> dict:
+    snap = db.get(DecisionSnapshot, snap_id)
+    if not snap:
+        raise KeyError("DecisionSnapshot not found")
+
+    inputs = json.loads(snap.inputs_json) if snap.inputs_json else {}
+    outputs = json.loads(snap.outputs_json) if snap.outputs_json else {}
+    evidence_ids = json.loads(snap.evidence_ids_json) if snap.evidence_ids_json else []
+
+    return {
+        "snapshot_meta": {
+            "id": snap.id,
+            "created_at": snap.created_at,
+            "decision_key": snap.decision_key,
+            "program_id": snap.program_id,
+            "molecule_id": snap.molecule_id,
+            "batch_id": snap.batch_id,
+            "rules_version": snap.rules_version,
+            "engine_key": getattr(snap, "engine_key", None),
+            "schema_version": getattr(snap, "schema_version", None),
+            "as_of_ts": getattr(snap, "as_of_ts", None),
+        },
+        "inputs": inputs,
+        "outputs": outputs,
+        "evidence_ids": evidence_ids,
+    }
+
+
+def _di_policy_from_output(out: dict) -> dict:
+    pol = out.get("policy") if isinstance(out, dict) else {}
+    if not isinstance(pol, dict):
+        pol = {}
+    return {
+        "policy_id": str(pol.get("policy_id") or ""),
+        "policy_name": str(pol.get("policy_name") or pol.get("name") or ""),
+        "policy_version": str(pol.get("policy_version") or pol.get("version") or ""),
+        "policy_schema_version": str(pol.get("policy_schema_version") or ""),
+        "policy_semantics_hash": str(pol.get("policy_semantics_hash") or pol.get("hash") or ""),
+        "policy_package_hash": str(pol.get("policy_package_hash") or ""),
+        "source": str(pol.get("source") or ""),
+        # Back-compat aliases used by older templates
+        "hash": str(pol.get("hash") or pol.get("policy_semantics_hash") or ""),
+        "name": str(pol.get("name") or pol.get("policy_name") or ""),
+        "version": str(pol.get("version") or pol.get("policy_version") or ""),
+    }
+
+
+def _keys_from_list(items: Any, key_name: str) -> list[str]:
+    out: set[str] = set()
+    if isinstance(items, list):
+        for it in items:
+            if isinstance(it, dict):
+                k = it.get(key_name)
+                if k:
+                    out.add(str(k))
+            elif isinstance(it, str):
+                out.add(it)
+    return sorted(out)
+
+
+def _gates_map(out: dict) -> dict[str, dict[str, str]]:
+    m: dict[str, dict[str, str]] = {}
+    gates = out.get("gates") if isinstance(out, dict) else []
+    if not isinstance(gates, list):
+        return m
+    for g in gates:
+        if not isinstance(g, dict):
+            continue
+        k = str(g.get("gate_key") or "")
+        if not k:
+            continue
+        m[k] = {
+            "status": str(g.get("status") or ""),
+            "rationale": str(g.get("rationale") or ""),
+        }
+    return m
+
+
+def _measurement_ids_used(out: dict) -> list[int]:
+    mids = out.get("measurement_ids_used") if isinstance(out, dict) else []
+    if isinstance(mids, list):
+        try:
+            return sorted([int(x) for x in mids])
+        except Exception:
+            return sorted([x for x in mids if isinstance(x, int)])
+    return []
+
+
+def get_snapshot_compare_context(db: Session, *, snap_a: int, snap_b: int) -> dict:
+    # Local import to avoid circular import:
+    # snapshot_diff depends on stable_json_dumps from this module.
+    from psi.services.di.snapshot_diff import compute_snapshot_diff_by_id
+
+    a = db.get(DecisionSnapshot, int(snap_a))
+    b = db.get(DecisionSnapshot, int(snap_b))
+    if not a or not b:
+        return {"error": "One or both snapshots not found.", "snap_a": a, "snap_b": b}
+
+    out_a = json.loads(a.outputs_json) if a.outputs_json else {}
+    out_b = json.loads(b.outputs_json) if b.outputs_json else {}
+    in_a = json.loads(a.inputs_json) if a.inputs_json else {}
+    in_b = json.loads(b.inputs_json) if b.inputs_json else {}
+
+    is_di_a = _detect_is_di(a, in_a, out_a)
+    is_di_b = _detect_is_di(b, in_b, out_b)
+
+    if not (is_di_a and is_di_b):
+        return {
+            "error": "DI compare is only supported for DI snapshots (engine_key=di / schema_version starts with di.).",
+            "snap_a": a,
+            "snap_b": b,
+        }
+
+    summary_banner = None
+    if (a.decision_key != b.decision_key) or (a.program_id != b.program_id) or (a.batch_id != b.batch_id):
+        summary_banner = "Note: snapshots differ in scope (decision_key/program/batch). Compare is still shown, but interpret with care."
+
+    policy_a = _di_policy_from_output(out_a)
+    policy_b = _di_policy_from_output(out_b)
+
+    # Deterministic shared diff (CLI + web)
+    dr = compute_snapshot_diff_by_id(db=db, id1=int(a.id), id2=int(b.id))
+
+    drift_map = {
+        "no_change": "VERIFIED",
+        "policy_drift": "POLICY_DRIFT",
+        "data_drift": "DATA_DRIFT",
+        "qc_drift": "QC_DRIFT",
+        "structural_drift": "STRUCTURAL_DRIFT",
+    }
+    drift_label = drift_map.get(str(dr.drift_label or ""), "STRUCTURAL_DRIFT")
+
+    diff = {
+        "drift_label": drift_label,
+        "summary": dr.summary,
+        "changes": dr.changes,
+    }
+
+    return {
+        "error": None,
+        "summary_banner": summary_banner,
+        "snap_a": a,
+        "snap_b": b,
+        "policy_a": policy_a,
+        "policy_b": policy_b,
+        "diff": diff,
     }

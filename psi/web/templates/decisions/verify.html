@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Verify Decision #{{ snap.id }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+    <div>
+      <h1 style="margin:0;">Verify snapshot #{{ snap.id }}</h1>
+      <div class="muted">Read-only verification · deterministic re-run</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <a class="btn" href="/decisions/{{ snap.id }}">Back to decision</a>
+      <a class="btn" href="/decisions">All decisions</a>
+    </div>
+  </div>
+
+  <div class="notice" style="margin-top:12px;{% if report.classification != 'VERIFIED' %}border-color:var(--warn);{% endif %}">
+    <b>Classification:</b> {{ report.classification }}
+    {% if report.explain and report.explain.missing_stored_integrity_fields %}
+      <div class="muted" style="margin-top:6px;">Note: snapshot is missing stored integrity fields (legacy). VERIFIED is not possible.</div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Policy & integrity</h2>
+    <div class="muted mini" style="margin-bottom:8px;">
+      Columns: <b>stored</b> (snapshot payload) · <b>current-world recompute</b> (selector today) · <b>anchored replay</b> (verification-only, bypass selector using stored evidence IDs)
+    </div>
+    <table class="table">
+      <thead><tr><th></th><th>stored</th><th>current-world</th><th>anchored replay</th></tr></thead>
+      <tbody>
+        <tr><td><b>policy_id</b></td><td>{{ report.stored.policy_id }}</td><td>{{ report.stored.policy_id }}</td><td>{{ report.stored.policy_id }}</td></tr>
+        <tr><td><b>policy_version</b></td><td>{{ report.stored.policy_version }}</td><td>{{ report.stored.policy_version }}</td><td>{{ report.stored.policy_version }}</td></tr>
+        <tr><td><b>policy_semantics_hash</b></td><td>{{ report.stored.policy_semantics_hash }}</td><td>{{ report.recomputed.policy_semantics_hash }}</td><td>{{ report.recomputed.policy_semantics_hash }}</td></tr>
+        <tr><td><b>policy_package_hash</b></td><td>{{ report.stored.policy_package_hash }}</td><td>{{ report.recomputed.policy_package_hash }}</td><td>{{ report.recomputed.policy_package_hash }}</td></tr>
+        <tr><td><b>evidence_fingerprint</b></td><td>{{ report.stored.evidence_fingerprint }}</td><td>{{ report.recomputed.evidence_fingerprint }}</td><td>{{ report.anchored_replay.replay.evidence_fingerprint if report.anchored_replay and report.anchored_replay.available else '—' }}</td></tr>
+        <tr><td><b>snapshot_content_hash</b></td><td>{{ report.stored.snapshot_content_hash }}</td><td>{{ report.recomputed.snapshot_content_hash }}</td><td>{{ report.anchored_replay.replay.snapshot_content_hash if report.anchored_replay and report.anchored_replay.available else '—' }}</td></tr>
+        <tr><td><b>decision_output_hash_v2</b></td><td class="muted">{{ report.stored.decision_output_hash_v2_effective }}</td><td class="muted">{{ report.recomputed.decision_output_hash_v2_effective }}</td><td class="muted">{{ report.anchored_replay.replay.decision_output_hash_v2_effective if report.anchored_replay and report.anchored_replay.available else '—' }}</td></tr>
+        <tr><td><b>stored vs current</b></td><td colspan="3">{{ report.classification }}</td></tr>
+        <tr><td><b>stored vs replay</b></td><td colspan="3">{% if report.anchored_replay and report.anchored_replay.available %}{{ report.anchored_replay.stored_vs_replay_classification }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+        <tr><td><b>replay vs current</b></td><td colspan="3">{% if report.anchored_replay and report.anchored_replay.available %}{{ report.anchored_replay.replay_vs_current_classification }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+      </tbody>
+    </table>
+
+    {% if report.anchored_replay and not report.anchored_replay.available %}
+      <div class="notice" style="margin-top:10px;">
+        <b>Anchored replay unavailable:</b> {{ report.anchored_replay.reason }}
+      </div>
+    {% endif %}
+
+    {% if report.anchored_replay and report.anchored_replay.diagnosis and report.anchored_replay.diagnosis.primary %}
+      <div class="notice" style="margin-top:10px;">
+        <b>Diagnosis:</b> {{ report.anchored_replay.diagnosis.primary }}
+        {% if report.anchored_replay.diagnosis.detail %}
+          <div class="muted" style="margin-top:6px;">{{ report.anchored_replay.diagnosis.detail }}</div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Explain</h2>
+    <pre style="white-space:pre-wrap;overflow:auto;max-height:420px;">{{ report.explain | tojson(indent=2) }}</pre>
+  </div>
+</div>
+{% endblock %}

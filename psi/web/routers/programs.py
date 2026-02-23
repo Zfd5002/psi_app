@@ -36,7 +36,14 @@ def create_program(
 def program_detail(program_id: int, request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
     try:
-        ctx = svc.get_program_detail(db, program_id)
+        pol_filter = request.query_params.get("policy_version")
+        verify_lineage = str(request.query_params.get("verify") or "").strip() == "1"
+        ctx = svc.get_program_detail(
+            db,
+            program_id,
+            policy_version_filter=(pol_filter or None),
+            verify_lineage=verify_lineage,
+        )
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request

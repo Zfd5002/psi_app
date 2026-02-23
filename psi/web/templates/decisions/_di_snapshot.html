@@ -1,0 +1,420 @@
+{# Dedicated DI snapshot viewer (read-only). Assumes ctx: snap, output, inputs #}
+
+{% set engine = output.engine if output.engine is defined else {} %}
+{% set policy = output.policy if output.policy is defined else {} %}
+{% set prov = output.provenance if output.provenance is defined else {} %}
+{% set integ = prov.integrity if prov is defined and prov.integrity is defined else {} %}
+{% set soe = output.state_of_evidence if output.state_of_evidence is defined else {} %}
+{% set used = soe.used if soe is defined and soe.used is defined else {} %}
+{% set ignored = soe.ignored_evidence if soe is defined and soe.ignored_evidence is defined else [] %}
+{% set warnings = soe.warnings if soe is defined and soe.warnings is defined else [] %}
+{% set exp_sugg = output.experiment_suggestions if output.experiment_suggestions is defined else {} %}
+
+{% if verification is defined or verification_error is defined %}
+  {% include "decisions/_di_verification.html" %}
+{% endif %}
+
+<div class="grid cols-3" style="margin-top:12px;">
+  <div class="card" style="margin:0;">
+    <div class="muted">Decision state</div>
+    <div style="font-size:22px;font-weight:800;">{{ output.decision_state }}</div>
+    <div class="muted">Decision: {{ snap.decision_key }}</div>
+  </div>
+  <div class="card" style="margin:0;">
+    <div class="muted">Policy</div>
+    <div><b>{{ policy.policy_name if policy.policy_name is defined else (policy.name if policy.name is defined else '') }}</b></div>
+    <div class="muted">{{ policy.policy_id if policy.policy_id is defined else '' }}</div>
+    <div class="muted">{{ policy.policy_version if policy.policy_version is defined else (policy.version if policy.version is defined else '') }}</div>
+
+    {% if policy.policy_semantics_hash is defined and policy.policy_semantics_hash %}
+      <div class="muted">Semantics hash: {{ policy.policy_semantics_hash[:12] }}</div>
+    {% elif policy.hash is defined and policy.hash %}
+      <div class="muted">Semantics hash: {{ policy.hash[:12] }}</div>
+    {% endif %}
+
+    {% if policy.policy_package_hash is defined and policy.policy_package_hash %}
+      <details style="margin-top:6px;">
+        <summary class="muted">Package hash</summary>
+        <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px;">{{ policy.policy_package_hash }}</div>
+      </details>
+    {% endif %}
+
+    {% if policy.changelog is defined and policy.changelog %}
+      <details style="margin-top:6px;">
+        <summary class="muted">Changelog</summary>
+        <pre style="white-space:pre-wrap;overflow:auto;max-height:240px;">{{ policy.changelog | tojson(indent=2) }}</pre>
+      </details>
+    {% endif %}
+
+    {% if policy.source is defined and policy.source %}<div class="muted" style="margin-top:6px;">Source: {{ policy.source }}</div>{% endif %}
+  </div>
+  <div class="card" style="margin:0;">
+    <div class="muted">Scope</div>
+    <div>Program: {{ snap.program_id }}</div>
+    <div>{% if snap.molecule_id %}Molecule: {{ snap.molecule_id }}{% else %}<span class="muted">Molecule: (none)</span>{% endif %}</div>
+    <div>{% if snap.batch_id %}Batch: {{ snap.batch_id }}{% else %}<span class="muted">Batch: (none)</span>{% endif %}</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Snapshot metadata</h2>
+  <table class="table">
+    <tbody>
+      <tr><td><b>Engine</b></td><td>{{ engine.engine_id if engine.engine_id is defined else (inputs.engine_id if inputs is defined else '') }}</td></tr>
+      <tr><td><b>Schema</b></td><td>{{ engine.schema_version if engine.schema_version is defined else (inputs.schema_version if inputs is defined else '') }}</td></tr>
+      <tr><td><b>Selector</b></td><td>{{ engine.selector_version if engine.selector_version is defined else (inputs.selector_version if inputs is defined else '') }}</td></tr>
+      <tr><td><b>Evaluator</b></td><td>{{ engine.evaluator_version if engine.evaluator_version is defined else (inputs.evaluator_version if inputs is defined else '') }}</td></tr>
+      <tr><td><b>as_of_ts</b></td><td>{{ prov.as_of_ts if prov.as_of_ts is defined else (inputs.as_of_ts if inputs is defined else '') }}</td></tr>
+      <tr><td><b>qc_mode</b></td><td>{{ prov.qc_mode if prov.qc_mode is defined else (inputs.qc_mode if inputs is defined else '') }}</td></tr>
+
+      {% if integ is defined and (integ.evidence_fingerprint is defined or integ.snapshot_content_hash is defined or integ.decision_output_hash_v2_effective is defined) %}
+        <tr>
+          <td><b>evidence_fingerprint</b></td>
+          <td>
+            {% if integ.evidence_fingerprint is defined and integ.evidence_fingerprint %}
+              <details><summary class="muted">{{ integ.evidence_fingerprint[:12] }}</summary>
+                <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px;">{{ integ.evidence_fingerprint }}</div>
+              </details>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td><b>snapshot_content_hash</b></td>
+          <td>
+            {% if integ.snapshot_content_hash is defined and integ.snapshot_content_hash %}
+              <details><summary class="muted">{{ integ.snapshot_content_hash[:12] }}</summary>
+                <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px;">{{ integ.snapshot_content_hash }}</div>
+              </details>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td><b>decision_output_hash_v2_effective</b></td>
+          <td>
+            {% if integ.decision_output_hash_v2_effective is defined and integ.decision_output_hash_v2_effective %}
+              <details><summary class="muted">{{ integ.decision_output_hash_v2_effective[:12] }}</summary>
+                <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px;">{{ integ.decision_output_hash_v2_effective }}</div>
+              </details>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Outcome labels</h2>
+  {% if outcomes is defined and outcomes|length %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Value</th>
+          <th>Version</th>
+          <th>When</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in outcomes %}
+        <tr>
+          <td>{{ o.name }}</td>
+          <td>
+            {% if o.value_text %}{{ o.value_text }}
+            {% elif o.value_num is not none %}{{ o.value_num }}
+            {% elif o.value_bool is not none %}{{ 'true' if o.value_bool else 'false' }}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>{{ o.version }}</td>
+          <td>{{ o.created_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="muted">No outcome labels recorded.</div>
+  {% endif %}
+</div>
+
+{% set soe_cov = (soe.soe_v0_3 if soe is defined and soe.soe_v0_3 is defined and soe.soe_v0_3.metric_status is defined else (soe.soe_v0_2 if soe is defined and soe.soe_v0_2 is defined else {})) %}
+{% set metric_status = (soe_cov.metric_status if soe_cov is defined and soe_cov.metric_status is defined else {}) %}
+{% set gate_cov = (soe_cov.gate_coverage if soe_cov is defined and soe_cov.gate_coverage is defined else {}) %}
+{% set req_by_gate = (soe_cov.requirements.by_gate if soe_cov is defined and soe_cov.requirements is defined and soe_cov.requirements.by_gate is defined else {}) %}
+{% set cov_summary = (soe_cov.summary if soe_cov is defined and soe_cov.summary is defined else {}) %}
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">SoE Coverage</h2>
+  <div class="muted mini">Read-only rendering of stored snapshot State-of-Evidence coverage. No recomputation.</div>
+
+  {% if cov_summary.metrics is defined %}
+    <div class="grid cols-3" style="margin-top:10px;">
+      <div>
+        <div class="muted mini">Metrics referenced</div>
+        <div style="font-size:20px;font-weight:800;">{{ cov_summary.metrics.referenced_total }}</div>
+        <div class="muted mini">present: {{ cov_summary.metrics.present }} · missing: {{ cov_summary.metrics.missing }}</div>
+        {% if cov_summary.metrics.present_but_ignored is defined or cov_summary.metrics.present_but_non_numeric is defined %}
+          <div class="muted mini">ignored: {{ cov_summary.metrics.present_but_ignored if cov_summary.metrics.present_but_ignored is defined else 0 }} · non-numeric: {{ cov_summary.metrics.present_but_non_numeric if cov_summary.metrics.present_but_non_numeric is defined else 0 }}</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted mini">Gate coverage</div>
+        {% if cov_summary.gates is defined %}
+          <div style="font-size:20px;font-weight:800;">{{ cov_summary.gates.coverage_satisfied }} / {{ cov_summary.gates.total }}</div>
+          <div class="muted mini">satisfied / total</div>
+        {% else %}
+          <div class="muted">—</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted mini">SoE schema</div>
+        <div style="font-size:20px;font-weight:800;">{% if soe_cov is mapping and soe_cov is not none %}{{ 'v0.3' if soe.soe_v0_3 is defined and soe.soe_v0_3.metric_status is defined else ('v0.2' if soe.soe_v0_2 is defined else '—') }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% set ns = namespace(required=[]) %}
+  {% for gk, reqs in req_by_gate|dictsort %}
+    {% if reqs is mapping %}
+      {% set lst = (reqs.require_all if reqs.require_all is defined else (reqs.require_any if reqs.require_any is defined else [])) %}
+      {% for mk in lst %}
+        {% if mk is string and mk not in ns.required %}{% set _ = ns.required.append(mk) %}{% endif %}
+      {% endfor %}
+    {% endif %}
+  {% endfor %}
+
+  {% if metric_status and metric_status|length %}
+    <h3 style="margin-top:14px;">Per-metric status</h3>
+    <table class="table compact">
+      <thead><tr><th>metric_key</th><th>required?</th><th>status</th><th>measurement_id</th><th>qc</th><th>timestamp_used</th><th class="muted">notes</th></tr></thead>
+      <tbody>
+        {% for mk, ms in metric_status|dictsort %}
+          <tr>
+            <td><b>{{ mk }}</b></td>
+            <td>{% if mk in ns.required %}<span class="chip">required</span>{% else %}<span class="chip">optional</span>{% endif %}</td>
+            <td>{{ ms.status if ms is mapping and ms.status is defined else (ms.get('status') if ms is mapping else '—') }}</td>
+            <td class="muted">{% if ms is mapping and ms.selected_measurement_id is defined and ms.selected_measurement_id %}{{ ms.selected_measurement_id }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if ms is mapping and ms.qc_status is defined and ms.qc_status %}{{ ms.qc_status }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if ms is mapping and ms.timestamp_used is defined and ms.timestamp_used %}{{ ms.timestamp_used }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if ms is mapping and ms.notes is defined and ms.notes %}{{ ms.notes|join('; ') }}{% else %}—{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="muted" style="margin-top:10px;">No metric coverage data present in this snapshot.</div>
+  {% endif %}
+
+  {% if gate_cov and gate_cov|length %}
+    <h3 style="margin-top:14px;">Gate coverage</h3>
+    <table class="table compact">
+      <thead><tr><th>gate_key</th><th>requirement</th><th>present</th><th>missing</th><th>satisfied</th></tr></thead>
+      <tbody>
+        {% for gk, gd in gate_cov|dictsort %}
+          <tr>
+            <td><b>{{ gk }}</b></td>
+            <td class="muted">{% if gd is mapping and gd.requirement_type is defined %}{{ gd.requirement_type }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if gd is mapping and gd.present is defined and gd.present %}{{ gd.present|join(', ') }}{% else %}—{% endif %}</td>
+            <td class="muted">{% if gd is mapping and gd.missing is defined and gd.missing %}{{ gd.missing|join(', ') }}{% else %}—{% endif %}</td>
+            <td>{% if gd is mapping and gd.satisfied is defined and gd.satisfied %}<span class="chip">yes</span>{% else %}<span class="chip">no</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>
+
+
+{% if output.gates and output.gates|length %}
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Gates</h2>
+    <table class="table">
+      <thead><tr><th>Gate</th><th>Status</th><th>Rationale</th></tr></thead>
+      <tbody>
+      {% for g in output.gates|sort(attribute='gate_key') %}
+        <tr>
+          <td><b>{{ g.gate_key }}</b></td>
+          <td>{{ g.status }}</td>
+          <td>{{ g.rationale }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="card" style="margin-top:12px;"><div class="muted">No gates.</div></div>
+{% endif %}
+
+{% if output.blockers and output.blockers|length %}
+  <div class="notice" style="border-color:var(--warn);margin-top:12px;">
+    <b>Blockers</b>
+    <ul class="clean" style="margin-top:6px;">
+      {% for b in output.blockers %}
+        {% if b is mapping %}
+          <li>
+            <b>{{ b.blocker_key if b.blocker_key is defined else 'blocker' }}</b>
+            {% if b.summary is defined %}<span class="muted"> — {{ b.summary }}</span>{% endif %}
+
+            {% if exp_sugg and (b.blocker_key is defined) and (b.blocker_key in exp_sugg) %}
+              <div class="muted" style="margin-top:4px;">Experiments that address this blocker</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+                {% for ek in exp_sugg[b.blocker_key] %}<span class="tag">{{ ek }}</span>{% endfor %}
+              </div>
+            {% endif %}
+
+            {% if b.detail is defined %}
+              <details style="margin-top:4px;">
+                <summary class="muted">details</summary>
+                <pre style="white-space:pre-wrap;overflow:auto;max-height:320px;">{{ b.detail | tojson(indent=2) }}</pre>
+              </details>
+            {% endif %}
+          </li>
+        {% else %}
+          <li>{{ b }}</li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+{% if output.risk_flags and output.risk_flags|length %}
+  <div class="notice" style="border-color:var(--accent);margin-top:12px;">
+    <b>Risk flags</b>
+    <ul class="clean" style="margin-top:6px;">
+      {% for r in output.risk_flags %}
+        {% if r is mapping %}
+          <li>
+            <b>{{ r.risk_key if r.risk_key is defined else 'risk' }}</b>
+            {% if r.summary is defined %}<span class="muted"> — {{ r.summary }}</span>{% endif %}
+            {% if r.detail is defined %}
+              <details style="margin-top:4px;">
+                <summary class="muted">details</summary>
+                <pre style="white-space:pre-wrap;overflow:auto;max-height:320px;">{{ r.detail | tojson(indent=2) }}</pre>
+              </details>
+            {% endif %}
+          </li>
+        {% else %}
+          <li>{{ r }}</li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Provenance</h2>
+  <div class="help">Selection tie-break: primary → newest timestamp → measurement_id. QC source preference: measurement_qc → qc_flag fallback.</div>
+  {% if prov.selection_provenance is defined %}
+    <details style="margin-top:8px;">
+      <summary class="muted">selection_provenance</summary>
+      <pre style="white-space:pre-wrap;overflow:auto;max-height:360px;">{{ prov.selection_provenance | tojson(indent=2) }}</pre>
+    </details>
+  {% endif %}
+
+  {% if warnings and warnings|length %}
+    <div class="notice" style="margin-top:10px;">
+      <b>Warnings</b>
+      <ul class="clean" style="margin-top:6px;">
+        {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Evidence</h2>
+  <div class="help">DI evidence references are measurement IDs (not legacy Evidence rows).</div>
+
+  {% if used and used|length %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>metric_key</th>
+          <th>measurement_id</th>
+          <th>value</th>
+          <th>unit</th>
+          <th>qc_status</th>
+          <th>qc_source</th>
+          <th>primary</th>
+          <th>produced_at</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for metric_key, ev in used|dictsort %}
+          <tr>
+            <td><b>{{ metric_key }}</b></td>
+            <td>{{ ev.measurement_id if ev.measurement_id is defined else '—' }}</td>
+            <td>
+              {% if ev.value_num is defined and ev.value_num is not none %}{{ ev.value_num }}
+              {% elif ev.value_text is defined and ev.value_text is not none %}{{ ev.value_text }}
+              {% elif ev.value_bool is defined and ev.value_bool is not none %}{{ ev.value_bool }}
+              {% else %}<span class="muted">—</span>{% endif %}
+              {% if ev.comparator is defined and ev.comparator %}<span class="muted"> ({{ ev.comparator }})</span>{% endif %}
+            </td>
+            <td>{{ ev.unit if ev.unit is defined and ev.unit else '' }}</td>
+            <td>{{ ev.qc_status if ev.qc_status is defined else '' }}</td>
+            <td>{{ ev.qc_source if ev.qc_source is defined else '' }}</td>
+            <td>{% if ev.is_primary is defined and ev.is_primary %}✓{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{{ ev.produced_at if ev.produced_at is defined and ev.produced_at else (ev.created_at if ev.created_at is defined else '') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="muted">No measurements used.</div>
+  {% endif %}
+
+  {% if ignored and ignored|length %}
+    <details style="margin-top:10px;">
+      <summary class="muted">Ignored evidence ({{ ignored|length }})</summary>
+      {% if ignored[0].reason_key is defined %}
+        {% for grp in ignored|groupby('reason_key') %}
+          <div style="margin-top:10px;">
+            <div class="muted"><b>{{ grp.grouper }}</b> ({{ grp.list|length }})</div>
+            <table class="table" style="margin-top:6px;">
+              <thead><tr><th>metric_key</th><th>measurement_id</th><th>qc_source</th><th>reason_detail</th></tr></thead>
+              <tbody>
+                {% for ig in grp.list %}
+                  <tr>
+                    <td>{{ ig.metric_key if ig.metric_key is defined else '' }}</td>
+                    <td>{{ ig.measurement_id if ig.measurement_id is defined else '' }}</td>
+                    <td>{{ ig.qc_source if ig.qc_source is defined and ig.qc_source else '' }}</td>
+                    <td>{{ ig.reason_detail if ig.reason_detail is defined and ig.reason_detail else '' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+      {% else %}
+        {# Legacy DI snapshots (pre v1.2.9d) #}
+        <table class="table" style="margin-top:8px;">
+          <thead><tr><th>metric_key</th><th>measurement_id</th><th>reason</th><th>details</th></tr></thead>
+          <tbody>
+          {% for ig in ignored %}
+            <tr>
+              <td>{{ ig.metric_key if ig.metric_key is defined else '' }}</td>
+              <td>{{ ig.measurement_id if ig.measurement_id is defined else '' }}</td>
+              <td>{{ ig.reason if ig.reason is defined else '' }}</td>
+              <td>
+                {% if ig.details is defined %}
+                  <details>
+                    <summary class="muted">json</summary>
+                    <pre style="white-space:pre-wrap;overflow:auto;max-height:240px;">{{ ig.details | tojson(indent=2) }}</pre>
+                  </details>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </details>
+  {% endif %}
+
+  {% if inputs.policy_json_canonical is defined %}
+    <details style="margin-top:10px;">
+      <summary class="muted">Embedded policy (canonical JSON)</summary>
+      <pre style="white-space:pre-wrap;overflow:auto;max-height:360px;">{{ inputs.policy_json_canonical }}</pre>
+    </details>
+  {% endif %}
+</div>

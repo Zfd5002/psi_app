@@ -53,12 +53,14 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
       <a class="btn primary" href="/batches/new?molecule_id={{ molecule.id }}">New Batch</a>
+      <a class="btn" href="/decisions/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}">Run DI</a>
       <a class="btn" href="/molecules/{{ molecule.id }}/edit">Edit</a>
     </div>
   </div>
 
   <div class="tabs no-print">
     <a class="tab active" href="#batches">Batches</a>
+    <a class="tab" href="#di_history">Decisions</a>
     <a class="tab" href="#data">Data Records</a>
     <a class="tab" href="#evidence">Evidence</a>
     <a class="tab" href="#files">Files</a>
@@ -299,6 +301,77 @@
   </div>
 </div>
   
+<h2 id="di_history">Decision history</h2>
+<p class="muted">All DI snapshots across all batches for this molecule (read-only).</p>
+
+{% if di_history and di_history|length %}
+  <div class="card" style="margin-top:10px;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>snapshot_id</th>
+          <th>status</th>
+          <th>created_at</th>
+          <th>decision_key</th>
+          <th>batch</th>
+          <th>policy</th>
+          <th>outcome</th>
+          <th class="no-print">drift vs prev</th>
+          <th class="no-print">integrity</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in di_history %}
+          <tr>
+            <td><a href="/decisions/{{ row.snapshot_id }}"><b>#{{ row.snapshot_id }}</b></a></td>
+            <td>
+              {% if row.is_superseded == 1 %}
+                <div><span class="chip">SUPERSEDED</span></div>
+                {% if row.superseded_by_snapshot_id %}
+                  <div class="muted"><a href="/decisions/{{ row.superseded_by_snapshot_id }}">by #{{ row.superseded_by_snapshot_id }}</a></div>
+                {% elif row.superseded_at %}
+                  <div class="muted">{{ row.superseded_at }}</div>
+                {% endif %}
+              {% else %}
+                <span class="chip">ACTIVE</span>
+              {% endif %}
+            </td>
+            <td class="muted">{{ row.created_at }}</td>
+            <td>{{ row.decision_key }}</td>
+            <td>
+              {% if row.batch_id %}
+                <a href="/batches/{{ row.batch_id }}">{{ row.batch_label or row.batch_id }}</a>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td>
+              <div><b>{{ row.policy_id }}</b></div>
+              <div class="muted">{{ row.policy_version }}</div>
+            </td>
+            <td>
+              <div><b>{{ row.summary.decision_state }}</b></div>
+              <div class="muted">gates: {{ row.summary.gates_pass }} pass / {{ row.summary.gates_nonpass }} non-pass · blockers: {{ row.summary.blockers }}</div>
+            </td>
+            <td class="no-print">
+              {% if row.drift_vs_prev and row.prev_snapshot_id %}
+                <div><span class="chip">{{ row.drift_vs_prev }}</span></div>
+                <div class="muted"><a href="/decisions/compare?snap_a={{ row.prev_snapshot_id }}&snap_b={{ row.snapshot_id }}">compare</a></div>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td class="no-print">
+              <div class="muted">evidence_fp: {{ (row.integrity.evidence_fingerprint[:12] if row.integrity.evidence_fingerprint else '—') }}</div>
+              <div class="muted">content_hash: {{ (row.integrity.snapshot_content_hash[:12] if row.integrity.snapshot_content_hash else '—') }}</div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="muted">No DI snapshots found for this molecule.</div>
+{% endif %}
+
 <h2 id="data">Data Records</h2>
 <p class="muted">Data records are now displayed batch-first above. Records without a batch appear under the <strong>Unassigned</strong> panel.</p>
 <h2 id="evidence">Recent evidence</h2>

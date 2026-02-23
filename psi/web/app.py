@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -21,6 +22,12 @@ from psi.web.routers import (
     qc,
 )
 
+# Canonical, importable, grep-friendly version source.
+from psi.version import PSI_VERSION as _PSI_VERSION
+
+# Backward-compat alias – do not redefine version here.
+PSI_VERSION = _PSI_VERSION
+
 
 def create_app(*, base_dir: Path | None = None) -> FastAPI:
     """Application factory.
@@ -32,13 +39,22 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
         # repo root
         base_dir = Path(__file__).resolve().parents[2]
 
-    app = FastAPI(title="PSI (Preclinical Systems Intelligence)")
-
     templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
-    # Release string (shown in UI footer). Keep as a single source of truth.
-    templates.env.globals["PSI_VERSION"] = "v1.2.8c"
+    # Release string (shown in UI footer). Single source of truth: psi/version.py
+    templates.env.globals["PSI_VERSION"] = PSI_VERSION
     storage = StorageConfig(base_dir=base_dir)
     rules_path = base_dir / "psi_rules" / "psirules-0.1.0.yml"
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        ensure_schema()
+        ensure_storage(storage)
+
+        # load extensions (may add routes + registry entries)
+        load_extensions(app)
+        yield
+
+    app = FastAPI(title="PSI (Preclinical Systems Intelligence)", lifespan=lifespan)
 
     app.state.base_dir = base_dir
     app.state.templates = templates
@@ -47,14 +63,6 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
 
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-    @app.on_event("startup")
-    def _startup() -> None:
-        ensure_schema()
-        ensure_storage(storage)
-
-        # load extensions (may add routes + registry entries)
-        load_extensions(app)
 
     # include routers
     app.include_router(programs.router)

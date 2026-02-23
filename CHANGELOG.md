@@ -1,3 +1,7 @@
+## v1.2.9e
+- DI v0.1: constitution lock-in + template ontology declaration + selection semantics version emission.
+- DI: contract smoke hardening for ontology/semantics + experiment suggestion integrity.
+
 ## v1.2.6
 - Raw File Registry & Provenance foundation:
   - Add provenance fields on `files` (source_kind/source_path/collected_at/imported_at/instrument/operator/run_id/tags_json/notes).

@@ -1,3 +1,16 @@
+## 2026-02-22 — v1.2.9q
+- decision_snapshots: add nullable supersession governance columns (additive):
+  - `is_superseded` (INTEGER 0/1; NULL allowed for legacy rows)
+  - `superseded_by_snapshot_id` (INTEGER; points to replacing snapshot)
+  - `superseded_at` (TEXT timestamp)
+- ensure_schema backfill: deterministically supersedes older snapshots so each scope has exactly one ACTIVE snapshot.
+- Add SQLite partial unique expression index to enforce at most one ACTIVE snapshot per scope:
+  `(decision_key, program_id, COALESCE(molecule_id,0), COALESCE(batch_id,0)) WHERE is_superseded=0`
+
+## 2026-02-20 — v1.2.9b
+- decision_snapshots: add nullable `engine_key`, `schema_version` (schema discrimination between DI and legacy snapshots).
+- Additive only; existing snapshots remain compatible (NULL allowed).
+
 ## v1.2.5b
 - Hotfix: fix indentation bug in export_wide QC attach block (SyntaxError return outside function).
 - Hotfix: ensure scripts/start_psi.sh is executable in overlays.

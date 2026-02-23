@@ -1,0 +1,169 @@
+{
+  "policy_id": "policy.advance_to_in_vivo",
+  "policy_version": "v0.1",
+  "policy_name": "advance_to_in_vivo",
+  "schema_version": "di.policy_package.v0_1",
+  "template_key": "advance_to_in_vivo.v0_1",
+  "decision_scope": {
+    "decision_key": "advance_to_in_vivo",
+    "scope_type": "batch"
+  },
+  "experiment_catalog_ref": {
+    "catalog_id": "experiment_catalog_v0_1",
+    "catalog_version": "v0.1"
+  },
+  "template_structure": {
+    "context_knobs": [
+      "route",
+      "model",
+      "study_intent"
+    ],
+    "gate_categories": [
+      "material_readiness",
+      "purity_integrity",
+      "endotoxin",
+      "functional"
+    ],
+    "risk_flag_categories": [
+      "qc_uncertainty"
+    ],
+    "blocker_taxonomy": [
+      "missing_required_metric",
+      "qc_rejected_required_metric",
+      "unreviewed_qc_required_metric",
+      "insufficient_functional_anchor",
+      "conflicting_metrics",
+      "metric_present_but_non_numeric",
+      "interpretation_gap_internalization"
+    ]
+  },
+  "changelog": [
+    {
+      "version": "v0.1",
+      "date": "2026-02-20",
+      "change": "Initial packaged policy for advance_to_in_vivo (DI v0.1)."
+    }
+  ],
+  "policy_body": {
+    "blocker_order": [
+      "missing_required_metric",
+      "qc_rejected_required_metric",
+      "unreviewed_qc_required_metric",
+      "metric_present_but_non_numeric",
+      "conflicting_metrics",
+      "interpretation_gap_internalization",
+      "insufficient_functional_anchor"
+    ],
+    "blocker_suggestions": {
+      "conflicting_metrics": [
+        "resolve_alias_conflict"
+      ],
+      "insufficient_functional_anchor": [
+        "run_functional_assay"
+      ],
+      "interpretation_gap_internalization": [
+        "run_internalization_or_surface_expression"
+      ],
+      "metric_present_but_non_numeric": [
+        "fix_parser_or_reimport"
+      ],
+      "missing_required_metric": [
+        "run_missing_assays"
+      ],
+      "qc_rejected_required_metric": [
+        "repeat_assay_or_review_qc"
+      ],
+      "unreviewed_qc_required_metric": [
+        "qc_review_required"
+      ]
+    },
+    "gates": {
+      "G1_material_readiness": {
+        "require_any": [
+          "total_yield_mg",
+          "titer_mg_l"
+        ]
+      },
+      "G2_purity_integrity": {
+        "require_all": [
+          "monomer_pct",
+          "hmw_pct",
+          "lmw_pct"
+        ]
+      },
+      "G3_endotoxin": {
+        "require_all": [
+          "value_eu_ml",
+          "limit_eu_ml"
+        ]
+      },
+      "G4_functional": {
+        "require_any": [
+          "percent_killing",
+          "ec50",
+          "pass_fail"
+        ]
+      },
+      "G5_internalization_if_kd_present": {
+        "enabled": true,
+        "if_present": [
+          "kd_nM"
+        ],
+        "require_any": [
+          "internalization_t1_2_h",
+          "surface_expression_pct_24h"
+        ]
+      },
+      "G6_pk_optional": {
+        "context_knob": "study_intent",
+        "enabled": true,
+        "require_any": [
+          "half_life_days",
+          "auc",
+          "cmax_ug_ml"
+        ]
+      }
+    },
+    "metric_alias_map": {
+      "hmw_pct": [
+        "hmw_percent"
+      ],
+      "monomer_pct": [
+        "monomer_percent"
+      ]
+    },
+    "qc_modes": {
+      "model_safe": {
+        "accept_statuses": [
+          "approved",
+          "unreviewed"
+        ],
+        "reject_statuses": [
+          "rejected",
+          "quarantined"
+        ],
+        "treat_unreviewed_as": "accept_with_flag"
+      },
+      "none": {
+        "accept_statuses": [
+          "approved",
+          "unreviewed",
+          "rejected",
+          "quarantined"
+        ],
+        "reject_statuses": [],
+        "treat_unreviewed_as": "accept"
+      },
+      "strict": {
+        "accept_statuses": [
+          "approved"
+        ],
+        "reject_statuses": [
+          "rejected",
+          "quarantined"
+        ],
+        "treat_unreviewed_as": "reject"
+      }
+    }
+  }
+}

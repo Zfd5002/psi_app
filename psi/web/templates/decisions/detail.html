@@ -5,119 +5,46 @@
   <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
     <div>
       <h1 style="margin:0;">Decision #{{ snap.id }} ({{ snap.decision_key }})</h1>
+      <div style="margin-top:6px;">
+        {% if snap.is_superseded %}
+          <span style="padding:2px 10px;border-radius:999px;font-size:12px;border:1px solid #999;">SUPERSEDED</span>
+          {% if snap.superseded_by_snapshot_id %}
+            <span class="muted" style="margin-left:10px;">Superseded by <a href="/decisions/{{ snap.superseded_by_snapshot_id }}">#{{ snap.superseded_by_snapshot_id }}</a></span>
+          {% endif %}
+        {% else %}
+          <span style="padding:2px 10px;border-radius:999px;font-size:12px;border:1px solid #999;">ACTIVE</span>
+        {% endif %}
+        {% if snap.engine_key %}
+          {% if snap.engine_key == "di" %}
+            <span style="margin-left:10px;padding:2px 10px;border-radius:999px;font-size:12px;border:1px solid #3a7;">DI</span>
+          {% else %}
+            <span style="margin-left:10px;padding:2px 10px;border-radius:999px;font-size:12px;border:1px solid #b66;">LEGACY YAML</span>
+          {% endif %}
+        {% endif %}
+      </div>
       <div class="muted">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
       <a class="btn" href="/decisions">Back</a>
+      <a class="btn" href="/decisions/{{ snap.id }}/export">Export JSON</a>
+      {% if is_di %}
+        <form method="get" action="/decisions/compare" style="display:flex;gap:6px;align-items:flex-end;">
+          <input type="hidden" name="snap_a" value="{{ snap.id }}" />
+          <div>
+            <div class="muted" style="font-size:12px;">Compare to snapshot ID</div>
+            <input name="snap_b" placeholder="#" style="width:90px;" />
+          </div>
+          <button class="btn" type="submit">Compare</button>
+        </form>
+
+        <form method="post" action="/decisions/{{ snap.id }}/verify" style="display:flex;align-items:flex-end;">
+          <button class="btn" type="submit">Verify snapshot</button>
+        </form>
+      {% endif %}
       <a class="btn primary" href="/decisions/{{ snap.id }}?print_view=1" target="_blank">Print view</a>
     </div>
   </div>
 
-  <div class="grid cols-3" style="margin-top:12px;">
-    <div class="card" style="margin:0;">
-      <div class="muted">Verdict</div>
-      <div style="font-size:22px;font-weight:800;">{{ output.verdict }}</div>
-      <div class="muted">Confidence: {{ output.confidence }}</div>
-    </div>
-    <div class="card" style="margin:0;">
-      <div class="muted">Domain scores</div>
-      <ul class="clean" style="margin-top:6px;">
-        {% for d, s in output.domain_scores.items() %}
-          <li><b>{{ d }}</b>: {{ s }}</li>
-        {% endfor %}
-      </ul>
-    </div>
-    <div class="card" style="margin:0;">
-      <div class="muted">Scope</div>
-      <div>Program: {{ snap.program_id }}</div>
-      <div>{% if snap.molecule_id %}Molecule: {{ snap.molecule_id }}{% else %}<span class="muted">Molecule: (none)</span>{% endif %}</div>
-      <div>{% if snap.batch_id %}Batch: {{ snap.batch_id }}{% else %}<span class="muted">Batch: (none)</span>{% endif %}</div>
-    </div>
-  </div>
-
-  {% if output.blockers and output.blockers|length %}
-  <div class="notice" style="border-color:var(--warn);margin-top:12px;">
-    <b>Blockers / hard stops:</b>
-    <ul class="clean" style="margin-top:6px;">
-      {% for b in output.blockers %}<li>{{ b }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
-  {% if output.ceilings_triggered and output.ceilings_triggered|length %}
-  <div class="notice" style="margin-top:12px;">
-    <b>Ceilings triggered:</b>
-    <ul class="clean" style="margin-top:6px;">
-      {% for c in output.ceilings_triggered %}<li>{{ c }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
-  {% if output.what_would_change and output.what_would_change|length %}
-  <div class="card" style="margin-top:12px;">
-    <h2 style="margin-top:0;">What would change this decision</h2>
-    <ul class="clean">
-      {% for s in output.what_would_change %}<li>{{ s }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
-  <div class="card" style="margin-top:12px;">
-    <h2 style="margin-top:0;">Decision report (traceability)</h2>
-    <div class="help">Decisions cite Evidence; Evidence cites Data Records; Data Records link to files.</div>
-
-    {% set ev_by_id = {} %}
-    {% for e in evidence %}{% set _ = ev_by_id.update({e.id: e}) %}{% endfor %}
-
-    {% for etype, info in output.evidence_by_type.items() %}
-      {% set eid = info.evidence_id %}
-      <div class="card" style="margin:10px 0 0 0;">
-        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;">
-          <div>
-            <b>{{ etype }}</b>
-            <span class="muted">(used strength {{ info.strength }})</span>
-          </div>
-          <div>
-            <a class="btn" href="/evidence/{{ eid }}">Evidence #{{ eid }}</a>
-          </div>
-        </div>
-        {% set e = ev_by_id.get(eid) %}
-        {% if e %}
-          <div style="margin-top:8px;">{{ e.summary }}</div>
-        {% endif %}
-
-        <div class="muted" style="margin-top:10px;">Cited Data Records</div>
-        <ul class="clean" style="margin-top:6px;">
-          {% for c in citations %}
-            {% if c.evidence_id == eid %}
-              {% for dr in data_records %}
-                {% if dr.id == c.data_record_id %}
-                  <li style="margin-bottom:6px;">
-                    <a href="/data/{{ dr.id }}">Data #{{ dr.id }}</a> — {{ dr.title }}
-                    <span class="muted">({{ dr.data_type }}/{{ dr.method }})</span>
-                    {% set fls = file_links_by_dr.get(dr.id, []) %}
-                    {% if fls|length %}
-                      <div class="muted" style="margin-top:4px;">Files:</div>
-                      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                        {% for fl in fls %}
-                          {% set f = files_by_id.get(fl.file_id) %}
-                          {% if f %}<a class="tag" href="/files/{{ f.id }}/download">{{ f.original_name }}</a>{% endif %}
-                        {% endfor %}
-                      </div>
-                    {% endif %}
-                  </li>
-                {% endif %}
-              {% endfor %}
-            {% endif %}
-          {% endfor %}
-        </ul>
-      </div>
-    {% endfor %}
-
-    {% if output.evidence_by_type|length == 0 %}
-      <div class="muted" style="margin-top:8px;">No evidence in scope.</div>
-    {% endif %}
-
-  </div>
+  {% include "decisions/_decision_body.html" %}
 </div>
 {% endblock %}

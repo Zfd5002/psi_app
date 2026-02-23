@@ -7,9 +7,10 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
+from sqlalchemy.inspection import inspect as sa_inspect
 
 from .models import AuditEvent, File, FileLink
 
@@ -38,7 +39,7 @@ def sha256_fileobj(data: bytes) -> str:
 
 
 def now_utc() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def json_dumps_compact(obj: Any) -> str:
@@ -50,6 +51,22 @@ def model_to_dict(obj: Any) -> Dict[str, Any]:
     if obj is None:
         return {}
     out: Dict[str, Any] = {}
+    try:
+        mapper = sa_inspect(obj).mapper
+        for col in mapper.column_attrs:
+            k = col.key
+            try:
+                v = getattr(obj, k)
+            except Exception:
+                continue
+            if isinstance(v, (str, int, float, type(None), bool)):
+                out[k] = v
+            elif hasattr(v, "isoformat"):
+                out[k] = v.isoformat()
+        if out:
+            return out
+    except Exception:
+        pass
     for k in dir(obj):
         if k.startswith("_"):
             continue

@@ -1,0 +1,429 @@
+from __future__ import annotations
+
+import datetime as _dt
+import hashlib
+import json
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
+from sqlalchemy import bindparam, text
+from sqlalchemy.orm import Session
+
+from psi.core.di.catalog import DEFAULT_CATALOG_PATH, load_catalog
+from psi.core.di.policy import load_policy
+from psi.core.di.schema import DIInput
+from psi.core.models import DecisionSnapshot, Program
+from psi.core.utils import now_utc
+from psi.services.di.selection import select_batch_measurements
+from psi.services.di.compute import _compute_di_from_used_by_metric
+from psi.services.di.enrich import coverage_fingerprint_payload
+from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2, compute_evidence_fingerprint, compute_snapshot_content_hash
+from psi.version import PSI_VERSION
+
+
+def _stable_json(obj: Any) -> str:
+    # Deterministic snapshot serialization for identical inputs/DB state.
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+
+
+# DI snapshot contract identifiers (stable, explicit, portable)
+ENGINE_KEY = "di"
+ENGINE_ID = "di.engine.v0_1"
+SNAPSHOT_SCHEMA_VERSION = "di.snapshot.v0_1"
+SELECTOR_VERSION = "di.selector.v0_1"
+EVALUATOR_VERSION = "di.template.advance_to_in_vivo.v0_1"
+
+# explicit selection semantics version (constitution-locked)
+DI_SELECTION_SEMANTICS_VERSION = "di.selection.v0_1"
+
+# Policy package schema allowlist (governance guardrail)
+ALLOWED_POLICY_SCHEMA_VERSIONS = {"di.policy_package.v0_1"}
+
+
+def _sha256_of_stable_json(obj: Any) -> str:
+    s = _stable_json(obj)
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+def _parse_asof_to_utc_naive(ts: Optional[str]) -> Optional[_dt.datetime]:
+    if not ts:
+        return None
+    t = str(ts).strip()
+    if not t:
+        return None
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    try:
+        dt = _dt.datetime.fromisoformat(t)
+    except Exception:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(_dt.timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _policy_schema_mismatch_output(*, di_input: DIInput, pol: Any, mismatch: str) -> Dict[str, Any]:
+    # Deterministic NOT_READY snapshot payload that does not raise.
+    return {
+        "decision_state": "not_ready",
+        "policy": {
+            "policy_id": getattr(pol, "policy_id", ""),
+            "policy_name": getattr(pol, "name", ""),
+            "policy_version": getattr(pol, "version", ""),
+            "policy_schema_version": getattr(pol, "schema_version", ""),
+            "policy_semantics_hash": getattr(pol, "policy_semantics_hash", ""),
+            "policy_package_hash": getattr(pol, "policy_package_hash", ""),
+            "name": getattr(pol, "name", ""),
+            "version": getattr(pol, "version", ""),
+            "hash": getattr(pol, "policy_semantics_hash", ""),
+            "source": getattr(pol, "source_name", ""),
+            "changelog": getattr(pol, "changelog", []) if getattr(pol, "changelog", None) is not None else [],
+        },
+        "engine": {
+            "engine_id": ENGINE_ID,
+            "schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "selector_version": SELECTOR_VERSION,
+            "evaluator_version": EVALUATOR_VERSION,
+            "evaluation_version": EVALUATOR_VERSION,
+            "code_version": PSI_VERSION,
+        },
+        "provenance": {
+            "as_of_ts": di_input.as_of_ts,
+            "qc_mode": di_input.qc_mode,
+            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
+            "experiment_catalog": {"catalog_id": "", "catalog_version": "", "catalog_hash": ""},
+            "selection_provenance": {},
+            "inputs_fingerprint": {
+                "decision_key": di_input.decision_key,
+                "scope_type": di_input.scope_type,
+                "scope_id": int(di_input.scope_id),
+                "context_keys": sorted(list((di_input.context or {}).keys())),
+            },
+        },
+        "state_of_evidence": {
+            "used": {},
+            "ignored_evidence": [],
+            "warnings": [
+                {
+                    "kind": "policy_schema_mismatch",
+                    "detail": {
+                        "policy_schema_version": getattr(pol, "schema_version", ""),
+                        "allowed": sorted(list(ALLOWED_POLICY_SCHEMA_VERSIONS)),
+                        "mismatch": mismatch,
+                    },
+                }
+            ],
+        },
+        "gates": [],
+        "blockers": [
+            {
+                "blocker_key": "policy_schema_mismatch",
+                "detail": {
+                    "policy_schema_version": getattr(pol, "schema_version", ""),
+                    "allowed": sorted(list(ALLOWED_POLICY_SCHEMA_VERSIONS)),
+                },
+            }
+        ],
+        "risk_flags": [
+            {
+                "risk_flag": "policy_schema_mismatch",
+                "detail": {"note": "Policy package schema version is not supported by this PSI build."},
+            }
+        ],
+        "risk_flags_enriched": [
+            {
+                "key": "policy_schema_mismatch",
+                "category": "governance",
+                "severity": "high",
+                "related_metrics": [],
+                "explanation": "Policy package schema version is not supported by this PSI build.",
+            }
+        ],
+        "experiment_suggestions": {},
+        "measurement_ids_used": [],
+        "gate_outcomes": {},
+        "readiness": {
+            "state": "blocked",
+            "blockers": [
+                {
+                    "key": "policy_schema_mismatch",
+                    "severity": "high",
+                    "metrics": [],
+                    "gates": [],
+                    "explanation": "Unsupported policy package schema version.",
+                }
+            ],
+            "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0},
+            "qc_confidence": {"qc_mode": str(di_input.qc_mode), "reviewed_required_present": 0, "unreviewed_required_present": 0, "notes": []},
+            "comparability": {"method_incomparable_metrics": [], "notes": []},
+            "decision_context": str(di_input.decision_key),
+            "readiness_level": "blocked",
+            "blocking_gates": [],
+            "blocking_reasons": ["Unsupported policy package schema version."],
+            "assumptions": [],
+            "required_next_steps": [],
+        },
+        "coverage_fingerprint": _sha256_of_stable_json(
+            coverage_fingerprint_payload(readiness={"blockers": [], "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0}, "comparability": {"method_incomparable_metrics": [], "notes": []}}, gate_outcomes={})
+        ),
+        "suggestions": [],
+    }
+
+
+def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, Any]:
+    pol = load_policy(policy_path)
+    if pol.decision_key != di_input.decision_key:
+        raise ValueError(f"Policy decision_key mismatch: policy={pol.decision_key} input={di_input.decision_key}")
+
+    if di_input.scope_type != "batch":
+        raise ValueError("DI v0.1 supports scope_type=batch only")
+
+    if di_input.decision_key != "advance_to_in_vivo":
+        raise ValueError("DI v0.1 supports decision_key=advance_to_in_vivo only")
+
+    program_id, molecule_id = _resolve_snapshot_lineage(db, batch_id=int(di_input.scope_id))
+
+    res = compute_di_output(db, di_input=di_input, pol=pol, policy_path=policy_path)
+    out = res["output"]
+    inputs_obj = res["inputs_obj"]
+    evidence_ids = res["evidence_ids"]
+    rules_version = res["rules_version"]
+
+
+
+    # v1.2.9q: supersede prior ACTIVE snapshots for this exact scope, transactionally.
+    scope_batch_id = int(di_input.scope_id)
+    active_ids = [
+        int(r[0])
+        for r in db.execute(
+            text(
+                '''
+                SELECT id
+                FROM decision_snapshots
+                WHERE decision_key = :dk
+                  AND program_id = :pid
+                  AND COALESCE(molecule_id, 0) = COALESCE(:mid, 0)
+                  AND COALESCE(batch_id, 0) = COALESCE(:bid, 0)
+                  AND (is_superseded IS NULL OR is_superseded = 0)
+                '''
+            ),
+            {"dk": di_input.decision_key, "pid": int(program_id), "mid": molecule_id, "bid": scope_batch_id},
+        ).fetchall()
+    ]
+
+    if active_ids:
+        q = text(
+            '''
+            UPDATE decision_snapshots
+            SET is_superseded = 1,
+                superseded_at = CURRENT_TIMESTAMP,
+                superseded_by_snapshot_id = NULL
+            WHERE id IN :ids
+            '''
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"ids": list(active_ids)})
+
+    snap = DecisionSnapshot(
+        program_id=int(program_id),
+        molecule_id=molecule_id,
+        batch_id=scope_batch_id,
+        decision_key=di_input.decision_key,
+        rules_version=rules_version,
+        engine_key=ENGINE_KEY,
+        schema_version=SNAPSHOT_SCHEMA_VERSION,
+        is_superseded=0,
+        inputs_json=_stable_json(inputs_obj),
+        outputs_json=_stable_json(out),
+        evidence_ids_json=_stable_json(sorted(list(evidence_ids))),
+        as_of_ts=_parse_asof_to_utc_naive(di_input.as_of_ts),
+        created_at=now_utc(),
+    )
+    db.add(snap)
+    db.flush()
+
+    if active_ids:
+        q = text(
+            '''
+            UPDATE decision_snapshots
+            SET superseded_by_snapshot_id = :new_id
+            WHERE id IN :ids
+            '''
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"new_id": int(snap.id), "ids": list(active_ids)})
+
+    db.commit()
+    db.refresh(snap)
+
+    return {"snapshot_id": snap.id, "output": out}
+
+
+def _resolve_snapshot_lineage(db: Session, *, batch_id: int) -> Tuple[int, Optional[int]]:
+    """Resolve program_id + molecule_id for snapshot lineage."""
+
+    row = db.execute(
+        text(
+            """
+            SELECT
+              b.id as batch_id,
+              b.molecule_id as molecule_id,
+              m.program_id as program_id
+            FROM batches b
+            LEFT JOIN molecules m ON m.id=b.molecule_id
+            WHERE b.id=:bid
+            """
+        ),
+        {"bid": int(batch_id)},
+    ).mappings().first()
+    if not row:
+        raise KeyError(f"Batch not found: {batch_id}")
+
+    molecule_id = int(row["molecule_id"]) if row.get("molecule_id") is not None else None
+    program_id = int(row["program_id"]) if row.get("program_id") is not None else None
+    if program_id is None:
+        p = db.query(Program).filter(Program.name == "PSI_EXAMPLES").first()
+        program_id = int(p.id) if p else 1
+    return int(program_id), molecule_id
+
+
+def compute_di_output(
+    db: Session,
+    *,
+    di_input: DIInput,
+    pol: Any,
+    policy_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Pure DI computation path.
+
+    IMPORTANT: This function must not persist snapshots or mutate DB state.
+    It returns the computed output plus the snapshot inputs payload and evidence ids.
+    """
+
+    rules_version = f"{pol.name}:{pol.version}:{pol.policy_semantics_hash[:12]}"
+
+    scope_batch_id = int(di_input.scope_id)
+
+    # Policy governance guardrail: enforce known package schema versions.
+    if str(pol.schema_version) not in ALLOWED_POLICY_SCHEMA_VERSIONS:
+        out = _policy_schema_mismatch_output(di_input=di_input, pol=pol, mismatch="unknown_policy_schema_version")
+        inputs_obj = {
+            "decision_key": di_input.decision_key,
+            "scope_type": di_input.scope_type,
+            "scope_id": int(di_input.scope_id),
+            "as_of_ts": di_input.as_of_ts,
+            "qc_mode": di_input.qc_mode,
+            "context": di_input.context or {},
+            "engine_key": ENGINE_KEY,
+            "engine_id": ENGINE_ID,
+            "schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "selector_version": SELECTOR_VERSION,
+            "evaluator_version": EVALUATOR_VERSION,
+            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
+            "policy_id": pol.policy_id,
+            "policy_version": pol.version,
+            "policy_name": pol.name,
+            "policy_semantics_hash": pol.policy_semantics_hash,
+            "policy_package_hash": pol.policy_package_hash,
+            "policy_schema_version": pol.schema_version,
+            "policy_hash": pol.policy_semantics_hash,
+            "policy_source": pol.source_name,
+            "policy_json_canonical": pol.policy_body_canonical_json,
+            "catalog_id": "",
+            "catalog_version": "",
+            "catalog_hash": "",
+            # Non-authoritative, machine-local metadata (debugging only)
+            "policy_path": str(policy_path) if policy_path is not None else "",
+        }
+        evidence_ids: list[int] = []
+
+        # v1.2.9k integrity
+        prov = out.get("provenance")
+        if isinstance(prov, dict):
+            integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric={})}
+            integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
+                inputs_obj=inputs_obj,
+                outputs_obj=out,
+                evidence_ids=evidence_ids,
+            )
+            integrity["decision_output_hash"] = compute_decision_output_hash(inputs_obj=inputs_obj, outputs_obj=out)
+            integrity["decision_output_hash_v2"] = compute_decision_output_hash_v2(
+                inputs_obj=inputs_obj,
+                outputs_obj=out,
+            )
+            prov["integrity"] = integrity
+
+        return {"rules_version": rules_version, "inputs_obj": inputs_obj, "output": out, "evidence_ids": evidence_ids}
+
+    sel = select_batch_measurements(
+        db,
+        batch_id=scope_batch_id,
+        as_of_ts=di_input.as_of_ts,
+        qc_mode=di_input.qc_mode,
+        metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}),
+        policy_qc=(pol.policy_body.get("qc_modes") or {}),
+    )
+
+    used_by_metric = sel["used_by_metric"]
+    ignored = sel["ignored"]
+    warnings = sel["warnings"]
+    selection_provenance = sel.get("selection_provenance") or {}
+
+    # Catalog reference + hash (catalog JSON is NOT embedded in snapshots).
+    cat_ref = pol.experiment_catalog_ref
+    catalog_id = str(cat_ref.get("catalog_id") or "")
+    catalog_version = str(cat_ref.get("catalog_version") or "")
+    catalog_hash = ""
+    if catalog_id and catalog_version:
+        cat = load_catalog(DEFAULT_CATALOG_PATH)
+        if cat.catalog_id != catalog_id or cat.catalog_version != catalog_version:
+            raise ValueError(
+                f"Experiment catalog ref mismatch: policy_ref={catalog_id}:{catalog_version} file={cat.catalog_id}:{cat.catalog_version}"
+            )
+        catalog_hash = cat.catalog_hash
+
+
+    inputs_obj = {
+        "decision_key": di_input.decision_key,
+        "scope_type": di_input.scope_type,
+        "scope_id": int(di_input.scope_id),
+        "as_of_ts": di_input.as_of_ts,
+        "qc_mode": di_input.qc_mode,
+        "context": di_input.context or {},
+        "engine_key": ENGINE_KEY,
+        "engine_id": ENGINE_ID,
+        "schema_version": SNAPSHOT_SCHEMA_VERSION,
+        "selector_version": SELECTOR_VERSION,
+        "evaluator_version": EVALUATOR_VERSION,
+        "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
+        # Policy packaging
+        "policy_id": pol.policy_id,
+        "policy_version": pol.version,
+        "policy_name": pol.name,
+        "policy_semantics_hash": pol.policy_semantics_hash,
+        "policy_package_hash": pol.policy_package_hash,
+        "policy_schema_version": pol.schema_version,
+        # Back-compat fields
+        "policy_hash": pol.policy_semantics_hash,
+        "policy_source": pol.source_name,
+        "policy_json_canonical": pol.policy_body_canonical_json,
+        # Experiment catalog reference
+        "catalog_id": catalog_id,
+        "catalog_version": catalog_version,
+        "catalog_hash": catalog_hash,
+        # Non-authoritative, machine-local metadata (debugging only)
+        "policy_path": str(policy_path) if policy_path is not None else "",
+    }
+
+    out = _compute_di_from_used_by_metric(
+        db,
+        di_in=di_input,
+        pol=pol,
+        used_by_metric=used_by_metric,
+        inputs_obj=inputs_obj,
+        ignored=ignored,
+        warnings=warnings,
+        selection_provenance=selection_provenance,
+    )
+
+    evidence_ids = sorted([ev.measurement_id for ev in used_by_metric.values()])
+
+    return {"rules_version": rules_version, "inputs_obj": inputs_obj, "output": out, "evidence_ids": evidence_ids}

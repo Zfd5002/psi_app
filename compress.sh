@@ -6,28 +6,29 @@ set -euo pipefail
 # ----------------------------------------
 #
 # Usage:
-#   ./compress.sh                # auto-detect version, build zip, and (by default) install desktop shortcut
-#   ./compress.sh v1.2.3         # override version tag
-#   ./compress.sh --no-desktop   # build zip only
+#   ./compress.sh                       # auto-detect version, build zip only
+#   ./compress.sh v1.2.3                # override version tag
+#   ./compress.sh --install-shortcut    # build zip + install desktop shortcut
+#   INSTALL_SHORTCUT=1 ./compress.sh    # build zip + install desktop shortcut
 #
 # Notes:
-# - Version is sourced from psi/web/app.py (templates.env.globals["PSI_VERSION"] = "vX.Y.Z")
-# - Desktop shortcut install is idempotent and safe to re-run.
+# - Version is sourced from psi/version.py (PSI_VERSION = "vX.Y.Z")
+# - Desktop shortcut install is opt-in and safe to re-run.
 #
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 # --- arg parsing ---
 VERSION_OVERRIDE=""
-INSTALL_DESKTOP=1
+INSTALL_DESKTOP=0
 
 for arg in "$@"; do
   case "$arg" in
+    --install-shortcut)
+      INSTALL_DESKTOP=1
+      ;;
     --no-desktop)
       INSTALL_DESKTOP=0
-      ;;
-    --desktop)
-      INSTALL_DESKTOP=1
       ;;
     v*)
       # allow a single version override like "v1.2.3"
@@ -35,23 +36,27 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown argument: $arg"
-      echo "Usage: ./compress.sh [vX.Y.Z] [--no-desktop]"
+      echo "Usage: ./compress.sh [vX.Y.Z] [--install-shortcut|--no-desktop]"
       exit 2
       ;;
   esac
 done
 
+if [ "${INSTALL_SHORTCUT:-0}" = "1" ]; then
+  INSTALL_DESKTOP=1
+fi
+
 # --- detect version from source of truth ---
 detect_version() {
-  local app_py="$REPO_ROOT/psi/web/app.py"
-  if [ ! -f "$app_py" ]; then
+  local version_py="$REPO_ROOT/psi/version.py"
+  if [ ! -f "$version_py" ]; then
     return 1
   fi
-  # Extract PSI_VERSION from the Jinja env global assignment
+  # Extract PSI_VERSION from the canonical constant
   # Example line:
-  # templates.env.globals["PSI_VERSION"] = "v1.2.1"
+  # PSI_VERSION = "v1.2.1"
   local v
-  v="$(grep -Eo 'PSI_VERSION"\][[:space:]]*=[[:space:]]*"v[^"]+"' "$app_py" | head -n 1 | sed -E 's/.*"((v[^"]+))".*/\1/')"
+  v="$(grep -Eo '^PSI_VERSION[[:space:]]*=[[:space:]]*"v[^"]+"' "$version_py" | head -n 1 | sed -E 's/.*"((v[^"]+))".*/\1/')"
   if [ -n "${v:-}" ]; then
     echo "$v"
     return 0
@@ -66,7 +71,7 @@ else
   if VERSION="$(detect_version)"; then
     :
   else
-    echo "⚠️  WARNING: Could not auto-detect PSI_VERSION from psi/web/app.py"
+    echo "⚠️  WARNING: Could not auto-detect PSI_VERSION from psi/version.py"
     VERSION="unknown"
   fi
 fi
@@ -113,11 +118,12 @@ else
   echo "✅ ZIP is clean (no git, venv, vendor, DB, uploads, or caches)"
 fi
 
-# Optional desktop shortcut install
+# Optional desktop shortcut install (opt-in)
 if [ "$INSTALL_DESKTOP" -eq 1 ]; then
   if [ -f "$REPO_ROOT/scripts/install_desktop_shortcut.sh" ]; then
     echo
     echo "🖥️  Installing desktop shortcut (idempotent)..."
+    echo "⚠️  IMPORTANT: Run this from ~/psi_repo (runtime repo), not ~/psi_codex."
     bash "$REPO_ROOT/scripts/install_desktop_shortcut.sh"
   else
     echo

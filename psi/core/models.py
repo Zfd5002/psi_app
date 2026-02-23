@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text, UniqueConstraint, Float
 from sqlalchemy.orm import declarative_base, relationship
@@ -9,7 +9,7 @@ Base = declarative_base()
 
 
 def utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Program(Base):
@@ -470,12 +470,24 @@ class DecisionSnapshot(Base):
 
     decision_key = Column(Text, nullable=False)
     rules_version = Column(Text, nullable=False)
+
+    # v1.2.9b: schema discrimination + provenance for DI snapshots.
+    # Additive, nullable to preserve older DBs and legacy snapshots.
+    engine_key = Column(Text, nullable=True)        # e.g. "di" vs NULL for legacy rules engine
+    schema_version = Column(Text, nullable=True)    # e.g. "di.snapshot.v0_1"
+
     inputs_json = Column(Text, nullable=False)
     outputs_json = Column(Text, nullable=False)
     evidence_ids_json = Column(Text, nullable=False)
 
     as_of_ts = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
+
+    # v1.2.9q: snapshot lifecycle governance (additive).
+    # These fields do NOT affect snapshot immutability: they are metadata that clarifies lifecycle.
+    is_superseded = Column(Integer, nullable=True)          # 0/1; NULL allowed for older rows
+    superseded_by_snapshot_id = Column(Integer, ForeignKey("decision_snapshots.id"), nullable=True)
+    superseded_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=utcnow, nullable=False)
 

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from typing import Any
 
 from psi.core.audit import record_audit
 from psi.core.models import (
     SequenceEntity,
     AuditEvent,
     Batch,
+    DecisionSnapshot,
     DataRecord,
     Evidence,
     File as StoredFile,
@@ -20,10 +23,11 @@ from psi.core.models import (
     PropertyRun,
     PropertyValue,
 )
+from psi.services.di.snapshot_diff import compute_snapshot_diff_struct
 from psi.core.utils import model_to_dict, now_utc
 import json
 from psi.core.fasta import normalize_aa_sequence, sha256_text, to_fasta
-from psi.core.db import SessionLocal
+from psi.core.db import SessionLocal, get_db
 from psi.services.computed import run_computed_properties, get_property_runs, get_run_values
 from psi.services.domains import extract_domains_for_molecule
 from psi.services.numbering import get_numbering_artifacts_for_molecule
@@ -102,25 +106,44 @@ def get_or_create_chain(
     ent = db.query(SequenceEntity).filter(SequenceEntity.sha256 == h).first()
 
     if ent is None:
-        ent = SequenceEntity(
-            sha256=h,
-            sequence_norm=seq,
-            length=len(seq),
-            alphabet="AA",
-            created_at=now_utc(),
-        )
-        ent.chain_id = _next_chain_id(db)
-        if type_hint:
-            ent.type_hint = type_hint
-        if notes:
-            ent.notes = notes
-        db.add(ent)
-        db.flush()
-        return ent
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            ent = SequenceEntity(
+                sha256=h,
+                sequence_norm=seq,
+                length=len(seq),
+                alphabet="AA",
+                created_at=now_utc(),
+            )
+            ent.chain_id = _next_chain_id(db)
+            if type_hint:
+                ent.type_hint = type_hint
+            if notes:
+                ent.notes = notes
+            db.add(ent)
+            try:
+                db.flush()
+                return ent
+            except IntegrityError:
+                db.rollback()
+                if attempt == max_attempts - 1:
+                    raise
+                ent = db.query(SequenceEntity).filter(SequenceEntity.sha256 == h).first()
+                if ent is not None:
+                    break
 
     if not ent.chain_id:
-        ent.chain_id = _next_chain_id(db)
-        db.add(ent)
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            ent.chain_id = _next_chain_id(db)
+            db.add(ent)
+            try:
+                db.flush()
+                break
+            except IntegrityError:
+                db.rollback()
+                if attempt == max_attempts - 1:
+                    raise
 
     if type_hint and not ent.type_hint:
         ent.type_hint = type_hint
@@ -161,6 +184,105 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         raise KeyError("Molecule not found")
 
     batches = db.query(Batch).filter(Batch.molecule_id == molecule_id).order_by(Batch.created_at.desc()).all()
+
+    batch_label_by_id = {int(b.id): (str(getattr(b, "batch_id", "") or b.id)) for b in batches}
+
+    # v1.2.9m: molecule-level DI decision history + drift vs previous (read-only)
+    snaps = (
+        db.query(DecisionSnapshot)
+        .filter(DecisionSnapshot.molecule_id == molecule_id)
+        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
+        .all()
+    )
+
+    # We compute drift vs previous snapshot (same decision_key) deterministically using the
+    # shared snapshot diff module (no engine/policy changes; UI surface only).
+    _tmp: list[dict[str, Any]] = []
+    for s in snaps:
+        try:
+            out = json.loads(s.outputs_json or "{}")
+        except Exception:
+            out = {}
+        try:
+            inn = json.loads(s.inputs_json or "{}")
+        except Exception:
+            inn = {}
+        if not isinstance(out, dict) or not out.get("decision_state"):
+            continue
+
+        policy = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+        prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+        integ = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+
+        gate_outcomes = out.get("gate_outcomes") if isinstance(out.get("gate_outcomes"), dict) else {}
+        if not gate_outcomes and isinstance(out.get("gates"), list):
+            gate_outcomes = {
+                str(g.get("gate_key")): {"status": g.get("status")}
+                for g in out.get("gates")
+                if isinstance(g, dict) and g.get("gate_key")
+            }
+        statuses = [str(v.get("status") or "") for v in (gate_outcomes or {}).values() if isinstance(v, dict)]
+        pass_n = sum(1 for x in statuses if x == "pass")
+        nonpass_n = sum(1 for x in statuses if x and x != "pass")
+        blocker_n = len(out.get("blockers") or []) if isinstance(out.get("blockers"), list) else 0
+
+        _tmp.append(
+            {
+                "snapshot_id": int(s.id),
+                "created_at": s.created_at,
+                "decision_key": s.decision_key,
+                "batch_id": int(s.batch_id) if s.batch_id is not None else None,
+                "batch_label": batch_label_by_id.get(int(s.batch_id or 0), str(s.batch_id or "")) if s.batch_id else "",
+                "is_superseded": int(s.is_superseded) if s.is_superseded is not None else None,
+                "superseded_by_snapshot_id": int(s.superseded_by_snapshot_id) if s.superseded_by_snapshot_id is not None else None,
+                "superseded_at": s.superseded_at,
+                "policy_id": str(policy.get("policy_id") or ""),
+                "policy_version": str(policy.get("policy_version") or ""),
+                "summary": {
+                    "decision_state": str(out.get("decision_state") or ""),
+                    "gates_pass": int(pass_n),
+                    "gates_nonpass": int(nonpass_n),
+                    "blockers": int(blocker_n),
+                },
+                "integrity": {
+                    "snapshot_content_hash": str(integ.get("snapshot_content_hash") or ""),
+                    "evidence_fingerprint": str(integ.get("evidence_fingerprint") or ""),
+                },
+                "_out": out,
+                "_in": inn,
+            }
+        )
+
+    # Sort chronologically for "vs previous" computations, then return newest-first for display.
+    _tmp_sorted = sorted(_tmp, key=lambda r: (r.get("created_at") or "", int(r.get("snapshot_id") or 0)))
+    prev_by_decision_key: dict[str, dict[str, Any]] = {}
+    for row in _tmp_sorted:
+        dk = str(row.get("decision_key") or "")
+        prev = prev_by_decision_key.get(dk)
+        if prev is not None:
+            try:
+                dr = compute_snapshot_diff_struct(
+                    out1=prev.get("_out") or {},
+                    in1=prev.get("_in") or {},
+                    out2=row.get("_out") or {},
+                    in2=row.get("_in") or {},
+                )
+                row["prev_snapshot_id"] = int(prev.get("snapshot_id") or 0)
+                row["drift_vs_prev"] = str(dr.drift_label)
+            except Exception:
+                row["prev_snapshot_id"] = None
+                row["drift_vs_prev"] = None
+        else:
+            row["prev_snapshot_id"] = None
+            row["drift_vs_prev"] = None
+        prev_by_decision_key[dk] = row
+
+    # Final display ordering: newest first.
+    di_history: list[dict[str, Any]] = []
+    for row in sorted(_tmp_sorted, key=lambda r: (r.get("created_at") or "", int(r.get("snapshot_id") or 0)), reverse=True):
+        row.pop("_out", None)
+        row.pop("_in", None)
+        di_history.append(row)
 
     qc_counts_by_batch = qc_svc.get_qc_counts_for_batches(db, molecule_id=molecule_id)
 
@@ -559,6 +681,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     return {
         "molecule": m,
         "batches": batches,
+        "di_history": di_history,
         "data_records": data_records,
         "evidence": evidence,
         "file_links": file_links,
@@ -587,12 +710,20 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     }
 
 
-def _background_compute(molecule_id: int, trigger_reason: str) -> None:
+def _background_compute(molecule_id: int, trigger_reason: str, db_path: str | None = None) -> None:
     """Run computed properties in a fresh session (for BackgroundTasks)."""
+    import os
+
+    if db_path:
+        with get_db(db_path, ensure=False) as db:
+            m = db.get(Molecule, molecule_id)
+            heavy_global = os.getenv("PSI_ENABLE_HEAVY_COMPUTE", "").strip() == "1"
+            tier = "FAST+HEAVY" if heavy_global and m and int(m.heavy_compute_enabled or 0) == 1 else "FAST"
+            run_computed_properties(db, molecule_id=molecule_id, trigger_reason=trigger_reason, compute_tier=tier)
+        return
+
     db = SessionLocal()
     try:
-        import os
-
         m = db.get(Molecule, molecule_id)
         heavy_global = os.getenv("PSI_ENABLE_HEAVY_COMPUTE", "").strip() == "1"
         tier = "FAST+HEAVY" if heavy_global and m and int(m.heavy_compute_enabled or 0) == 1 else "FAST"
@@ -601,7 +732,12 @@ def _background_compute(molecule_id: int, trigger_reason: str) -> None:
         db.close()
 
 
-def _background_domain_extraction(molecule_id: int) -> None:
+def _background_domain_extraction(molecule_id: int, db_path: str | None = None) -> None:
+    if db_path:
+        with get_db(db_path, ensure=False) as db:
+            extract_domains_for_molecule(db, molecule_id)
+        return
+
     db = SessionLocal()
     try:
         extract_domains_for_molecule(db, molecule_id)
@@ -637,6 +773,7 @@ def create_molecule(
     heavy_compute_enabled: int = 0,
     components: dict[str, str] | None = None,
     background_tasks=None,
+    db_path: str | None = None,
 ) -> Molecule:
     """Create a molecule.
 
@@ -649,98 +786,110 @@ def create_molecule(
     desc_user = (description_user if description_user is not None else description).strip() or None
 
     pid = (primary_id or "").strip()
-    if not pid:
-        pid = _next_molecule_primary_id(db)
+    auto_primary = not pid
+    max_attempts = 3 if auto_primary else 1
 
-    # Create molecule row early (but don't commit until collision check passes)
-    m = Molecule(
-        program_id=program_id,
-        primary_id=pid,
-        title=title.strip() or None,
-        description=desc_user,
-        description_user=desc_user,
-        molecule_format=(molecule_format or None),
-        heavy_compute_enabled=int(heavy_compute_enabled or 0),
-        sequences=None,
-        created_at=now_utc(),
-        updated_at=now_utc(),
-    )
+    for attempt in range(max_attempts):
+        if not pid:
+            pid = _next_molecule_primary_id(db)
 
-    # Structured components are the v1.2.0 source of truth. Legacy `sequences` remains populated.
-    role_order = ["HC1", "HC2", "LC1", "LC2"]
-    role_to_seq: dict[str, str] = {}
-
-    if components:
-        # Only accept v1.2.0 user roles; ignore others (legacy remains readable).
-        for r in role_order:
-            if r in components:
-                role_to_seq[r] = components.get(r, "") or ""
-
-        # Default infer: HC2=HC1, LC2=LC1 when blank.
-        hc1 = normalize_aa_sequence(role_to_seq.get("HC1", ""))
-        lc1 = normalize_aa_sequence(role_to_seq.get("LC1", ""))
-        if not hc1 or not lc1:
-            raise ValueError("HC1 and LC1 are required for structured molecule creation")
-
-        hc2 = normalize_aa_sequence(role_to_seq.get("HC2", "")) or hc1
-        lc2 = normalize_aa_sequence(role_to_seq.get("LC2", "")) or lc1
-
-        role_to_seq = {"HC1": hc1, "HC2": hc2, "LC1": lc1, "LC2": lc2}
-
-        # Chain registry + composition hash
-        chains_by_role: dict[str, str | None] = {}
-        ents_by_role = {}
-        for role, seq in role_to_seq.items():
-            ent = get_or_create_chain(db, seq)
-            ents_by_role[role] = ent
-            chains_by_role[role] = getattr(ent, "chain_id", None)
-
-        comp_hash = composition_sha256(chains_by_role)
-        # Collision check (block creation)
-        existing = db.query(Molecule).filter(Molecule.composition_sha256 == comp_hash).first()
-        if existing is not None:
-            raise DuplicateMoleculeError(existing_molecule_id=existing.id, existing_primary_id=existing.primary_id)
-
-        m.composition_sha256 = comp_hash
-
-        # Populate legacy multi-FASTA
-        m.sequences = to_fasta([(r, role_to_seq[r]) for r in role_order]).strip() or None
-
-        db.add(m)
-        db.flush()  # assign id
-
-        # Create components as join records
-        for role in role_order:
-            seq = role_to_seq[role]
-            ent = ents_by_role[role]
-            c = MoleculeComponent(
-                molecule_id=m.id,
-                role=role,
-                fasta=seq,
-                sha256=sha256_text(seq),
-                sequence_entity_id=ent.id,
+        try:
+            # Create molecule row early (but don't commit until collision check passes)
+            m = Molecule(
+                program_id=program_id,
+                primary_id=pid,
+                title=title.strip() or None,
+                description=desc_user,
+                description_user=desc_user,
+                molecule_format=(molecule_format or None),
+                heavy_compute_enabled=int(heavy_compute_enabled or 0),
+                sequences=None,
                 created_at=now_utc(),
                 updated_at=now_utc(),
             )
-            db.add(c)
 
-        db.commit()
-        db.refresh(m)
-    else:
-        # Legacy/unstructured path (no collision semantics)
-        m.sequences = sequences.strip() or None
-        db.add(m)
-        db.commit()
-        db.refresh(m)
+            # Structured components are the v1.2.0 source of truth. Legacy `sequences` remains populated.
+            role_order = ["HC1", "HC2", "LC1", "LC2"]
+            role_to_seq: dict[str, str] = {}
 
-    record_audit(db, entity_type="Molecule", entity_id=m.id, action="create", before=None, after=model_to_dict(m))
-    db.commit()
+            if components:
+                # Only accept v1.2.0 user roles; ignore others (legacy remains readable).
+                for r in role_order:
+                    if r in components:
+                        role_to_seq[r] = components.get(r, "") or ""
 
-    # Auto-run computed properties
-    if background_tasks is not None:
-        background_tasks.add_task(_background_compute, m.id, "molecule_created")
-        background_tasks.add_task(_background_domain_extraction, m.id)
-    return m
+                # Default infer: HC2=HC1, LC2=LC1 when blank.
+                hc1 = normalize_aa_sequence(role_to_seq.get("HC1", ""))
+                lc1 = normalize_aa_sequence(role_to_seq.get("LC1", ""))
+                if not hc1 or not lc1:
+                    raise ValueError("HC1 and LC1 are required for structured molecule creation")
+
+                hc2 = normalize_aa_sequence(role_to_seq.get("HC2", "")) or hc1
+                lc2 = normalize_aa_sequence(role_to_seq.get("LC2", "")) or lc1
+
+                role_to_seq = {"HC1": hc1, "HC2": hc2, "LC1": lc1, "LC2": lc2}
+
+                # Chain registry + composition hash
+                chains_by_role: dict[str, str | None] = {}
+                ents_by_role = {}
+                for role, seq in role_to_seq.items():
+                    ent = get_or_create_chain(db, seq)
+                    ents_by_role[role] = ent
+                    chains_by_role[role] = getattr(ent, "chain_id", None)
+
+                comp_hash = composition_sha256(chains_by_role)
+                # Collision check (block creation)
+                existing = db.query(Molecule).filter(Molecule.composition_sha256 == comp_hash).first()
+                if existing is not None:
+                    raise DuplicateMoleculeError(existing_molecule_id=existing.id, existing_primary_id=existing.primary_id)
+
+                m.composition_sha256 = comp_hash
+
+                # Populate legacy multi-FASTA
+                m.sequences = to_fasta([(r, role_to_seq[r]) for r in role_order]).strip() or None
+
+                db.add(m)
+                db.flush()  # assign id
+
+                # Create components as join records
+                for role in role_order:
+                    seq = role_to_seq[role]
+                    ent = ents_by_role[role]
+                    c = MoleculeComponent(
+                        molecule_id=m.id,
+                        role=role,
+                        fasta=seq,
+                        sha256=sha256_text(seq),
+                        sequence_entity_id=ent.id,
+                        created_at=now_utc(),
+                        updated_at=now_utc(),
+                    )
+                    db.add(c)
+
+                db.commit()
+                db.refresh(m)
+            else:
+                # Legacy/unstructured path (no collision semantics)
+                m.sequences = sequences.strip() or None
+                db.add(m)
+                db.commit()
+                db.refresh(m)
+
+            record_audit(db, entity_type="Molecule", entity_id=m.id, action="create", before=None, after=model_to_dict(m))
+            db.commit()
+
+            # Auto-run computed properties
+            if background_tasks is not None:
+                background_tasks.add_task(_background_compute, m.id, "molecule_created", db_path)
+                background_tasks.add_task(_background_domain_extraction, m.id, db_path)
+            return m
+        except IntegrityError:
+            db.rollback()
+            db.expunge_all()
+            if attempt == max_attempts - 1:
+                raise
+            pid = ""
+            continue
 
 
 def update_molecule(
@@ -757,6 +906,7 @@ def update_molecule(
     heavy_compute_enabled: int = 0,
     components: dict[str, str] | None = None,
     background_tasks=None,
+    db_path: str | None = None,
     reason: str = "",
 ) -> Molecule:
     m = get_molecule(db, molecule_id)
@@ -890,8 +1040,8 @@ def update_molecule(
     db.commit()
 
     if sequences_changed and background_tasks is not None:
-        background_tasks.add_task(_background_compute, m.id, "molecule_sequences_changed")
-        background_tasks.add_task(_background_domain_extraction, m.id)
+        background_tasks.add_task(_background_compute, m.id, "molecule_sequences_changed", db_path)
+        background_tasks.add_task(_background_domain_extraction, m.id, db_path)
     return m
 
 

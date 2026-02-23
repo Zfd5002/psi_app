@@ -54,10 +54,14 @@ def main() -> None:
     from psi.core.export_profiles import validate_profiles
 
     # --- Release guardrail ---
+    # Canonical version is defined only in psi/version.py
+    from psi.version import PSI_VERSION as psi_version
+
+    # Ensure the web app exposes the same version into the template env.
     from psi.web.app import create_app
     app = create_app()
-    psi_version = app.state.templates.env.globals.get("PSI_VERSION")
-    assert psi_version, "PSI_VERSION missing"
+    ui_version = app.state.templates.env.globals.get("PSI_VERSION")
+    assert ui_version == psi_version, f"UI PSI_VERSION mismatch: {ui_version} != {psi_version}"
     # Patch notes must include current version (append-only discipline).
     root = Path(__file__).resolve().parents[2]
     pn = root / "PATCH_NOTES.md"

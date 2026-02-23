@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from psi.web.deps import get_db, get_storage_cfg, get_templates
+from psi.core.db import DB_PATH
 from psi.services import molecules as svc
 from psi.services.computed import run_computed_properties, run_immunogenicity_mhci
 from psi.services.numbering import trigger_numbering_for_molecule
@@ -21,7 +22,7 @@ def recompute_fast_properties(molecule_id: int, background_tasks: BackgroundTask
     if not m:
         raise HTTPException(404)
     # Always run in background; consistent UX.
-    background_tasks.add_task(svc._background_compute, molecule_id, "manual_recompute")
+    background_tasks.add_task(svc._background_compute, molecule_id, "manual_recompute", DB_PATH)
     return RedirectResponse(url=f"/molecules/{molecule_id}", status_code=303)
 
 
@@ -218,6 +219,7 @@ async def create_molecule(request: Request, background_tasks: BackgroundTasks, d
             heavy_compute_enabled=heavy_compute_enabled,
             components=comps if comps else None,
             background_tasks=background_tasks,
+            db_path=DB_PATH,
         )
     except DuplicateMoleculeError as e:
         # Block duplicate composition; redirect back to form with a clear banner + link.
@@ -226,110 +228,6 @@ async def create_molecule(request: Request, background_tasks: BackgroundTasks, d
         return RedirectResponse(url=f"/molecules/new?error={str(e)}", status_code=303)
 
     return RedirectResponse(url=f"/molecules/{m.id}", status_code=303)
-
-
-
-# ---- v1.2.3f: batch-first molecule UX helpers (UI-only, read-only) ----
-
-def _batch_sort_key(batch_id: str) -> tuple:
-    """Deterministic batch sort.
-
-    - If batch_id ends with a numeric suffix like '-001', sort by that integer.
-    - Otherwise fall back to case-insensitive lexical sort.
-    """
-    s = (batch_id or "").strip()
-    try:
-        import re as _re
-        m = _re.search(r"-(\d{1,6})$", s)
-    except Exception:
-        m = None
-    if m:
-        try:
-            return (0, int(m.group(1)), s.lower())
-        except Exception:
-            pass
-    return (1, s.lower())
-
-
-def _reflect_measurement_cols(db: Session) -> dict:
-    """Best-effort reflection of the data_measurements schema (read-only)."""
-    from sqlalchemy import text as _text
-
-    try:
-        rows = db.execute(_text("PRAGMA table_info(data_measurements)")).mappings().all()
-    except Exception:
-        return {}
-
-    cols = {str(r["name"]): True for r in rows}
-
-    def pick(*names: str):
-        for n in names:
-            if n in cols:
-                return n
-        return None
-
-    out = {
-        "record_fk": pick("data_record_id", "record_id"),
-        "name": pick("metric_key", "name", "key"),
-        "value_num": pick("value_num", "numeric_value", "value"),
-        "value_text": pick("value_text", "text_value", "raw_value"),
-        "unit": pick("unit"),
-        "comparator": pick("comparator", "op"),
-        "is_primary": pick("is_primary", "primary", "is_headline"),
-        "is_outlier": pick("is_outlier"),
-        "qc_flag": pick("qc_flag", "qc_status"),
-        "id": pick("id"),
-        "created_at": pick("created_at", "updated_at", "timestamp", "ts"),
-        "_all": set(cols.keys()),
-    }
-    if not out["record_fk"] or not out["name"]:
-        return {}
-    return out
-
-
-def _fetch_measurements_for_record(db: Session, record_id: int, cols: dict) -> list[dict]:
-    """Fetch all measurement rows for a record with deterministic ordering, QC-safe."""
-    if not cols:
-        return []
-    from sqlalchemy import text as _text
-
-    where = [f"{cols['record_fk']}=:rid"]
-    params = {"rid": int(record_id)}
-
-    qc_col = cols.get("qc_flag")
-    if qc_col:
-        where.append(f"({qc_col} IS NULL OR {qc_col}=0 OR {qc_col}='0' OR {qc_col}='')")
-
-    order = []
-    if cols.get("is_primary"):
-        order.append(f"{cols['is_primary']} DESC")
-    if cols.get("created_at"):
-        order.append(f"{cols['created_at']} DESC")
-    if cols.get("id"):
-        order.append(f"{cols['id']} DESC")
-    order.append(f"{cols['name']} ASC")
-
-    q = _text(f"SELECT * FROM data_measurements WHERE {' AND '.join(where)} ORDER BY {', '.join(order)}")
-    rows = db.execute(q, params).mappings().all()
-
-    out = []
-    for r in rows:
-        def get(k):
-            c = cols.get(k)
-            return r.get(c) if c else None
-        out.append(
-            {
-                "id": get("id") or r.get("id"),
-                "record_id": record_id,
-                "name": get("name"),
-                "value_num": get("value_num"),
-                "value_text": get("value_text"),
-                "unit": get("unit"),
-                "comparator": get("comparator"),
-                "is_primary": get("is_primary") or 0,
-            }
-        )
-    return out
 
 
 def _fmt_num(v: float, *, sig: int = 3) -> str:
@@ -566,6 +464,7 @@ async def update_molecule(
             heavy_compute_enabled=heavy_compute_enabled,
             components=comps if (molecule_format in ("IgG", "scFv") and comps) else (None if not comps and molecule_format not in ("IgG", "scFv") else comps),
             background_tasks=background_tasks,
+            db_path=DB_PATH,
             reason=reason,
         )
     except KeyError:
