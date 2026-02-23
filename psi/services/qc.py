@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from psi.core.models import MeasurementQC, MeasurementQCEvent
+from psi.core.utils import now_utc
 
 
 VALID_ACTIONS = {"approve", "reject", "quarantine", "clear", "note"}
@@ -15,7 +16,7 @@ VALID_POLICIES = {"include", "exclude_soft", "exclude_hard", "quarantine"}
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return now_utc()
 
 
 def get_qc_state_for_measurements(db: Session, measurement_ids: Iterable[int]) -> Dict[int, Dict[str, Any]]:

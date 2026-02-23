@@ -355,7 +355,9 @@ def upsert_measurements(db: Session, *, record_id: int, measurements: List[Dict[
 
             # Conservative required-default fill: satisfy NOT NULL columns with no defaults
             # using safe, pattern-based fallbacks only.
-            utcnow = datetime.now(timezone.utc).replace(tzinfo=None)
+            from psi.core.utils import now_utc
+
+            utcnow = now_utc()
 
             def _default_for_required(colname: str) -> Any:
                 low = colname.lower()

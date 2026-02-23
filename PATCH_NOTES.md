@@ -617,3 +617,15 @@ What changed:
 What did NOT change:
 - No DI logic changes. No policy changes. No selector changes.
 - No DB changes / migrations. No UI changes.
+
+## 2026-02-23 — v1.2.9v26
+Why:
+- Standardize naive UTC helpers in service layers without altering timestamps.
+
+What changed:
+- `psi/services/qc.py`: route QC timestamps through `now_utc()` helper.
+- `psi/services/measurements.py`: use `now_utc()` for default timestamp parsing fallback.
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No UI changes.
