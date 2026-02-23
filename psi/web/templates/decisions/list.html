@@ -29,13 +29,6 @@
           {% else %}
             <span style="margin-left:8px;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #999;">ACTIVE</span>
           {% endif %}
-          {% if s.engine_key %}
-            {% if s.engine_key == "di" %}
-              <span style="margin-left:8px;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #3a7;">DI</span>
-            {% else %}
-              <span style="margin-left:8px;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #b66;">LEGACY YAML</span>
-            {% endif %}
-          {% endif %}
         </td>
         <td>
           Program {{ s.program_id }}

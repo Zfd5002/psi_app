@@ -8,9 +8,6 @@ from typing import Any, Dict
 from psi.core.di.policy import canonical_package_json, sha256_hex_of_canonical_json
 
 
-DEFAULT_CATALOG_PATH = Path(__file__).resolve().parent / "catalogs" / "experiment_catalog_v0_1.json"
-
-
 @dataclass(frozen=True)
 class LoadedCatalog:
     catalog: Dict[str, Any]

@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from psi.core.di.catalog import DEFAULT_CATALOG_PATH, load_catalog
+from psi.core.di.catalog import load_catalog
 from psi.core.di.policy import load_policy
 from psi.core.di.schema import DIInput
 from psi.core.models import DecisionSnapshot, Program
@@ -373,7 +373,8 @@ def compute_di_output(
     catalog_version = str(cat_ref.get("catalog_version") or "")
     catalog_hash = ""
     if catalog_id and catalog_version:
-        cat = load_catalog(DEFAULT_CATALOG_PATH)
+        cat_path = Path(__file__).resolve().parents[2] / "core" / "di" / "catalogs" / "experiment_catalog_v0_1.json"
+        cat = load_catalog(cat_path)
         if cat.catalog_id != catalog_id or cat.catalog_version != catalog_version:
             raise ValueError(
                 f"Experiment catalog ref mismatch: policy_ref={catalog_id}:{catalog_version} file={cat.catalog_id}:{cat.catalog_version}"

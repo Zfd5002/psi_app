@@ -103,39 +103,6 @@
   </table>
 </div>
 
-<div class="card" style="margin-top:12px;">
-  <h2 style="margin-top:0;">Outcome labels</h2>
-  {% if outcomes is defined and outcomes|length %}
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Value</th>
-          <th>Version</th>
-          <th>When</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for o in outcomes %}
-        <tr>
-          <td>{{ o.name }}</td>
-          <td>
-            {% if o.value_text %}{{ o.value_text }}
-            {% elif o.value_num is not none %}{{ o.value_num }}
-            {% elif o.value_bool is not none %}{{ 'true' if o.value_bool else 'false' }}
-            {% else %}<span class="muted">—</span>{% endif %}
-          </td>
-          <td>{{ o.version }}</td>
-          <td>{{ o.created_at }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <div class="muted">No outcome labels recorded.</div>
-  {% endif %}
-</div>
-
 {% set soe_cov = (soe.soe_v0_3 if soe is defined and soe.soe_v0_3 is defined and soe.soe_v0_3.metric_status is defined else (soe.soe_v0_2 if soe is defined and soe.soe_v0_2 is defined else {})) %}
 {% set metric_status = (soe_cov.metric_status if soe_cov is defined and soe_cov.metric_status is defined else {}) %}
 {% set gate_cov = (soe_cov.gate_coverage if soe_cov is defined and soe_cov.gate_coverage is defined else {}) %}
