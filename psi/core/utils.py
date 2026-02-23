@@ -50,23 +50,26 @@ def model_to_dict(obj: Any) -> Dict[str, Any]:
     """Best-effort shallow model serializer for audit logs."""
     if obj is None:
         return {}
-    out: Dict[str, Any] = {}
     try:
         mapper = sa_inspect(obj).mapper
+        out: Dict[str, Any] = {}
         for col in mapper.column_attrs:
             k = col.key
             try:
                 v = getattr(obj, k)
             except Exception:
                 continue
-            if isinstance(v, (str, int, float, type(None), bool)):
-                out[k] = v
-            elif hasattr(v, "isoformat"):
+            if hasattr(v, "isoformat"):
                 out[k] = v.isoformat()
+            elif isinstance(v, (str, int, float, type(None), bool)):
+                out[k] = v
+            else:
+                out[k] = str(v)
         if out:
-            return out
+            return {k: out[k] for k in sorted(out.keys())}
     except Exception:
         pass
+    out: Dict[str, Any] = {}
     for k in dir(obj):
         if k.startswith("_"):
             continue
@@ -130,7 +133,8 @@ def model_to_dict(obj: Any) -> Dict[str, Any]:
         "reason",
         "file_id",
     }
-    return {k: v for k, v in out.items() if k in allow}
+    filtered = {k: v for k, v in out.items() if k in allow}
+    return {k: filtered[k] for k in sorted(filtered.keys())}
 
 
 def diff_json(before: Optional[Dict[str, Any]], after: Optional[Dict[str, Any]]) -> Dict[str, Any]:
