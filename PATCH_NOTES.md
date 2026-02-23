@@ -729,3 +729,18 @@ Gates run (limit 5):
 
 Notes:
 - Outcome labels appear on the snapshot detail UI and in JSON export (`/decisions/{id}/export`).
+
+## 2026-02-23 — v1.2.9v33
+What changed:
+- `psi/web/routers/molecules.py`: remove duplicate formatting helpers already present in the service layer.
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No route behavior changes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
