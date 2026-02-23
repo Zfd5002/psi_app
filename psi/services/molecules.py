@@ -91,6 +91,13 @@ def _next_chain_id(db: Session) -> str:
     return f"CHAIN{mx+1:03d}"
 
 
+def _id_allocation_retry_exhausted(kind: str, attempts: int, err: IntegrityError) -> RuntimeError:
+    return RuntimeError(
+        f"Could not allocate a unique {kind} after {attempts} attempts due to a concurrent write. "
+        "Please retry."
+    )
+
+
 def get_or_create_chain(
     db: Session,
     sequence_text: str,
@@ -125,10 +132,10 @@ def get_or_create_chain(
             try:
                 db.flush()
                 return ent
-            except IntegrityError:
+            except IntegrityError as exc:
                 db.rollback()
                 if attempt == max_attempts - 1:
-                    raise
+                    raise _id_allocation_retry_exhausted("chain ID", max_attempts, exc) from exc
                 ent = db.query(SequenceEntity).filter(SequenceEntity.sha256 == h).first()
                 if ent is not None:
                     break
@@ -141,10 +148,10 @@ def get_or_create_chain(
             try:
                 db.flush()
                 break
-            except IntegrityError:
+            except IntegrityError as exc:
                 db.rollback()
                 if attempt == max_attempts - 1:
-                    raise
+                    raise _id_allocation_retry_exhausted("chain ID", max_attempts, exc) from exc
 
     if type_hint and not ent.type_hint:
         ent.type_hint = type_hint
@@ -883,10 +890,12 @@ def create_molecule(
                 background_tasks.add_task(_background_compute, m.id, "molecule_created", db_path)
                 background_tasks.add_task(_background_domain_extraction, m.id, db_path)
             return m
-        except IntegrityError:
+        except IntegrityError as exc:
             db.rollback()
             db.expunge_all()
             if attempt == max_attempts - 1:
+                if auto_primary:
+                    raise _id_allocation_retry_exhausted("molecule primary ID", max_attempts, exc) from exc
                 raise
             pid = ""
             continue
