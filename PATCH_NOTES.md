@@ -840,3 +840,157 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w01
+What changed:
+- Version-only: “Verify now” action already present on decision detail (POST `/decisions/{id}/verify`).
+
+What did NOT change:
+- No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations. No route behavior changes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w02
+What changed:
+- Verification UI: clearer status chips, evidence added/removed summary, and per-metric “Why?” block.
+
+What did NOT change:
+- No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations. No verification logic changes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w03
+What changed:
+- Version-only: no f-string SQL `IN (...)` constructions found; existing `IN :ids` uses already use expanding bindparams.
+
+What did NOT change:
+- No query semantics changes. No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w04
+What changed:
+- Version-only: `now_utc()` helper already exists and there are no `datetime.utcnow()` usages to replace.
+- Note: timestamps remain naive UTC for SQLite compatibility (current PSI convention).
+
+What did NOT change:
+- No query semantics changes. No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w05
+What changed:
+- Version-only: FastAPI lifespan already implemented in `psi/web/app.py` (no `@app.on_event("startup")` remains).
+
+What did NOT change:
+- No startup behavior changes. No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w06
+What changed:
+- Version-only: SQLite WAL mode already enabled via connect PRAGMAs in `psi/core/db.py`.
+- Runtime note: WAL improves concurrency and reduces lock errors; rollback is removing the PRAGMA listener to return to default journal mode.
+
+What did NOT change:
+- No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations. No query behavior changes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w07
+What changed:
+- DI runner now loads the experiment catalog via a canonical loader (no hardcoded file paths in `runner.py`).
+
+What did NOT change:
+- No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations. No policy packaging changes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w08
+What changed:
+- Background tasks in `psi/services/molecules.py` now derive and pass the active `db_path` instead of using import-time `SessionLocal`.
+- Note: no behavior change in normal single-DB deployment; fixes alternate db_path correctness in tools/tests.
+
+What did NOT change:
+- No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w09
+What changed:
+- Version-only: duplicated router helpers already removed; router delegates to service layer for molecule business logic.
+
+What did NOT change:
+- No behavior changes intended. No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w10
+What changed:
+- Governance: documented Legacy YAML engine deprecation timeline and risk statement.
+- UI: decision views label engine type as “DI engine” vs “Legacy YAML engine” with a caution note.
+
+What did NOT change:
+- No decision semantics changes. No DI logic changes. No ML. No scoring weights.
+- No DB changes / migrations. No enforcement of engine selection.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

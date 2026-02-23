@@ -29,25 +29,38 @@
       <div class="muted" style="margin-top:8px;">{{ anchored.diagnosis.primary }}{% if anchored.diagnosis.detail %} — {{ anchored.diagnosis.detail }}{% endif %}</div>
     {% endif %}
 
-    <details style="margin-top:10px;">
-      <summary class="muted">Explain drift</summary>
-      <div style="margin-top:8px;">
-        {% if verification.evidence_ids_diff is defined %}
-          {% set added_ids = (verification.evidence_ids_diff.added if verification.evidence_ids_diff.added is defined else []) %}
-          {% set removed_ids = (verification.evidence_ids_diff.removed if verification.evidence_ids_diff.removed is defined else []) %}
-          <table class="table compact" style="margin-top:6px;">
-            <thead><tr><th>added_ids</th><th>removed_ids</th></tr></thead>
-            <tbody>
-              <tr>
-                <td class="muted">{{ added_ids|join(', ') if added_ids is iterable else added_ids }}</td>
-                <td class="muted">{{ removed_ids|join(', ') if removed_ids is iterable else removed_ids }}</td>
-              </tr>
-            </tbody>
-          </table>
-        {% endif %}
+    {% set added_ids = [] %}
+    {% set removed_ids = [] %}
+    {% if verification.evidence_ids_diff is defined %}
+      {% set added_ids = (verification.evidence_ids_diff.added if verification.evidence_ids_diff.added is defined else []) %}
+      {% set removed_ids = (verification.evidence_ids_diff.removed if verification.evidence_ids_diff.removed is defined else []) %}
+    {% endif %}
 
+    <div class="muted" style="margin-top:10px;">
+      Evidence diff: <b>{{ added_ids|length if added_ids is iterable else 0 }}</b> added ·
+      <b>{{ removed_ids|length if removed_ids is iterable else 0 }}</b> removed
+    </div>
+
+    <details style="margin-top:6px;">
+      <summary class="muted">Evidence added/removed (details)</summary>
+      <div style="margin-top:8px;">
+        <table class="table compact">
+          <thead><tr><th>added_ids</th><th>removed_ids</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="muted">{{ added_ids|join(', ') if added_ids is iterable else added_ids }}</td>
+              <td class="muted">{{ removed_ids|join(', ') if removed_ids is iterable else removed_ids }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details style="margin-top:6px;">
+      <summary class="muted">Why? (per-metric reasons)</summary>
+      <div style="margin-top:8px;">
         {% if verification.evidence_ids_explain is defined and verification.evidence_ids_explain.per_metric is defined %}
-          <table class="table compact" style="margin-top:8px;">
+          <table class="table compact">
             <thead>
               <tr>
                 <th>metric_key</th>
@@ -98,7 +111,7 @@
             </tbody>
           </table>
         {% else %}
-          <div class="muted" style="margin-top:6px;">No drift explanation available.</div>
+          <div class="muted">No per-metric reasons available.</div>
         {% endif %}
 
         <div class="muted" style="margin-top:8px;">

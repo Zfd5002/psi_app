@@ -35,3 +35,9 @@ def load_catalog(path: Path) -> LoadedCatalog:
     canon = canonical_package_json(raw)
     h = sha256_hex_of_canonical_json(raw)
     return LoadedCatalog(catalog=raw, catalog_hash=h, canonical_json=canon, source_name=path.name)
+
+
+def load_experiment_catalog_v0_1() -> LoadedCatalog:
+    """Load the canonical experiment catalog from the core catalogs directory."""
+    cat_path = Path(__file__).resolve().parent / "catalogs" / "experiment_catalog_v0_1.json"
+    return load_catalog(cat_path)

@@ -49,11 +49,13 @@ PSI historically included a **legacy YAML rules engine** path (e.g. `psi/service
 * Any transition where the UI routes a decision workflow from legacy YAML to DI must be **explicit, versioned, and documented** (not an incidental refactor).
 * This boundary remains in place until the legacy YAML engine is formally deprecated and removed under a dedicated deprecation plan.
 
-#### Deprecation Clock (Intent Only)
+#### Legacy YAML Engine Deprecation Timeline (Intent Only)
 
-* Target: v1.3.0 makes **DI** the default engine for new decision runs.
+* Current state: PSI supports **two** decision engines (legacy YAML + DI). Semantics may differ.
+* Risk statement: comparisons across engines can be misleading unless the engine label is explicit.
+* Target: v1.3.0 makes **DI** the default engine for new decision runs (soft policy; not enforced here).
 * Legacy YAML remains **read-only** for rendering existing snapshots.
-* This version (v1.2.9v35) does **not** remove or alter legacy YAML behavior.
+* This version (v1.2.9w10) does **not** remove or alter legacy YAML behavior.
 
 ### 2. Determinism Guarantee
 

@@ -29,7 +29,7 @@ from psi.services.di.snapshot_diff import compute_snapshot_diff_struct
 from psi.core.utils import model_to_dict, now_utc
 import json
 from psi.core.fasta import normalize_aa_sequence, sha256_text, to_fasta
-from psi.core.db import SessionLocal, get_db
+from psi.core.db import get_db
 from psi.services.computed import run_computed_properties, get_property_runs, get_run_values
 from psi.services.domains import extract_domains_for_molecule
 from psi.services.numbering import get_numbering_artifacts_for_molecule
@@ -722,35 +722,31 @@ def _background_compute(molecule_id: int, trigger_reason: str, db_path: str | No
     """Run computed properties in a fresh session (for BackgroundTasks)."""
     import os
 
-    if db_path:
-        with get_db(db_path, ensure=False) as db:
-            m = db.get(Molecule, molecule_id)
-            heavy_global = os.getenv("PSI_ENABLE_HEAVY_COMPUTE", "").strip() == "1"
-            tier = "FAST+HEAVY" if heavy_global and m and int(m.heavy_compute_enabled or 0) == 1 else "FAST"
-            run_computed_properties(db, molecule_id=molecule_id, trigger_reason=trigger_reason, compute_tier=tier)
-        return
-
-    db = SessionLocal()
-    try:
+    # Avoid import-time SessionLocal for background tasks to preserve db_path correctness in tests/tools.
+    with get_db(db_path, ensure=False) as db:
         m = db.get(Molecule, molecule_id)
         heavy_global = os.getenv("PSI_ENABLE_HEAVY_COMPUTE", "").strip() == "1"
         tier = "FAST+HEAVY" if heavy_global and m and int(m.heavy_compute_enabled or 0) == 1 else "FAST"
         run_computed_properties(db, molecule_id=molecule_id, trigger_reason=trigger_reason, compute_tier=tier)
-    finally:
-        db.close()
 
 
 def _background_domain_extraction(molecule_id: int, db_path: str | None = None) -> None:
-    if db_path:
-        with get_db(db_path, ensure=False) as db:
-            extract_domains_for_molecule(db, molecule_id)
-        return
-
-    db = SessionLocal()
-    try:
+    # Avoid import-time SessionLocal for background tasks to preserve db_path correctness in tests/tools.
+    with get_db(db_path, ensure=False) as db:
         extract_domains_for_molecule(db, molecule_id)
-    finally:
-        db.close()
+
+
+def _resolve_db_path(db: Session, db_path: str | None) -> str | None:
+    if db_path:
+        return db_path
+    try:
+        bind = db.get_bind()
+        url = getattr(bind, "url", None)
+        if url is not None and url.database:
+            return str(url.database)
+    except Exception:
+        return None
+    return None
 
 
 def _next_molecule_primary_id(db: Session) -> str:
@@ -887,8 +883,9 @@ def create_molecule(
 
             # Auto-run computed properties
             if background_tasks is not None:
-                background_tasks.add_task(_background_compute, m.id, "molecule_created", db_path)
-                background_tasks.add_task(_background_domain_extraction, m.id, db_path)
+                background_db_path = _resolve_db_path(db, db_path)
+                background_tasks.add_task(_background_compute, m.id, "molecule_created", background_db_path)
+                background_tasks.add_task(_background_domain_extraction, m.id, background_db_path)
             return m
         except IntegrityError as exc:
             db.rollback()
@@ -1049,8 +1046,9 @@ def update_molecule(
     db.commit()
 
     if sequences_changed and background_tasks is not None:
-        background_tasks.add_task(_background_compute, m.id, "molecule_sequences_changed", db_path)
-        background_tasks.add_task(_background_domain_extraction, m.id, db_path)
+        background_db_path = _resolve_db_path(db, db_path)
+        background_tasks.add_task(_background_compute, m.id, "molecule_sequences_changed", background_db_path)
+        background_tasks.add_task(_background_domain_extraction, m.id, background_db_path)
     return m
 
 
