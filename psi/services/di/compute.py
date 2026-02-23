@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from psi.core.di.schema import DIInput, EvidenceRef, IgnoredEvidence
 from psi.services.di.templates.advance_to_in_vivo import evaluate as eval_advance_to_in_vivo
-from psi.services.di.eval import derive_gate_outcomes, derive_readiness
+from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
 from psi.services.di.comparability import compute_comparability
 from psi.services.di.enrich import (
     build_soe_v0_2,
@@ -337,6 +337,20 @@ def _compute_di_from_used_by_metric(
         coverage_fingerprint_payload(readiness=readiness, gate_outcomes=gate_outcomes)
     )
     out["suggestions"] = derive_suggestions(gate_outcomes=gate_outcomes, readiness=readiness, ignored=ignored)
+
+    shortlisting = derive_shortlisting(
+        policy_body=(pol.policy_body or {}),
+        decision_state=decision_state,
+        readiness=readiness if isinstance(readiness, dict) else {},
+        gate_outcomes=gate_outcomes if isinstance(gate_outcomes, dict) else {},
+        blockers=templ.get("blockers") or [],
+        comparability=comparability if isinstance(comparability, dict) else {},
+        metric_evaluations=metric_evaluations if isinstance(metric_evaluations, dict) else {},
+        scope_type=di_in.scope_type,
+        scope_id=int(di_in.scope_id),
+    )
+    if shortlisting is not None:
+        out["shortlisting"] = shortlisting
 
     # Integrity (canonical, additive-only)
     evidence_ids = sorted([ev.measurement_id for ev in used_by_metric.values()])

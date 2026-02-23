@@ -314,3 +314,137 @@ def derive_readiness(
         "assumptions": [],
         "required_next_steps": [],
     }
+
+
+def derive_shortlisting(
+    *,
+    policy_body: Dict[str, Any],
+    decision_state: str,
+    readiness: Dict[str, Any],
+    gate_outcomes: Dict[str, Any],
+    blockers: list[Dict[str, Any]],
+    comparability: Dict[str, Any],
+    metric_evaluations: Dict[str, Any],
+    scope_type: str,
+    scope_id: int,
+) -> Dict[str, Any] | None:
+    """Deterministic shortlisting (single-scope baseline).
+
+    Only enabled when policy explicitly allows it. Never overrides blockers/gates.
+    """
+    pol_short = (policy_body or {}).get("shortlisting") or {}
+    if not isinstance(pol_short, dict):
+        return None
+    allow = bool(pol_short.get("allow_shortlisting") or pol_short.get("allow"))
+    if not allow:
+        return None
+
+    min_cov = pol_short.get("min_required_coverage_ratio")
+    try:
+        min_cov_f = float(min_cov) if min_cov is not None else 1.0
+    except Exception:
+        min_cov_f = 1.0
+
+    min_state = str(pol_short.get("min_readiness_state") or "ready").strip().lower()
+    required_gates = pol_short.get("required_gates")
+    if not isinstance(required_gates, list) or not required_gates:
+        required_gates = ["G1_material_readiness", "G2_purity_integrity", "G3_endotoxin", "G4_functional"]
+
+    reasons: list[Dict[str, Any]] = []
+
+    if blockers:
+        reasons.append({"kind": "blockers_present", "count": int(len(blockers))})
+
+    failing_gates = []
+    for gk in [str(x) for x in required_gates]:
+        status = str((gate_outcomes.get(gk) or {}).get("status") or "").strip().lower()
+        if status and status != "pass":
+            failing_gates.append(gk)
+    if failing_gates:
+        reasons.append({"kind": "hard_gates_not_passed", "gates": sorted(set(failing_gates))})
+
+    state = str((readiness or {}).get("state") or "").strip().lower()
+    if min_state and state != min_state:
+        reasons.append({"kind": "readiness_state_below_threshold", "state": state, "required": min_state})
+
+    cov = (readiness or {}).get("coverage") or {}
+    try:
+        cov_ratio = float(cov.get("coverage_ratio") or 0.0)
+    except Exception:
+        cov_ratio = 0.0
+    if cov_ratio < min_cov_f:
+        reasons.append({"kind": "coverage_below_threshold", "coverage_ratio": cov_ratio, "required": min_cov_f})
+
+    tie_break_hierarchy = [
+        "readiness_completeness",
+        "qc_coherence",
+        "purity_aggregation",
+        "reproducibility",
+        "functional_potency",
+    ]
+
+    if reasons:
+        return {
+            "enabled": True,
+            "refused": True,
+            "refusal_reason": "insufficient evidence to rank",
+            "refusal_reasons": reasons,
+            "tie_break_hierarchy": tie_break_hierarchy,
+            "ranked_candidates": [],
+        }
+
+    def _eval_for(mk: str) -> Dict[str, Any]:
+        ev = metric_evaluations.get(mk) if isinstance(metric_evaluations, dict) else None
+        if not isinstance(ev, dict):
+            return {"evaluated_status": "UNKNOWN", "interpretation_gap": False}
+        return {
+            "evaluated_status": str(ev.get("evaluated_status") or "UNKNOWN"),
+            "interpretation_gap": bool(ev.get("interpretation_gap")),
+        }
+
+    comp = comparability or {}
+    summ = (comp.get("summary") or {}) if isinstance(comp, dict) else {}
+    qc_high = int(summ.get("high_severity_count") or 0)
+    qc_total = int(summ.get("total_flags") or 0)
+
+    purity = {
+        "monomer_pct": _eval_for("monomer_pct"),
+        "hmw_pct": _eval_for("hmw_pct"),
+        "lmw_pct": _eval_for("lmw_pct"),
+    }
+
+    func_metrics = {
+        "percent_killing": _eval_for("percent_killing"),
+        "ec50": _eval_for("ec50"),
+        "pass_fail": _eval_for("pass_fail"),
+    }
+    func_gap = any(v.get("interpretation_gap") for v in func_metrics.values())
+    functional = {"context_valid": (not func_gap), "metrics": func_metrics}
+
+    candidate = {
+        "candidate_id": f"{scope_type}:{int(scope_id)}",
+        "scope_type": scope_type,
+        "scope_id": int(scope_id),
+        "decision_state": str(decision_state or ""),
+        "readiness_completeness": cov_ratio,
+        "qc_coherence": {"high_severity_count": qc_high, "total_flags": qc_total},
+        "purity_aggregation": purity,
+        "reproducibility": {"status": "not_available"},
+        "functional_potency": functional,
+        "tie_breaks": [
+            {"key": "readiness_completeness", "value": cov_ratio},
+            {"key": "qc_coherence", "value": {"high_severity_count": qc_high, "total_flags": qc_total}},
+            {"key": "purity_aggregation", "value": purity},
+            {"key": "reproducibility", "value": "not_available"},
+            {"key": "functional_potency", "value": functional},
+        ],
+    }
+
+    return {
+        "enabled": True,
+        "refused": False,
+        "refusal_reason": "",
+        "refusal_reasons": [],
+        "tie_break_hierarchy": tie_break_hierarchy,
+        "ranked_candidates": [candidate],
+    }

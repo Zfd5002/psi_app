@@ -676,3 +676,21 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9v30
+What changed:
+- `psi/services/di/eval.py`: add deterministic shortlisting derivation with explicit refusal state.
+- `psi/services/di/compute.py`: include shortlisting output when policy allows it.
+- `psi/core/di/policies/advance_to_in_vivo_v0_3.json`: add policy-visible shortlisting guardrails.
+- `psi/tools/di_contract_smoke.py` and `psi/tools/run_di.py`: default to v0.3 policy.
+
+What did NOT change:
+- No DB changes / migrations. No snapshot mutations.
+- No scoring weights. No ML. No gate/selector behavior changes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
