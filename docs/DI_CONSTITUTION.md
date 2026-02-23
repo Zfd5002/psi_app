@@ -49,6 +49,12 @@ PSI historically included a **legacy YAML rules engine** path (e.g. `psi/service
 * Any transition where the UI routes a decision workflow from legacy YAML to DI must be **explicit, versioned, and documented** (not an incidental refactor).
 * This boundary remains in place until the legacy YAML engine is formally deprecated and removed under a dedicated deprecation plan.
 
+#### Deprecation Clock (Intent Only)
+
+* Target: v1.3.0 makes **DI** the default engine for new decision runs.
+* Legacy YAML remains **read-only** for rendering existing snapshots.
+* This version (v1.2.9v35) does **not** remove or alter legacy YAML behavior.
+
 ### 2. Determinism Guarantee
 
 Same PSI DB state + same policy package + same selection semantics version + same as-of timestamp ⇒ identical DI output JSON.
@@ -236,4 +242,3 @@ The second pass must explicitly re-validate:
 * snapshot immutability (no mutation of stored snapshots)
 * anchored replay fidelity
 * hash surface stability (especially cross-version replay noise)
-

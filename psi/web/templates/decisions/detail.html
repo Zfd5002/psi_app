@@ -16,6 +16,15 @@
         {% endif %}
       </div>
       <div class="muted">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
+      <div class="muted" style="margin-top:4px;">
+        Engine:
+        {% if is_di %}
+          <span class="chip">DI</span>
+        {% else %}
+          <span class="chip">Legacy YAML</span>
+          <span class="muted" style="margin-left:6px;">Legacy YAML decision engine (deprecated timeline: v1.3.0 DI-default)</span>
+        {% endif %}
+      </div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
       <a class="btn" href="/decisions">Back</a>

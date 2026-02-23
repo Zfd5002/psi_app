@@ -759,3 +759,19 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9v35
+What changed:
+- `psi/web/templates/decisions/detail.html`: add engine badge (DI vs Legacy YAML) and deprecation warning for legacy engine.
+- `docs/DI_CONSTITUTION.md`: document deprecation clock (v1.3.0 DI-default; legacy YAML read-only).
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No engine selection changes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
