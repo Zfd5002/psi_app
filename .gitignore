@@ -21,3 +21,10 @@ psi/psi.sqlite
 
 # local DB backups
 psi/psi.sqlite.bak_*
+
+# --- PSI local DB artifacts (never commit) ---
+psi/psi.sqlite
+psi/*.sqlite
+psi/*.sqlite-wal
+psi/*.sqlite-shm
+psi/*.sqlite-journal
