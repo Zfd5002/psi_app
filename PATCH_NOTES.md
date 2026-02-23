@@ -585,12 +585,13 @@ What did NOT change:
 ## v1.2.9o5
 - Hotfix: di_contract_smoke cross-version test now treats classification==VERIFIED as pass when verify_snapshot omits legacy 'ok' flag.
 
-## 2026-02-23 — v1.2.9v21
-- Packaging: harden overlay ZIP exclusions (vendor/caches)
-- Release: add bump_version helper + smoke_test guardrail
-- UI: molecule-scoped <details> persistence + batch expand/collapse
+## 2026-02-23 — v1.2.9v23
+Why:
+- Align smoke_test guardrail with append-only PATCH_NOTES discipline (latest entry at file end).
 
-## 2026-02-23 — v1.2.9v22
-- Guardrail: db_schema_sanity now compares PRAGMA columns against SQLAlchemy Base.metadata (true declared schema).
-- Correctness: eliminates false-positive “extra columns” warnings caused by ensure_schema’s model_columns literal.
-- No DB writes; DI logic unchanged; schema unchanged.
+What changed:
+- `psi/scripts/smoke_test.py`: latest PATCH_NOTES header is now read from the last dated entry.
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No UI changes.

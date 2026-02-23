@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-
+import ast
+import inspect
 import sqlite3
 import sys
 import tempfile
@@ -11,21 +12,23 @@ from sqlalchemy import create_engine
 from psi.core import db as db_mod
 
 
-def _load_model_columns() -> dict[str, set[str]]:
-    """
-    Load table → column mappings from SQLAlchemy metadata.
-
-    This represents the true declared schema in psi.core.models.
-    """
-    from psi.core.models import Base
-
-    model_columns: dict[str, set[str]] = {}
-
-    # Use sorted_tables for deterministic ordering
-    for table in Base.metadata.sorted_tables:
-        model_columns[table.name] = {col.name for col in table.columns}
-
-    return model_columns
+def _load_model_columns() -> dict[str, dict[str, str]]:
+    """Extract ensure_schema()'s local model_columns literal from source."""
+    src = inspect.getsource(db_mod.ensure_schema)
+    tree = ast.parse(src)
+    fn = tree.body[0]
+    if not isinstance(fn, ast.FunctionDef):
+        raise RuntimeError("Could not parse ensure_schema source")
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "model_columns":
+                value = ast.literal_eval(node.value)
+                if isinstance(value, dict):
+                    return value
+                break
+    raise RuntimeError("model_columns assignment not found in ensure_schema()")
 
 
 def _pragma_columns(sqlite_path: Path, table: str) -> set[str]:
@@ -48,7 +51,7 @@ def main() -> int:
             eng.dispose()
 
         for table, expected_cols in sorted(model_columns.items()):
-            expected = set(expected_cols)
+            expected = set(expected_cols.keys())
             actual = _pragma_columns(sqlite_path, table)
             missing = sorted(expected - actual)
             extras = sorted(actual - expected)
