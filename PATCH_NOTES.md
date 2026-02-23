@@ -584,3 +584,8 @@ What did NOT change:
 
 ## v1.2.9o5
 - Hotfix: di_contract_smoke cross-version test now treats classification==VERIFIED as pass when verify_snapshot omits legacy 'ok' flag.
+
+## 2026-02-23 — v1.2.9v21
+- Packaging: harden overlay ZIP exclusions (vendor/caches)
+- Release: add bump_version helper + smoke_test guardrail
+- UI: molecule-scoped <details> persistence + batch expand/collapse
