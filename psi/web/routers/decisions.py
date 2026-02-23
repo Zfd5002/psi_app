@@ -97,6 +97,39 @@ def decisions_verify(snap_id: int, request: Request, debug: int = 0, db: Session
     return templates.TemplateResponse("decisions/verify.html", ctx)
 
 
+@router.post("/decisions/{snap_id}/outcomes")
+def decisions_add_outcome(
+    snap_id: int,
+    request: Request,
+    label_type: str = Form(...),
+    note: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    try:
+        snap_ctx = svc.get_snapshot_detail(db, snap_id)
+    except KeyError:
+        raise HTTPException(404)
+
+    valid = {lt["key"]: lt for lt in (snap_ctx.get("outcome_label_types") or []) if isinstance(lt, dict)}
+    label_type = (label_type or "").strip()
+    spec = valid.get(label_type)
+    if not spec:
+        raise HTTPException(400, "Invalid label type")
+
+    note_val = (note or "").strip()
+    if spec.get("note_required") and not note_val:
+        raise HTTPException(400, "Note required for this label type")
+
+    svc.add_outcome_label(
+        db,
+        snapshot_id=int(snap_id),
+        name=label_type,
+        value_text=(note_val if note_val else None),
+    )
+
+    return RedirectResponse(url=f"/decisions/{snap_id}", status_code=303)
+
+
 @router.get("/decisions/{snap_id}/export")
 def decisions_export(snap_id: int, db: Session = Depends(get_db)):
     try:

@@ -19,6 +19,45 @@
   {% include "decisions/_di_verification.html" %}
 {% endif %}
 
+{# --- Outcome labels (capture only) --- #}
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Outcome review</h2>
+  {% if outcomes is defined and outcomes|length %}
+    <table class="table compact">
+      <thead><tr><th>label</th><th>note</th><th>created_at</th></tr></thead>
+      <tbody>
+        {% for o in outcomes %}
+          <tr>
+            <td><b>{{ o.name }}</b></td>
+            <td class="muted">{{ o.value_text if o.value_text else '—' }}</td>
+            <td class="muted">{{ o.created_at }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="muted">No outcome labels yet.</div>
+  {% endif %}
+
+  {% if outcome_label_types is defined and outcome_label_types|length %}
+    <form method="post" action="/decisions/{{ snap.id }}/outcomes" style="margin-top:10px;display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end;">
+      <div>
+        <div class="muted mini">Label type</div>
+        <select name="label_type">
+          {% for lt in outcome_label_types %}
+            <option value="{{ lt.key }}">{{ lt.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <div class="muted mini">Note (required for “Other”)</div>
+        <input name="note" placeholder="Optional note" />
+      </div>
+      <button class="btn" type="submit">Add label</button>
+    </form>
+  {% endif %}
+</div>
+
 {# --- Top summary (fast interpretation) --- #}
 <div class="card" style="margin-top:12px;">
   <div class="grid cols-2" style="gap:12px;">

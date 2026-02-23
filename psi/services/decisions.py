@@ -24,6 +24,14 @@ from psi.core.models import (
 
 from psi.core.utils import json_dumps_compact, model_to_dict, now_utc
 
+OUTCOME_LABEL_TYPES = [
+    {"key": "correct", "label": "Correct", "note_required": False},
+    {"key": "overly_conservative", "label": "Overly conservative", "note_required": False},
+    {"key": "missed_risk", "label": "Missed risk", "note_required": False},
+    {"key": "data_insufficient", "label": "Data insufficient", "note_required": False},
+    {"key": "other", "label": "Other (requires note)", "note_required": True},
+]
+
 
 def stable_json_dumps(obj: Any) -> str:
     """Stable JSON serialization for exports/diffs (deterministic ordering, no whitespace drift)."""
@@ -315,6 +323,7 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
 
     return {
         "snap": snap,
+        "outcome_label_types": OUTCOME_LABEL_TYPES,
         "outcomes": outcomes,
         "output": output,
         "inputs": inputs,
@@ -336,6 +345,13 @@ def get_snapshot_export_payload(db: Session, snap_id: int) -> dict:
     outputs = json.loads(snap.outputs_json) if snap.outputs_json else {}
     evidence_ids = json.loads(snap.evidence_ids_json) if snap.evidence_ids_json else []
 
+    outcomes = (
+        db.query(OutcomeLabel)
+        .filter(OutcomeLabel.snapshot_id == snap.id)
+        .order_by(OutcomeLabel.created_at.asc())
+        .all()
+    )
+
     return {
         "snapshot_meta": {
             "id": snap.id,
@@ -352,6 +368,19 @@ def get_snapshot_export_payload(db: Session, snap_id: int) -> dict:
         "inputs": inputs,
         "outputs": outputs,
         "evidence_ids": evidence_ids,
+        "outcome_labels": [
+            {
+                "id": o.id,
+                "snapshot_id": o.snapshot_id,
+                "name": o.name,
+                "value_text": o.value_text,
+                "value_num": o.value_num,
+                "value_bool": o.value_bool,
+                "version": o.version,
+                "created_at": o.created_at,
+            }
+            for o in outcomes
+        ],
     }
 
 

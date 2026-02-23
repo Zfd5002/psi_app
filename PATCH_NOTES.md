@@ -709,3 +709,23 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9v32
+What changed:
+- `psi/services/decisions.py`: add OutcomeLabel taxonomy constants and include labels in snapshot export payload.
+- `psi/web/routers/decisions.py`: add minimal POST handler to attach OutcomeLabel to a snapshot.
+- `psi/web/templates/decisions/_di_snapshot.html`: add Outcome review section with a minimal label form.
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+Notes:
+- Outcome labels appear on the snapshot detail UI and in JSON export (`/decisions/{id}/export`).
