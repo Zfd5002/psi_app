@@ -643,3 +643,18 @@ What did NOT change:
 
 Notes:
 - Writable SQLite connections attempt `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL`.
+
+## 2026-02-23 — v1.2.9v28
+Why:
+- Complete hardening sweep: remove f-string SQL assembly and ensure background tasks target the caller DB.
+
+What changed:
+- `psi/services/measurements.py`: remove f-string SQL assembly for raw measurement queries/updates.
+- `psi/tools/export_measurements.py`: remove f-string SQL for PRAGMA table introspection.
+- `psi/tools/qc_measurements.py`: remove f-string SQL for QC updates.
+- `psi/core/db.py`: remove f-string SQL for PRAGMA/ALTER statements.
+- `psi/web/routers/molecules.py`: pass explicit DB path to background tasks via caller session bind.
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No UI changes.

@@ -14,7 +14,7 @@ from psi.services.measurements import get_primary_measurement_for_record
 def _table_cols(db: Session, table: str) -> set[str]:
     """Return column names for a table, or empty set if it doesn't exist."""
     try:
-        rows = db.execute(text(f"PRAGMA table_info({table})")).mappings().all()
+        rows = db.execute(text("PRAGMA table_info(" + table + ")")).mappings().all()
     except Exception:
         return set()
     return {r.get('name') for r in rows if r.get('name')}

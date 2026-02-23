@@ -394,10 +394,10 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
         for table, cols in model_columns.items():
             if not _table_exists(conn, table):
                 continue
-            existing = {r[1] for r in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()}
+            existing = {r[1] for r in conn.execute(text("PRAGMA table_info(" + table + ")")).fetchall()}
             for col, coltype in cols.items():
                 if col not in existing:
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"))
+                    conn.execute(text("ALTER TABLE " + table + " ADD COLUMN " + col + " " + coltype))
 
 
     # v1.2.9q: backfill snapshot supersession metadata (deterministic).

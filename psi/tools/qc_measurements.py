@@ -98,7 +98,7 @@ def run(
         if mid is None:
             continue
         # Only flag if currently unflagged
-        cur = db.execute(text(f"SELECT {qc_flag} FROM data_measurements WHERE id=:id"), {"id": mid}).scalar()
+        cur = db.execute(text("SELECT " + qc_flag + " FROM data_measurements WHERE id=:id"), {"id": mid}).scalar()
         if cur not in (None, 0, "0", ""):
             continue
         upd_cols = [f"{qc_flag}=1"]
@@ -106,7 +106,7 @@ def run(
         if qc_note:
             upd_cols.append(f"{qc_note}=:note")
             upd_params["note"] = it["reason"]
-        db.execute(text(f"UPDATE data_measurements SET {', '.join(upd_cols)} WHERE id=:id"), upd_params)
+        db.execute(text("UPDATE data_measurements SET " + ", ".join(upd_cols) + " WHERE id=:id"), upd_params)
         flagged += 1
     db.commit()
 

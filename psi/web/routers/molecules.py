@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from psi.web.deps import get_db, get_storage_cfg, get_templates
-from psi.core.db import DB_PATH
+from psi.core.db import get_db as get_db_ctx
 from psi.services import molecules as svc
 from psi.services.computed import run_computed_properties, run_immunogenicity_mhci
 from psi.services.numbering import trigger_numbering_for_molecule
@@ -16,13 +16,23 @@ from psi.core.models import MoleculeComponent
 router = APIRouter()
 
 
+def _db_path_from_session(db: Session) -> str | None:
+    try:
+        bind = db.get_bind()
+        if bind is None or bind.url is None:
+            return None
+        return bind.url.database
+    except Exception:
+        return None
+
+
 @router.post("/molecules/{molecule_id}/computed/recompute")
 def recompute_fast_properties(molecule_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     m = svc.get_molecule(db, molecule_id)
     if not m:
         raise HTTPException(404)
     # Always run in background; consistent UX.
-    background_tasks.add_task(svc._background_compute, molecule_id, "manual_recompute")
+    background_tasks.add_task(svc._background_compute, molecule_id, "manual_recompute", _db_path_from_session(db))
     return RedirectResponse(url=f"/molecules/{molecule_id}", status_code=303)
 
 
@@ -32,14 +42,10 @@ def run_numbering(molecule_id: int, background_tasks: BackgroundTasks, scheme: s
     if not m:
         raise HTTPException(404)
     # Run in background: compute missing artifacts.
+    db_path = _db_path_from_session(db)
     def _bg():
-        from psi.core.db import SessionLocal
-
-        s = SessionLocal()
-        try:
+        with get_db_ctx(db_path, ensure=False) as s:
             trigger_numbering_for_molecule(s, molecule_id=molecule_id, scheme=scheme, force=True)
-        finally:
-            s.close()
 
     background_tasks.add_task(_bg)
     return RedirectResponse(url=f"/molecules/{molecule_id}?scheme={scheme}", status_code=303)
@@ -65,11 +71,9 @@ def run_immunogenicity_mhci_scan(
     if not m:
         raise HTTPException(404)
 
+    db_path = _db_path_from_session(db)
     def _bg():
-        from psi.core.db import SessionLocal
-
-        s = SessionLocal()
-        try:
+        with get_db_ctx(db_path, ensure=False) as s:
             run_immunogenicity_mhci(
                 s,
                 molecule_id=molecule_id,
@@ -79,8 +83,6 @@ def run_immunogenicity_mhci_scan(
                 max_len=int(max_len),
                 binder_threshold_nm=float(binder_threshold_nm),
             )
-        finally:
-            s.close()
 
     background_tasks.add_task(_bg)
     return RedirectResponse(url=f"/molecules/{molecule_id}#computed", status_code=303)
@@ -92,14 +94,10 @@ def recompute_domains(molecule_id: int, background_tasks: BackgroundTasks, db: S
     if not m:
         raise HTTPException(404)
 
+    db_path = _db_path_from_session(db)
     def _bg():
-        from psi.core.db import SessionLocal
-
-        s = SessionLocal()
-        try:
+        with get_db_ctx(db_path, ensure=False) as s:
             extract_domains_for_molecule(s, molecule_id)
-        finally:
-            s.close()
 
     background_tasks.add_task(_bg)
     return RedirectResponse(url=f"/molecules/{molecule_id}#domains", status_code=303)
@@ -219,7 +217,7 @@ async def create_molecule(request: Request, background_tasks: BackgroundTasks, d
             heavy_compute_enabled=heavy_compute_enabled,
             components=comps if comps else None,
             background_tasks=background_tasks,
-            db_path=DB_PATH,
+            db_path=_db_path_from_session(db),
         )
     except DuplicateMoleculeError as e:
         # Block duplicate composition; redirect back to form with a clear banner + link.
@@ -464,7 +462,7 @@ async def update_molecule(
             heavy_compute_enabled=heavy_compute_enabled,
             components=comps if (molecule_format in ("IgG", "scFv") and comps) else (None if not comps and molecule_format not in ("IgG", "scFv") else comps),
             background_tasks=background_tasks,
-            db_path=DB_PATH,
+            db_path=_db_path_from_session(db),
             reason=reason,
         )
     except KeyError:

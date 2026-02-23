@@ -274,7 +274,7 @@ def list_measurements_for_record(db: Session, *, record_id: int) -> List[Dict[st
 
     order_sql = ", ".join([f"{c} ASC" for c in order_bits if c])
 
-    q = text(f"SELECT * FROM data_measurements WHERE {record_fk} = :rid ORDER BY {order_sql}")
+    q = text("SELECT * FROM data_measurements WHERE " + record_fk + " = :rid ORDER BY " + order_sql)
     rows = db.execute(q, {"rid": int(record_id)}).mappings().all()
     return [dict(r) for r in rows]
 
@@ -405,7 +405,7 @@ def upsert_measurements(db: Session, *, record_id: int, measurements: List[Dict[
 
             col_sql = ", ".join(insert_phys_cols)
             val_sql = ", ".join([f":{b}" for b in insert_vals.keys()])
-            ins = text(f"INSERT INTO data_measurements ({col_sql}) VALUES ({val_sql})")
+            ins = text("INSERT INTO data_measurements (" + col_sql + ") VALUES (" + val_sql + ")")
             db.execute(ins, insert_vals)
             wrote += 1
             continue
@@ -437,7 +437,7 @@ def upsert_measurements(db: Session, *, record_id: int, measurements: List[Dict[
             set_sql = ", ".join([f"{c}=:v_{i}" for i, c in enumerate(updates.keys())])
             params = {f"v_{i}": v for i, v in enumerate(updates.values())}
             params["mid"] = row["id"]
-            upd = text(f"UPDATE data_measurements SET {set_sql} WHERE id=:mid")
+            upd = text("UPDATE data_measurements SET " + set_sql + " WHERE id=:mid")
             db.execute(upd, params)
             wrote += 1
 
@@ -486,14 +486,14 @@ def upsert_measurements_force(db: Session, *, record_id: int, measurements: List
             set_sql = ", ".join([f"{c}=:v_{i}" for i, c in enumerate(updates.keys())])
             params = {f"v_{i}": v for i, v in enumerate(updates.values())}
             params["mid"] = row["id"]
-            upd = text(f"UPDATE data_measurements SET {set_sql} WHERE id=:mid")
+            upd = text("UPDATE data_measurements SET " + set_sql + " WHERE id=:mid")
             db.execute(upd, params)
             wrote += 1
 
         # Ensure some primary exists if supported
         if cols.get("is_primary") and (not primary_exists):
             db.execute(
-                text(f"UPDATE data_measurements SET {cols['is_primary']}=1 WHERE id=:mid"),
+                text("UPDATE data_measurements SET " + cols["is_primary"] + "=1 WHERE id=:mid"),
                 {"mid": row["id"]},
             )
             primary_exists = True
