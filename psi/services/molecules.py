@@ -1571,15 +1571,9 @@ def _run_qc_summary_for_records(db: Session, record_ids: list[int], cols: dict) 
     if not record_ids or not cols:
         return {}
 
-    from sqlalchemy import text as _text
+    from sqlalchemy import bindparam as _bindparam, text as _text
 
-    # Build IN clause with named params for sqlite.
-    binds = []
-    params = {}
-    for i, rid in enumerate(record_ids):
-        k = f"rid{i}"
-        binds.append(f":{k}")
-        params[k] = int(rid)
+    record_ids = [int(rid) for rid in record_ids if rid]
 
     q = _text(
         f"""
@@ -1591,11 +1585,11 @@ def _run_qc_summary_for_records(db: Session, record_ids: list[int], cols: dict) 
                COUNT(1) AS total
         FROM data_measurements dm
         LEFT JOIN measurement_qc mq ON mq.measurement_id = dm.id
-        WHERE dm.{cols['record_fk']} IN ({', '.join(binds)})
+        WHERE dm.{cols['record_fk']} IN :record_ids
         GROUP BY dm.{cols['record_fk']}
         """
-    )
-    rows = db.execute(q, params).mappings().all()
+    ).bindparams(_bindparam("record_ids", expanding=True))
+    rows = db.execute(q, {"record_ids": record_ids}).mappings().all()
     out: dict[int, dict] = {}
     for r in rows:
         rid = int(r.get("rid") or 0)

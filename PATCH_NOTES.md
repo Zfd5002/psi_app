@@ -606,3 +606,14 @@ What changed:
 What did NOT change:
 - No DI logic changes. No policy changes. No selector changes.
 - No DB changes / migrations. No UI changes.
+
+## 2026-02-23 — v1.2.9v25
+Why:
+- Harden SQL IN-clause usage to use SQLAlchemy expanding bind parameters.
+
+What changed:
+- `psi/services/molecules.py`: replace dynamic `IN (...)` string binds with `bindparam(expanding=True)`.
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No UI changes.
