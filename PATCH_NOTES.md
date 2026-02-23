@@ -1,48 +1,36 @@
-<<<<<<< HEAD
-=======
+## v1.2.9v5
+
+Why:
+- Remove FastAPI startup deprecation while preserving deterministic startup semantics.
+
+What changed:
+- Migrate startup hook to a FastAPI lifespan context manager.
+
+What did NOT change:
+- No schema changes. No DI/policy changes. No endpoint/UI changes.
+
+## v1.2.9v4
+
+Why:
+- Eliminate Python 3.12 datetime.utcnow deprecation and enforce consistent UTC helper usage.
+
+What changed:
+- Add/standardize `now_utc()` in `psi/core/utils.py` (naive UTC) and replace all `datetime.utcnow()` call sites.
+
+What did NOT change:
+- No schema changes. No DI/policy changes. No functional decision changes.
+
 ## v1.2.9v3
 
 Why:
-- Improve DI drift explain readability.
-- Harden SQL `IN (...)` usage.
-- Surface program-level DI governance and lineage in a read-only UI.
-- Make packaging workflow safer (desktop shortcut install opt-in).
+- UI readability polish for drift explanations and SQL IN-clause hardening.
 
 What changed:
-- UI (Decision Snapshot):
-  - Improved drift explain panel readability.
-  - Added evidence added/removed clarity.
-  - Added reason legend.
-  - No change to DI engine behavior.
-
-- UI (Program Detail):
-  - Added policy governance summary (policy_id / policy_version counts).
-  - Added policy_version filter.
-  - Added DI snapshot lineage table (recent, read-only).
-  - Optional `?verify=1` shows anchored/current verification chips (read-only).
-
-- Hardening:
-  - Replaced f-string / manual `IN (...)` SQL with SQLAlchemy `bindparam(expanding=True)` in:
-    - `psi/core/db.py`
-    - `psi/services/decisions.py`
-    - `psi/services/di/runner.py`
-    - `psi/services/di/verify.py`
-    - `psi/services/export_wide.py`
-  - (One legacy `IN (...)` pattern remains in `psi/services/molecules.py` and is tracked for follow-up.)
-
-- Tooling:
-  - Added `psi/tools/di_cross_version_stress.py` for cross-version anchored replay stress testing (WARN on DATA_DRIFT; fail only on anchored mismatch or errors).
-
-- Packaging:
-  - `compress.sh` now builds ZIP by default.
-  - Desktop shortcut install is opt-in via `--install-shortcut` or `INSTALL_SHORTCUT=1`.
-  - Added explicit runtime vs codex guidance in `PSI_CONTEXT.md`.
+- UI: improved DI drift explain panel readability; reason legend; no functional change.
+- Hardening: replace f-string IN-clause SQL with SQLAlchemy expanding bindparams across codebase.
 
 What did NOT change:
-- No schema changes.
-- No DI policy changes.
-- No DI engine logic changes.
-- All new UI and verification surfaces are read-only.
+- No DI engine logic changes. No policy changes. No DB writes or schema changes.
 
 ## v1.2.9v2
 
@@ -156,7 +144,6 @@ What did NOT change:
 - No snapshot content changes. No integrity hash changes.
 - `runner.py` supersession logic is untouched (already correct).
 
->>>>>>> v1.2.9s1_evidence_tuple_dedupe
 ## v1.2.9r3
 
 Why:
