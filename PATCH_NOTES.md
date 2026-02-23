@@ -658,3 +658,21 @@ What changed:
 What did NOT change:
 - No DI logic changes. No policy changes. No selector changes.
 - No DB changes / migrations. No UI changes.
+
+## 2026-02-23 — v1.2.9v29
+What changed:
+- `psi/services/di/enrich.py`: add deterministic metric value-function evaluation + interpretation gap detection.
+- `psi/services/di/compute.py`: include metric evaluations in DI outputs and emit interpretation-gap risk flags.
+- `psi/core/di/policies/advance_to_in_vivo_v0_2.json`: add policy-visible `metric_value_functions` and include `interpretation_gap` in risk flag categories.
+- `psi/tools/di_contract_smoke.py` and `psi/tools/run_di.py`: default to the v0.2 policy file.
+
+What did NOT change:
+- No DB changes / migrations. No snapshot mutation.
+- No scoring weights. No ML. No selector or gate logic changes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

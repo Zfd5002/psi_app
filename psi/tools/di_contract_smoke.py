@@ -257,7 +257,7 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         ],
     )
 
-    policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_1.json"
+    policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_2.json"
 
     di_input = DIInput(
         decision_key="advance_to_in_vivo",
@@ -581,7 +581,7 @@ def test_cross_version_snapshot_content_hash_stability() -> None:
     )
 
     # Policy path (repo-local)
-    policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_1.json"
+    policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_2.json"
 
     di_input = DIInput(
         decision_key="advance_to_in_vivo",

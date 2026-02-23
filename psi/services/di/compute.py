@@ -27,6 +27,7 @@ from psi.services.di.enrich import (
     build_soe_v0_2,
     build_soe_v0_3,
     coverage_fingerprint_payload,
+    derive_metric_evaluations,
     derive_risk_flags_enriched,
     derive_suggestions,
 )
@@ -143,6 +144,12 @@ def _compute_di_from_used_by_metric(
     templ = eval_advance_to_in_vivo(
         used_by_metric=used_by_metric,
         policy=pol.policy_body,
+        context=di_in.context or {},
+    )
+
+    metric_evaluations, interpretation_gap_flags = derive_metric_evaluations(
+        policy_body=(pol.policy_body or {}),
+        used_by_metric=used_by_metric,
         context=di_in.context or {},
     )
 
@@ -267,9 +274,9 @@ def _compute_di_from_used_by_metric(
         },
         "gates": [_to_dict(g) for g in (templ.get("gates") or [])],
         "blockers": templ.get("blockers") or [],
-        "risk_flags": templ.get("risk_flags") or [],
+        "risk_flags": (templ.get("risk_flags") or []) + (interpretation_gap_flags or []),
         "risk_flags_enriched": derive_risk_flags_enriched(
-            risk_flags=templ.get("risk_flags") or [],
+            risk_flags=(templ.get("risk_flags") or []) + (interpretation_gap_flags or []),
             used_by_metric=used_by_metric,
             policy_body=(pol.policy_body or {}),
         ),
@@ -283,6 +290,8 @@ def _compute_di_from_used_by_metric(
             if mid is not None and str(mid).strip() and int(mid) > 0
         ]),
     }
+    if metric_evaluations:
+        out["metric_evaluations"] = metric_evaluations
 
     gate_outcomes = derive_gate_outcomes(
         policy_body=(pol.policy_body or {}),

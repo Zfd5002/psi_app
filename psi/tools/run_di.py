@@ -20,7 +20,7 @@ def _json_default(o):
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="python -m psi.tools.run_di",
-        description="Run PSI DI v0.1 headlessly and persist a DecisionSnapshot.",
+        description="Run PSI DI v0.2 headlessly and persist a DecisionSnapshot.",
     )
     ap.add_argument("--decision", required=True, help="Decision key (v0.1 supports: advance_to_in_vivo)")
     ap.add_argument("--batch-id", required=True, type=int, help="Batch DB id (integer)")
@@ -33,7 +33,7 @@ def main() -> None:
 
     decision = args.decision.strip()
     if decision != "advance_to_in_vivo":
-        raise SystemExit("DI v0.1 only supports --decision advance_to_in_vivo")
+        raise SystemExit("DI v0.2 only supports --decision advance_to_in_vivo")
 
     ctx = {}
     if args.context_json.strip():
@@ -42,7 +42,7 @@ def main() -> None:
             raise SystemExit("--context-json must be a JSON object")
 
     base = Path(__file__).resolve().parents[1]  # psi/
-    default_policy = base / "core" / "di" / "policies" / "advance_to_in_vivo_v0_1.json"
+    default_policy = base / "core" / "di" / "policies" / "advance_to_in_vivo_v0_2.json"
     policy_path = Path(args.policy).expanduser().resolve() if args.policy.strip() else default_policy
     if not policy_path.exists():
         raise SystemExit(f"Policy file not found: {policy_path}")
