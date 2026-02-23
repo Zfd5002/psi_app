@@ -790,3 +790,53 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9v37
+What changed:
+- `psi/services/di/nbe.py`: catalog-driven NBE helper for deterministic experiment suggestions.
+- `psi/services/di/compute.py`: emit catalog-driven `experiment_suggestions` and `recommended_experiments`.
+- `docs/DI_SNAPSHOT_CONTRACT.md`: document experiment suggestion outputs and determinism rules.
+
+What did NOT change:
+- No DI gate/selector logic changes. No ML. No scoring weights.
+- No DB changes / migrations.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9v38
+What changed:
+- DI post-hoc review capture via OutcomeLabel (verdict + rationale) on DI snapshot page.
+- UI: add DI review form and show latest review alongside existing outcome labels.
+- Service/router: accept DI review submissions without schema changes.
+
+What did NOT change:
+- No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9v39
+What changed:
+- DI snapshot UI: clarified supersession status/labeling.
+- DI snapshot UI: added “What to trust” verification box explaining hashes and drift labels.
+
+What did NOT change:
+- No DI semantics changes. No ML. No scoring weights.
+- No DB changes / migrations. No new routes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

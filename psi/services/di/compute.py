@@ -31,6 +31,7 @@ from psi.services.di.enrich import (
     derive_risk_flags_enriched,
     derive_suggestions,
 )
+from psi.services.di.nbe import build_experiment_suggestions
 from psi.services.di.integrity import (
     compute_decision_output_hash,
     compute_decision_output_hash_v2,
@@ -208,21 +209,13 @@ def _compute_di_from_used_by_metric(
     catalog_version = str(inputs_obj.get("catalog_version") or "")
     catalog_hash = str(inputs_obj.get("catalog_hash") or "")
 
-    # Blocker -> experiment mapping (neutral; sorted/deduped; no prioritization logic)
-    experiment_suggestions: Dict[str, Any] = {}
-    blocker_suggestions = pol.policy_body.get("blocker_suggestions") if isinstance(pol.policy_body, dict) else {}
-    if isinstance(blocker_suggestions, dict):
-        for bk, exps in blocker_suggestions.items():
-            if isinstance(exps, list):
-                seen = set()
-                out_list: List[str] = []
-                for x in exps:
-                    sx = str(x).strip()
-                    if not sx or sx in seen:
-                        continue
-                    seen.add(sx)
-                    out_list.append(sx)
-                experiment_suggestions[str(bk)] = sorted(out_list)
+    # Catalog-driven experiment suggestions (deterministic; no scoring)
+    experiment_suggestions, recommended_experiments = build_experiment_suggestions(
+        blockers=(templ.get("blockers") or []),
+        catalog_id=catalog_id,
+        catalog_version=catalog_version,
+        allow_recommended_list=True,
+    )
 
     out: Dict[str, Any] = {
         "decision_state": decision_state,
@@ -292,6 +285,8 @@ def _compute_di_from_used_by_metric(
     }
     if metric_evaluations:
         out["metric_evaluations"] = metric_evaluations
+    if recommended_experiments:
+        out["recommended_experiments"] = recommended_experiments
 
     gate_outcomes = derive_gate_outcomes(
         policy_body=(pol.policy_body or {}),

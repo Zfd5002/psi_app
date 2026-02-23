@@ -101,14 +101,39 @@ def decisions_verify(snap_id: int, request: Request, debug: int = 0, db: Session
 def decisions_add_outcome(
     snap_id: int,
     request: Request,
-    label_type: str = Form(...),
+    label_type: str | None = Form(None),
     note: str | None = Form(None),
+    di_review_verdict: str | None = Form(None),
+    di_review_rationale: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     try:
         snap_ctx = svc.get_snapshot_detail(db, snap_id)
     except KeyError:
         raise HTTPException(404)
+
+    verdict = (di_review_verdict or "").strip()
+    rationale = (di_review_rationale or "").strip()
+    if verdict or rationale:
+        valid = {lt["key"] for lt in (snap_ctx.get("di_review_verdicts") or []) if isinstance(lt, dict)}
+        if not verdict or verdict not in valid:
+            raise HTTPException(400, "Invalid DI review verdict")
+        if not rationale:
+            raise HTTPException(400, "Rationale is required for DI review")
+
+        svc.add_outcome_label(
+            db,
+            snapshot_id=int(snap_id),
+            name="di_review_verdict",
+            value_text=verdict,
+        )
+        svc.add_outcome_label(
+            db,
+            snapshot_id=int(snap_id),
+            name="di_review_rationale",
+            value_text=rationale,
+        )
+        return RedirectResponse(url=f"/decisions/{snap_id}", status_code=303)
 
     valid = {lt["key"]: lt for lt in (snap_ctx.get("outcome_label_types") or []) if isinstance(lt, dict)}
     label_type = (label_type or "").strip()

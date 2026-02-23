@@ -32,6 +32,12 @@ OUTCOME_LABEL_TYPES = [
     {"key": "other", "label": "Other (requires note)", "note_required": True},
 ]
 
+DI_REVIEW_VERDICTS = [
+    {"key": "useful", "label": "Useful"},
+    {"key": "incorrect", "label": "Incorrect"},
+    {"key": "mixed", "label": "Mixed"},
+]
+
 
 def stable_json_dumps(obj: Any) -> str:
     """Stable JSON serialization for exports/diffs (deterministic ordering, no whitespace drift)."""
@@ -287,6 +293,12 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
         .order_by(OutcomeLabel.created_at.asc())
         .all()
     )
+    di_review = {"verdict": None, "rationale": None}
+    for o in outcomes:
+        if o.name == "di_review_verdict":
+            di_review["verdict"] = o.value_text
+        if o.name == "di_review_rationale":
+            di_review["rationale"] = o.value_text
 
     # Legacy rules-engine evidence tracing
     evidence = []
@@ -324,6 +336,8 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
     return {
         "snap": snap,
         "outcome_label_types": OUTCOME_LABEL_TYPES,
+        "di_review_verdicts": DI_REVIEW_VERDICTS,
+        "di_review": di_review,
         "outcomes": outcomes,
         "output": output,
         "inputs": inputs,

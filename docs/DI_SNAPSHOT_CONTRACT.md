@@ -112,6 +112,18 @@ Additive fields may be present, including:
 - `code_version` (string; PSI code version from `psi/version.py`)
 - `evaluation_version` (string; alias of `evaluator_version` for readability)
 
+### 4.5 Experiment suggestions (v1.2.9v37; additive)
+
+If present, the DI output MAY include catalog-driven experiment suggestions:
+
+- `experiment_suggestions` (dict): mapping of `blocker_key` → `[experiment_key, ...]`
+- `recommended_experiments` (list): flattened list of objects with catalog fields
+
+Determinism:
+- `experiment_suggestions` preserves blocker order from the DI output.
+- Experiments are sorted by `(time_tier, cost_tier, experiment_key)` using a fixed tier order.
+- Suggestions are catalog/policy-driven only (no optimization, no scoring, no weights).
+
 ### 4.3 Provenance integrity (v1.2.9k+; additive)
 
 If present, `outputs_json.provenance.integrity` MUST be a dict containing:

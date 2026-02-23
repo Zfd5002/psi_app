@@ -14,6 +14,7 @@
 {% set risk_flags = output.risk_flags_enriched if output.risk_flags_enriched is defined else (output.risk_flags if output.risk_flags is defined else []) %}
 {% set metric_evals = output.metric_evaluations if output.metric_evaluations is defined else {} %}
 {% set shortlisting = output.shortlisting if output.shortlisting is defined else None %}
+{% set superseded = (snap.is_superseded if snap is defined else None) %}
 
 {% if verification is defined or verification_error is defined %}
   {% include "decisions/_di_verification.html" %}
@@ -21,7 +22,35 @@
 
 {# --- Outcome labels (capture only) --- #}
 <div class="card" style="margin-top:12px;">
-  <h2 style="margin-top:0;">Outcome review</h2>
+  <h2 style="margin-top:0;">DI post-hoc review</h2>
+  {% if di_review is defined and (di_review.verdict or di_review.rationale) %}
+    <div class="muted">Latest review</div>
+    <div><b>{{ di_review.verdict if di_review.verdict else '—' }}</b></div>
+    <div class="muted" style="margin-top:4px;">{{ di_review.rationale if di_review.rationale else '—' }}</div>
+  {% else %}
+    <div class="muted">No DI review yet.</div>
+  {% endif %}
+
+  {% if di_review_verdicts is defined and di_review_verdicts|length %}
+    <form method="post" action="/decisions/{{ snap.id }}/outcomes" style="margin-top:10px;display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end;">
+      <div>
+        <div class="muted mini">Verdict</div>
+        <select name="di_review_verdict">
+          {% for lt in di_review_verdicts %}
+            <option value="{{ lt.key }}">{{ lt.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <div class="muted mini">Rationale (required)</div>
+        <input name="di_review_rationale" placeholder="Why this verdict?" />
+      </div>
+      <button class="btn" type="submit">Save DI review</button>
+    </form>
+  {% endif %}
+
+  <hr style="margin:12px 0;opacity:0.4;" />
+  <h2 style="margin:0 0 6px 0;">Outcome review</h2>
   {% if outcomes is defined and outcomes|length %}
     <table class="table compact">
       <thead><tr><th>label</th><th>note</th><th>created_at</th></tr></thead>
@@ -171,6 +200,17 @@
 
 <div class="card" style="margin-top:12px;">
   <h2 style="margin-top:0;">Snapshot metadata</h2>
+  <div class="muted" style="margin-bottom:6px;">
+    Supersession:
+    {% if superseded %}
+      <span class="chip">Superseded</span>
+    {% else %}
+      <span class="chip">Active</span>
+    {% endif %}
+    {% if snap.superseded_by_snapshot_id %}
+      <span class="muted">by snapshot {{ snap.superseded_by_snapshot_id }}</span>
+    {% endif %}
+  </div>
   <table class="table">
     <tbody>
       <tr><td><b>Engine</b></td><td>{{ engine.engine_id if engine.engine_id is defined else (inputs.engine_id if inputs is defined else '') }}</td></tr>
@@ -214,6 +254,17 @@
       {% endif %}
     </tbody>
   </table>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">What to trust</h2>
+  <div class="muted">Verification checks whether this snapshot still matches its recorded content and prior context.</div>
+  <ul style="margin:8px 0 0 16px;">
+    <li><b>snapshot_content_hash</b>: hashes stored snapshot inputs/outputs.</li>
+    <li><b>decision_output_hash_v2</b>: hashes canonicalized decision outputs (stable semantic fields).</li>
+    <li><b>evidence_fingerprint</b>: hashes the evidence set used/ignored and gate outcomes at the time of snapshot.</li>
+    <li><b>Drift vs previous</b>: indicates divergence from the immediately prior snapshot for the same scope.</li>
+  </ul>
 </div>
 
 {% set soe_cov = (soe.soe_v0_3 if soe is defined and soe.soe_v0_3 is defined and soe.soe_v0_3.metric_status is defined else (soe.soe_v0_2 if soe is defined and soe.soe_v0_2 is defined else {})) %}
