@@ -483,6 +483,12 @@ class DecisionSnapshot(Base):
     as_of_ts = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
 
+    # v1.2.9q: snapshot lifecycle governance (additive).
+    # These fields do NOT affect snapshot immutability: they are metadata that clarifies lifecycle.
+    is_superseded = Column(Integer, nullable=True)          # 0/1; NULL allowed for older rows
+    superseded_by_snapshot_id = Column(Integer, ForeignKey("decision_snapshots.id"), nullable=True)
+    superseded_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     program = relationship("Program", back_populates="decisions")

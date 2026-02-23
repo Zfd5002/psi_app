@@ -1,0 +1,114 @@
+{# DI verification panel (read-only). Assumes ctx: verification / verification_error #}
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Verification</h2>
+
+  {% if verification_error is defined and verification_error %}
+    <div class="notice" style="border-color:var(--bad);">
+      <b>Verification error:</b> {{ verification_error }}
+    </div>
+  {% elif verification is defined and verification %}
+    {% set anchored = (verification.anchored_replay if verification.anchored_replay is defined else {}) %}
+    {% set anchored_avail = (anchored.available if anchored is defined and anchored.available is defined else false) %}
+    {% set anchored_status = (anchored.stored_vs_replay_classification if anchored_avail else 'UNAVAILABLE') %}
+    {% set current_cls = (verification.classification if verification.classification is defined else '—') %}
+    {% set replay_vs_current = (anchored.replay_vs_current_classification if anchored is defined and anchored.replay_vs_current_classification is defined else '—') %}
+
+    {% set anchored_badge = 'good' if anchored_status == 'VERIFIED' else ('warn' if anchored_status == 'UNAVAILABLE' else 'bad') %}
+    {% set current_badge = 'good' if current_cls == 'VERIFIED' else ('warn' if current_cls == 'DATA_DRIFT' else 'bad') %}
+
+    <div class="row" style="margin-top:6px;">
+      <span class="badge {{ anchored_badge }}">Anchored: {{ anchored_status }}</span>
+      <span class="badge {{ current_badge }}">Current: {{ current_cls }}</span>
+      {% if anchored_avail %}
+        <span class="badge">Replay vs current: {{ replay_vs_current }}</span>
+      {% endif %}
+    </div>
+
+    {% if anchored is defined and anchored.diagnosis is defined and anchored.diagnosis.primary %}
+      <div class="muted" style="margin-top:8px;">{{ anchored.diagnosis.primary }}{% if anchored.diagnosis.detail %} — {{ anchored.diagnosis.detail }}{% endif %}</div>
+    {% endif %}
+
+    <details style="margin-top:10px;">
+      <summary class="muted">Explain drift</summary>
+      <div style="margin-top:8px;">
+        {% if verification.evidence_ids_diff is defined %}
+          {% set added_ids = (verification.evidence_ids_diff.added if verification.evidence_ids_diff.added is defined else []) %}
+          {% set removed_ids = (verification.evidence_ids_diff.removed if verification.evidence_ids_diff.removed is defined else []) %}
+          <table class="table compact" style="margin-top:6px;">
+            <thead><tr><th>added_ids</th><th>removed_ids</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="muted">{{ added_ids|join(', ') if added_ids is iterable else added_ids }}</td>
+                <td class="muted">{{ removed_ids|join(', ') if removed_ids is iterable else removed_ids }}</td>
+              </tr>
+            </tbody>
+          </table>
+        {% endif %}
+
+        {% if verification.evidence_ids_explain is defined and verification.evidence_ids_explain.per_metric is defined %}
+          <table class="table compact" style="margin-top:8px;">
+            <thead>
+              <tr>
+                <th>metric_key</th>
+                <th>reason</th>
+                <th>removed → added</th>
+                <th class="muted">created_at</th>
+                <th class="muted">unit/value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in verification.evidence_ids_explain.per_metric %}
+                <tr>
+                  <td><b>{{ row.metric_key }}</b></td>
+                  <td class="muted">{{ row.reason_key }}</td>
+                  <td class="muted">
+                    {% if row.removed_id is defined and row.added_id is defined %}
+                      {{ row.removed_id }} → {{ row.added_id }}
+                    {% else %}
+                      {{ row.removed_ids if row.removed_ids is defined else '—' }} → {{ row.added_ids if row.added_ids is defined else '—' }}
+                    {% endif %}
+                  </td>
+                  <td class="muted">
+                    {% if row.removed_created_at is defined or row.added_created_at is defined %}
+                      {{ (row.removed_created_at[:10] if row.removed_created_at is defined and row.removed_created_at) else '—' }} →
+                      {{ (row.added_created_at[:10] if row.added_created_at is defined and row.added_created_at) else '—' }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td class="muted">
+                    {% set unit = (row.unit if row.unit is defined else '') %}
+                    {% if row.added_value_num is defined and row.added_value_num is not none %}
+                      {{ unit }} {{ row.added_value_num }}
+                    {% elif row.added_value_text is defined and row.added_value_text %}
+                      {{ unit }} {{ row.added_value_text }}
+                    {% elif row.removed_value_num is defined and row.removed_value_num is not none %}
+                      {{ unit }} {{ row.removed_value_num }}
+                    {% elif row.removed_value_text is defined and row.removed_value_text %}
+                      {{ unit }} {{ row.removed_value_text }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="5" class="muted">No per-metric drift details.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <div class="muted" style="margin-top:6px;">No drift explanation available.</div>
+        {% endif %}
+
+        <div class="muted" style="margin-top:8px;">
+          <b>Reason legend:</b>
+          <span>newer_measurement_selected → A newer measurement was inserted; recompute chose newest by selection semantics.</span>
+          <span>qc_filtered → QC gating changed which evidence qualifies.</span>
+        </div>
+      </div>
+    </details>
+  {% else %}
+    <div class="muted">Verification unavailable.</div>
+  {% endif %}
+</div>

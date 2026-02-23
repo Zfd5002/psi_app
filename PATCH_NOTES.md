@@ -1,3 +1,162 @@
+<<<<<<< HEAD
+=======
+## v1.2.9v3
+
+Why:
+- Improve DI drift explain readability.
+- Harden SQL `IN (...)` usage.
+- Surface program-level DI governance and lineage in a read-only UI.
+- Make packaging workflow safer (desktop shortcut install opt-in).
+
+What changed:
+- UI (Decision Snapshot):
+  - Improved drift explain panel readability.
+  - Added evidence added/removed clarity.
+  - Added reason legend.
+  - No change to DI engine behavior.
+
+- UI (Program Detail):
+  - Added policy governance summary (policy_id / policy_version counts).
+  - Added policy_version filter.
+  - Added DI snapshot lineage table (recent, read-only).
+  - Optional `?verify=1` shows anchored/current verification chips (read-only).
+
+- Hardening:
+  - Replaced f-string / manual `IN (...)` SQL with SQLAlchemy `bindparam(expanding=True)` in:
+    - `psi/core/db.py`
+    - `psi/services/decisions.py`
+    - `psi/services/di/runner.py`
+    - `psi/services/di/verify.py`
+    - `psi/services/export_wide.py`
+  - (One legacy `IN (...)` pattern remains in `psi/services/molecules.py` and is tracked for follow-up.)
+
+- Tooling:
+  - Added `psi/tools/di_cross_version_stress.py` for cross-version anchored replay stress testing (WARN on DATA_DRIFT; fail only on anchored mismatch or errors).
+
+- Packaging:
+  - `compress.sh` now builds ZIP by default.
+  - Desktop shortcut install is opt-in via `--install-shortcut` or `INSTALL_SHORTCUT=1`.
+  - Added explicit runtime vs codex guidance in `PSI_CONTEXT.md`.
+
+What did NOT change:
+- No schema changes.
+- No DI policy changes.
+- No DI engine logic changes.
+- All new UI and verification surfaces are read-only.
+
+## v1.2.9v2
+
+Why:
+- Surface DI verification + drift intelligence in the UI (anchored vs current-world), read-only.
+
+What changed:
+- `psi/web/routers/decisions.py` + `psi/web/templates/decisions/_di_snapshot.html` + `psi/web/templates/decisions/_di_verification.html`: add DI verification panel with anchored/current status + drift explain.
+- `psi/services/programs.py` + `psi/web/routers/programs.py` + `psi/web/templates/programs/detail.html`: optional lineage verification chips via `?verify=1`.
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No DB writes or schema changes.
+
+## v1.2.9v1
+
+Why:
+- di_cross_version_stress should treat DATA_DRIFT as expected and non-failing.
+
+What changed:
+- `psi/tools/di_cross_version_stress.py`: DATA_DRIFT now WARN (non-failing); hard fail only on anchored mismatch, exceptions, or non-data-drift classifications; add classification histogram; exit nonzero only on hard failures.
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No DB writes or schema changes.
+
+## v1.2.9v
+
+Why:
+- Governance hardening for packaging, dashboard visibility, and verification tooling.
+
+What changed:
+- `compress.sh` + `PSI_CONTEXT.md`: desktop shortcut install is opt-in and must be run from `~/psi_repo`.
+- `psi/services/programs.py` + `psi/web/templates/programs/detail.html`: add DI snapshot lineage panel (read-only).
+- `psi/tools/di_cross_version_stress.py`: read-only cross-version verification stress test tool.
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No DB writes or schema changes.
+
+## v1.2.9u
+
+Why:
+- Finish deterministic, read-only portfolio analytics surfaces and clarify decision lifecycle in molecule history.
+
+What changed:
+- `psi/services/programs.py` + `psi/web/templates/programs/detail.html`: add gate failure frequency, metric coverage frequency, and QC instability summaries (counts only).
+- `psi/services/molecules.py` + `psi/web/templates/molecules/detail.html`: surface superseded status in decision history.
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No DB writes or schema changes.
+
+## v1.2.9s3
+
+Why:
+- Make replay regression harness startup clearer and fail fast on invalid explicit DB paths.
+
+What changed:
+- `psi/tools/di_replay_regression.py`: print PSI version + read-only mode; fail fast if `--db` path is missing.
+
+What did NOT change:
+- No DI logic changes. No DB writes. No schema changes.
+
+## v1.2.9s2
+
+Why:
+- Clarify which SQLite DB path the replay regression harness opens, and enforce read-only posture.
+
+What changed:
+- `psi/tools/di_replay_regression.py`: print resolved DB path at startup; open DB with `ensure=False`.
+
+What did NOT change:
+- No DB schema changes. No DB writes. No DI logic changes.
+
+## v1.2.9s
+
+Why:
+- Fix a startup crash (`IntegrityError: UNIQUE constraint failed:
+  ux_decision_snapshots_one_active_per_scope`) that fires on every PSI
+  startup after the first time the q-series supersession index was created.
+
+Root cause:
+- `ensure_schema()` in `psi/core/db.py` ran a blanket
+  `UPDATE decision_snapshots SET is_superseded=0 WHERE is_superseded IS NULL`
+  on every startup. On the first run this was safe (the unique index did not
+  exist yet). On every subsequent run the unique index already exists, and if
+  any rows had `is_superseded IS NULL` (produced by `create_snapshot_freeze`
+  or any pre-q-series snapshot), converting them all to 0 simultaneously
+  violates the index when two or more such rows share the same scope tuple.
+  The dedup step that would have cleaned up duplicates ran after the blanket
+  conversion — too late.
+
+- Secondary cause: `create_snapshot_freeze` never set `is_superseded` at all,
+  leaving every freeze snapshot with `is_superseded IS NULL`. These silently
+  accumulated and triggered the crash on the next startup.
+
+What changed:
+- `psi/core/db.py` (`ensure_schema`): replace the blanket NULL→0 backfill
+  with a safe per-scope algorithm:
+    1. Early-exit if no NULL rows exist (idempotent, zero cost on clean DBs).
+    2. For each affected scope, fetch all candidate-active rows (NULL or 0)
+       ordered newest-first.
+    3. Mark all losers `is_superseded=1` FIRST — this only removes rows from
+       the active set and can never violate the unique index.
+    4. Set the remaining NULLs (now guaranteed: at most one per scope) to 0.
+  This is safe on first run, safe on all subsequent runs, and idempotent.
+
+- `psi/services/decisions.py` (`create_snapshot_freeze`): explicitly set
+  `is_superseded=0` on every new freeze snapshot. Prevents future NULL
+  accumulation from this path.
+
+What did NOT change:
+- No DI engine logic changes. No policy changes. No selector changes.
+- No snapshot content changes. No integrity hash changes.
+- `runner.py` supersession logic is untouched (already correct).
+
+>>>>>>> v1.2.9s1_evidence_tuple_dedupe
 ## v1.2.9r3
 
 Why:

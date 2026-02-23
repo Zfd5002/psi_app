@@ -6,28 +6,29 @@ set -euo pipefail
 # ----------------------------------------
 #
 # Usage:
-#   ./compress.sh                # auto-detect version, build zip, and (by default) install desktop shortcut
-#   ./compress.sh v1.2.3         # override version tag
-#   ./compress.sh --no-desktop   # build zip only
+#   ./compress.sh                       # auto-detect version, build zip only
+#   ./compress.sh v1.2.3                # override version tag
+#   ./compress.sh --install-shortcut    # build zip + install desktop shortcut
+#   INSTALL_SHORTCUT=1 ./compress.sh    # build zip + install desktop shortcut
 #
 # Notes:
 # - Version is sourced from psi/version.py (PSI_VERSION = "vX.Y.Z")
-# - Desktop shortcut install is idempotent and safe to re-run.
+# - Desktop shortcut install is opt-in and safe to re-run.
 #
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 # --- arg parsing ---
 VERSION_OVERRIDE=""
-INSTALL_DESKTOP=1
+INSTALL_DESKTOP=0
 
 for arg in "$@"; do
   case "$arg" in
+    --install-shortcut)
+      INSTALL_DESKTOP=1
+      ;;
     --no-desktop)
       INSTALL_DESKTOP=0
-      ;;
-    --desktop)
-      INSTALL_DESKTOP=1
       ;;
     v*)
       # allow a single version override like "v1.2.3"
@@ -35,11 +36,15 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown argument: $arg"
-      echo "Usage: ./compress.sh [vX.Y.Z] [--no-desktop]"
+      echo "Usage: ./compress.sh [vX.Y.Z] [--install-shortcut|--no-desktop]"
       exit 2
       ;;
   esac
 done
+
+if [ "${INSTALL_SHORTCUT:-0}" = "1" ]; then
+  INSTALL_DESKTOP=1
+fi
 
 # --- detect version from source of truth ---
 detect_version() {
@@ -113,11 +118,12 @@ else
   echo "✅ ZIP is clean (no git, venv, vendor, DB, uploads, or caches)"
 fi
 
-# Optional desktop shortcut install
+# Optional desktop shortcut install (opt-in)
 if [ "$INSTALL_DESKTOP" -eq 1 ]; then
   if [ -f "$REPO_ROOT/scripts/install_desktop_shortcut.sh" ]; then
     echo
     echo "🖥️  Installing desktop shortcut (idempotent)..."
+    echo "⚠️  IMPORTANT: Run this from ~/psi_repo (runtime repo), not ~/psi_codex."
     bash "$REPO_ROOT/scripts/install_desktop_shortcut.sh"
   else
     echo

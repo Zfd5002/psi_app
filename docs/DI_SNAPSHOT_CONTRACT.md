@@ -160,6 +160,7 @@ snapshot_content_hash = sha256(stable_json(authoritative_snapshot_payload))
 Notes:
 - `policy_path` is explicitly machine-local and MUST NOT contribute to integrity hashes.
 - `provenance.integrity` is excluded from the hash to avoid self-reference.
+- `outputs.engine.code_version` is metadata and MUST NOT contribute to `snapshot_content_hash` (it may change across releases).
 - Snapshot row metadata (id, created_at, etc.) is not part of the authoritative payload.
 
 ### 4.4 State of Evidence (SoE)

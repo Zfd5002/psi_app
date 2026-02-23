@@ -67,6 +67,40 @@
   const mSel = document.getElementById('mSel');
   const bSel = document.getElementById('bSel');
 
+  function applyPrefill(){
+    const params = new URLSearchParams(window.location.search || "");
+    let pid = (params.get("program_id") || "").trim();
+    let mid = (params.get("molecule_id") || "").trim();
+    let bid = (params.get("batch_id") || "").trim();
+
+    // If a batch is provided but molecule/program are not, infer upward from option metadata.
+    if (bid && !mid) {
+      const bOpt = bSel.querySelector(`option[value="${bid}"]`);
+      if (bOpt && bOpt.dataset && bOpt.dataset.molecule) { mid = String(bOpt.dataset.molecule); }
+    }
+    if (mid && !pid) {
+      const mOpt = mSel.querySelector(`option[value="${mid}"]`);
+      if (mOpt && mOpt.dataset && mOpt.dataset.program) { pid = String(mOpt.dataset.program); }
+    }
+
+    if (pid && pSel.querySelector(`option[value="${pid}"]`)) {
+      pSel.value = pid;
+    }
+  applyPrefill();
+
+    if (mid) {
+      const mOpt = mSel.querySelector(`option[value="${mid}"]`);
+      if (mOpt && !mOpt.hidden) { mSel.value = mid; }
+    }
+    filterBatches();
+
+    if (bid) {
+      const bOpt = bSel.querySelector(`option[value="${bid}"]`);
+      if (bOpt && !bOpt.hidden) { bSel.value = bid; }
+    }
+  }
+
+
   function filterMolecules(){
     const pid = pSel.value;
     Array.from(mSel.options).forEach(o=>{

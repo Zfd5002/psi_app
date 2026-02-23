@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from psi.core.di.catalog import load_catalog
@@ -189,14 +189,49 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
     evidence_ids = res["evidence_ids"]
     rules_version = res["rules_version"]
 
+
+
+    # v1.2.9q: supersede prior ACTIVE snapshots for this exact scope, transactionally.
+    scope_batch_id = int(di_input.scope_id)
+    active_ids = [
+        int(r[0])
+        for r in db.execute(
+            text(
+                '''
+                SELECT id
+                FROM decision_snapshots
+                WHERE decision_key = :dk
+                  AND program_id = :pid
+                  AND COALESCE(molecule_id, 0) = COALESCE(:mid, 0)
+                  AND COALESCE(batch_id, 0) = COALESCE(:bid, 0)
+                  AND (is_superseded IS NULL OR is_superseded = 0)
+                '''
+            ),
+            {"dk": di_input.decision_key, "pid": int(program_id), "mid": molecule_id, "bid": scope_batch_id},
+        ).fetchall()
+    ]
+
+    if active_ids:
+        q = text(
+            '''
+            UPDATE decision_snapshots
+            SET is_superseded = 1,
+                superseded_at = CURRENT_TIMESTAMP,
+                superseded_by_snapshot_id = NULL
+            WHERE id IN :ids
+            '''
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"ids": list(active_ids)})
+
     snap = DecisionSnapshot(
         program_id=int(program_id),
         molecule_id=molecule_id,
-        batch_id=int(di_input.scope_id),
+        batch_id=scope_batch_id,
         decision_key=di_input.decision_key,
         rules_version=rules_version,
         engine_key=ENGINE_KEY,
         schema_version=SNAPSHOT_SCHEMA_VERSION,
+        is_superseded=0,
         inputs_json=_stable_json(inputs_obj),
         outputs_json=_stable_json(out),
         evidence_ids_json=_stable_json(sorted(list(evidence_ids))),
@@ -204,6 +239,18 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
         created_at=now_utc(),
     )
     db.add(snap)
+    db.flush()
+
+    if active_ids:
+        q = text(
+            '''
+            UPDATE decision_snapshots
+            SET superseded_by_snapshot_id = :new_id
+            WHERE id IN :ids
+            '''
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"new_id": int(snap.id), "ids": list(active_ids)})
+
     db.commit()
     db.refresh(snap)
 
@@ -252,6 +299,8 @@ def compute_di_output(
     """
 
     rules_version = f"{pol.name}:{pol.version}:{pol.policy_semantics_hash[:12]}"
+
+    scope_batch_id = int(di_input.scope_id)
 
     # Policy governance guardrail: enforce known package schema versions.
     if str(pol.schema_version) not in ALLOWED_POLICY_SCHEMA_VERSIONS:
@@ -306,7 +355,7 @@ def compute_di_output(
 
     sel = select_batch_measurements(
         db,
-        batch_id=int(di_input.scope_id),
+        batch_id=scope_batch_id,
         as_of_ts=di_input.as_of_ts,
         qc_mode=di_input.qc_mode,
         metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}),

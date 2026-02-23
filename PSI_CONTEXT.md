@@ -54,6 +54,10 @@ Expected workflow:
 2. User overlays onto existing local repo using `rsync`
 3. Local DB, venv, and uploads persist untouched
 
+Desktop shortcut note:
+- If you need to (re)install the desktop shortcut, run the installer **only** from `~/psi_repo` (runtime repo).
+- Do **not** install the shortcut from `~/psi_codex` (patch builder), or it will repoint the launcher to the wrong path.
+
 This is **intentional** and fundamental to PSI’s design.
 
 ### Release checklist (REQUIRED for every overlay ZIP)
