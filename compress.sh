@@ -92,6 +92,7 @@ fi
 
 # Create ZIP
 zip -r "$ZIP" . \
+  -x ".git" \
   -x ".git/*" \
   -x ".venv/*" \
   -x "vendor/*" \
@@ -99,9 +100,12 @@ zip -r "$ZIP" . \
   -x "uploads/*" \
   -x "psi/uploads/*" \
   -x "*.sqlite" -x "*.db" \
+  -x "*.sqlite-wal" -x "*.sqlite-shm" -x "*.sqlite-journal" \
   -x "__pycache__/*" -x "**/__pycache__/*" \
   -x "*.pyc" -x "*.pyo" \
   -x ".pytest_cache/*" -x ".mypy_cache/*" -x ".ruff_cache/*" \
+  -x "*.bak" -x "*.bak~" -x "*.bak*" \
+  -x "PSI_ENVIRONMENT.md" \
   -x "psi/web/templates/molecules/*.bak_*"
 
 echo
@@ -110,9 +114,9 @@ ls -lh "$ZIP"
 
 echo
 echo "🔍 Verifying exclusions..."
-if zipinfo -1 "$ZIP" | egrep -i '(\.git/|\.venv/|vendor/|uploads/|\.sqlite$|\.db$|__pycache__/|\.pyc$)' >/dev/null; then
+if zipinfo -1 "$ZIP" | egrep -i '((^|/)\.git(/|$)|\.venv/|vendor/|uploads/|\.sqlite$|\.db$|\.sqlite-(wal|shm)$|\.sqlite-journal$|__pycache__/|\.pyc$|\.bak(~|$|_))' >/dev/null; then
   echo "❌ ERROR: Forbidden files detected in ZIP"
-  zipinfo -1 "$ZIP" | egrep -i '(\.git/|\.venv/|vendor/|uploads/|\.sqlite$|\.db$|__pycache__/|\.pyc$)'
+  zipinfo -1 "$ZIP" | egrep -i '((^|/)\.git(/|$)|\.venv/|vendor/|uploads/|\.sqlite$|\.db$|\.sqlite-(wal|shm)$|\.sqlite-journal$|__pycache__/|\.pyc$|\.bak(~|$|_))'
   exit 1
 else
   echo "✅ ZIP is clean (no git, venv, vendor, DB, uploads, or caches)"

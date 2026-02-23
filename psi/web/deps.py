@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterator
 
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
@@ -9,7 +10,7 @@ from psi.core.db import SessionLocal
 from psi.core.storage import StorageConfig
 
 
-def get_db() -> Session:
+def get_db() -> Iterator[Session]:
     db = SessionLocal()
     try:
         yield db

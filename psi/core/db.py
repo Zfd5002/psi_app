@@ -424,6 +424,7 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             # This is idempotent: if all rows are already 0 or 1 and at most one active
             # per scope, all queries return empty result sets and no UPDATEs fire.
 
+            # Fast after first run: null_count becomes 0 and subsequent startups only do cheap counts.
             # Early-exit: nothing to do if there are no NULL rows.
             null_count = conn.execute(
                 text("SELECT COUNT(*) FROM decision_snapshots WHERE is_superseded IS NULL")

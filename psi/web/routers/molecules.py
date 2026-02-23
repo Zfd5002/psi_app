@@ -22,7 +22,7 @@ def recompute_fast_properties(molecule_id: int, background_tasks: BackgroundTask
     if not m:
         raise HTTPException(404)
     # Always run in background; consistent UX.
-    background_tasks.add_task(svc._background_compute, molecule_id, "manual_recompute", DB_PATH)
+    background_tasks.add_task(svc._background_compute, molecule_id, "manual_recompute")
     return RedirectResponse(url=f"/molecules/{molecule_id}", status_code=303)
 
 
