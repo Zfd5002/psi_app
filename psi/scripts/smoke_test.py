@@ -73,8 +73,8 @@ def main() -> None:
     # Expected header format: "## YYYY-MM-DD — vX.Y.Z..."
     headers = re.findall(r"^##\s+\d{4}-\d{2}-\d{2}\s+—\s+(v[^\s]+)\s*$", pn_text, flags=re.M)
     assert headers, "PATCH_NOTES has no version headers"
-    # PATCH_NOTES is maintained newest-first (top of file). The first matching header is the latest.
-    latest = headers[0]
+    # PATCH_NOTES is maintained oldest-first (append-at-bottom). The last matching header is the latest.
+    latest = headers[-1]
     assert (
         latest == psi_version
     ), f"PATCH_NOTES latest entry is {latest} but PSI_VERSION is {psi_version}"

@@ -589,3 +589,8 @@ What did NOT change:
 - Packaging: harden overlay ZIP exclusions (vendor/caches)
 - Release: add bump_version helper + smoke_test guardrail
 - UI: molecule-scoped <details> persistence + batch expand/collapse
+
+## 2026-02-23 — v1.2.9v22
+- Guardrail: db_schema_sanity now compares PRAGMA columns against SQLAlchemy Base.metadata (true declared schema).
+- Correctness: eliminates false-positive “extra columns” warnings caused by ensure_schema’s model_columns literal.
+- No DB writes; DI logic unchanged; schema unchanged.
