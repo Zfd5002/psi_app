@@ -595,3 +595,14 @@ What changed:
 What did NOT change:
 - No DI logic changes. No policy changes. No selector changes.
 - No DB changes / migrations. No UI changes.
+
+## 2026-02-23 — v1.2.9v24
+Why:
+- Version sync: verify + compare DI snapshot UI already exists in this repo; no new behavior required.
+
+What changed:
+- Version bump only (no code changes needed).
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No UI changes.
