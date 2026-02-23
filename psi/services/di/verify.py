@@ -464,12 +464,14 @@ def _fetch_measurements_brief(db: Session, ids: List[int]) -> Dict[int, Dict[str
     ]
     if qc_col:
         sel.append(f"{qc_col} as qc_status")
-    q = f"""
+    q = text(
+        f"""
         select {", ".join(sel)}
         from data_measurements
-        where id in ({", ".join([str(int(x)) for x in ids])})
-    """
-    rows = db.execute(text(q)).mappings().all()
+        where id in :ids
+        """
+    ).bindparams(bindparam("ids", expanding=True))
+    rows = db.execute(q, {"ids": list(ids)}).mappings().all()
     out: Dict[int, Dict[str, Any]] = {}
     for r in rows:
         out[int(r["id"])] = dict(r)

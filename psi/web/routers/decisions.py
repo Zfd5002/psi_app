@@ -68,6 +68,12 @@ def decisions_detail(snap_id: int, request: Request, print_view: int = 0, db: Se
     except KeyError:
         raise HTTPException(404)
 
+    if ctx.get("is_di"):
+        try:
+            ctx["verification"] = verify_snapshot(db=db, snapshot_id=int(snap_id), debug=False)
+        except Exception as e:
+            ctx["verification_error"] = str(e)
+
     tmpl = "decisions/detail_print.html" if print_view else "decisions/detail.html"
     ctx["request"] = request
     return templates.TemplateResponse(tmpl, ctx)

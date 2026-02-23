@@ -10,6 +10,10 @@
 {% set warnings = soe.warnings if soe is defined and soe.warnings is defined else [] %}
 {% set exp_sugg = output.experiment_suggestions if output.experiment_suggestions is defined else {} %}
 
+{% if verification is defined or verification_error is defined %}
+  {% include "decisions/_di_verification.html" %}
+{% endif %}
+
 <div class="grid cols-3" style="margin-top:12px;">
   <div class="card" style="margin:0;">
     <div class="muted">Decision state</div>

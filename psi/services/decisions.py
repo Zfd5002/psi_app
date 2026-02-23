@@ -4,7 +4,7 @@ import json
 import datetime
 from typing import Optional, Any
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
@@ -107,18 +107,16 @@ def run_and_snapshot(
     ]
 
     if active_ids:
-        placeholders = ",".join(str(x) for x in active_ids)
-        db.execute(
-            text(
-                f'''
-                UPDATE decision_snapshots
-                SET is_superseded = 1,
-                    superseded_at = CURRENT_TIMESTAMP,
-                    superseded_by_snapshot_id = NULL
-                WHERE id IN ({placeholders})
-                '''
-            )
-        )
+        q = text(
+            '''
+            UPDATE decision_snapshots
+            SET is_superseded = 1,
+                superseded_at = CURRENT_TIMESTAMP,
+                superseded_by_snapshot_id = NULL
+            WHERE id IN :ids
+            '''
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"ids": list(active_ids)})
 
     snap = DecisionSnapshot(
         program_id=program_id,
@@ -143,17 +141,14 @@ def run_and_snapshot(
     db.flush()
 
     if active_ids:
-        placeholders = ",".join(str(x) for x in active_ids)
-        db.execute(
-            text(
-                f'''
-                UPDATE decision_snapshots
-                SET superseded_by_snapshot_id = :new_id
-                WHERE id IN ({placeholders})
-                '''
-            ),
-            {"new_id": int(snap.id)},
-        )
+        q = text(
+            '''
+            UPDATE decision_snapshots
+            SET superseded_by_snapshot_id = :new_id
+            WHERE id IN :ids
+            '''
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"new_id": int(snap.id), "ids": list(active_ids)})
 
     db.commit()
     db.refresh(snap)

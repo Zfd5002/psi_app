@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Iterator, Optional
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import bindparam, create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import Session
@@ -399,20 +399,17 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
                     # This can never violate the unique index because we are only
                     # setting rows to 1 (removing them from the active set).
                     if loser_ids:
-                        placeholders = ",".join(str(x) for x in loser_ids)
-                        conn.execute(
-                            text(
-                                f'''
-                                UPDATE decision_snapshots
-                                SET
-                                  is_superseded = 1,
-                                  superseded_at = CURRENT_TIMESTAMP,
-                                  superseded_by_snapshot_id = :keep_id
-                                WHERE id IN ({placeholders})
-                                '''
-                            ),
-                            {"keep_id": keep_id},
-                        )
+                        q = text(
+                            '''
+                            UPDATE decision_snapshots
+                            SET
+                              is_superseded = 1,
+                              superseded_at = CURRENT_TIMESTAMP,
+                              superseded_by_snapshot_id = :keep_id
+                            WHERE id IN :ids
+                            '''
+                        ).bindparams(bindparam("ids", expanding=True))
+                        conn.execute(q, {"keep_id": keep_id, "ids": list(loser_ids)})
 
                 # Step 3: Set remaining NULLs (the winners) to 0.
                 # At this point each scope has at most one NULL row, so this

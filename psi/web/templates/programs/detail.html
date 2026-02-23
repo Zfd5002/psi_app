@@ -91,6 +91,44 @@
     </div>
   </div>
 
+  <div style="margin-top:12px;">
+    <h3>Policy governance</h3>
+    {% if di_dashboard.policy_version_filter %}
+      <div class="muted">Filter: policy_version = {{ di_dashboard.policy_version_filter }} · <a href="/programs/{{ program.id }}">clear</a></div>
+    {% endif %}
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div>
+        <div class="muted">Policy versions</div>
+        <table class="table mini">
+          <thead><tr><th>policy_version</th><th>count</th></tr></thead>
+          <tbody>
+            {% for k,v in di_dashboard.policy_versions %}
+              <tr>
+                <td><a href="/programs/{{ program.id }}?policy_version={{ k | urlencode }}">{{ k }}</a></td>
+                <td class="muted">{{ v }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="2" class="muted">—</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="muted">Policy IDs</div>
+        <table class="table mini">
+          <thead><tr><th>policy_id</th><th>count</th></tr></thead>
+          <tbody>
+            {% for k,v in di_dashboard.policy_ids %}
+              <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+            {% else %}
+              <tr><td colspan="2" class="muted">—</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="grid cols-2" style="margin-top:12px;">
     <div>
       <h3>Most common blockers</h3>
@@ -196,6 +234,7 @@
     </div>
   </div>
 
+  {% set rollup = (di_dashboard.molecule_rollup_filtered if di_dashboard.policy_version_filter else di_dashboard.molecule_rollup) %}
   <h3 style="margin-top:12px;">Molecule rollup</h3>
   <table class="table">
     <thead>
@@ -208,7 +247,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for r in di_dashboard.molecule_rollup %}
+      {% for r in rollup %}
         <tr>
           <td><a href="/molecules/{{ r.molecule_id }}">{{ r.primary_id }}</a> <span class="muted">{{ r.title or '' }}</span></td>
           <td>
@@ -225,6 +264,84 @@
       {% endfor %}
     </tbody>
   </table>
+
+  <h2 style="margin-top:12px;">DI Snapshot Lineage</h2>
+  <p class="muted">
+    Recent DI snapshots for this program (read-only).
+    {% if di_dashboard.lineage_verify_enabled %}
+      <a href="/programs/{{ program.id }}{% if di_dashboard.policy_version_filter %}?policy_version={{ di_dashboard.policy_version_filter | urlencode }}{% endif %}">Hide verification</a>
+    {% else %}
+      <a href="/programs/{{ program.id }}?verify=1{% if di_dashboard.policy_version_filter %}&policy_version={{ di_dashboard.policy_version_filter | urlencode }}{% endif %}">Show verification</a>
+    {% endif %}
+  </p>
+  <div class="card" style="margin-top:8px;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>snapshot_id</th>
+          <th>created_at</th>
+          <th>molecule</th>
+          <th>policy</th>
+          <th>decision</th>
+          <th>superseded</th>
+          <th class="no-print">drift vs prev</th>
+          <th class="no-print">verification</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in di_dashboard.lineage %}
+          <tr>
+            <td><a href="/decisions/{{ row.snapshot_id }}">#{{ row.snapshot_id }}</a></td>
+            <td class="muted">{{ row.created_at }}</td>
+            <td>
+              {% if row.molecule_id %}
+                <a href="/molecules/{{ row.molecule_id }}">{{ row.molecule_primary_id }}</a>
+                <span class="muted">{{ row.molecule_title or '' }}</span>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <div><b>{{ row.policy_id }}</b></div>
+              <div class="muted">{{ row.policy_version }}</div>
+            </td>
+            <td>
+              <div><b>{{ row.decision_state }}</b></div>
+              <div class="muted">{{ row.readiness_state or '' }}</div>
+            </td>
+            <td>
+              {% if row.is_superseded == 1 %}
+                <span class="chip">SUPERSEDED</span>
+                {% if row.superseded_by_snapshot_id %}
+                  <div class="muted"><a href="/decisions/{{ row.superseded_by_snapshot_id }}">by #{{ row.superseded_by_snapshot_id }}</a></div>
+                {% endif %}
+              {% else %}
+                <span class="chip">ACTIVE</span>
+              {% endif %}
+            </td>
+            <td class="no-print">
+              {% if row.drift_vs_prev and row.prev_snapshot_id %}
+                <div><span class="chip">{{ row.drift_vs_prev }}</span></div>
+                <div class="muted"><a href="/decisions/compare?snap_a={{ row.prev_snapshot_id }}&snap_b={{ row.snapshot_id }}">compare</a></div>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td class="no-print">
+              {% if row.verification is defined and row.verification %}
+                <div><span class="chip">Anchored: {{ row.verification.anchored }}</span></div>
+                <div><span class="chip">Current: {{ row.verification.current }}</span></div>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8" class="muted">No DI snapshots found for this program.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
   <h2 id="audit">Audit</h2>
   {% include "partials/audit_table.html" %}

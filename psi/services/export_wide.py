@@ -5,7 +5,7 @@ import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from psi.core.measurement_registry import MeasurementDef, ordered_defs, resolve_def, conversion_to_canonical
@@ -252,12 +252,10 @@ def export_wide_to_csv(
         CHUNK = 900
         for i in range(0, len(rids), CHUNK):
             chunk = rids[i : i + CHUNK]
-            placeholders = ",".join([":r%d" % j for j in range(len(chunk))])
-            params = {"r%d" % j: chunk[j] for j in range(len(chunk))}
             q = text(
-                f"SELECT * FROM data_measurements WHERE {mcols['record_fk']} IN ({placeholders})"
-            )
-            mrows.extend(db.execute(q, params).mappings().all())
+                f"SELECT * FROM data_measurements WHERE {mcols['record_fk']} IN :rids"
+            ).bindparams(bindparam("rids", expanding=True))
+            mrows.extend(db.execute(q, {"rids": list(chunk)}).mappings().all())
 
     # SQLAlchemy returns RowMapping objects from .mappings(); they are immutable.
     # Convert to plain dicts so we can safely enrich rows (qc_status, etc.).
@@ -275,10 +273,10 @@ def export_wide_to_csv(
                 CHUNK2 = 900
                 for j in range(0, len(mids), CHUNK2):
                     chunk = mids[j : j + CHUNK2]
-                    placeholders = ",".join([":m%d" % k for k in range(len(chunk))])
-                    params = {"m%d" % k: chunk[k] for k in range(len(chunk))}
-                    q2 = text(f"SELECT measurement_id, status, ignore_policy FROM measurement_qc WHERE measurement_id IN ({placeholders})")
-                    for r2 in db.execute(q2, params).mappings().all():
+                    q2 = text(
+                        "SELECT measurement_id, status, ignore_policy FROM measurement_qc WHERE measurement_id IN :mids"
+                    ).bindparams(bindparam("mids", expanding=True))
+                    for r2 in db.execute(q2, {"mids": list(chunk)}).mappings().all():
                         qc_map[int(r2["measurement_id"])] = {
                             "qc_status": (r2.get("status") or "unreviewed"),
                             "qc_ignore_policy": (r2.get("ignore_policy") or "include"),
