@@ -694,3 +694,18 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9v31
+What changed:
+- `psi/web/templates/decisions/_di_snapshot.html`: reorganize DI snapshot view for fast interpretation (top summary first).
+
+What did NOT change:
+- No DI logic changes. No policy changes. No selector changes.
+- No DB changes / migrations. No new routes.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

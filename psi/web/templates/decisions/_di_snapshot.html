@@ -9,16 +9,90 @@
 {% set ignored = soe.ignored_evidence if soe is defined and soe.ignored_evidence is defined else [] %}
 {% set warnings = soe.warnings if soe is defined and soe.warnings is defined else [] %}
 {% set exp_sugg = output.experiment_suggestions if output.experiment_suggestions is defined else {} %}
+{% set gate_outcomes = output.gate_outcomes if output.gate_outcomes is defined else {} %}
+{% set blockers = output.blockers if output.blockers is defined else [] %}
+{% set risk_flags = output.risk_flags_enriched if output.risk_flags_enriched is defined else (output.risk_flags if output.risk_flags is defined else []) %}
+{% set metric_evals = output.metric_evaluations if output.metric_evaluations is defined else {} %}
+{% set shortlisting = output.shortlisting if output.shortlisting is defined else None %}
 
 {% if verification is defined or verification_error is defined %}
   {% include "decisions/_di_verification.html" %}
 {% endif %}
 
+{# --- Top summary (fast interpretation) --- #}
+<div class="card" style="margin-top:12px;">
+  <div class="grid cols-2" style="gap:12px;">
+    <div>
+      <div class="muted">Decision state</div>
+      <div style="font-size:22px;font-weight:800;">{{ output.decision_state }}</div>
+      <div class="muted">Decision: {{ snap.decision_key }}</div>
+      {% if gate_outcomes and gate_outcomes|length %}
+        {% set pass_n = 0 %}
+        {% set fail_n = 0 %}
+        {% set na_n = 0 %}
+        {% for gk, gd in gate_outcomes.items() %}
+          {% set st = (gd.status if gd is mapping and gd.status is defined else '') %}
+          {% if st == 'pass' %}{% set pass_n = pass_n + 1 %}{% elif st == 'fail' or st == 'hold' %}{% set fail_n = fail_n + 1 %}{% else %}{% set na_n = na_n + 1 %}{% endif %}
+        {% endfor %}
+        <div class="muted" style="margin-top:6px;">Gates: {{ pass_n }} pass · {{ fail_n }} non-pass · {{ na_n }} n/a</div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="muted">Immediate blockers</div>
+      {% if blockers and blockers|length %}
+        {% for b in blockers %}
+          <div><span class="chip">{{ b.blocker_key if b.blocker_key is defined else b.get('blocker_key') }}</span></div>
+        {% endfor %}
+      {% else %}
+        <div class="muted">None</div>
+      {% endif %}
+      <div class="muted" style="margin-top:10px;">Risk flags</div>
+      {% if risk_flags and risk_flags|length %}
+        {% for rf in risk_flags %}
+          <div><span class="chip">{{ rf.key if rf.key is defined else (rf.risk_flag if rf.risk_flag is defined else (rf.get('key') if rf is mapping else '')) }}</span></div>
+        {% endfor %}
+      {% else %}
+        <div class="muted">None</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="grid cols-2" style="gap:12px;margin-top:10px;">
+    <div>
+      <div class="muted">Interpretation gaps</div>
+      {% set gap_list = [] %}
+      {% if metric_evals and metric_evals|length %}
+        {% for mk, ev in metric_evals|dictsort %}
+          {% if ev is mapping and ev.interpretation_gap is defined and ev.interpretation_gap %}
+            {% set _ = gap_list.append(mk) %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      {% if gap_list and gap_list|length %}
+        <div class="muted">{{ gap_list|join(', ') }}</div>
+      {% else %}
+        <div class="muted">None</div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="muted">Shortlisting</div>
+      {% if shortlisting is mapping %}
+        {% if shortlisting.refused %}
+          <div><span class="chip">Refused</span> <span class="muted">{{ shortlisting.refusal_reason }}</span></div>
+        {% else %}
+          <div><span class="chip">Enabled</span> <span class="muted">candidates: {{ shortlisting.ranked_candidates|length if shortlisting.ranked_candidates is defined else 0 }}</span></div>
+        {% endif %}
+      {% else %}
+        <div class="muted">Not enabled</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 <div class="grid cols-3" style="margin-top:12px;">
   <div class="card" style="margin:0;">
-    <div class="muted">Decision state</div>
-    <div style="font-size:22px;font-weight:800;">{{ output.decision_state }}</div>
-    <div class="muted">Decision: {{ snap.decision_key }}</div>
+    <div class="muted">Evidence summary</div>
+    <div style="font-size:22px;font-weight:800;">{{ used|length }}</div>
+    <div class="muted">used · {{ ignored|length }} ignored · {{ warnings|length }} warnings</div>
   </div>
   <div class="card" style="margin:0;">
     <div class="muted">Policy</div>
