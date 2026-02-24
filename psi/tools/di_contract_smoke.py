@@ -18,6 +18,7 @@ import os
 import tempfile
 import shutil
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from psi.core.di.catalog import load_catalog
@@ -30,6 +31,9 @@ from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
 def _assert(cond: bool, msg: str) -> None:
     if not cond:
         raise AssertionError(msg)
+
+
+_SMOKE_SET_BASELINE_CUTOFF = False
 
 
 def test_policy_canonicalization_and_hash() -> None:
@@ -525,6 +529,106 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
 
     db.close()
 
+def test_baseline_cutoff_prevents_walk() -> None:
+    """Ensure baseline cutoff prevents run2 from selecting run1 as drift baseline."""
+    if not _SMOKE_SET_BASELINE_CUTOFF:
+        # If cutoff was pre-set externally, we can't assert its value; skip to avoid false failure.
+        print("baseline_cutoff_test: skipped (cutoff pre-set externally)")
+        return
+
+    if os.environ.get("PSI_DB_PATH"):
+        db_path = os.environ["PSI_DB_PATH"]
+    else:
+        root = Path(tempfile.gettempdir()) / "psi_di_contract_cutoff"
+        root.mkdir(parents=True, exist_ok=True)
+        db_path = str(root / "psi_di_contract_cutoff.sqlite")
+        os.environ["PSI_DB_PATH"] = db_path
+
+    from psi.core.db import SessionLocal, ensure_schema
+    from psi.core.models import Batch, Molecule, Program, DecisionSnapshot
+    from psi.services.programs import create_program
+    from psi.services.molecules import create_molecule
+    from psi.services.batches import create_batch
+    from psi.services.data_records import create_data_record
+    from psi.services.measurements import upsert_measurements
+
+    from psi.core.di.schema import DIInput
+    from psi.services.di.runner import run_di
+
+    ensure_schema()
+    db = SessionLocal()
+
+    p = db.query(Program).filter(Program.name == "DI_SMOKE_CUTOFF").first()
+    if p is None:
+        p = create_program(db, name="DI_SMOKE_CUTOFF", description="DI cutoff smoke")
+
+    m = db.query(Molecule).filter(Molecule.program_id == p.id).first()
+    if m is None:
+        m = create_molecule(db, program_id=p.id, primary_id="DI-SMOKE-CUTOFF-0001", title="DI cutoff molecule", components={"HC1": "EVQLV", "LC1": "DIQMT"})
+
+    b = db.query(Batch).filter(Batch.molecule_id == m.id).first()
+    if b is None:
+        b = create_batch(db=db, molecule_id=m.id, title="DI cutoff batch", expression_notes="", purification_notes="")
+
+    dr = create_data_record(
+        db=db,
+        program_id=p.id,
+        molecule_id=None,
+        batch_id=b.id,
+        domain="generic",
+        data_type="generic",
+        method="generic",
+        title="DI cutoff record",
+        params_json={},
+        results_json={},
+    )
+    upsert_measurements(
+        db=db,
+        record_id=dr.id,
+        measurements=[
+            {
+                "name": "monomer_pct",
+                "value_num": 98.0,
+                "value_text": "98%",
+                "unit": "%",
+                "comparator": None,
+                "data_type": dr.data_type,
+                "method": dr.method,
+            }
+        ],
+    )
+
+    policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_3.json"
+    di_input = DIInput(
+        decision_key="advance_to_in_vivo",
+        scope_type="batch",
+        scope_id=int(b.id),
+        as_of_ts=None,
+        qc_mode="model_safe",
+        context={},
+    )
+
+    out1 = run_di(db, di_input=di_input, policy_path=policy_path)
+    out2 = run_di(db, di_input=di_input, policy_path=policy_path)
+
+    s1 = db.query(DecisionSnapshot).filter(DecisionSnapshot.id == int(out1.get("snapshot_id"))).first()
+    s2 = db.query(DecisionSnapshot).filter(DecisionSnapshot.id == int(out2.get("snapshot_id"))).first()
+    _assert(s1 is not None and s2 is not None, "snapshot rows must exist for cutoff test")
+    try:
+        inputs2 = json.loads(s2.inputs_json or "{}")
+    except Exception:
+        inputs2 = {}
+    drift_ctx = inputs2.get("drift_context") if isinstance(inputs2, dict) else None
+    prev_id = None
+    if isinstance(drift_ctx, dict):
+        try:
+            prev_id = int(drift_ctx.get("prev_snapshot_id") or 0)
+        except Exception:
+            prev_id = None
+    _assert(prev_id != int(s1.id), "baseline cutoff must prevent run2 from referencing run1 snapshot")
+
+    db.close()
+
 
 
 
@@ -663,6 +767,10 @@ def test_cross_version_snapshot_content_hash_stability() -> None:
 
 def main() -> int:
     try:
+        global _SMOKE_SET_BASELINE_CUTOFF
+        if "PSI_DI_BASELINE_CUTOFF_ISO" not in os.environ:
+            os.environ["PSI_DI_BASELINE_CUTOFF_ISO"] = datetime.now(timezone.utc).isoformat()
+            _SMOKE_SET_BASELINE_CUTOFF = True
         test_policy_canonicalization_and_hash()
         test_policy_package_dual_hash_stability()
         test_catalog_hash_validation()
@@ -672,6 +780,7 @@ def main() -> int:
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()
         test_soe_v0_2_contract_snapshot_shape_and_determinism()
+        test_baseline_cutoff_prevents_walk()
         test_cross_version_snapshot_content_hash_stability()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")

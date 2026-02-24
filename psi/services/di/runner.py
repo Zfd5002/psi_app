@@ -3,6 +3,8 @@ from __future__ import annotations
 import datetime as _dt
 import hashlib
 import json
+import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -292,16 +294,22 @@ def _drift_context_for_scope(
     molecule_id: int | None,
     batch_id: int | None,
 ) -> Dict[str, Any]:
-    prev = (
+    cutoff_raw = os.environ.get("PSI_DI_BASELINE_CUTOFF_ISO")
+    cutoff_dt = _parse_asof_to_utc_naive(cutoff_raw) if cutoff_raw else None
+    if cutoff_raw and cutoff_dt is None:
+        print(f"WARNING: invalid PSI_DI_BASELINE_CUTOFF_ISO ignored: {cutoff_raw}", file=sys.stderr)
+
+    q = (
         db.query(DecisionSnapshot)
         .filter(DecisionSnapshot.decision_key == str(decision_key))
         .filter(DecisionSnapshot.program_id == int(program_id))
         .filter(DecisionSnapshot.molecule_id == (int(molecule_id) if molecule_id is not None else None))
         .filter(DecisionSnapshot.batch_id == (int(batch_id) if batch_id is not None else None))
         .filter(DecisionSnapshot.superseded_by_snapshot_id.is_(None))
-        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
-        .first()
     )
+    if cutoff_dt is not None:
+        q = q.filter(DecisionSnapshot.created_at <= cutoff_dt)
+    prev = q.order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc()).first()
     if not prev:
         return {}
     try:

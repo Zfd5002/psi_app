@@ -1440,3 +1440,22 @@ Gates run (limit 5):
 - `python -m psi.tools.db_schema_sanity`
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-24 — v1.2.9w31
+What changed:
+- Determinism fix for di_contract_smoke via baseline cutoff env var: `PSI_DI_BASELINE_CUTOFF_ISO`.
+
+Why it changed:
+- Prevent drift baseline from walking forward between the two smoke runs.
+
+Determinism/contract impact:
+- If `PSI_DI_BASELINE_CUTOFF_ISO` is set and parses as ISO8601, drift baseline selection only considers snapshots with `created_at <= cutoff`.
+- If the env var is absent or invalid, behavior is unchanged (invalid values emit a warning and are ignored).
+
+Behavior changes:
+- di_contract_smoke sets `PSI_DI_BASELINE_CUTOFF_ISO` once at process start (if not already set) and reuses it for both runs.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
