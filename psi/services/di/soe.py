@@ -47,9 +47,25 @@ def _fetch_batch_metric_keys_raw(db: Session, *, batch_id: int) -> list[str]:
     return sorted(set(out))
 
 
+def _dedupe_preserve_order_ints(batch_ids: List[int]) -> List[int]:
+    out: List[int] = []
+    seen: set[int] = set()
+    for x in batch_ids or []:
+        try:
+            xi = int(x)
+        except Exception:
+            continue
+        if xi <= 0:
+            continue
+        if xi in seen:
+            continue
+        seen.add(xi)
+        out.append(xi)
+    return out
+
+
 def _fetch_metric_keys_raw_for_batches(db: Session, *, batch_ids: List[int]) -> list[str]:
-    batch_ids = [int(x) for x in batch_ids if str(x).isdigit() and int(x) > 0]
-    batch_ids = sorted(list(set(batch_ids)))
+    batch_ids = _dedupe_preserve_order_ints(batch_ids)
     if not batch_ids:
         return []
     cols = measurement_cols(db)
@@ -370,6 +386,8 @@ def build_soe_v0_2_molecule(
     context: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Additive SoE schema v0.2 for molecule scope (aggregated over batches)."""
+
+    batch_ids = _dedupe_preserve_order_ints(batch_ids)
 
     gates = (policy_body or {}).get("gates") or {}
     if not isinstance(gates, dict):
@@ -784,8 +802,7 @@ def build_soe_v0_3_molecule(
 ) -> Dict[str, Any]:
     """Additive SoE schema v0.3 for molecule scope (aggregated over batches)."""
 
-    batch_ids = [int(x) for x in batch_ids if str(x).isdigit() and int(x) > 0]
-    batch_ids = sorted(list(set(batch_ids)))
+    batch_ids = _dedupe_preserve_order_ints(batch_ids)
 
     cols = measurement_cols(db)
     record_fk = cols["record_fk"]

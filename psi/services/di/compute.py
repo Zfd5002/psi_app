@@ -383,7 +383,7 @@ def _compute_di_from_used_by_metric(
             },
         },
         "state_of_evidence": {
-            "used": {str(k): _to_dict(v) for k, v in used_by_metric.items()},
+            "used": {str(k): _to_dict(used_by_metric[k]) for k in sorted([str(k) for k in used_by_metric.keys()])},
             "ignored_evidence": [_to_dict(ig) for ig in ignored],
             "warnings": warnings,
             "soe_v0_2": soe_v0_2,

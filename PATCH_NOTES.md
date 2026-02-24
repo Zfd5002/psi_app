@@ -1501,3 +1501,19 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-24 — v1.2.9w34
+What changed:
+- Determinism hardening: preserve molecule batch order; canonicalize dict key ordering in outputs.
+
+Why it changed:
+- Keep molecule batch ordering stable end-to-end and avoid nondeterministic dict ordering in stable JSON surfaces.
+
+Determinism/contract impact:
+- Molecule batch_ids are de-duplicated without sorting (first-seen order preserved).
+- Used-by-metric and metric source maps are serialized with stable key ordering.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

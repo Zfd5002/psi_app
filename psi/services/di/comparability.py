@@ -333,8 +333,23 @@ def compute_comparability_for_batches(
 ) -> Dict[str, Any]:
     """Compute comparability + qc coherence diagnostics for a set of batches (molecule scope)."""
 
-    batch_ids = [int(x) for x in batch_ids if str(x).isdigit() and int(x) > 0]
-    batch_ids = sorted(list(set(batch_ids)))
+    def _dedupe_preserve_order_ints(values: List[int]) -> List[int]:
+        out: List[int] = []
+        seen: set[int] = set()
+        for x in values or []:
+            try:
+                xi = int(x)
+            except Exception:
+                continue
+            if xi <= 0:
+                continue
+            if xi in seen:
+                continue
+            seen.add(xi)
+            out.append(xi)
+        return out
+
+    batch_ids = _dedupe_preserve_order_ints(batch_ids)
     if not batch_ids:
         return {
             "comparability": {"metric_level": [], "qc_coherence": [], "summary": {"total_flags": 0, "high_severity_count": 0}},

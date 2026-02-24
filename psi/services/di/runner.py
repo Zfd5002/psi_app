@@ -726,7 +726,9 @@ def compute_di_output(
             "batch_ids_ordered": batch_ids_ordered,
             "batch_selection_rule": "include all batches for molecule_id; order by created_at asc, id asc",
             "aggregation_rule": "per metric_key, select first evidence from newest batch (created_at desc, id desc)",
-            "metric_source_batch_ids": {str(k): int(v) for k, v in metric_source_batch.items()},
+            "metric_source_batch_ids": {
+                str(k): int(metric_source_batch[k]) for k in sorted([str(k) for k in metric_source_batch.keys()])
+            },
             "duplicate_metrics": {str(k): sorted(list(set(v))) for k, v in duplicate_metrics.items()},
             "batch_summaries": batch_summaries,
         }
