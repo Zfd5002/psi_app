@@ -1568,3 +1568,8 @@ Gates run (limit 5):
 ## 2026-02-24 — v1.2.9w38
 What changed:
 - Fix: add missing json import in decisions service (CLI regression fix)
+
+## 2026-02-24 — v1.2.9w39
+What changed:
+- Governance fix: DI ranking/weighted scoring is now emitted only when policy shortlisting is explicitly enabled (`shortlisting.allow_shortlisting` / `allow`).
+- Contract smoke now asserts ranking is present when enabled and absent when disabled.

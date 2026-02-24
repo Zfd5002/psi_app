@@ -279,7 +279,7 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         )
         return b.id
 
-    def _run_once(db_path: Path):
+    def _run_once(db_path: Path, *, policy_path_override: Path | None = None):
         eng = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False}, future=True)
         _install_sqlite_pragmas(eng, read_only=False)
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)
@@ -295,7 +295,7 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
                 qc_mode="model_safe",
                 context={},
             )
-            out = run_di(db, di_input=di_input, policy_path=policy_path)
+            out = run_di(db, di_input=di_input, policy_path=(policy_path_override or policy_path))
             return out, db
         except Exception:
             db.close()
@@ -349,6 +349,8 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
 
     _assert(s1 == s2, "DI output must be deterministic for identical DB + inputs")
 
+    _assert("ranking" in (out1.get("output") or {}), "ranking must be present when policy shortlisting is enabled")
+
     # v1.2.9k: provenance.integrity must exist and be stable across deterministic reruns
     out1_obj = (out1.get("output") or {})
     prov1 = out1_obj.get("provenance") or {}
@@ -361,6 +363,26 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         _assert(bool(str(integ1.get(k) or "")), f"provenance.integrity.{k} must be non-empty")
         _assert(bool(str(integ2.get(k) or "")), f"provenance.integrity.{k} must be non-empty")
         _assert(str(integ1.get(k)) == str(integ2.get(k)), f"provenance.integrity.{k} must be stable across reruns")
+
+    # Ranking governance gate: disabling policy shortlisting must suppress ranking emission.
+    disabled_pol = json.loads(policy_path.read_text(encoding="utf-8"))
+    pb = disabled_pol.get("policy_body")
+    if not isinstance(pb, dict):
+        pb = {}
+        disabled_pol["policy_body"] = pb
+    sh = pb.get("shortlisting")
+    if not isinstance(sh, dict):
+        sh = {}
+    sh["allow_shortlisting"] = False
+    sh["allow"] = False
+    pb["shortlisting"] = sh
+    disabled_path = Path(tempfile.mkdtemp(prefix="psi_di_contract_policy_", dir=tempfile.gettempdir())) / "disabled_shortlisting.json"
+    disabled_path.write_text(json.dumps(disabled_pol, sort_keys=True, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+    out_disabled, db_disabled = _run_once(db2_path, policy_path_override=disabled_path)
+    try:
+        _assert("ranking" not in (out_disabled.get("output") or {}), "ranking must be absent when policy shortlisting is disabled")
+    finally:
+        db_disabled.close()
 
     ranking = out1_obj.get("ranking") if isinstance(out1_obj, dict) else None
     _assert(isinstance(ranking, dict), "ranking must be present for batch scope")

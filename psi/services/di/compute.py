@@ -68,6 +68,13 @@ def _ranking_factor(key: str, direction: str, value: Any, weight: float) -> Dict
     return {"key": key, "direction": direction, "value": value, "weight": weight}
 
 
+def _ranking_enabled(policy_body: Dict[str, Any]) -> bool:
+    pol_short = (policy_body or {}).get("shortlisting") or {}
+    if not isinstance(pol_short, dict):
+        return False
+    return bool(pol_short.get("allow_shortlisting") or pol_short.get("allow"))
+
+
 def _score_from_factors(factors: List[Dict[str, Any]]) -> float:
     score = 0.0
     for f in factors:
@@ -537,7 +544,8 @@ def _compute_di_from_used_by_metric(
             if mid is not None and str(mid).strip() and int(mid) > 0
         ]),
     }
-    out["ranking"] = _build_ranking(di_in=di_in, out=out, selection_provenance=selection_provenance)
+    if _ranking_enabled((pol.policy_body or {}) if isinstance(pol.policy_body, dict) else {}):
+        out["ranking"] = _build_ranking(di_in=di_in, out=out, selection_provenance=selection_provenance)
     if metric_evaluations:
         out["metric_evaluations"] = metric_evaluations
     if recommended_experiments:
