@@ -438,6 +438,33 @@ def derive_shortlisting(
             {"key": "reproducibility", "value": "not_available"},
             {"key": "functional_potency", "value": functional},
         ],
+        "tie_break_explanations": [
+            {
+                "key": "readiness_completeness",
+                "summary": "Coverage ratio used for readiness completeness.",
+                "details": {"coverage_ratio": cov_ratio, "required": min_cov_f},
+            },
+            {
+                "key": "qc_coherence",
+                "summary": "QC coherence uses high-severity flags vs total flags.",
+                "details": {"high_severity_count": qc_high, "total_flags": qc_total},
+            },
+            {
+                "key": "purity_aggregation",
+                "summary": "Purity aggregation derived from monomer/hmw/lmw value functions.",
+                "details": purity,
+            },
+            {
+                "key": "reproducibility",
+                "summary": "Reproducibility not yet available in v0.5.",
+                "details": {"status": "not_available"},
+            },
+            {
+                "key": "functional_potency",
+                "summary": "Functional potency considers context validity and metric evaluations.",
+                "details": functional,
+            },
+        ],
     }
 
     return {

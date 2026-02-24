@@ -79,6 +79,41 @@ def decisions_detail(snap_id: int, request: Request, print_view: int = 0, db: Se
     return templates.TemplateResponse(tmpl, ctx)
 
 
+@router.get("/decisions/{snap_id}/history", response_class=HTMLResponse)
+def decisions_history(snap_id: int, request: Request, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    try:
+        ctx = svc.get_snapshot_history(db, snap_id=int(snap_id))
+    except KeyError:
+        raise HTTPException(404)
+    ctx["request"] = request
+    return templates.TemplateResponse("decisions/history.html", ctx)
+
+
+@router.post("/decisions/{snap_id}/history/compare", response_class=HTMLResponse)
+def decisions_history_compare(
+    snap_id: int,
+    request: Request,
+    snapshot_ids: list[int] = Form(default=[]),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    try:
+        ctx = svc.get_snapshot_history(db, snap_id=int(snap_id))
+    except KeyError:
+        raise HTTPException(404)
+
+    ids = [int(x) for x in snapshot_ids if x is not None]
+    ids = sorted(list(set(ids)), reverse=True)
+    if len(ids) != 2:
+        ctx["request"] = request
+        ctx["compare_error"] = "Select exactly two snapshots to compare."
+        ctx["selected_ids"] = ids
+        return templates.TemplateResponse("decisions/history.html", ctx)
+
+    return RedirectResponse(url=f"/decisions/compare?snap_a={ids[0]}&snap_b={ids[1]}", status_code=303)
+
+
 @router.post("/decisions/{snap_id}/verify", response_class=HTMLResponse)
 def decisions_verify(snap_id: int, request: Request, debug: int = 0, db: Session = Depends(get_db)):
     templates = get_templates(request)

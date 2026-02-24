@@ -18,6 +18,7 @@ from psi.services.di.selection import select_batch_measurements
 from psi.services.di.compute import _compute_di_from_used_by_metric
 from psi.services.di.enrich import coverage_fingerprint_payload
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2, compute_evidence_fingerprint, compute_snapshot_content_hash
+from psi.services.di.templates.registry import resolve_template_entry
 from psi.version import PSI_VERSION
 
 
@@ -31,7 +32,6 @@ ENGINE_KEY = "di"
 ENGINE_ID = "di.engine.v0_1"
 SNAPSHOT_SCHEMA_VERSION = "di.snapshot.v0_1"
 SELECTOR_VERSION = "di.selector.v0_1"
-EVALUATOR_VERSION = "di.template.advance_to_in_vivo.v0_1"
 
 # explicit selection semantics version (constitution-locked)
 DI_SELECTION_SEMANTICS_VERSION = "di.selection.v0_1"
@@ -62,7 +62,7 @@ def _parse_asof_to_utc_naive(ts: Optional[str]) -> Optional[_dt.datetime]:
     return dt
 
 
-def _policy_schema_mismatch_output(*, di_input: DIInput, pol: Any, mismatch: str) -> Dict[str, Any]:
+def _policy_schema_mismatch_output(*, di_input: DIInput, pol: Any, mismatch: str, evaluator_version: str) -> Dict[str, Any]:
     # Deterministic NOT_READY snapshot payload that does not raise.
     return {
         "decision_state": "not_ready",
@@ -83,8 +83,8 @@ def _policy_schema_mismatch_output(*, di_input: DIInput, pol: Any, mismatch: str
             "engine_id": ENGINE_ID,
             "schema_version": SNAPSHOT_SCHEMA_VERSION,
             "selector_version": SELECTOR_VERSION,
-            "evaluator_version": EVALUATOR_VERSION,
-            "evaluation_version": EVALUATOR_VERSION,
+            "evaluator_version": str(evaluator_version),
+            "evaluation_version": str(evaluator_version),
             "code_version": PSI_VERSION,
         },
         "provenance": {
@@ -170,6 +170,157 @@ def _policy_schema_mismatch_output(*, di_input: DIInput, pol: Any, mismatch: str
     }
 
 
+def _unsupported_template_output(
+    *,
+    di_input: DIInput,
+    pol: Any,
+    reason: str,
+    evaluator_version: str,
+) -> Dict[str, Any]:
+    return {
+        "decision_state": "not_ready",
+        "policy": {
+            "policy_id": getattr(pol, "policy_id", ""),
+            "policy_name": getattr(pol, "name", ""),
+            "policy_version": getattr(pol, "version", ""),
+            "policy_schema_version": getattr(pol, "schema_version", ""),
+            "policy_semantics_hash": getattr(pol, "policy_semantics_hash", ""),
+            "policy_package_hash": getattr(pol, "policy_package_hash", ""),
+            "name": getattr(pol, "name", ""),
+            "version": getattr(pol, "version", ""),
+            "hash": getattr(pol, "policy_semantics_hash", ""),
+            "source": getattr(pol, "source_name", ""),
+            "changelog": getattr(pol, "changelog", []) if getattr(pol, "changelog", None) is not None else [],
+        },
+        "engine": {
+            "engine_id": ENGINE_ID,
+            "schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "selector_version": SELECTOR_VERSION,
+            "evaluator_version": str(evaluator_version),
+            "evaluation_version": str(evaluator_version),
+            "code_version": PSI_VERSION,
+        },
+        "provenance": {
+            "as_of_ts": di_input.as_of_ts,
+            "qc_mode": di_input.qc_mode,
+            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
+            "experiment_catalog": {"catalog_id": "", "catalog_version": "", "catalog_hash": ""},
+            "selection_provenance": {},
+            "inputs_fingerprint": {
+                "decision_key": di_input.decision_key,
+                "scope_type": di_input.scope_type,
+                "scope_id": int(di_input.scope_id),
+                "context_keys": sorted(list((di_input.context or {}).keys())),
+            },
+        },
+        "state_of_evidence": {
+            "used": {},
+            "ignored_evidence": [],
+            "warnings": [
+                {
+                    "kind": "unsupported_template",
+                    "detail": {
+                        "decision_key": di_input.decision_key,
+                        "template_key": getattr(pol, "template_key", ""),
+                        "reason": str(reason),
+                    },
+                }
+            ],
+        },
+        "gates": [],
+        "blockers": [
+            {
+                "blocker_key": "unsupported_template",
+                "detail": {
+                    "decision_key": di_input.decision_key,
+                    "template_key": getattr(pol, "template_key", ""),
+                    "reason": str(reason),
+                },
+            }
+        ],
+        "risk_flags": [
+            {
+                "risk_flag": "unsupported_template",
+                "detail": {"note": "Decision template is not supported by this PSI build."},
+            }
+        ],
+        "risk_flags_enriched": [
+            {
+                "key": "unsupported_template",
+                "category": "governance",
+                "severity": "high",
+                "related_metrics": [],
+                "explanation": "Decision template is not supported by this PSI build.",
+            }
+        ],
+        "experiment_suggestions": {},
+        "measurement_ids_used": [],
+        "gate_outcomes": {},
+        "readiness": {
+            "state": "blocked",
+            "blockers": [
+                {
+                    "key": "unsupported_template",
+                    "severity": "high",
+                    "metrics": [],
+                    "gates": [],
+                    "explanation": "Unsupported decision template.",
+                }
+            ],
+            "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0},
+            "qc_confidence": {"qc_mode": str(di_input.qc_mode), "reviewed_required_present": 0, "unreviewed_required_present": 0, "notes": []},
+            "comparability": {"method_incomparable_metrics": [], "notes": []},
+            "decision_context": str(di_input.decision_key),
+            "readiness_level": "blocked",
+            "blocking_gates": [],
+            "blocking_reasons": ["Unsupported decision template."],
+            "assumptions": [],
+            "required_next_steps": [],
+        },
+        "coverage_fingerprint": _sha256_of_stable_json(
+            coverage_fingerprint_payload(readiness={"blockers": [], "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0}, "comparability": {"method_incomparable_metrics": [], "notes": []}}, gate_outcomes={})
+        ),
+        "suggestions": [],
+    }
+
+
+def _drift_context_for_scope(
+    db: Session,
+    *,
+    decision_key: str,
+    program_id: int,
+    molecule_id: int | None,
+    batch_id: int | None,
+) -> Dict[str, Any]:
+    prev = (
+        db.query(DecisionSnapshot)
+        .filter(DecisionSnapshot.decision_key == str(decision_key))
+        .filter(DecisionSnapshot.program_id == int(program_id))
+        .filter(DecisionSnapshot.molecule_id == (int(molecule_id) if molecule_id is not None else None))
+        .filter(DecisionSnapshot.batch_id == (int(batch_id) if batch_id is not None else None))
+        .filter(DecisionSnapshot.superseded_by_snapshot_id.is_(None))
+        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
+        .first()
+    )
+    if not prev:
+        return {}
+    try:
+        out = json.loads(prev.outputs_json or "{}")
+    except Exception:
+        out = {}
+    if not isinstance(out, dict):
+        out = {}
+    policy = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+    prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+    integ = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+    return {
+        "prev_snapshot_id": int(prev.id),
+        "prev_policy_semantics_hash": str(policy.get("policy_semantics_hash") or ""),
+        "prev_evidence_fingerprint": str(integ.get("evidence_fingerprint") or ""),
+        "prev_decision_state": str(out.get("decision_state") or ""),
+    }
+
+
 def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, Any]:
     pol = load_policy(policy_path)
     if pol.decision_key != di_input.decision_key:
@@ -178,12 +329,16 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
     if di_input.scope_type != "batch":
         raise ValueError("DI v0.1 supports scope_type=batch only")
 
-    if di_input.decision_key != "advance_to_in_vivo":
-        raise ValueError("DI v0.1 supports decision_key=advance_to_in_vivo only")
-
     program_id, molecule_id = _resolve_snapshot_lineage(db, batch_id=int(di_input.scope_id))
 
-    res = compute_di_output(db, di_input=di_input, pol=pol, policy_path=policy_path)
+    drift_ctx = _drift_context_for_scope(
+        db,
+        decision_key=di_input.decision_key,
+        program_id=program_id,
+        molecule_id=molecule_id,
+        batch_id=int(di_input.scope_id),
+    )
+    res = compute_di_output(db, di_input=di_input, pol=pol, policy_path=policy_path, drift_context=drift_ctx)
     out = res["output"]
     inputs_obj = res["inputs_obj"]
     evidence_ids = res["evidence_ids"]
@@ -291,6 +446,7 @@ def compute_di_output(
     di_input: DIInput,
     pol: Any,
     policy_path: Optional[Path] = None,
+    drift_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Pure DI computation path.
 
@@ -302,9 +458,27 @@ def compute_di_output(
 
     scope_batch_id = int(di_input.scope_id)
 
+    template_entry = None
+    template_error = ""
+    try:
+        template_entry = resolve_template_entry(
+            decision_key=di_input.decision_key,
+            template_key=getattr(pol, "template_key", "") or "",
+        )
+    except Exception as exc:
+        template_entry = None
+        template_error = str(exc)
+
+    evaluator_version = str((template_entry or {}).get("evaluator_version") or "unknown")
+
     # Policy governance guardrail: enforce known package schema versions.
     if str(pol.schema_version) not in ALLOWED_POLICY_SCHEMA_VERSIONS:
-        out = _policy_schema_mismatch_output(di_input=di_input, pol=pol, mismatch="unknown_policy_schema_version")
+        out = _policy_schema_mismatch_output(
+            di_input=di_input,
+            pol=pol,
+            mismatch="unknown_policy_schema_version",
+            evaluator_version=evaluator_version,
+        )
         inputs_obj = {
             "decision_key": di_input.decision_key,
             "scope_type": di_input.scope_type,
@@ -316,7 +490,7 @@ def compute_di_output(
             "engine_id": ENGINE_ID,
             "schema_version": SNAPSHOT_SCHEMA_VERSION,
             "selector_version": SELECTOR_VERSION,
-            "evaluator_version": EVALUATOR_VERSION,
+            "evaluator_version": evaluator_version,
             "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
             "policy_id": pol.policy_id,
             "policy_version": pol.version,
@@ -333,9 +507,66 @@ def compute_di_output(
             # Non-authoritative, machine-local metadata (debugging only)
             "policy_path": str(policy_path) if policy_path is not None else "",
         }
+        if isinstance(drift_context, dict) and drift_context:
+            inputs_obj["drift_context"] = drift_context
         evidence_ids: list[int] = []
 
         # v1.2.9k integrity
+        prov = out.get("provenance")
+        if isinstance(prov, dict):
+            integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric={})}
+            integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
+                inputs_obj=inputs_obj,
+                outputs_obj=out,
+                evidence_ids=evidence_ids,
+            )
+            integrity["decision_output_hash"] = compute_decision_output_hash(inputs_obj=inputs_obj, outputs_obj=out)
+            integrity["decision_output_hash_v2"] = compute_decision_output_hash_v2(
+                inputs_obj=inputs_obj,
+                outputs_obj=out,
+            )
+            prov["integrity"] = integrity
+
+        return {"rules_version": rules_version, "inputs_obj": inputs_obj, "output": out, "evidence_ids": evidence_ids}
+
+    if template_entry is None:
+        out = _unsupported_template_output(
+            di_input=di_input,
+            pol=pol,
+            reason=template_error or "unknown_template",
+            evaluator_version=evaluator_version,
+        )
+        inputs_obj = {
+            "decision_key": di_input.decision_key,
+            "scope_type": di_input.scope_type,
+            "scope_id": int(di_input.scope_id),
+            "as_of_ts": di_input.as_of_ts,
+            "qc_mode": di_input.qc_mode,
+            "context": di_input.context or {},
+            "engine_key": ENGINE_KEY,
+            "engine_id": ENGINE_ID,
+            "schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "selector_version": SELECTOR_VERSION,
+            "evaluator_version": evaluator_version,
+            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
+            "policy_id": pol.policy_id,
+            "policy_version": pol.version,
+            "policy_name": pol.name,
+            "policy_semantics_hash": pol.policy_semantics_hash,
+            "policy_package_hash": pol.policy_package_hash,
+            "policy_schema_version": pol.schema_version,
+            "policy_hash": pol.policy_semantics_hash,
+            "policy_source": pol.source_name,
+            "policy_json_canonical": pol.policy_body_canonical_json,
+            "catalog_id": "",
+            "catalog_version": "",
+            "catalog_hash": "",
+            "policy_path": str(policy_path) if policy_path is not None else "",
+        }
+        if isinstance(drift_context, dict) and drift_context:
+            inputs_obj["drift_context"] = drift_context
+        evidence_ids: list[int] = []
+
         prov = out.get("provenance")
         if isinstance(prov, dict):
             integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric={})}
@@ -392,7 +623,7 @@ def compute_di_output(
         "engine_id": ENGINE_ID,
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
         "selector_version": SELECTOR_VERSION,
-        "evaluator_version": EVALUATOR_VERSION,
+        "evaluator_version": evaluator_version,
         "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
         # Policy packaging
         "policy_id": pol.policy_id,
@@ -412,6 +643,8 @@ def compute_di_output(
         # Non-authoritative, machine-local metadata (debugging only)
         "policy_path": str(policy_path) if policy_path is not None else "",
     }
+    if isinstance(drift_context, dict) and drift_context:
+        inputs_obj["drift_context"] = drift_context
 
     out = _compute_di_from_used_by_metric(
         db,

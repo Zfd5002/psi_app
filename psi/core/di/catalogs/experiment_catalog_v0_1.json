@@ -6,8 +6,12 @@
     {
       "experiment_key": "run_missing_assays",
       "name": "Run missing required assays",
-      "resolves": ["missing_required_metric"],
-      "outputs": ["required_metrics"],
+      "resolves": [
+        "missing_required_metric"
+      ],
+      "outputs": [
+        "required_metrics"
+      ],
       "prerequisites": [],
       "time_tier": "med",
       "cost_tier": "med",
@@ -16,8 +20,13 @@
     {
       "experiment_key": "qc_review_required",
       "name": "QC review of existing measurements",
-      "resolves": ["unreviewed_qc_required_metric", "qc_failed"],
-      "outputs": ["qc_status"],
+      "resolves": [
+        "unreviewed_qc_required_metric",
+        "qc_failed"
+      ],
+      "outputs": [
+        "qc_status"
+      ],
       "prerequisites": [],
       "time_tier": "low",
       "cost_tier": "low",
@@ -26,8 +35,12 @@
     {
       "experiment_key": "repeat_assay_or_review_qc",
       "name": "Repeat assay or review QC failure",
-      "resolves": ["qc_failed"],
-      "outputs": ["replacement_measurement"],
+      "resolves": [
+        "qc_failed"
+      ],
+      "outputs": [
+        "replacement_measurement"
+      ],
       "prerequisites": [],
       "time_tier": "med",
       "cost_tier": "med",
@@ -36,8 +49,12 @@
     {
       "experiment_key": "fix_parser_or_reimport",
       "name": "Fix parser or re-import to recover numeric value",
-      "resolves": ["metric_present_but_non_numeric"],
-      "outputs": ["numeric_measurement"],
+      "resolves": [
+        "metric_present_but_non_numeric"
+      ],
+      "outputs": [
+        "numeric_measurement"
+      ],
       "prerequisites": [],
       "time_tier": "low",
       "cost_tier": "low",
@@ -46,8 +63,12 @@
     {
       "experiment_key": "resolve_alias_conflict",
       "name": "Resolve metric alias conflict",
-      "resolves": ["conflicting_metrics"],
-      "outputs": ["consistent_metric_key"],
+      "resolves": [
+        "conflicting_metrics"
+      ],
+      "outputs": [
+        "consistent_metric_key"
+      ],
       "prerequisites": [],
       "time_tier": "low",
       "cost_tier": "low",
@@ -56,52 +77,191 @@
     {
       "experiment_key": "run_functional_assay",
       "name": "Run a functional assay",
-      "resolves": ["insufficient_functional_anchor"],
-      "outputs": ["functional_metric"],
-      "prerequisites": ["material_readiness"],
+      "resolves": [
+        "insufficient_functional_anchor"
+      ],
+      "outputs": [
+        "functional_metric"
+      ],
+      "prerequisites": [
+        "material_readiness"
+      ],
       "time_tier": "med",
       "cost_tier": "med",
-      "notes": "Functional anchor metrics include percent_killing, ec50, or pass_fail depending on assay design."
+      "notes": "Functional anchor metrics include percent_killing, ec50, or pass_fail depending on assay design.",
+      "metric_keys": [
+        "percent_killing",
+        "ec50",
+        "pass_fail"
+      ]
     },
     {
       "experiment_key": "run_internalization_or_surface_expression",
       "name": "Run internalization or surface expression assay",
-      "resolves": ["interpretation_gap_internalization"],
-      "outputs": ["internalization_t1_2_h", "surface_expression_pct_24h"],
-      "prerequisites": ["binding_or_kd"],
+      "resolves": [
+        "interpretation_gap_internalization"
+      ],
+      "outputs": [
+        "internalization_t1_2_h",
+        "surface_expression_pct_24h"
+      ],
+      "prerequisites": [
+        "binding_or_kd"
+      ],
       "time_tier": "med",
       "cost_tier": "med",
-      "notes": "Used when a binding affinity (kd_nM) is present but interpretability requires internalization/surface expression context."
+      "notes": "Used when a binding affinity (kd_nM) is present but interpretability requires internalization/surface expression context.",
+      "metric_keys": [
+        "internalization_t1_2_h",
+        "surface_expression_pct_24h"
+      ]
     },
     {
       "experiment_key": "run_endotoxin",
       "name": "Run endotoxin assay",
-      "resolves": ["missing_required_metric"],
-      "outputs": ["value_eu_ml", "limit_eu_ml"],
-      "prerequisites": ["material_ready"],
+      "resolves": [
+        "missing_required_metric"
+      ],
+      "outputs": [
+        "value_eu_ml",
+        "limit_eu_ml"
+      ],
+      "prerequisites": [
+        "material_ready"
+      ],
       "time_tier": "low",
       "cost_tier": "low",
-      "notes": "One concrete example of a required assay family."
+      "notes": "One concrete example of a required assay family.",
+      "metric_keys": [
+        "value_eu_ml",
+        "limit_eu_ml"
+      ]
     },
     {
       "experiment_key": "run_sec_hplc",
       "name": "Run SEC-HPLC purity profile",
-      "resolves": ["missing_required_metric"],
-      "outputs": ["monomer_pct", "hmw_pct", "lmw_pct"],
-      "prerequisites": ["material_ready"],
+      "resolves": [
+        "missing_required_metric"
+      ],
+      "outputs": [
+        "monomer_pct",
+        "hmw_pct",
+        "lmw_pct"
+      ],
+      "prerequisites": [
+        "material_ready"
+      ],
       "time_tier": "low",
       "cost_tier": "med",
-      "notes": "One concrete example of a required assay family for purity/integrity gates."
+      "notes": "One concrete example of a required assay family for purity/integrity gates.",
+      "metric_keys": [
+        "monomer_pct",
+        "hmw_pct",
+        "lmw_pct",
+        "purity_pct",
+        "aggregation_pct"
+      ]
     },
     {
       "experiment_key": "run_pk_screen",
       "name": "Run PK screen (optional gate)",
       "resolves": [],
-      "outputs": ["half_life_days", "auc", "cmax_ug_ml"],
-      "prerequisites": ["material_ready"],
+      "outputs": [
+        "half_life_days",
+        "auc",
+        "cmax_ug_ml"
+      ],
+      "prerequisites": [
+        "material_ready"
+      ],
       "time_tier": "high",
       "cost_tier": "high",
-      "notes": "Optional; used when study intent requires PK evidence."
+      "notes": "Optional; used when study intent requires PK evidence.",
+      "metric_keys": [
+        "half_life_days",
+        "auc",
+        "cmax_ug_ml"
+      ]
+    },
+    {
+      "experiment_key": "run_titer_assay",
+      "name": "Run titer assay",
+      "resolves": [
+        "missing_required_metric"
+      ],
+      "outputs": [
+        "titer_mg_l",
+        "titer_g_l"
+      ],
+      "metric_keys": [
+        "titer_mg_l",
+        "titer_g_l"
+      ],
+      "prerequisites": [
+        "material_ready"
+      ],
+      "time_tier": "med",
+      "cost_tier": "med",
+      "notes": "Quantify product titer to assess material readiness."
+    },
+    {
+      "experiment_key": "run_concentration_assay",
+      "name": "Run concentration assay",
+      "resolves": [
+        "missing_required_metric"
+      ],
+      "outputs": [
+        "concentration_mg_ml"
+      ],
+      "metric_keys": [
+        "concentration_mg_ml"
+      ],
+      "prerequisites": [
+        "material_ready"
+      ],
+      "time_tier": "low",
+      "cost_tier": "low",
+      "notes": "Measure concentration for scale-up readiness."
+    },
+    {
+      "experiment_key": "run_yield_quant",
+      "name": "Quantify total yield",
+      "resolves": [
+        "missing_required_metric"
+      ],
+      "outputs": [
+        "total_yield_mg"
+      ],
+      "metric_keys": [
+        "total_yield_mg"
+      ],
+      "prerequisites": [
+        "material_ready"
+      ],
+      "time_tier": "low",
+      "cost_tier": "low",
+      "notes": "Estimate total yield to assess production readiness."
+    },
+    {
+      "experiment_key": "run_stability_screen",
+      "name": "Run stability screen",
+      "resolves": [
+        "missing_required_metric"
+      ],
+      "outputs": [
+        "stability_t90_days",
+        "stability_delta_pct"
+      ],
+      "metric_keys": [
+        "stability_t90_days",
+        "stability_delta_pct"
+      ],
+      "prerequisites": [
+        "material_ready"
+      ],
+      "time_tier": "high",
+      "cost_tier": "med",
+      "notes": "Assess stability under standard conditions."
     }
   ]
 }

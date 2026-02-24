@@ -323,6 +323,43 @@ def _compute_anchored_replay(
             oprov["as_of_ts"] = stored_as_of_ts
             mutated = True
 
+        # 3) drift_type should be byte-identical for anchored replay (derived-only).
+        stored_drift = stored_outputs_obj.get("drift_type") if isinstance(stored_outputs_obj, dict) else None
+        replay_drift = out.get("drift_type") if isinstance(out, dict) else None
+        if stored_drift is not None and stored_drift != replay_drift:
+            out = dict(out)
+            out["drift_type"] = stored_drift
+            mutated = True
+        elif stored_drift is None and replay_drift is not None:
+            # Legacy snapshots without drift_type should remain hash-identical.
+            out = dict(out)
+            out.pop("drift_type", None)
+            mutated = True
+
+        # 4) state_transition should be byte-identical for anchored replay (derived-only).
+        stored_state = stored_outputs_obj.get("state_transition") if isinstance(stored_outputs_obj, dict) else None
+        replay_state = out.get("state_transition") if isinstance(out, dict) else None
+        if stored_state is not None and stored_state != replay_state:
+            out = dict(out)
+            out["state_transition"] = stored_state
+            mutated = True
+        elif stored_state is None and replay_state is not None:
+            out = dict(out)
+            out.pop("state_transition", None)
+            mutated = True
+
+        # 5) comparability should be byte-identical for anchored replay (derived-only).
+        stored_comp = stored_outputs_obj.get("comparability") if isinstance(stored_outputs_obj, dict) else None
+        replay_comp = out.get("comparability") if isinstance(out, dict) else None
+        if stored_comp is not None and stored_comp != replay_comp:
+            out = dict(out)
+            out["comparability"] = stored_comp
+            mutated = True
+        elif stored_comp is None and replay_comp is not None:
+            out = dict(out)
+            out.pop("comparability", None)
+            mutated = True
+
         if mutated:
             out["provenance"] = oprov
 
@@ -747,6 +784,118 @@ def _diff_top_level_keys(a: Any, b: Any) -> Dict[str, Any]:
     return {"added": added, "removed": removed, "changed": changed}
 
 
+def _is_comparable_output(outputs_obj: Dict[str, Any]) -> bool:
+    comp = outputs_obj.get("comparability") if isinstance(outputs_obj, dict) else {}
+    if isinstance(comp, dict) and "is_comparable" in comp:
+        try:
+            return bool(comp.get("is_comparable"))
+        except Exception:
+            return False
+    return False
+
+
+def _build_diff_surface(outputs_obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Curated, deterministic diff surface for governance comparison."""
+    out = outputs_obj if isinstance(outputs_obj, dict) else {}
+
+    surface: Dict[str, Any] = {}
+    surface["decision_state"] = str(out.get("decision_state") or "")
+    surface["drift_type"] = str(out.get("drift_type") or "")
+
+    st = out.get("state_transition") if isinstance(out.get("state_transition"), dict) else {}
+    if isinstance(st, dict) and st:
+        surface["state_transition.trigger"] = str(st.get("trigger") or "")
+        surface["state_transition.from_state"] = str(st.get("from_state") or "")
+        surface["state_transition.to_state"] = str(st.get("to_state") or "")
+
+    comp = out.get("comparability") if isinstance(out.get("comparability"), dict) else {}
+    if isinstance(comp, dict) and comp:
+        surface["comparability.is_comparable"] = bool(comp.get("is_comparable"))
+        surface["comparability.reason"] = str(comp.get("reason") or "")
+        surface["comparability.policy_semantics_hash_changed"] = bool(comp.get("policy_semantics_hash_changed"))
+        surface["comparability.evidence_fingerprint_changed"] = bool(comp.get("evidence_fingerprint_changed"))
+
+    readiness = out.get("readiness") if isinstance(out.get("readiness"), dict) else {}
+    if isinstance(readiness, dict) and readiness:
+        surface["readiness.state"] = str(readiness.get("state") or "")
+        surface["readiness.readiness_level"] = str(readiness.get("readiness_level") or "")
+        cov = readiness.get("coverage") if isinstance(readiness.get("coverage"), dict) else {}
+        if isinstance(cov, dict) and cov:
+            for k in ("required_present", "required_total", "optional_present", "optional_total", "coverage_ratio"):
+                surface[f"coverage.{k}"] = cov.get(k)
+
+    gate_outcomes = out.get("gate_outcomes") if isinstance(out.get("gate_outcomes"), dict) else {}
+    if isinstance(gate_outcomes, dict) and gate_outcomes:
+        for gk in sorted([str(k) for k in gate_outcomes.keys()]):
+            gv = gate_outcomes.get(gk) if isinstance(gate_outcomes.get(gk), dict) else {}
+            surface[f"gate_outcomes.{gk}.status"] = str(gv.get("status") or "")
+
+    risk_flags = out.get("risk_flags") if isinstance(out.get("risk_flags"), list) else []
+    if isinstance(risk_flags, list) and risk_flags:
+        counts: Dict[str, int] = {}
+        for rf in risk_flags:
+            if isinstance(rf, dict):
+                key = str(rf.get("risk_flag") or "")
+            else:
+                key = ""
+            if key:
+                counts[key] = counts.get(key, 0) + 1
+        for k in sorted(counts.keys()):
+            surface[f"risk_flags.{k}"] = int(counts[k])
+
+    blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
+    if isinstance(blockers, list) and blockers:
+        counts_b: Dict[str, int] = {}
+        for b in blockers:
+            if isinstance(b, dict):
+                key = str(b.get("blocker_key") or "")
+            else:
+                key = ""
+            if key:
+                counts_b[key] = counts_b.get(key, 0) + 1
+        for k in sorted(counts_b.keys()):
+            surface[f"blockers.{k}"] = int(counts_b[k])
+
+    return surface
+
+
+def _diff_surface(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+    keys = sorted(list(set([str(k) for k in a.keys()] + [str(k) for k in b.keys()])))
+    changed: List[str] = []
+    for k in keys:
+        if a.get(k) != b.get(k):
+            changed.append(k)
+    changed = sorted(changed)
+
+    counts = {
+        "total_fields_changed": int(len(changed)),
+        "coverage_fields_changed": 0,
+        "risk_fields_changed": 0,
+        "gate_fields_changed": 0,
+        "comparability_fields_changed": 0,
+        "readiness_fields_changed": 0,
+        "blocker_fields_changed": 0,
+        "state_fields_changed": 0,
+    }
+    for k in changed:
+        if k.startswith("coverage."):
+            counts["coverage_fields_changed"] += 1
+        elif k.startswith("risk_flags."):
+            counts["risk_fields_changed"] += 1
+        elif k.startswith("gate_outcomes."):
+            counts["gate_fields_changed"] += 1
+        elif k.startswith("comparability."):
+            counts["comparability_fields_changed"] += 1
+        elif k.startswith("readiness."):
+            counts["readiness_fields_changed"] += 1
+        elif k.startswith("blockers."):
+            counts["blocker_fields_changed"] += 1
+        else:
+            counts["state_fields_changed"] += 1
+
+    return {"changed_fields": changed, "changed_counts": counts, "notes": []}
+
+
 def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Dict[str, Any]:
     snap = db.query(DecisionSnapshot).filter(DecisionSnapshot.id == int(snapshot_id)).first()
     if not snap:
@@ -821,6 +970,37 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
         _require_integrity_present(recomputed_out, label='recomputed')
 
     recomputed_semantic_fp = _semantic_fingerprint(recomputed_out) if isinstance(recomputed_out, dict) else ""
+
+    # Prior active snapshot for diff_summary (if comparable)
+    prior_snap: DecisionSnapshot | None = None
+    try:
+        prior_snap = (
+            db.query(DecisionSnapshot)
+            .filter(DecisionSnapshot.decision_key == str(snap.decision_key))
+            .filter(DecisionSnapshot.program_id == int(snap.program_id))
+            .filter(DecisionSnapshot.molecule_id == (int(snap.molecule_id) if snap.molecule_id is not None else None))
+            .filter(DecisionSnapshot.batch_id == (int(snap.batch_id) if snap.batch_id is not None else None))
+            .filter(DecisionSnapshot.superseded_by_snapshot_id == int(snap.id))
+            .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
+            .first()
+        )
+        if prior_snap is None:
+            prior_snap = (
+                db.query(DecisionSnapshot)
+                .filter(DecisionSnapshot.decision_key == str(snap.decision_key))
+                .filter(DecisionSnapshot.program_id == int(snap.program_id))
+                .filter(DecisionSnapshot.molecule_id == (int(snap.molecule_id) if snap.molecule_id is not None else None))
+                .filter(DecisionSnapshot.batch_id == (int(snap.batch_id) if snap.batch_id is not None else None))
+                .filter(DecisionSnapshot.id != int(snap.id))
+                .filter(
+                    (DecisionSnapshot.created_at < snap.created_at)
+                    | ((DecisionSnapshot.created_at == snap.created_at) & (DecisionSnapshot.id < snap.id))
+                )
+                .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
+                .first()
+            )
+    except Exception:
+        prior_snap = None
 
     recomputed_measurement_ids_used = _coerce_int_list(
         recomputed_out.get("measurement_ids_used") if isinstance(recomputed_out, dict) else None
@@ -1058,6 +1238,23 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
         },
         "explain": explain,
     }
+
+    # Optional diff_summary (deterministic; only when comparable + prior snapshot exists)
+    if prior_snap is not None and isinstance(outputs_obj, dict) and _is_comparable_output(outputs_obj):
+        try:
+            prev_outputs = _parse_json_field(prior_snap.outputs_json, default={})
+            if isinstance(prev_outputs, dict):
+                surface_prev = _build_diff_surface(prev_outputs)
+                surface_cur = _build_diff_surface(outputs_obj)
+                diff = _diff_surface(surface_prev, surface_cur)
+                report["diff_summary"] = {
+                    "prev_snapshot_id": int(prior_snap.id),
+                    "changed_fields": diff.get("changed_fields") or [],
+                    "changed_counts": diff.get("changed_counts") or {},
+                    "notes": diff.get("notes") or [],
+                }
+        except Exception:
+            pass
 
     # Additive drift diagnosis (no new logic/thresholds)
     if isinstance(report.get("anchored_replay"), dict):

@@ -1,0 +1,136 @@
+{
+  "policy_id": "policy.ready_for_scaleup_screen",
+  "policy_version": "v0.1",
+  "policy_name": "ready_for_scaleup_screen",
+  "schema_version": "di.policy_package.v0_1",
+  "template_key": "ready_for_scaleup_screen.v0_1",
+  "decision_scope": {
+    "decision_key": "ready_for_scaleup_screen",
+    "scope_type": "batch"
+  },
+  "experiment_catalog_ref": {
+    "catalog_id": "experiment_catalog_v0_1",
+    "catalog_version": "v0.1"
+  },
+  "template_structure": {
+    "context_knobs": [],
+    "gate_categories": [
+      "material_readiness",
+      "purity_integrity",
+      "stability"
+    ],
+    "risk_flag_categories": [
+      "qc_uncertainty",
+      "interpretation_gap"
+    ],
+    "blocker_taxonomy": [
+      "missing_required_metric",
+      "threshold_violation",
+      "metric_present_but_non_numeric"
+    ]
+  },
+  "changelog": [
+    {
+      "version": "v0.1",
+      "date": "2026-02-23",
+      "change": "Initial packaged policy for ready_for_scaleup_screen (DI v0.1)."
+    }
+  ],
+  "policy_body": {
+    "gate_order": [
+      "G1_material_readiness",
+      "G2_purity_integrity",
+      "G3_stability"
+    ],
+    "required_gate_keys": [
+      "G1_material_readiness",
+      "G2_purity_integrity",
+      "G3_stability"
+    ],
+    "blocker_order": [
+      "missing_required_metric",
+      "threshold_violation",
+      "metric_present_but_non_numeric"
+    ],
+    "metric_alias_map": {},
+    "qc_modes": {
+      "model_safe": {
+        "accept_statuses": [
+          "approved",
+          "unreviewed"
+        ],
+        "reject_statuses": [
+          "rejected",
+          "quarantined"
+        ],
+        "treat_unreviewed_as": "accept_with_flag"
+      },
+      "none": {
+        "accept_statuses": [
+          "approved",
+          "unreviewed",
+          "rejected",
+          "quarantined"
+        ],
+        "reject_statuses": [],
+        "treat_unreviewed_as": "accept"
+      },
+      "strict": {
+        "accept_statuses": [
+          "approved"
+        ],
+        "reject_statuses": [
+          "rejected",
+          "quarantined"
+        ],
+        "treat_unreviewed_as": "reject"
+      }
+    },
+    "metric_value_functions": {
+      "titer_g_l": {
+        "type": "maximize",
+        "min_value": 1.0
+      },
+      "concentration_mg_ml": {
+        "type": "maximize",
+        "min_value": 1.0
+      },
+      "purity_pct": {
+        "type": "maximize",
+        "min_value": 90.0
+      },
+      "aggregation_pct": {
+        "type": "hard_cap",
+        "cap_value": 5.0
+      },
+      "stability_t90_days": {
+        "type": "maximize",
+        "min_value": 30.0
+      },
+      "stability_delta_pct": {
+        "type": "minimize",
+        "max_value": 10.0
+      }
+    },
+    "gates": {
+      "G1_material_readiness": {
+        "require_any": [
+          "titer_g_l",
+          "concentration_mg_ml"
+        ]
+      },
+      "G2_purity_integrity": {
+        "require_all": [
+          "purity_pct",
+          "aggregation_pct"
+        ]
+      },
+      "G3_stability": {
+        "require_any": [
+          "stability_t90_days",
+          "stability_delta_pct"
+        ]
+      }
+    }
+  }
+}

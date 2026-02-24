@@ -12,10 +12,10 @@ or rename existing fields without an explicit, versioned migration plan.
 - Local-first, overlay-safe evolution
 
 **Non-goals (v0.2):**
-- No candidate ranking/shortlisting
 - No weighted scoring system
 - No probabilistic/ML behavior
 - No automatic mutation of measurements/QC
+- No opaque ranking; controlled shortlisting is allowed only when policy-enabled and fully deterministic
 
 ---
 
@@ -29,6 +29,15 @@ DI snapshots are **distinguished** from legacy rule-engine snapshots via:
 - Fallback: `outputs_json` contains `decision_state` + `gates` (best-effort compatibility)
 
 DI snapshots MUST remain readable even if some discriminator fields are missing (older rows).
+
+### 1.1 Snapshot lineage metadata (additive)
+
+Decision snapshots carry lifecycle metadata to support lineage traversal:
+- `is_superseded` (0/1; NULL allowed for legacy rows)
+- `superseded_by_snapshot_id` (nullable int)
+- `superseded_at` (nullable timestamp)
+
+Latest snapshot queries should treat `superseded_by_snapshot_id IS NULL` as the active row.
 
 ---
 
@@ -100,6 +109,8 @@ Optional debugging-only metadata may be present (e.g. machine-local `policy_path
 - `gates` (list; templated gate results)
 - `blockers` (list; templated blockers)
 - `risk_flags` (list; templated risk flags)
+- `drift_type` (string enum; `NO_CHANGE|EVIDENCE_ONLY|POLICY_ONLY|BOTH|INCOMPARABLE`)
+- `state_transition` (object; additive; present when a prior active snapshot exists)
 
 ### 4.2 Engine metadata
 `engine` MUST include:
@@ -112,6 +123,11 @@ Additive fields may be present, including:
 - `code_version` (string; PSI code version from `psi/version.py`)
 - `evaluation_version` (string; alias of `evaluator_version` for readability)
 
+### 4.6 Evidence identifier surface (additive)
+
+If present:
+- `measurement_ids_used` MUST be a list of unique integers sorted ascending.
+
 ### 4.5 Experiment suggestions (v1.2.9v37; additive)
 
 If present, the DI output MAY include catalog-driven experiment suggestions:
@@ -123,6 +139,9 @@ Determinism:
 - `experiment_suggestions` preserves blocker order from the DI output.
 - Experiments are sorted by `(time_tier, cost_tier, experiment_key)` using a fixed tier order.
 - Suggestions are catalog/policy-driven only (no optimization, no scoring, no weights).
+- `recommended_experiments` is de-duplicated by `experiment_key` and globally ordered by `(time_tier, cost_tier, experiment_key)`.
+- `recommended_experiments[].triggered_by_blockers` is a sorted list of blocker keys.
+- `recommended_experiments[].metric_keys`, `resolves`, `outputs`, and `prerequisites` are sorted lexicographically.
 
 ### 4.3 Provenance integrity (v1.2.9k+; additive)
 
@@ -175,12 +194,49 @@ Notes:
 - `outputs.engine.code_version` is metadata and MUST NOT contribute to `snapshot_content_hash` (it may change across releases).
 - Snapshot row metadata (id, created_at, etc.) is not part of the authoritative payload.
 
+### 4.3.3 drift_type derivation (v1.2.9w23; additive)
+
+`drift_type` is a deterministic enum derived from:
+- current `policy.policy_semantics_hash`
+- current `provenance.integrity.evidence_fingerprint`
+- current comparability status (`comparability.is_comparable` when present; otherwise confidence_degradation/high-severity flags)
+- prior snapshot hashes embedded in `inputs_json.drift_context`
+
+Rules:
+- If not comparable → `INCOMPARABLE`
+- Else if evidence unchanged and policy unchanged → `NO_CHANGE`
+- Else if evidence changed and policy unchanged → `EVIDENCE_ONLY`
+- Else if policy changed and evidence unchanged → `POLICY_ONLY`
+- Else → `BOTH`
+
+### 4.3.4 state_transition derivation (v1.2.9w24; additive)
+
+If a prior *active* snapshot exists for the same scope, outputs include:
+
+- `state_transition.from_state` (string)
+- `state_transition.to_state` (string)
+- `state_transition.trigger` (enum: `NONE|EVIDENCE|POLICY|BOTH|INCOMPARABLE`)
+
+Derivation:
+- If `drift_type == INCOMPARABLE` → `trigger = INCOMPARABLE`
+- Else if `from_state == to_state` → `trigger = NONE`
+- Else map `drift_type`:
+  - `EVIDENCE_ONLY` → `EVIDENCE`
+  - `POLICY_ONLY` → `POLICY`
+  - `BOTH` → `BOTH`
+
+If no prior active snapshot exists, `state_transition` may be omitted.
+
 ### 4.4 State of Evidence (SoE)
 
 `state_of_evidence` MUST preserve the legacy (v0.1) keys:
 - `used` (object mapping metric_key → EvidenceRef)
 - `ignored_evidence` (list of IgnoredEvidence)
 - `warnings` (list)
+
+Determinism:
+- `ignored_evidence` must be ordered by `(metric_key ASC, measurement_id ASC)`.
+- `warnings` preserves emission order from selection/enrichment (deterministic for a fixed DB state).
 
 #### SoE v0.2 (v1.2.9f+)
 `state_of_evidence.soe_v0_2` MUST exist and be a dict containing:
@@ -247,12 +303,21 @@ If present:
 - `gate_outcomes` must be a dict keyed by gate_key (keys sorted lexicographically)
 - `coverage_fingerprint` must be a sha256 hex string over stable JSON of reporting-only signals
 
+Determinism:
+- `gates` list preserves deterministic gate evaluation order (template gate key order).
+- `blockers` list preserves deterministic evaluation order (gate order, then per-gate blocker emission order).
+- `risk_flags` list preserves deterministic evaluation order (pre-gate flags, then per-gate flags in gate order).
+
 ### 5.3 Evidence comparability diagnostics (v1.2.9j+; additive)
 
 If present, `comparability` MUST be a dict and MUST always include:
 
 ```yaml
 comparability:
+  is_comparable: true
+  reason: "ok"
+  policy_semantics_hash_changed: false
+  evidence_fingerprint_changed: false
   metric_level: []
   qc_coherence: []
   summary:
@@ -288,6 +353,93 @@ Each entry in `comparability.qc_coherence` MUST include:
 
 Determinism:
 - `comparability.qc_coherence` must be sorted by `(metric_key ASC, issue ASC)`.
+
+---
+
+## 6. Verification report (read-only; additive)
+
+`psi.services.di.verify.verify_snapshot` returns a verification report. It is not
+stored in `decision_snapshots.outputs_json`.
+
+### 6.1 diff_summary (v1.2.9w26; additive)
+
+When a prior snapshot exists for the same scope and `comparability.is_comparable`
+is true, the verification report MAY include:
+
+```yaml
+diff_summary:
+  prev_snapshot_id: 123
+  changed_fields: ["decision_state", "gate_outcomes.G1_material_readiness.status"]
+  changed_counts:
+    total_fields_changed: 1
+    coverage_fields_changed: 0
+    risk_fields_changed: 0
+    gate_fields_changed: 1
+    comparability_fields_changed: 0
+    readiness_fields_changed: 0
+    blocker_fields_changed: 0
+    state_fields_changed: 0
+  notes: []
+```
+
+Notes:
+- `changed_fields` are stable, contract-level field paths.
+- Hashes are excluded from the diff surface.
+
+---
+
+## 7. Shortlisting (v1.2.9w12; additive)
+
+If policy enables shortlisting, outputs may include:
+
+```yaml
+shortlisting:
+  enabled: true
+  refused: false
+  refusal_reason: ""
+  refusal_reasons: []
+  tie_break_hierarchy: ["readiness_completeness", "qc_coherence", "purity_aggregation", "reproducibility", "functional_potency"]
+  ranked_candidates:
+    - candidate_id: "batch:123"
+      scope_type: "batch"
+      scope_id: 123
+      decision_state: "ready"
+      readiness_completeness: 1.0
+      qc_coherence:
+        high_severity_count: 0
+        total_flags: 0
+      purity_aggregation:
+        monomer_pct: { evaluated_status: "PASS", interpretation_gap: false }
+        hmw_pct: { evaluated_status: "PASS", interpretation_gap: false }
+        lmw_pct: { evaluated_status: "PASS", interpretation_gap: false }
+      reproducibility:
+        status: "not_available"
+      functional_potency:
+        context_valid: true
+        metrics:
+          percent_killing: { evaluated_status: "PASS", interpretation_gap: false }
+          ec50: { evaluated_status: "PASS", interpretation_gap: false }
+          pass_fail: { evaluated_status: "PASS", interpretation_gap: false }
+      tie_breaks:
+        - { key: "readiness_completeness", value: 1.0 }
+        - { key: "qc_coherence", value: { high_severity_count: 0, total_flags: 0 } }
+        - { key: "purity_aggregation", value: { ... } }
+        - { key: "reproducibility", value: "not_available" }
+        - { key: "functional_potency", value: { ... } }
+      tie_break_explanations:
+        - { key: "readiness_completeness", summary: "...", details: { ... } }
+        - { key: "qc_coherence", summary: "...", details: { ... } }
+        - { key: "purity_aggregation", summary: "...", details: { ... } }
+        - { key: "reproducibility", summary: "...", details: { ... } }
+        - { key: "functional_potency", summary: "...", details: { ... } }
+```
+
+Determinism:
+- `tie_break_hierarchy` order is fixed by policy/implementation.
+- `tie_breaks` and `tie_break_explanations` must follow `tie_break_hierarchy` order.
+- `ranked_candidates` list is deterministic; in v0.5 it contains a single candidate for the current scope.
+- `refusal_reasons` are emitted in deterministic check order:
+  `blockers_present`, `hard_gates_not_passed`, `readiness_state_below_threshold`, `coverage_below_threshold`.
 
 #### 5.3.3 Summary
 

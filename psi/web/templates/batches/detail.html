@@ -60,8 +60,9 @@
   {% elif tab=='decisions' %}
     <h2>Decision snapshots for this batch</h2>
     <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0 14px 0;">
-      <a class="btn primary" href="/decisions/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ batch.id }}">Run DI for this batch</a>
-      <span class="muted mini">Opens the deterministic decision runner with scope prefilled (navigation only; no recomputation here).</span>
+      <a class="btn primary" href="/di/run?batch_id={{ batch.id }}&molecule_id={{ molecule.id }}">Run DI for this batch</a>
+      <a class="btn" href="/decisions/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ batch.id }}">Run Legacy YAML</a>
+      <span class="muted mini">DI runs create deterministic snapshots; legacy YAML remains available for historical parity.</span>
     </div>
     <table class="table">
       <thead>

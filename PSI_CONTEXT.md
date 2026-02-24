@@ -181,6 +181,12 @@ Verification:
 Code rule:
 - All tools, UI footers, smoke tests, and scripts must import `PSI_VERSION` from `psi.version`.
 
+### Legacy YAML Engine Deprecation Clock (Intent Only)
+
+- Target: **v1.3.0** makes DI the default for new decision runs (soft policy; not enforced here).
+- Legacy YAML remains **read-only** for rendering historical snapshots.
+- UI should display a **“Legacy YAML engine”** warning badge where legacy snapshots render (intent only).
+
 ---
 
 ## 8. How to Read a ZIP Without Missing Pieces

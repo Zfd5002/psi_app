@@ -15,8 +15,13 @@ DI does NOT:
 
 * mutate QC or source data
 * assign readiness percentages or scores
-* rank candidates
 * hide logic in opaque weights
+* use adaptive or opaque ranking
+
+Controlled shortlisting is permitted **only** when policy enables it and the output is:
+- deterministic
+- fully explainable
+- contract-specified
 
 ---
 
@@ -198,9 +203,9 @@ blocker_key → [experiment_key]
 
 Rules:
 
-* No ranking
+* No ranking or optimization
 * No prioritization
-* Lists must be de-duplicated and lexicographically sorted
+* Lists must be de-duplicated and deterministically ordered (time_tier, cost_tier, experiment_key)
 * All experiment_keys must exist in referenced catalog
 
 ---
@@ -209,11 +214,13 @@ Rules:
 
 * No readiness score/percent (descriptive coverage ratios are allowed; no scoring/ranking)
 * No scoring
-* No ranking
+* No opaque ranking
 * No planner heuristics
 * No new database tables for scoring, ranking, adaptive logic, learned thresholds, or probabilistic reasoning.
 * Deterministic audit/provenance/labeling support tables are permitted (e.g. `OutcomeLabel`).
 * No mutation of QC/source data
+
+Controlled shortlisting is allowed **only** when policy-enabled and fully deterministic, with an explicit tie-break trace.
 
 ---
 

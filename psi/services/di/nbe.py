@@ -5,10 +5,9 @@ Catalog-driven, deterministic, and policy-visible only.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from psi.core.di.catalog import load_catalog
+from psi.core.di.catalog import load_experiment_catalog_v0_1
 
 
 _TIER_ORDER = {"low": 0, "med": 1, "medium": 1, "high": 2}
@@ -24,10 +23,25 @@ def _blocker_key(b: Any) -> str:
     return str(getattr(b, "blocker_key", "") or "").strip()
 
 
-def _catalog_path_for_ref(*, catalog_id: str, catalog_version: str) -> Path | None:
+def _load_catalog_for_ref(*, catalog_id: str, catalog_version: str):
     if catalog_id == "experiment_catalog_v0_1" and catalog_version == "v0.1":
-        return Path(__file__).resolve().parents[2] / "core" / "di" / "catalogs" / "experiment_catalog_v0_1.json"
+        return load_experiment_catalog_v0_1()
     return None
+
+
+def _metric_keys_from_experiment(e: Dict[str, Any]) -> list[str]:
+    keys = e.get("metric_keys") if isinstance(e.get("metric_keys"), list) else []
+    return sorted({str(x).strip() for x in keys if str(x).strip()})
+
+
+def _missing_metrics_from_blocker(b: Any) -> list[str]:
+    if not isinstance(b, dict):
+        return []
+    detail = b.get("detail") if isinstance(b.get("detail"), dict) else {}
+    missing = detail.get("missing") if isinstance(detail.get("missing"), list) else []
+    missing_any = detail.get("missing_any_of") if isinstance(detail.get("missing_any_of"), list) else []
+    out = [str(x).strip() for x in (missing + missing_any) if str(x).strip()]
+    return sorted(set(out))
 
 
 def build_experiment_suggestions(
@@ -39,35 +53,49 @@ def build_experiment_suggestions(
 ) -> Tuple[Dict[str, List[str]], List[Dict[str, Any]]]:
     """Return (experiment_suggestions, recommended_experiments)."""
 
-    catalog_path = _catalog_path_for_ref(catalog_id=catalog_id, catalog_version=catalog_version)
-    if catalog_path is None or not catalog_path.exists():
+    cat = _load_catalog_for_ref(catalog_id=catalog_id, catalog_version=catalog_version)
+    if cat is None:
         return {}, []
 
-    cat = load_catalog(catalog_path)
     experiments = cat.catalog.get("experiments") if isinstance(cat.catalog, dict) else []
     if not isinstance(experiments, list):
         return {}, []
 
     exp_by_key: Dict[str, Dict[str, Any]] = {}
+    metrics_by_exp: Dict[str, List[str]] = {}
     for e in experiments:
         if not isinstance(e, dict):
             continue
         ek = str(e.get("experiment_key") or "").strip()
         if ek:
             exp_by_key[ek] = e
+            metrics_by_exp[ek] = _metric_keys_from_experiment(e)
 
     suggestions: Dict[str, List[str]] = {}
-    recommended: List[Dict[str, Any]] = []
+    recommended_map: Dict[str, Dict[str, Any]] = {}
 
     for b in blockers or []:
         bk = _blocker_key(b)
         if not bk:
             continue
         matches: List[Dict[str, Any]] = []
-        for e in exp_by_key.values():
+        missing_metrics = _missing_metrics_from_blocker(b) if bk == "missing_required_metric" else []
+
+        for ek, e in exp_by_key.items():
             resolves = e.get("resolves") if isinstance(e.get("resolves"), list) else []
-            if bk in [str(x).strip() for x in resolves if str(x).strip()]:
-                matches.append(e)
+            resolves = [str(x).strip() for x in resolves if str(x).strip()]
+            if missing_metrics:
+                if any(m in (metrics_by_exp.get(ek) or []) for m in missing_metrics):
+                    matches.append(e)
+            else:
+                if bk in resolves:
+                    matches.append(e)
+
+        if missing_metrics and not matches:
+            for e in exp_by_key.values():
+                resolves = e.get("resolves") if isinstance(e.get("resolves"), list) else []
+                if bk in [str(x).strip() for x in resolves if str(x).strip()]:
+                    matches.append(e)
 
         matches.sort(
             key=lambda e: (
@@ -86,18 +114,44 @@ def build_experiment_suggestions(
                 ek = str(e.get("experiment_key") or "")
                 if not ek:
                     continue
-                recommended.append(
-                    {
+                entry = recommended_map.get(ek)
+                if entry is None:
+                    entry = {
                         "experiment_key": ek,
                         "name": str(e.get("name") or ""),
-                        "resolves": e.get("resolves") if isinstance(e.get("resolves"), list) else [],
-                        "outputs": e.get("outputs") if isinstance(e.get("outputs"), list) else [],
-                        "prerequisites": e.get("prerequisites") if isinstance(e.get("prerequisites"), list) else [],
+                        "resolves": [],
+                        "outputs": [],
+                        "metric_keys": [],
+                        "prerequisites": [],
                         "time_tier": str(e.get("time_tier") or ""),
                         "cost_tier": str(e.get("cost_tier") or ""),
                         "notes": str(e.get("notes") or ""),
-                        "source_blocker": bk,
+                        "triggered_by_blockers": [],
                     }
+                    recommended_map[ek] = entry
+
+                entry["triggered_by_blockers"] = sorted(
+                    list(set((entry.get("triggered_by_blockers") or []) + [bk]))
                 )
+
+                resolves = e.get("resolves") if isinstance(e.get("resolves"), list) else []
+                entry["resolves"] = sorted(list(set((entry.get("resolves") or []) + resolves)))
+
+                outputs = e.get("outputs") if isinstance(e.get("outputs"), list) else []
+                entry["outputs"] = sorted(list(set((entry.get("outputs") or []) + outputs)))
+
+                prereq = e.get("prerequisites") if isinstance(e.get("prerequisites"), list) else []
+                entry["prerequisites"] = sorted(list(set((entry.get("prerequisites") or []) + prereq)))
+
+                entry["metric_keys"] = sorted(list(set((entry.get("metric_keys") or []) + (metrics_by_exp.get(ek) or []))))
+
+    recommended = sorted(
+        list(recommended_map.values()),
+        key=lambda e: (
+            _tier_rank(e.get("time_tier")),
+            _tier_rank(e.get("cost_tier")),
+            str(e.get("experiment_key") or ""),
+        ),
+    )
 
     return suggestions, recommended

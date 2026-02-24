@@ -52,13 +52,13 @@ def main() -> None:
     from psi.tools.export_measurements import export_csv
     from psi.services.export_wide import ExportWideOptions, export_wide_to_csv
     from psi.core.export_profiles import validate_profiles
+    from psi.web.app import create_app
 
     # --- Release guardrail ---
     # Canonical version is defined only in psi/version.py
     from psi.version import PSI_VERSION as psi_version
 
     # Ensure the web app exposes the same version into the template env.
-    from psi.web.app import create_app
     app = create_app()
     ui_version = app.state.templates.env.globals.get("PSI_VERSION")
     assert ui_version == psi_version, f"UI PSI_VERSION mismatch: {ui_version} != {psi_version}"
@@ -78,6 +78,12 @@ def main() -> None:
     assert (
         latest == psi_version
     ), f"PATCH_NOTES latest entry is {latest} but PSI_VERSION is {psi_version}"
+
+    # --- Template compilation guardrail ---
+    env = app.state.templates.env
+    assert env is not None, "Jinja environment not initialized"
+    for name in sorted(env.list_templates()):
+        env.get_template(name)
 
     # --- Schema ---
     ensure_schema()

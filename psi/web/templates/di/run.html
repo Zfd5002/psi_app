@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Run DI</h1>
+  <div class="muted">Creates a DI snapshot for a batch. This does not use the legacy YAML engine.</div>
+
+  {% if error %}
+    <div class="card" style="border:1px solid #b94a48;background:#fff5f5;color:#8a1f1f;margin-top:10px;">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  <form class="form" method="post" action="/di/run" style="margin-top:14px;">
+    <div class="field">
+      <label>Batch</label>
+      <select name="batch_id" required>
+        {% for b in batches %}
+          <option value="{{ b.id }}" {% if selected_batch_id and b.id == selected_batch_id %}selected{% endif %}>
+            #{{ b.id }} · {{ b.title }}{% if b.molecule_id %} · molecule {{ b.molecule_id }}{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      {% if selected_molecule_id %}
+        <div class="help">Filtered to batches for molecule {{ selected_molecule_id }}.</div>
+      {% endif %}
+    </div>
+
+    <div class="field">
+      <label>Decision key</label>
+      <select name="decision_key" required>
+        {% for k in decision_keys %}
+          <option value="{{ k }}" {% if k == selected_decision_key %}selected{% endif %}>{{ k }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Policy package</label>
+      <select name="policy_path" required>
+        {% for p in policies %}
+          <option value="{{ p.path }}" {% if p.path == selected_policy_path %}selected{% endif %}>
+            {{ p.decision_key }} · {{ p.policy_version }} · {{ p.policy_name }}
+          </option>
+        {% endfor %}
+      </select>
+      <div class="help">Defaults to the latest policy version for the selected decision key.</div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="field">
+        <label>QC mode</label>
+        <select name="qc_mode">
+          <option value="model_safe">model_safe</option>
+          <option value="strict">strict</option>
+          <option value="none">none</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>As-of timestamp (optional)</label>
+        <input type="text" name="as_of_ts" placeholder="2026-02-23T12:00:00Z">
+        <div class="help">Leave blank for latest available evidence.</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" type="submit">Run DI</button>
+      <a class="btn" href="/decisions/new">Run Legacy YAML</a>
+      <a class="btn" href="/decisions">Cancel</a>
+    </div>
+  </form>
+{% endblock %}

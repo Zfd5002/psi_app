@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 
 # Machine-local / debug-only keys that must never contribute to integrity hashes.
-MACHINE_LOCAL_INPUT_KEYS = {"policy_path"}
+MACHINE_LOCAL_INPUT_KEYS = {"policy_path", "drift_context"}
 
 
 def _stable_json(obj: Any) -> str:

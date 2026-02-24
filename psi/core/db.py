@@ -515,6 +515,10 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
                 "WHERE is_superseded = 0"
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_decision_snapshots_superseded_by ON decision_snapshots(superseded_by_snapshot_id)"))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_decision_snapshots_scope_superseded_by "
+                "ON decision_snapshots(decision_key, program_id, COALESCE(molecule_id,0), COALESCE(batch_id,0), superseded_by_snapshot_id)"
+            ))
 
         # v1.2.6: file registry indexes (additive)
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_files_sha256 ON files(sha256)"))

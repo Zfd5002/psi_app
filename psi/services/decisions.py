@@ -350,6 +350,44 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
     }
 
 
+def get_snapshot_history(db: Session, *, snap_id: int) -> dict:
+    snap = db.get(DecisionSnapshot, int(snap_id))
+    if not snap:
+        raise KeyError("DecisionSnapshot not found")
+
+    rows = (
+        db.query(DecisionSnapshot)
+        .filter(DecisionSnapshot.decision_key == str(snap.decision_key))
+        .filter(DecisionSnapshot.program_id == int(snap.program_id))
+        .filter(DecisionSnapshot.molecule_id == (int(snap.molecule_id) if snap.molecule_id is not None else None))
+        .filter(DecisionSnapshot.batch_id == (int(snap.batch_id) if snap.batch_id is not None else None))
+        .order_by(DecisionSnapshot.id.desc())
+        .all()
+    )
+
+    history = []
+    for r in rows:
+        out = json.loads(r.outputs_json) if r.outputs_json else {}
+        comp = out.get("comparability") if isinstance(out.get("comparability"), dict) else {}
+        st = out.get("state_transition") if isinstance(out.get("state_transition"), dict) else {}
+        history.append(
+            {
+                "snapshot_id": int(r.id),
+                "created_at": r.created_at,
+                "decision_state": str(out.get("decision_state") or ""),
+                "drift_type": str(out.get("drift_type") or ""),
+                "comparability_is_comparable": (
+                    bool(comp.get("is_comparable")) if isinstance(comp, dict) and "is_comparable" in comp else None
+                ),
+                "state_transition": st if isinstance(st, dict) else {},
+                "is_superseded": bool(r.is_superseded) if r.is_superseded is not None else False,
+                "superseded_by_snapshot_id": r.superseded_by_snapshot_id,
+            }
+        )
+
+    return {"snap": snap, "history": history}
+
+
 def get_snapshot_export_payload(db: Session, snap_id: int) -> dict:
     snap = db.get(DecisionSnapshot, snap_id)
     if not snap:

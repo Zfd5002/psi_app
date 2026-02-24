@@ -84,8 +84,8 @@
                   </td>
                   <td class="muted">
                     {% if row.removed_created_at is defined or row.added_created_at is defined %}
-                      {{ (row.removed_created_at[:10] if row.removed_created_at is defined and row.removed_created_at) else '—' }} →
-                      {{ (row.added_created_at[:10] if row.added_created_at is defined and row.added_created_at) else '—' }}
+                      {{ row.removed_created_at[:10] if row.removed_created_at is defined and row.removed_created_at else '—' }} →
+                      {{ row.added_created_at[:10] if row.added_created_at is defined and row.added_created_at else '—' }}
                     {% else %}
                       —
                     {% endif %}

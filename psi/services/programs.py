@@ -72,6 +72,7 @@ def get_program_detail(
     all_snaps = (
         db.query(DecisionSnapshot)
         .filter(DecisionSnapshot.program_id == program_id)
+        .filter(DecisionSnapshot.superseded_by_snapshot_id.is_(None))
         .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
         .all()
     )

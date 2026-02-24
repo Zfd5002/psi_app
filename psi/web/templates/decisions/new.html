@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Run Decision | PSI{% endblock %}
+{% block title %}Run Legacy YAML | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1 style="margin:0;">Run Decision</h1>
+  <h1 style="margin:0;">Run Legacy YAML</h1>
+  <div class="muted" style="margin-top:6px;">Legacy YAML engine (deprecated). For DI snapshots, use <a href="/di/run">Run DI</a>.</div>
   <div class="muted" style="margin-top:6px;">Rules: {{ rules_version }} · Evidence is scored deterministically from max strength per evidence type.</div>
 
   <form class="form" method="post" action="/decisions/new">

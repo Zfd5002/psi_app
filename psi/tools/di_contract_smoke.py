@@ -16,6 +16,7 @@ import json
 import sys
 import os
 import tempfile
+import shutil
 
 from pathlib import Path
 
@@ -24,7 +25,6 @@ from psi.core.di.policy import canonical_policy_json, load_policy, sha256_hex_of
 from psi.services.decisions import stable_json_dumps
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
 from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
-from psi.tools.di_snapshot_diff import compute_snapshot_diff_by_id
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -153,16 +153,9 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     # Lightweight integration check: build a tiny ephemeral DB, run DI, and validate
     # the additive SoE v0.2 structure + deterministic ordering.
 
-    if os.environ.get("PSI_DB_PATH"):
-        # Respect explicit user override (but still run).
-        db_path = os.environ["PSI_DB_PATH"]
-    else:
-        root = Path(tempfile.gettempdir()) / "psi_di_contract"
-        root.mkdir(parents=True, exist_ok=True)
-        db_path = str(root / "psi_di_contract.sqlite")
-        os.environ["PSI_DB_PATH"] = db_path
-
-    from psi.core.db import SessionLocal, ensure_schema
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from psi.core.db import _copy_sqlite_bundle, _install_sqlite_pragmas, ensure_schema
     from psi.core.models import Batch, Molecule, Program
     from psi.services.programs import create_program
     from psi.services.molecules import create_molecule, DuplicateMoleculeError
@@ -174,102 +167,143 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     from psi.services.di.runner import run_di
     from psi.services.di.verify import verify_snapshot
 
-    ensure_schema()
-    db = SessionLocal()
+    def _seed_contract_db(db):
+        # Program
+        p = db.query(Program).filter(Program.name == "DI_SMOKE").first()
+        if p is None:
+            p = create_program(db, name="DI_SMOKE", description="DI contract smoke")
 
-    # Program
-    p = db.query(Program).filter(Program.name == "DI_SMOKE").first()
-    if p is None:
-        p = create_program(db, name="DI_SMOKE", description="DI contract smoke")
+        # Molecule
+        m = db.query(Molecule).filter(Molecule.program_id == p.id).first()
+        if m is None:
+            hc = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISWNSGGSTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYC"
+            lc = "DIQMTQSPSSLSASVGDRVTITCRASSSVSYIHWFQQKPGKAPKLLIYAASTLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYC"
+            try:
+                m = create_molecule(db, program_id=p.id, primary_id="DI-SMOKE-0001", title="DI Smoke molecule", components={"HC1": hc, "LC1": lc})
+            except DuplicateMoleculeError:
+                m = db.query(Molecule).filter(Molecule.program_id == p.id).first()
+                _assert(m is not None, "Duplicate molecule but none found")
 
-    # Molecule
-    m = db.query(Molecule).filter(Molecule.program_id == p.id).first()
-    if m is None:
-        hc = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISWNSGGSTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYC"
-        lc = "DIQMTQSPSSLSASVGDRVTITCRASSSVSYIHWFQQKPGKAPKLLIYAASTLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYC"
+        # Batch
+        b = db.query(Batch).filter(Batch.molecule_id == m.id).first()
+        if b is None:
+            b = create_batch(db=db, molecule_id=m.id, title="DI Smoke batch", expression_notes="", purification_notes="")
+
+        # Minimal records + measurements to exercise alias mapping + missing coverage.
+        # Provide alias metric key (hmw_percent) that canonicalizes to hmw_pct in policy.
+        r = create_data_record(
+            db=db,
+            program_id=p.id,
+            molecule_id=None,
+            batch_id=b.id,
+            domain="generic",
+            data_type="generic",
+            method="generic",
+            title="DI contract record",
+            params_json={},
+            results_json={},
+        )
+
+        upsert_measurements(
+            db=db,
+            record_id=r.id,
+            measurements=[
+                {
+                    "name": "hmw_percent",  # alias -> should satisfy canonical hmw_pct via metric_alias_map
+                    "value_num": 2.0,
+                    "value_text": "2.0",
+                    "unit": None,
+                    "comparator": None,
+                    "data_type": r.data_type,
+                    "method": r.method,
+                },
+                {
+                    "name": "monomer_pct",
+                    "value_num": 98.0,
+                    "value_text": "98%",
+                    "unit": "%",
+                    "comparator": None,
+                    "data_type": r.data_type,
+                    "method": r.method,
+                },
+                # Intentionally omit lmw_pct to exercise missing-coverage paths.
+                {
+                    "name": "value_eu_ml",
+                    "value_num": 0.1,
+                    "value_text": "0.1",
+                    "unit": None,
+                    "comparator": None,
+                    "data_type": r.data_type,
+                    "method": r.method,
+                },
+                {
+                    "name": "limit_eu_ml",
+                    "value_num": 5.0,
+                    "value_text": "5",
+                    "unit": None,
+                    "comparator": None,
+                    "data_type": r.data_type,
+                    "method": r.method,
+                },
+            ],
+        )
+        return b.id
+
+    def _run_once(db_path: Path):
+        eng = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False}, future=True)
+        _install_sqlite_pragmas(eng, read_only=False)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)
+        ensure_schema(engine_override=eng)
+        db = SessionLocal()
         try:
-            m = create_molecule(db, program_id=p.id, primary_id="DI-SMOKE-0001", title="DI Smoke molecule", components={"HC1": hc, "LC1": lc})
-        except DuplicateMoleculeError:
-            m = db.query(Molecule).filter(Molecule.program_id == p.id).first()
-            _assert(m is not None, "Duplicate molecule but none found")
+            batch_id = _seed_contract_db(db)
+            di_input = DIInput(
+                decision_key="advance_to_in_vivo",
+                scope_type="batch",
+                scope_id=int(batch_id),
+                as_of_ts=None,
+                qc_mode="model_safe",
+                context={},
+            )
+            out = run_di(db, di_input=di_input, policy_path=policy_path)
+            return out, db
+        except Exception:
+            db.close()
+            raise
 
-    # Batch
-    b = db.query(Batch).filter(Batch.molecule_id == m.id).first()
-    if b is None:
-        b = create_batch(db=db, molecule_id=m.id, title="DI Smoke batch", expression_notes="", purification_notes="")
+    if os.environ.get("PSI_DB_PATH"):
+        baseline_path = Path(os.environ["PSI_DB_PATH"])
+        _assert(baseline_path.exists(), f"PSI_DB_PATH not found: {baseline_path}")
+    else:
+        root = Path(tempfile.gettempdir()) / "psi_di_contract"
+        root.mkdir(parents=True, exist_ok=True)
+        baseline_path = root / "psi_di_contract.sqlite"
+        for p in (baseline_path, baseline_path.with_name(baseline_path.name + "-wal"), baseline_path.with_name(baseline_path.name + "-shm")):
+            try:
+                if p.exists():
+                    p.unlink()
+            except Exception:
+                pass
+        eng = create_engine(f"sqlite:///{baseline_path}", connect_args={"check_same_thread": False}, future=True)
+        _install_sqlite_pragmas(eng, read_only=False)
+        ensure_schema(engine_override=eng)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)
+        db = SessionLocal()
+        try:
+            _seed_contract_db(db)
+        finally:
+            db.close()
+            eng.dispose()
 
-    # Minimal records + measurements to exercise alias mapping + missing coverage.
-    # Provide alias metric key (hmw_percent) that canonicalizes to hmw_pct in policy.
-    r = create_data_record(
-        db=db,
-        program_id=p.id,
-        molecule_id=None,
-        batch_id=b.id,
-        domain="generic",
-        data_type="generic",
-        method="generic",
-        title="DI contract record",
-        params_json={},
-        results_json={},
-    )
-
-    upsert_measurements(
-        db=db,
-        record_id=r.id,
-        measurements=[
-            {
-                "name": "hmw_percent",  # alias -> should satisfy canonical hmw_pct via metric_alias_map
-                "value_num": 2.0,
-                "value_text": "2.0",
-                "unit": None,
-                "comparator": None,
-                "data_type": r.data_type,
-                "method": r.method,
-            },
-            {
-                "name": "monomer_pct",
-                "value_num": 98.0,
-                "value_text": "98%",
-                "unit": "%",
-                "comparator": None,
-                "data_type": r.data_type,
-                "method": r.method,
-            },
-            # Intentionally omit lmw_pct to exercise missing-coverage paths.
-            {
-                "name": "value_eu_ml",
-                "value_num": 0.1,
-                "value_text": "0.1",
-                "unit": None,
-                "comparator": None,
-                "data_type": r.data_type,
-                "method": r.method,
-            },
-            {
-                "name": "limit_eu_ml",
-                "value_num": 5.0,
-                "value_text": "5",
-                "unit": None,
-                "comparator": None,
-                "data_type": r.data_type,
-                "method": r.method,
-            },
-        ],
-    )
+    run1_dir = Path(tempfile.mkdtemp(prefix="psi_di_contract_run1_", dir=tempfile.gettempdir()))
+    run2_dir = Path(tempfile.mkdtemp(prefix="psi_di_contract_run2_", dir=tempfile.gettempdir()))
+    db1_path = _copy_sqlite_bundle(baseline_path, run1_dir)
+    db2_path = _copy_sqlite_bundle(baseline_path, run2_dir)
 
     policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_3.json"
 
-    di_input = DIInput(
-        decision_key="advance_to_in_vivo",
-        scope_type="batch",
-        scope_id=int(b.id),
-        as_of_ts=None,
-        qc_mode="model_safe",
-        context={},
-    )
-
-    out1 = run_di(db, di_input=di_input, policy_path=policy_path)
-    out2 = run_di(db, di_input=di_input, policy_path=policy_path)
+    out1, db1 = _run_once(db1_path)
+    out2, db2 = _run_once(db2_path)
 
     # NOTE: run_di persists a new DecisionSnapshot row per call, so snapshot_id will
     # naturally differ. Determinism is asserted over the pure DI output payload.
@@ -297,13 +331,8 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         _assert(bool(str(integ2.get(k) or "")), f"provenance.integrity.{k} must be non-empty")
         _assert(str(integ1.get(k)) == str(integ2.get(k)), f"provenance.integrity.{k} must be stable across reruns")
 
-    # v1.2.9h: snapshot diff tool must report no_change for deterministic reruns
-    dr = compute_snapshot_diff_by_id(db=db, id1=int(out1.get("snapshot_id")), id2=int(out2.get("snapshot_id")))
-    _assert(dr.drift_label == "no_change", "di_snapshot_diff must classify deterministic reruns as no_change")
-    _assert(not (dr.changes or {}), "di_snapshot_diff changes must be empty for deterministic reruns")
-
     # v1.2.9n: anchored replay must match runner output for all compute-derived fingerprints after a clean run
-    rep = verify_snapshot(db=db, snapshot_id=int(out1.get("snapshot_id")), debug=False)
+    rep = verify_snapshot(db=db1, snapshot_id=int(out1.get("snapshot_id")), debug=False)
     ar = (rep.get("anchored_replay") or {}) if isinstance(rep, dict) else {}
     _assert(bool(ar.get("available")), "anchored replay must be available for smoke snapshot")
     stored = (rep.get("stored") or {}) if isinstance(rep, dict) else {}
@@ -314,6 +343,9 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         rv = str(replay.get(k) or "")
         _assert(bool(sv) and bool(rv), f"stored + replay {k} must be non-empty")
         _assert(sv == rv, f"anchored replay {k} must equal stored {k}")
+
+    db1.close()
+    db2.close()
 
 
     out_payload = out1.get("output") or {}

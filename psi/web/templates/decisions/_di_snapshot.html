@@ -146,8 +146,31 @@
       {% if shortlisting is mapping %}
         {% if shortlisting.refused %}
           <div><span class="chip">Refused</span> <span class="muted">{{ shortlisting.refusal_reason }}</span></div>
+          {% if shortlisting.refusal_reasons is defined and shortlisting.refusal_reasons %}
+            <details style="margin-top:6px;">
+              <summary class="muted">Why refused</summary>
+              <div style="margin-top:6px;">
+                {% for r in shortlisting.refusal_reasons %}
+                  <div class="muted">{{ r.kind if r is mapping and r.kind is defined else r }}</div>
+                {% endfor %}
+              </div>
+            </details>
+          {% endif %}
         {% else %}
           <div><span class="chip">Enabled</span> <span class="muted">candidates: {{ shortlisting.ranked_candidates|length if shortlisting.ranked_candidates is defined else 0 }}</span></div>
+          {% if shortlisting.ranked_candidates is defined and shortlisting.ranked_candidates|length %}
+            {% set cand = shortlisting.ranked_candidates[0] %}
+            {% if cand is mapping and cand.tie_break_explanations is defined and cand.tie_break_explanations %}
+              <details style="margin-top:6px;">
+                <summary class="muted">Tie-break explanation</summary>
+                <div style="margin-top:6px;">
+                  {% for ex in cand.tie_break_explanations %}
+                    <div class="muted"><b>{{ ex.key if ex is mapping and ex.key is defined else '—' }}</b>: {{ ex.summary if ex is mapping and ex.summary is defined else '' }}</div>
+                  {% endfor %}
+                </div>
+              </details>
+            {% endif %}
+          {% endif %}
         {% endif %}
       {% else %}
         <div class="muted">Not enabled</div>
@@ -197,6 +220,53 @@
     <div>{% if snap.batch_id %}Batch: {{ snap.batch_id }}{% else %}<span class="muted">Batch: (none)</span>{% endif %}</div>
   </div>
 </div>
+
+{% if metric_evals and metric_evals|length %}
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Value function evaluation</h2>
+    <table class="table compact">
+      <thead>
+        <tr>
+          <th>metric</th>
+          <th>status</th>
+          <th>value</th>
+          <th>function</th>
+          <th class="muted">reasons</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for mk, ev in metric_evals|dictsort %}
+          {% set u = used[mk] if used is defined and used is mapping and used.get(mk) is defined else None %}
+          <tr>
+            <td><b>{{ mk }}</b></td>
+            <td class="muted">{{ ev.evaluated_status if ev is mapping and ev.evaluated_status is defined else '—' }}</td>
+            <td class="muted">
+              {% if u is mapping %}
+                {% if u.value_num is defined and u.value_num is not none %}
+                  {{ u.value_num }} {{ u.unit if u.unit is defined else '' }}
+                {% elif u.value_text is defined and u.value_text %}
+                  {{ u.value_text }} {{ u.unit if u.unit is defined else '' }}
+                {% else %}
+                  —
+                {% endif %}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td class="muted">{{ ev.applied_value_function_type if ev is mapping and ev.applied_value_function_type is defined else '—' }}</td>
+            <td class="muted">
+              {% if ev is mapping and ev.reasons is defined and ev.reasons %}
+                {{ ev.reasons|map(attribute='kind')|list|join(', ') }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
 
 <div class="card" style="margin-top:12px;">
   <h2 style="margin-top:0;">Snapshot metadata</h2>

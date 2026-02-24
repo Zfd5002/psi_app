@@ -24,7 +24,7 @@
     </div>
     <div class="field">
       <label>Primary ID</label>
-      <input name="primary_id" value="{{ molecule.primary_id if molecule else  }}" placeholder="TCB001 (leave blank to auto-assign)" />
+          <input name="primary_id" value="{{ molecule.primary_id if molecule else '' }}" placeholder="TCB001 (leave blank to auto-assign)" />
       <div class="help">If left blank, PSI will assign the next available TCBXXX. Used for batch auto-increment (e.g., TCB001-001).</div>
     </div>
     <div class="field">

@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from psi.core.di.schema import DIInput, EvidenceRef, IgnoredEvidence
-from psi.services.di.templates.advance_to_in_vivo import evaluate as eval_advance_to_in_vivo
+from psi.services.di.templates.registry import resolve_template_entry
 from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
 from psi.services.di.comparability import compute_comparability
 from psi.services.di.enrich import (
@@ -115,6 +115,88 @@ def _ignored_reason_key(x: Any) -> str:
     return str(getattr(x, "reason_key", "") or "")
 
 
+def _is_comparable_from_output(out: Dict[str, Any]) -> bool:
+    comp = out.get("comparability") if isinstance(out, dict) else {}
+    if isinstance(comp, dict) and "is_comparable" in comp:
+        try:
+            return bool(comp.get("is_comparable"))
+        except Exception:
+            pass
+    summary = comp.get("summary") if isinstance(comp, dict) else {}
+    high = summary.get("high_severity_count") if isinstance(summary, dict) else 0
+    try:
+        if int(high) > 0:
+            return False
+    except Exception:
+        pass
+    conf = out.get("confidence_degradation") if isinstance(out, dict) else {}
+    if isinstance(conf, dict) and bool(conf.get("triggered")):
+        return False
+    return True
+
+
+def _derive_drift_type(*, out: Dict[str, Any], inputs_obj: Dict[str, Any]) -> str:
+    drift_ctx = inputs_obj.get("drift_context") if isinstance(inputs_obj, dict) else None
+    if not isinstance(drift_ctx, dict):
+        return "NO_CHANGE"
+
+    prev_e = str(drift_ctx.get("prev_evidence_fingerprint") or "")
+    prev_p = str(drift_ctx.get("prev_policy_semantics_hash") or "")
+    if not prev_e and not prev_p:
+        return "NO_CHANGE"
+
+    policy = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+    current_p = str(policy.get("policy_semantics_hash") or "")
+    prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+    integ = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+    current_e = str(integ.get("evidence_fingerprint") or "")
+
+    if not current_e or not current_p:
+        return "INCOMPARABLE"
+
+    if not _is_comparable_from_output(out):
+        return "INCOMPARABLE"
+
+    evidence_changed = current_e != prev_e
+    policy_changed = current_p != prev_p
+
+    if not evidence_changed and not policy_changed:
+        return "NO_CHANGE"
+    if evidence_changed and not policy_changed:
+        return "EVIDENCE_ONLY"
+    if policy_changed and not evidence_changed:
+        return "POLICY_ONLY"
+    return "BOTH"
+
+
+def _derive_state_transition(*, out: Dict[str, Any], inputs_obj: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    drift_ctx = inputs_obj.get("drift_context") if isinstance(inputs_obj, dict) else None
+    if not isinstance(drift_ctx, dict):
+        return None
+    from_state = str(drift_ctx.get("prev_decision_state") or "")
+    if not from_state:
+        return None
+    to_state = str(out.get("decision_state") or "")
+    if not to_state:
+        return None
+
+    drift_type = str(out.get("drift_type") or "")
+    if drift_type == "INCOMPARABLE":
+        trigger = "INCOMPARABLE"
+    elif from_state == to_state:
+        trigger = "NONE"
+    elif drift_type == "EVIDENCE_ONLY":
+        trigger = "EVIDENCE"
+    elif drift_type == "POLICY_ONLY":
+        trigger = "POLICY"
+    elif drift_type == "BOTH":
+        trigger = "BOTH"
+    else:
+        trigger = "NONE"
+
+    return {"from_state": from_state, "to_state": to_state, "trigger": trigger}
+
+
 def _compute_di_from_used_by_metric(
     db: Session,
     *,
@@ -142,16 +224,27 @@ def _compute_di_from_used_by_metric(
     warnings = warnings or []
     selection_provenance = selection_provenance or {}
 
-    templ = eval_advance_to_in_vivo(
-        used_by_metric=used_by_metric,
-        policy=pol.policy_body,
-        context=di_in.context or {},
+    template_entry = resolve_template_entry(
+        decision_key=di_in.decision_key,
+        template_key=getattr(pol, "template_key", "") or "",
     )
+    evaluate_fn = template_entry["evaluate"]
+    expected_eval_version = str(template_entry.get("evaluator_version") or "")
+    enforce_value_functions_template = bool(template_entry.get("enforce_value_functions"))
 
     metric_evaluations, interpretation_gap_flags = derive_metric_evaluations(
         policy_body=(pol.policy_body or {}),
         used_by_metric=used_by_metric,
         context=di_in.context or {},
+    )
+    evaluator_version = str(inputs_obj.get("evaluator_version") or expected_eval_version)
+    enforce_value_functions = enforce_value_functions_template and evaluator_version == expected_eval_version
+    templ = evaluate_fn(
+        used_by_metric=used_by_metric,
+        policy=pol.policy_body,
+        context=di_in.context or {},
+        metric_evaluations=(metric_evaluations if enforce_value_functions else {}),
+        enforce_value_functions=enforce_value_functions,
     )
 
     # strict-mode cannot_assess heuristic: nothing usable and strict QC blocked candidates
@@ -352,6 +445,41 @@ def _compute_di_from_used_by_metric(
     prov = out.get("provenance")
     if isinstance(prov, dict):
         integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric=used_by_metric)}
+        prov["integrity"] = integrity
+
+    # Comparability contract fields (additive)
+    comp_obj = out.get("comparability") if isinstance(out.get("comparability"), dict) else {}
+    comp_obj = dict(comp_obj)
+    conf = out.get("confidence_degradation") if isinstance(out.get("confidence_degradation"), dict) else {}
+    high = 0
+    if isinstance(comp_obj.get("summary"), dict):
+        try:
+            high = int(comp_obj.get("summary", {}).get("high_severity_count") or 0)
+        except Exception:
+            high = 0
+    triggered = bool(conf.get("triggered")) or high > 0
+    comp_obj["is_comparable"] = not bool(triggered)
+    comp_obj["reason"] = "confidence_degradation" if triggered else "ok"
+
+    drift_ctx = inputs_obj.get("drift_context") if isinstance(inputs_obj, dict) else None
+    prev_e = str(drift_ctx.get("prev_evidence_fingerprint") or "") if isinstance(drift_ctx, dict) else ""
+    prev_p = str(drift_ctx.get("prev_policy_semantics_hash") or "") if isinstance(drift_ctx, dict) else ""
+    policy = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+    current_p = str(policy.get("policy_semantics_hash") or "")
+    integ_cur = prov.get("integrity") if isinstance(prov, dict) and isinstance(prov.get("integrity"), dict) else {}
+    current_e = str(integ_cur.get("evidence_fingerprint") or "")
+    comp_obj["policy_semantics_hash_changed"] = bool(prev_p and current_p and prev_p != current_p)
+    comp_obj["evidence_fingerprint_changed"] = bool(prev_e and current_e and prev_e != current_e)
+    out["comparability"] = comp_obj
+
+    out["drift_type"] = _derive_drift_type(out=out, inputs_obj=inputs_obj)
+    st = _derive_state_transition(out=out, inputs_obj=inputs_obj)
+    if isinstance(st, dict):
+        out["state_transition"] = st
+
+    if isinstance(prov, dict):
+        integrity = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+        integrity = dict(integrity)
         integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
             inputs_obj=inputs_obj,
             outputs_obj=out,

@@ -13,6 +13,7 @@ from psi.extensions import load_extensions
 from psi.web.routers import (
     batches,
     decisions,
+    di,
     evidence,
     files,
     molecules,
@@ -71,6 +72,7 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
     app.include_router(data_records.router)
     app.include_router(evidence.router)
     app.include_router(decisions.router)
+    app.include_router(di.router)
     app.include_router(files.router)
     app.include_router(search.router)
     app.include_router(qc.router)

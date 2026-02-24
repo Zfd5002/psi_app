@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Decision History | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1 style="margin:0;">Decision history</h1>
+      <div class="muted">Scope: {{ snap.decision_key }} · program {{ snap.program_id }} · molecule {{ snap.molecule_id }} · batch {{ snap.batch_id }}</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <a class="btn" href="/decisions/{{ snap.id }}">Back to snapshot</a>
+      <a class="btn" href="/decisions">All decisions</a>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;">
+    {% if compare_error %}
+      <div class="notice" style="margin-bottom:12px;border-color:var(--warn);">
+        <b>Cannot compare:</b> {{ compare_error }}
+      </div>
+    {% endif %}
+    <form method="post" action="/decisions/{{ snap.id }}/history/compare">
+    <table class="table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Snapshot</th>
+          <th>Created</th>
+          <th>Decision</th>
+          <th>Drift</th>
+          <th>Comparable</th>
+          <th>State transition</th>
+          <th>Superseded</th>
+          <th>Superseded by</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in history %}
+        <tr>
+          <td>
+            <input type="checkbox" name="snapshot_ids" value="{{ row.snapshot_id }}"
+              {% if selected_ids is defined and row.snapshot_id in selected_ids %}checked{% endif %} />
+          </td>
+          <td><a href="/decisions/{{ row.snapshot_id }}">#{{ row.snapshot_id }}</a></td>
+          <td>{{ row.created_at }}</td>
+          <td>{{ row.decision_state }}</td>
+          <td>{{ row.drift_type }}</td>
+          <td>
+            {% if row.comparability_is_comparable is not none %}
+              {{ "yes" if row.comparability_is_comparable else "no" }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>
+            {% if row.state_transition %}
+              {{ row.state_transition.get("from_state", "") }} → {{ row.state_transition.get("to_state", "") }}
+              {% if row.state_transition.get("trigger") %}
+                <span class="muted">({{ row.state_transition.get("trigger") }})</span>
+              {% endif %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>{{ "yes" if row.is_superseded else "no" }}</td>
+          <td>
+            {% if row.superseded_by_snapshot_id %}
+              <a href="/decisions/{{ row.superseded_by_snapshot_id }}">#{{ row.superseded_by_snapshot_id }}</a>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="margin-top:10px;">
+      <button class="btn" type="submit">Compare selected</button>
+      <span class="muted" style="margin-left:8px;">Select exactly two snapshots.</span>
+    </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -994,3 +994,449 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w11
+What changed:
+- Enforced policy value functions in gate evaluation (thresholds/caps now affect gate pass/fail).
+- Added threshold-violation risk flags/blockers when present metrics fail policy-defined value functions.
+- DI snapshot UI now shows a compact value-function evaluation table.
+
+Why it changed:
+- Policy-defined thresholds must be enforced; presence alone should not be treated as pass.
+
+Determinism/contract impact:
+- Deterministic; outputs remain additive (`metric_evaluations` already present, now used by gate logic).
+- Snapshot contract unchanged; no schema changes.
+
+Behavior changes:
+- Gate outcomes and decision_state may change when a metric is present but out-of-range per policy.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w12
+What changed:
+- Shortlisting output now includes structured tie-break explanations and refusal reasons.
+- DI snapshot UI renders tie-break explanations and refusal details.
+
+Why it changed:
+- v0.5 requires transparent tie-break reasoning; explanations must be visible to the scientist.
+
+Determinism/contract impact:
+- Additive fields only (`tie_break_explanations`), deterministic ordering preserved.
+- No change to gate logic or policy semantics.
+
+Behavior changes:
+- None (explanations only).
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w13
+What changed:
+- Gates are now evaluated via a policy-driven evaluator (JSON-gate definitions), with templates acting as thin adapters.
+
+Why it changed:
+- Decouple gate logic from Python to honor policy-as-data and unblock multi-template evaluation.
+
+Determinism/contract impact:
+- No semantic change intended; gate outcomes/readiness remain equivalent to v1.2.9w12.
+- Snapshot contract unchanged; output fields additive only.
+
+Behavior changes:
+- None intended (equivalence refactor).
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w14
+What changed:
+- Refactored DI enrichment into focused modules: `soe`, `metric_eval`, `risk_flags`, `coverage`.
+- `enrich.py` now acts as a thin orchestration layer importing the same functions.
+
+Why it changed:
+- Improve maintainability by splitting the enrichment "god module" without changing behavior.
+
+Determinism/contract impact:
+- No semantic change intended; deterministic ordering preserved.
+- Snapshot contract unchanged; no DB/schema changes.
+
+Behavior changes:
+- None intended (refactor-only).
+
+Gates run (limit 5; replay run twice):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w15
+What changed:
+- Added a DI template registry keyed by decision_key and template_key.
+- DI runner now resolves templates via the registry (no hard-coded decision_key stop).
+- Unknown templates yield deterministic `unsupported_template` outputs (not_ready) instead of raising.
+
+Why it changed:
+- Enable multi-template support while keeping policy-as-data and deterministic behavior.
+
+Determinism/contract impact:
+- Deterministic output; no schema changes.
+- Unsupported templates produce stable, explicit not_ready outputs.
+
+Behavior changes:
+- Unknown decision_key/template_key no longer raises; snapshot output is not_ready with governance warning.
+
+Gates run (limit 5; replay run twice):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w16
+What changed:
+- Added a second DI template: `ready_for_scaleup_screen` (policy + template adapter).
+- Registered the new template in the DI template registry.
+
+Why it changed:
+- Prove multi-template DI support without altering existing `advance_to_in_vivo` semantics.
+
+Determinism/contract impact:
+- Deterministic output; no schema changes.
+- Unsupported templates still produce stable `unsupported_template` outputs.
+
+Behavior changes:
+- New decision_key `ready_for_scaleup_screen` is now supported.
+- No behavior change for `advance_to_in_vivo`.
+
+Gates run (limit 5; replay run twice):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w17
+What changed:
+- Expanded the experiment catalog with metric-specific experiment mappings.
+- NBE suggestion mapping now uses metric_keys to map missing metrics to experiments deterministically.
+
+Why it changed:
+- Ensure every policy-referenced metric can yield actionable experiment suggestions when missing.
+
+Determinism/contract impact:
+- Deterministic ordering preserved; no schema changes.
+- No changes to gate, ranking, or value-function semantics.
+
+Behavior changes:
+- Missing metrics now produce richer, metric-specific experiment suggestions.
+
+Gates run (limit 5; replay run twice):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w18
+What changed:
+- Added a dedicated "Run DI" UI entrypoint and form (batch-scoped).
+- Wired DI run to the DI runner service; created DI snapshots from the UI.
+- Clarified legacy YAML labeling and links (Run Legacy YAML).
+
+Why it changed:
+- Provide an explicit DI run flow while preserving the legacy YAML path.
+
+Determinism/contract impact:
+- No DI semantic changes; no schema changes.
+- Anchored replay and DI contracts unchanged.
+
+Behavior changes:
+- Users can run DI from the UI for supported templates.
+
+Gates run (limit 5; replay run twice):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w19
+What changed:
+- Fixed Jinja inline conditional syntax in DI verification template.
+
+Why it changed:
+- Prevent template rendering errors in the verification UI.
+
+Determinism/contract impact:
+- No semantic changes; display-only fix.
+
+Behavior changes:
+- None; template renders correctly instead of erroring.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w20
+What changed:
+- Added a Jinja template compilation guardrail to `psi.scripts.smoke_test`.
+- Fixed a Jinja syntax error in `molecules/form.html` caught by the guardrail.
+
+Why it changed:
+- Prevent template syntax errors from shipping by failing smoke_test if any template fails to compile.
+
+Determinism/contract impact:
+- Deterministic; no runtime behavior changes; no schema changes.
+
+Behavior changes:
+- None in production; smoke_test now validates template compilation.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w21
+What changed:
+- Added Legacy YAML deprecation clock statement to `PSI_CONTEXT.md` (intent-only).
+
+Why it changed:
+- Align context doc with Constitution wording and clarify the DI default timeline.
+
+Determinism/contract impact:
+- Docs-only; no runtime or schema changes.
+
+Behavior changes:
+- None.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w22
+What changed:
+- Formalized DI snapshot supersession semantics in docs and queries.
+- Latest snapshot rollups now use `superseded_by_snapshot_id IS NULL`.
+- Added scope+superseded index for deterministic lineage queries.
+
+Why it changed:
+- Make snapshot lineage first-class and queryable without changing DI semantics.
+
+Determinism/contract impact:
+- No DI evaluation changes; deterministic ordering preserved.
+- Snapshot contract now documents lineage metadata.
+
+Behavior changes:
+- "Latest" snapshot rollups exclude superseded snapshots.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w23
+What changed:
+- Added deterministic `drift_type` enum to DI snapshot outputs.
+- Drift derivation uses evidence fingerprint, policy semantics hash, and comparability status.
+- Snapshot contract updated to document drift_type derivation.
+- DI contract smoke now resets its ephemeral DB to keep determinism checks stable.
+
+Why it changed:
+- Make drift classification first-class and reproducible across anchored replay.
+
+Determinism/contract impact:
+- Deterministic; no schema changes.
+- Anchored replay reproduces `drift_type` via stored drift context.
+
+Behavior changes:
+- New `drift_type` field present in DI outputs.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w24
+What changed:
+- DI contract smoke now compares two identical fresh DB copies to avoid run-to-run cross-contamination.
+- Added deterministic `state_transition` metadata to DI outputs, derived from prior active snapshot + drift_type.
+- Snapshot contract updated to document `state_transition`.
+
+Why it changed:
+- Fix harness nondeterminism and make state transitions first-class without altering DI evaluation logic.
+
+Determinism/contract impact:
+- Deterministic; no schema changes.
+- Anchored replay preserves legacy snapshots without `state_transition`.
+
+Behavior changes:
+- New `state_transition` field present on DI outputs when a prior active snapshot exists.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w25
+What changed:
+- Added structured `comparability` contract fields (`is_comparable`, `reason`, hash-change flags).
+- Drift derivation now honors `comparability.is_comparable`.
+- Snapshot contract updated with comparability fields.
+
+Why it changed:
+- Make comparability a first-class, reproducible contract surface.
+
+Determinism/contract impact:
+- Deterministic; no schema changes.
+- Anchored replay preserves legacy snapshots without comparability.
+
+Behavior changes:
+- New `comparability` fields present in DI outputs.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w26
+What changed:
+- Added deterministic `diff_summary` to DI verification reports (when comparable + prior snapshot exists).
+- diff_summary derives from a curated, contract-level diff surface (hashes excluded).
+- Snapshot contract updated to document diff_summary.
+
+Why it changed:
+- Provide a governance/audit-friendly summary of structural changes.
+
+Determinism/contract impact:
+- Deterministic; no schema changes.
+- Legacy snapshots remain byte-stable (diff_summary is report-only).
+
+Behavior changes:
+- Verification output may include `diff_summary` when comparable and prior snapshot exists.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w27
+What changed:
+- Decision detail now shows ACTIVE vs SUPERSEDED, superseded_by link, and superseded_at.
+- Added scope-level snapshot history view with deterministic ordering.
+
+Why it changed:
+- Make lineage explicit and provide a history entry point for the same decision scope.
+
+Determinism/contract impact:
+- Deterministic UI/query only; no schema changes.
+
+Behavior changes:
+- New history page at `/decisions/{id}/history`.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w28
+What changed:
+- History page now supports selecting two snapshots and launching compare.
+- Validation enforces exactly two selections with a deterministic order.
+
+Why it changed:
+- Enable scope-level compare workflow directly from the history list.
+
+Determinism/contract impact:
+- Deterministic UI wiring only; no schema changes.
+
+Behavior changes:
+- New “Compare selected” action on `/decisions/{id}/history`.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w29
+What changed:
+- History compare selection now posts stable `snapshot_ids` and redirects to compare.
+- Compare page labels clarify ordering (A newer/higher id; B older/lower id).
+
+Why it changed:
+- Make history compare wiring explicit and deterministic.
+
+Determinism/contract impact:
+- Deterministic UI wiring only; no schema changes.
+
+Behavior changes:
+- Compare page now labels A/B ordering.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.scripts.smoke_test`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-23 — v1.2.9w30
+What changed:
+- Constitution and snapshot contract now explicitly allow controlled, policy-defined shortlisting (no scoring, no opaque ranking).
+- Snapshot contract now documents shortlisting schema and deterministic ordering rules.
+- NBE recommended_experiments is now de-duplicated by experiment_key with deterministic global ordering and triggered_by_blockers attribution.
+
+Why it changed:
+- Align governance docs to actual deterministic outputs and remove contradictions.
+
+Determinism/contract impact:
+- Deterministic; no schema changes.
+- NBE recommended list ordering is stable across runs and replay.
+
+Behavior changes:
+- recommended_experiments is now de-duplicated and includes triggered_by_blockers.
+
+Gates run (limit 5):
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
