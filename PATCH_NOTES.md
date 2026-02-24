@@ -1564,3 +1564,7 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-24 — v1.2.9w38
+What changed:
+- Fix: add missing json import in decisions service (CLI regression fix)
