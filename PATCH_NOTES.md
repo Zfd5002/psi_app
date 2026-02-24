@@ -1517,3 +1517,19 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-24 — v1.2.9w35
+What changed:
+- Patch C1: deterministic ranking + structured why (additive outputs; both scopes; smoke coverage).
+
+Why it changed:
+- Provide deterministic multi-candidate ranking output with transparent, structured factors.
+
+Determinism/contract impact:
+- Ranking object is additive and ordered deterministically; candidate ordering uses explicit score + tie-breakers.
+- Molecule candidate set derives from ordered batch selection provenance; batch scope emits a single candidate.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

@@ -350,7 +350,8 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     _assert(s1 == s2, "DI output must be deterministic for identical DB + inputs")
 
     # v1.2.9k: provenance.integrity must exist and be stable across deterministic reruns
-    prov1 = (out1.get("output") or {}).get("provenance") or {}
+    out1_obj = (out1.get("output") or {})
+    prov1 = out1_obj.get("provenance") or {}
     prov2 = (out2.get("output") or {}).get("provenance") or {}
     integ1 = prov1.get("integrity") if isinstance(prov1, dict) else None
     integ2 = prov2.get("integrity") if isinstance(prov2, dict) else None
@@ -360,6 +361,12 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         _assert(bool(str(integ1.get(k) or "")), f"provenance.integrity.{k} must be non-empty")
         _assert(bool(str(integ2.get(k) or "")), f"provenance.integrity.{k} must be non-empty")
         _assert(str(integ1.get(k)) == str(integ2.get(k)), f"provenance.integrity.{k} must be stable across reruns")
+
+    ranking = out1_obj.get("ranking") if isinstance(out1_obj, dict) else None
+    _assert(isinstance(ranking, dict), "ranking must be present for batch scope")
+    _assert(str(ranking.get("scope_type") or "") == "batch", "ranking.scope_type must be batch for batch scope")
+    cands = ranking.get("candidates") if isinstance(ranking.get("candidates"), list) else []
+    _assert(len(cands) == 1, "batch scope ranking must include exactly one candidate")
 
     # v1.2.9n: anchored replay must match runner output for all compute-derived fingerprints after a clean run
     rep = verify_snapshot(db=db1, snapshot_id=int(out1.get("snapshot_id")), debug=False)
@@ -530,11 +537,18 @@ def test_molecule_scope_determinism() -> None:
     s2 = stable_json_dumps(out2.get("output") or {})
     _assert(s1 == s2, "molecule-scope DI output must be deterministic for identical DB + inputs")
 
-    prov = (out1.get("output") or {}).get("provenance") or {}
+    out1_obj = (out1.get("output") or {})
+    prov = out1_obj.get("provenance") or {}
     sp = prov.get("selection_provenance") if isinstance(prov, dict) else {}
     ordered = sp.get("batch_ids_ordered") if isinstance(sp, dict) else None
     _assert(isinstance(ordered, list) and len(ordered) >= 2, "molecule selection must include ordered batch_ids")
     _assert(set(int(x) for x in ordered) == set(int(x) for x in batch_ids1), "ordered batch_ids must match selected batches")
+
+    ranking = out1_obj.get("ranking") if isinstance(out1_obj, dict) else None
+    _assert(isinstance(ranking, dict), "ranking must be present for molecule scope")
+    _assert(str(ranking.get("scope_type") or "") == "molecule", "ranking.scope_type must be molecule for molecule scope")
+    cands = ranking.get("candidates") if isinstance(ranking.get("candidates"), list) else []
+    _assert(len(cands) >= 2, "molecule scope ranking must include candidate batches")
 
     db1.close()
     db2.close()

@@ -367,6 +367,18 @@ def _select_batches_for_molecule(db: Session, *, molecule_id: int) -> list[Dict[
     return out
 
 
+def _format_ts(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    try:
+        if hasattr(v, "isoformat"):
+            return v.isoformat()
+    except Exception:
+        pass
+    s = str(v).strip()
+    return s if s else None
+
+
 def _sort_ignored_entries(ignored: list[Any]) -> list[Any]:
     def _key(x: Any) -> tuple:
         if isinstance(x, dict):
@@ -679,6 +691,7 @@ def compute_di_output(
         batch_ids_all = [int(r["batch_id"]) for r in batch_rows]
         # Aggregation priority: newest-first (created_at DESC, id DESC).
         batch_ids_ordered = list(reversed(batch_ids_all))
+        batch_created_at = {int(r["batch_id"]): _format_ts(r.get("created_at")) for r in batch_rows}
 
         used_by_metric: Dict[str, Any] = {}
         ignored: list[Any] = []
@@ -724,6 +737,7 @@ def compute_di_output(
             "molecule_id": int(molecule_id),
             "batch_ids_all": batch_ids_all,
             "batch_ids_ordered": batch_ids_ordered,
+            "batch_created_at": {str(k): batch_created_at.get(k) for k in sorted(list(batch_created_at.keys()))},
             "batch_selection_rule": "include all batches for molecule_id; order by created_at asc, id asc",
             "aggregation_rule": "per metric_key, select first evidence from newest batch (created_at desc, id desc)",
             "metric_source_batch_ids": {

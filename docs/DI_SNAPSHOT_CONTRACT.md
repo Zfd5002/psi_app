@@ -143,6 +143,23 @@ Determinism:
 - `recommended_experiments[].triggered_by_blockers` is a sorted list of blocker keys.
 - `recommended_experiments[].metric_keys`, `resolves`, `outputs`, and `prerequisites` are sorted lexicographically.
 
+### 4.7 Ranking (v1.2.9w35; additive)
+
+If present, the DI output MAY include a deterministic `ranking` object:
+
+- `ranking.scope_type` (string; `batch` or `molecule`)
+- `ranking.candidates` (list; ordered best → worst deterministically)
+- `ranking.winner_candidate_id` (int or null)
+- `ranking.ranking_rule_version` (string; explicit)
+
+Each candidate entry MUST include:
+
+- `candidate_type` (string; currently `batch`)
+- `candidate_id` (int)
+- `score` (number; deterministic)
+- `tie_breaker` (object; includes `created_at` and `id`)
+- `factors` (list; deterministic structured factors)
+
 ### 4.3 Provenance integrity (v1.2.9k+; additive)
 
 If present, `outputs_json.provenance.integrity` MUST be a dict containing:
