@@ -160,6 +160,10 @@ Each candidate entry MUST include:
 - `tie_breaker` (object; includes `created_at` and `id`)
 - `factors` (list; deterministic structured factors)
 
+Factor semantics:
+- `weight` is a positive magnitude.
+- `direction` controls sign in scoring (`pro` adds, `con` subtracts).
+
 ### 4.3 Provenance integrity (v1.2.9k+; additive)
 
 If present, `outputs_json.provenance.integrity` MUST be a dict containing:

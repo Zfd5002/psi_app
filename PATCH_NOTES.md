@@ -1533,3 +1533,19 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-24 — v1.2.9w36
+What changed:
+- Ranking hardening: normalized factor semantics (direction drives sign), deterministic scoring.
+
+Why it changed:
+- Remove ambiguity in ranking factors while preserving deterministic ordering.
+
+Determinism/contract impact:
+- All ranking weights are positive magnitudes; direction controls sign during scoring.
+- Missing or unparseable factor values score as 0.0.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

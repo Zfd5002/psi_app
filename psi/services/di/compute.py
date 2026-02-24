@@ -61,7 +61,7 @@ def _to_dict(x: Any) -> Dict[str, Any]:
     return {"value": str(x)}
 
 
-RANKING_RULE_VERSION = "v0.5"
+RANKING_RULE_VERSION = "v0.5.1"
 
 
 def _ranking_factor(key: str, direction: str, value: Any, weight: float) -> Dict[str, Any]:
@@ -76,7 +76,11 @@ def _score_from_factors(factors: List[Dict[str, Any]]) -> float:
             w = float(f.get("weight") or 0.0)
         except Exception:
             continue
-        score += v * w
+        direction = str(f.get("direction") or "pro").strip().lower()
+        if direction == "con":
+            score -= v * w
+        else:
+            score += v * w
     return float(score)
 
 
@@ -102,16 +106,20 @@ def _build_ranking(
     if scope_type == "batch":
         factors: List[Dict[str, Any]] = []
         decision_state = str(out.get("decision_state") or "")
-        ready_val = 1.0 if decision_state == "ready" else (0.0 if decision_state == "not_ready" else -1.0)
-        factors.append(_ranking_factor("decision_state", "pro" if ready_val > 0 else "con", ready_val, 50.0))
+        if decision_state == "ready":
+            factors.append(_ranking_factor("decision_state", "pro", 1.0, 50.0))
+        elif decision_state == "not_ready":
+            factors.append(_ranking_factor("decision_state", "con", 1.0, 50.0))
+        else:
+            factors.append(_ranking_factor("decision_state", "con", 1.0, 50.0))
 
         blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
-        factors.append(_ranking_factor("blockers_count", "con", float(len(blockers)), -5.0))
+        factors.append(_ranking_factor("blockers_count", "con", float(len(blockers)), 5.0))
 
         comp = out.get("comparability") if isinstance(out.get("comparability"), dict) else {}
         summary = comp.get("summary") if isinstance(comp.get("summary"), dict) else {}
         high_sev = float(summary.get("high_severity_count") or 0)
-        factors.append(_ranking_factor("comparability_high_severity", "con", high_sev, -3.0))
+        factors.append(_ranking_factor("comparability_high_severity", "con", high_sev, 3.0))
 
         soe = out.get("state_of_evidence") if isinstance(out.get("state_of_evidence"), dict) else {}
         soe_v0_2 = soe.get("soe_v0_2") if isinstance(soe.get("soe_v0_2"), dict) else {}
@@ -119,10 +127,10 @@ def _build_ranking(
         missing = float(len(coverage.get("metrics_missing") or []))
         present = float(len(coverage.get("metrics_present") or []))
         factors.append(_ranking_factor("metrics_present", "pro", present, 1.0))
-        factors.append(_ranking_factor("metrics_missing", "con", missing, -1.0))
+        factors.append(_ranking_factor("metrics_missing", "con", missing, 1.0))
 
         warnings = soe.get("warnings") if isinstance(soe.get("warnings"), list) else []
-        factors.append(_ranking_factor("warnings_count", "con", float(len(warnings)), -1.0))
+        factors.append(_ranking_factor("warnings_count", "con", float(len(warnings)), 1.0))
 
         score = _score_from_factors(factors)
         cand = {
@@ -160,8 +168,8 @@ def _build_ranking(
             warn_cnt = float(summ.get("warning_count") or 0)
 
             factors.append(_ranking_factor("used_metric_count", "pro", used_cnt, 1.0))
-            factors.append(_ranking_factor("ignored_count", "con", ignored_cnt, -0.5))
-            factors.append(_ranking_factor("warning_count", "con", warn_cnt, -1.0))
+            factors.append(_ranking_factor("ignored_count", "con", ignored_cnt, 0.5))
+            factors.append(_ranking_factor("warning_count", "con", warn_cnt, 1.0))
 
             score = _score_from_factors(factors)
             cand = {
