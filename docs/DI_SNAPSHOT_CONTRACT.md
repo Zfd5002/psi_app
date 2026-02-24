@@ -164,6 +164,15 @@ Factor semantics:
 - `weight` is a positive magnitude.
 - `direction` controls sign in scoring (`pro` adds, `con` subtracts).
 
+### 4.8 Outcome labels (metadata; additive)
+
+Outcome labels are stored in the `outcome_labels` table and attached to a `DecisionSnapshot`
+via `OutcomeLabel.snapshot_id`. They are metadata only and do not affect deterministic DI outputs.
+
+DI review labels (optional):
+- `di_review_verdict` (string; one of the configured verdict keys)
+- `di_review_rationale` (string; free-text rationale)
+
 ### 4.3 Provenance integrity (v1.2.9k+; additive)
 
 If present, `outputs_json.provenance.integrity` MUST be a dict containing:
