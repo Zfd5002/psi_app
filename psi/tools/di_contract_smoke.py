@@ -378,6 +378,168 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     db2.close()
 
 
+def test_molecule_scope_determinism() -> None:
+    # Molecule-scope aggregation should be deterministic across identical DBs.
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from psi.core.db import _copy_sqlite_bundle, _install_sqlite_pragmas, ensure_schema
+    from psi.core.models import Batch, Molecule, Program
+    from psi.services.programs import create_program
+    from psi.services.molecules import create_molecule, DuplicateMoleculeError
+    from psi.services.batches import create_batch
+    from psi.services.data_records import create_data_record
+    from psi.services.measurements import upsert_measurements
+
+    from psi.core.di.schema import DIInput
+    from psi.services.di.runner import run_di
+
+    def _seed_molecule_db(db):
+        p = db.query(Program).filter(Program.name == "DI_SMOKE_MOL").first()
+        if p is None:
+            p = create_program(db, name="DI_SMOKE_MOL", description="DI molecule smoke")
+
+        m = db.query(Molecule).filter(Molecule.program_id == p.id).first()
+        if m is None:
+            hc = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISWNSGGSTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYC"
+            lc = "DIQMTQSPSSLSASVGDRVTITCRASSSVSYIHWFQQKPGKAPKLLIYAASTLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYC"
+            try:
+                m = create_molecule(db, program_id=p.id, primary_id="DI-SMOKE-MOL-0001", title="DI Smoke molecule (mol)", components={"HC1": hc, "LC1": lc})
+            except DuplicateMoleculeError:
+                m = db.query(Molecule).filter(Molecule.program_id == p.id).first()
+                _assert(m is not None, "Duplicate molecule but none found")
+
+        b1 = db.query(Batch).filter(Batch.molecule_id == m.id).order_by(Batch.id.asc()).first()
+        if b1 is None:
+            b1 = create_batch(db=db, molecule_id=m.id, title="DI Smoke mol batch 1", expression_notes="", purification_notes="")
+        b2 = db.query(Batch).filter(Batch.molecule_id == m.id).order_by(Batch.id.desc()).first()
+        if b2 is None or b2.id == b1.id:
+            b2 = create_batch(db=db, molecule_id=m.id, title="DI Smoke mol batch 2", expression_notes="", purification_notes="")
+
+        r1 = create_data_record(
+            db=db,
+            program_id=p.id,
+            molecule_id=None,
+            batch_id=b1.id,
+            domain="generic",
+            data_type="generic",
+            method="generic",
+            title="DI mol contract record 1",
+            params_json={},
+            results_json={},
+        )
+        upsert_measurements(
+            db=db,
+            record_id=r1.id,
+            measurements=[
+                {
+                    "name": "hmw_percent",
+                    "value_num": 1.0,
+                    "value_text": "1.0",
+                    "unit": None,
+                    "comparator": None,
+                    "data_type": r1.data_type,
+                    "method": r1.method,
+                },
+            ],
+        )
+
+        r2 = create_data_record(
+            db=db,
+            program_id=p.id,
+            molecule_id=None,
+            batch_id=b2.id,
+            domain="generic",
+            data_type="generic",
+            method="generic",
+            title="DI mol contract record 2",
+            params_json={},
+            results_json={},
+        )
+        upsert_measurements(
+            db=db,
+            record_id=r2.id,
+            measurements=[
+                {
+                    "name": "monomer_pct",
+                    "value_num": 97.0,
+                    "value_text": "97%",
+                    "unit": "%",
+                    "comparator": None,
+                    "data_type": r2.data_type,
+                    "method": r2.method,
+                },
+            ],
+        )
+
+        return m.id, [b1.id, b2.id]
+
+    def _run_once(db_path: Path):
+        eng = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False}, future=True)
+        _install_sqlite_pragmas(eng, read_only=False)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)
+        ensure_schema(engine_override=eng)
+        db = SessionLocal()
+        try:
+            mol_id, batch_ids = _seed_molecule_db(db)
+            di_input = DIInput(
+                decision_key="advance_to_in_vivo",
+                scope_type="molecule",
+                scope_id=int(mol_id),
+                as_of_ts=None,
+                qc_mode="model_safe",
+                context={},
+            )
+            out = run_di(db, di_input=di_input, policy_path=policy_path)
+            return out, batch_ids, db
+        except Exception:
+            db.close()
+            raise
+
+    root = Path(tempfile.gettempdir()) / "psi_di_contract_molecule"
+    root.mkdir(parents=True, exist_ok=True)
+    baseline_path = root / "psi_di_contract_molecule.sqlite"
+    for p in (baseline_path, baseline_path.with_name(baseline_path.name + "-wal"), baseline_path.with_name(baseline_path.name + "-shm")):
+        try:
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass
+    eng = create_engine(f"sqlite:///{baseline_path}", connect_args={"check_same_thread": False}, future=True)
+    _install_sqlite_pragmas(eng, read_only=False)
+    ensure_schema(engine_override=eng)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)
+    db = SessionLocal()
+    try:
+        _seed_molecule_db(db)
+    finally:
+        db.close()
+        eng.dispose()
+
+    run1_dir = Path(tempfile.mkdtemp(prefix="psi_di_contract_mol_run1_", dir=tempfile.gettempdir()))
+    run2_dir = Path(tempfile.mkdtemp(prefix="psi_di_contract_mol_run2_", dir=tempfile.gettempdir()))
+    db1_path = _copy_sqlite_bundle(baseline_path, run1_dir)
+    db2_path = _copy_sqlite_bundle(baseline_path, run2_dir)
+
+    policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_3.json"
+
+    out1, batch_ids1, db1 = _run_once(db1_path)
+    out2, batch_ids2, db2 = _run_once(db2_path)
+
+    s1 = stable_json_dumps(out1.get("output") or {})
+    s2 = stable_json_dumps(out2.get("output") or {})
+    _assert(s1 == s2, "molecule-scope DI output must be deterministic for identical DB + inputs")
+
+    prov = (out1.get("output") or {}).get("provenance") or {}
+    sp = prov.get("selection_provenance") if isinstance(prov, dict) else {}
+    ordered = sp.get("batch_ids_ordered") if isinstance(sp, dict) else None
+    _assert(isinstance(ordered, list) and len(ordered) >= 2, "molecule selection must include ordered batch_ids")
+    _assert(set(int(x) for x in ordered) == set(int(x) for x in batch_ids1), "ordered batch_ids must match selected batches")
+
+    db1.close()
+    db2.close()
+
+
     out_payload = out1.get("output") or {}
 
     # v1.2.9g: readiness formalization must be present and deterministic
@@ -807,6 +969,7 @@ def main() -> int:
         test_stable_json_dumps()
         test_normalize_ignored_schema_compat()
         test_soe_v0_2_contract_snapshot_shape_and_determinism()
+        test_molecule_scope_determinism()
         test_baseline_cutoff_prevents_walk()
         test_cross_version_snapshot_content_hash_stability()
     except Exception as e:

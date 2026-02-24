@@ -23,7 +23,9 @@ def main() -> None:
         description="Run PSI DI v0.3 headlessly and persist a DecisionSnapshot.",
     )
     ap.add_argument("--decision", required=True, help="Decision key (v0.1 supports: advance_to_in_vivo)")
-    ap.add_argument("--batch-id", required=True, type=int, help="Batch DB id (integer)")
+    ap.add_argument("--scope-type", default="batch", choices=["batch", "molecule"], help="Scope type (batch or molecule)")
+    ap.add_argument("--batch-id", type=int, default=None, help="Batch DB id (required for scope-type=batch)")
+    ap.add_argument("--molecule-id", type=int, default=None, help="Molecule DB id (required for scope-type=molecule)")
     ap.add_argument("--qc-mode", default="model_safe", choices=["strict", "model_safe", "none"])
     ap.add_argument("--as-of", default="", help="Optional ISO8601 as-of timestamp (e.g. 2026-02-20T12:00:00-05:00)")
     ap.add_argument("--db", default="", help="Optional path to sqlite db (default uses PSI_DB_PATH or psi/psi.sqlite)")
@@ -47,10 +49,20 @@ def main() -> None:
     if not policy_path.exists():
         raise SystemExit(f"Policy file not found: {policy_path}")
 
+    scope_type = str(args.scope_type or "batch").strip()
+    if scope_type == "batch":
+        if args.batch_id is None:
+            raise SystemExit("--batch-id is required for scope-type=batch")
+        scope_id = int(args.batch_id)
+    else:
+        if args.molecule_id is None:
+            raise SystemExit("--molecule-id is required for scope-type=molecule")
+        scope_id = int(args.molecule_id)
+
     di_in = DIInput(
         decision_key=decision,
-        scope_type="batch",
-        scope_id=int(args.batch_id),
+        scope_type=scope_type,
+        scope_id=scope_id,
         as_of_ts=(args.as_of.strip() or None),
         qc_mode=args.qc_mode,
         context=ctx,

@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 @dataclass(frozen=True)
 class DIInput:
     decision_key: str
-    scope_type: str  # "batch" only in v0.1
-    scope_id: int    # batch db id
+    scope_type: str  # "batch" | "molecule" (v0.1 supports both)
+    scope_id: int    # batch db id (batch) or molecule db id (molecule)
     as_of_ts: Optional[str] = None
     qc_mode: str = "model_safe"  # strict/model_safe/none
     context: Dict[str, Any] = field(default_factory=dict)  # store-only in v0.1

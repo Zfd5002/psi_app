@@ -58,7 +58,7 @@ For DI snapshots, `decision_snapshots.inputs_json` MUST include:
 
 ### 3.1 Core DI inputs
 - `decision_key` (string)
-- `scope_type` (string; v0.1 supports `"batch"`)
+- `scope_type` (string; v0.1 supports `"batch"` and `"molecule"`)
 - `scope_id` (int; batch id)
 - `as_of_ts` (string or null; ISO8601 text)
 - `qc_mode` (string; `none|model_safe|strict`)

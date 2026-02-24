@@ -1481,3 +1481,23 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-24 — v1.2.9w33
+What changed:
+- Patch B: molecule scope aggregation (deterministic batch selection + aggregation rule; smoke + replay coverage).
+
+Why it changed:
+- Enable deterministic molecule-scope DI snapshots without changing batch semantics.
+
+Determinism/contract impact:
+- Molecule scope selects all batches for the molecule ordered by created_at asc, id asc; aggregation uses newest-first for per-metric selection.
+- Selection provenance records ordered batch list and metric source batch ids; SoE/comparability aggregate over selected batches.
+
+Behavior changes:
+- DI runner accepts scope_type="molecule" and aggregates batch evidence deterministically.
+- di_contract_smoke exercises molecule scope.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

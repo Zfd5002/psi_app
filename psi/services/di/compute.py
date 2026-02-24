@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from psi.core.di.schema import DIInput, EvidenceRef, IgnoredEvidence
 from psi.services.di.templates.registry import resolve_template_entry
 from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
-from psi.services.di.comparability import compute_comparability
+from psi.services.di.comparability import compute_comparability, compute_comparability_for_batches
 from psi.services.di.enrich import (
     build_soe_v0_2,
     build_soe_v0_3,
@@ -39,6 +39,7 @@ from psi.services.di.integrity import (
     compute_snapshot_content_hash,
 )
 from psi.services.di.util import stable_json_dumps
+from psi.services.di.soe import build_soe_v0_2_molecule, build_soe_v0_3_molecule
 from psi.version import PSI_VERSION
 
 
@@ -280,27 +281,52 @@ def _compute_di_from_used_by_metric(
             ]
 
     # State of Evidence packs (additive)
-    soe_v0_2 = build_soe_v0_2(
-        db,
-        batch_id=int(di_in.scope_id),
-        decision_key=di_in.decision_key,
-        policy_body=(pol.policy_body or {}),
-        used_by_metric=used_by_metric,
-        ignored=ignored,
-        warnings=warnings,
-        qc_mode=di_in.qc_mode,
-        context=di_in.context or {},
-    )
-
-    soe_v0_3 = build_soe_v0_3(
-        db,
-        batch_id=int(di_in.scope_id),
-        as_of_ts=di_in.as_of_ts,
-        qc_mode=di_in.qc_mode,
-        policy_body=(pol.policy_body or {}),
-        used_by_metric=used_by_metric,
-        ignored=ignored,
-    )
+    if di_in.scope_type == "molecule":
+        sp = selection_provenance or {}
+        batch_ids = sp.get("batch_ids_ordered") or sp.get("batch_ids_all") or []
+        soe_v0_2 = build_soe_v0_2_molecule(
+            db,
+            molecule_id=int(di_in.scope_id),
+            batch_ids=batch_ids,
+            decision_key=di_in.decision_key,
+            policy_body=(pol.policy_body or {}),
+            used_by_metric=used_by_metric,
+            ignored=ignored,
+            warnings=warnings,
+            qc_mode=di_in.qc_mode,
+            context=di_in.context or {},
+        )
+        soe_v0_3 = build_soe_v0_3_molecule(
+            db,
+            molecule_id=int(di_in.scope_id),
+            batch_ids=batch_ids,
+            as_of_ts=di_in.as_of_ts,
+            qc_mode=di_in.qc_mode,
+            policy_body=(pol.policy_body or {}),
+            used_by_metric=used_by_metric,
+            ignored=ignored,
+        )
+    else:
+        soe_v0_2 = build_soe_v0_2(
+            db,
+            batch_id=int(di_in.scope_id),
+            decision_key=di_in.decision_key,
+            policy_body=(pol.policy_body or {}),
+            used_by_metric=used_by_metric,
+            ignored=ignored,
+            warnings=warnings,
+            qc_mode=di_in.qc_mode,
+            context=di_in.context or {},
+        )
+        soe_v0_3 = build_soe_v0_3(
+            db,
+            batch_id=int(di_in.scope_id),
+            as_of_ts=di_in.as_of_ts,
+            qc_mode=di_in.qc_mode,
+            policy_body=(pol.policy_body or {}),
+            used_by_metric=used_by_metric,
+            ignored=ignored,
+        )
 
     # Catalog reference comes from inputs_obj (runner is authoritative).
     catalog_id = str(inputs_obj.get("catalog_id") or "")
@@ -404,13 +430,24 @@ def _compute_di_from_used_by_metric(
         qc_mode=di_in.qc_mode,
     )
 
-    comp_pack = compute_comparability(
-        db,
-        batch_id=int(di_in.scope_id),
-        as_of_ts=di_in.as_of_ts,
-        metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}) if isinstance(pol.policy_body, dict) else {},
-        policy_body=(pol.policy_body or {}) if isinstance(pol.policy_body, dict) else {},
-    )
+    if di_in.scope_type == "molecule":
+        sp = selection_provenance or {}
+        batch_ids = sp.get("batch_ids_ordered") or sp.get("batch_ids_all") or []
+        comp_pack = compute_comparability_for_batches(
+            db,
+            batch_ids=batch_ids,
+            as_of_ts=di_in.as_of_ts,
+            metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}) if isinstance(pol.policy_body, dict) else {},
+            policy_body=(pol.policy_body or {}) if isinstance(pol.policy_body, dict) else {},
+        )
+    else:
+        comp_pack = compute_comparability(
+            db,
+            batch_id=int(di_in.scope_id),
+            as_of_ts=di_in.as_of_ts,
+            metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}) if isinstance(pol.policy_body, dict) else {},
+            policy_body=(pol.policy_body or {}) if isinstance(pol.policy_body, dict) else {},
+        )
     comparability = comp_pack.get("comparability") or {"metric_level": [], "qc_coherence": [], "summary": {"total_flags": 0, "high_severity_count": 0}}
     confidence_degradation = comp_pack.get("confidence_degradation") or {"triggered": False, "reasons": []}
 

@@ -14,13 +14,12 @@ from sqlalchemy.orm import Session
 from psi.core.di.catalog import load_experiment_catalog_v0_1
 from psi.core.di.policy import load_policy
 from psi.core.di.schema import DIInput
-from psi.core.models import DecisionSnapshot, Program
-from psi.core.utils import now_utc
+from psi.core.models import DecisionSnapshot, Molecule, Program
+from psi.core.utils import now_utc, stable_json_dumps
 from psi.services.di.selection import select_batch_measurements
 from psi.services.di.compute import _compute_di_from_used_by_metric
 from psi.services.di.enrich import coverage_fingerprint_payload
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2, compute_evidence_fingerprint, compute_snapshot_content_hash
-from psi.services.di.util import stable_json_dumps
 from psi.services.di.templates.registry import resolve_template_entry
 from psi.version import PSI_VERSION
 
@@ -325,22 +324,97 @@ def _drift_context_for_scope(
     }
 
 
+def _resolve_molecule_lineage(db: Session, *, molecule_id: int) -> int:
+    m = db.get(Molecule, int(molecule_id))
+    if not m:
+        raise KeyError(f"Molecule not found: {molecule_id}")
+    program_id = int(getattr(m, "program_id", 0) or 0)
+    if program_id <= 0:
+        raise ValueError(f"Missing program_id for molecule_id={int(molecule_id)}; cannot resolve lineage")
+    return program_id
+
+
+def _select_batches_for_molecule(db: Session, *, molecule_id: int) -> list[Dict[str, Any]]:
+    """Deterministic batch selection for molecule scope.
+
+    Rule:
+    - include all batches where batch.molecule_id == molecule_id
+    - order by created_at ASC, then id ASC (stable, tie-safe)
+    """
+
+    rows = (
+        db.execute(
+            text(
+                """
+                SELECT id, created_at
+                FROM batches
+                WHERE molecule_id = :mid
+                ORDER BY created_at ASC, id ASC
+                """
+            ),
+            {"mid": int(molecule_id)},
+        )
+        .mappings()
+        .all()
+    )
+    out: list[Dict[str, Any]] = []
+    for r in rows:
+        try:
+            bid = int(r.get("id"))
+        except Exception:
+            continue
+        out.append({"batch_id": bid, "created_at": r.get("created_at")})
+    return out
+
+
+def _sort_ignored_entries(ignored: list[Any]) -> list[Any]:
+    def _key(x: Any) -> tuple:
+        if isinstance(x, dict):
+            return (
+                str(x.get("metric_key") or ""),
+                int(x.get("measurement_id") or 0),
+                int(x.get("data_record_id") or 0),
+                str(x.get("reason_key") or ""),
+            )
+        return (
+            str(getattr(x, "metric_key", "") or ""),
+            int(getattr(x, "measurement_id", 0) or 0),
+            int(getattr(x, "data_record_id", 0) or 0),
+            str(getattr(x, "reason_key", "") or ""),
+        )
+
+    return sorted(list(ignored or []), key=_key)
+
+
+def _sort_warning_entries(warnings: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    return sorted([w for w in (warnings or []) if isinstance(w, dict)], key=lambda w: stable_json_dumps(w))
+
+
 def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, Any]:
     pol = load_policy(policy_path)
     if pol.decision_key != di_input.decision_key:
         raise ValueError(f"Policy decision_key mismatch: policy={pol.decision_key} input={di_input.decision_key}")
 
-    if di_input.scope_type != "batch":
-        raise ValueError("DI v0.1 supports scope_type=batch only")
+    if di_input.scope_type not in ("batch", "molecule"):
+        raise ValueError(f"Unknown DI scope_type: {di_input.scope_type}")
 
-    program_id, molecule_id = _resolve_snapshot_lineage(db, batch_id=int(di_input.scope_id))
+    program_id: int
+    molecule_id: Optional[int]
+    batch_id: Optional[int]
+    if di_input.scope_type == "batch":
+        program_id, molecule_id = _resolve_snapshot_lineage(db, batch_id=int(di_input.scope_id))
+        batch_id = int(di_input.scope_id)
+    else:
+        molecule_id = int(di_input.scope_id)
+        program_id = _resolve_molecule_lineage(db, molecule_id=molecule_id)
+        batch_id = None
 
     drift_ctx = _drift_context_for_scope(
         db,
         decision_key=di_input.decision_key,
         program_id=program_id,
         molecule_id=molecule_id,
-        batch_id=int(di_input.scope_id),
+        batch_id=batch_id,
     )
     res = compute_di_output(db, di_input=di_input, pol=pol, policy_path=policy_path, drift_context=drift_ctx)
     out = res["output"]
@@ -351,7 +425,6 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
 
 
     # v1.2.9q: supersede prior ACTIVE snapshots for this exact scope, transactionally.
-    scope_batch_id = int(di_input.scope_id)
     active_ids = [
         int(r[0])
         for r in db.execute(
@@ -366,7 +439,7 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
                   AND (is_superseded IS NULL OR is_superseded = 0)
                 '''
             ),
-            {"dk": di_input.decision_key, "pid": int(program_id), "mid": molecule_id, "bid": scope_batch_id},
+            {"dk": di_input.decision_key, "pid": int(program_id), "mid": molecule_id, "bid": (int(batch_id) if batch_id is not None else None)},
         ).fetchall()
     ]
 
@@ -385,7 +458,7 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
     snap = DecisionSnapshot(
         program_id=int(program_id),
         molecule_id=molecule_id,
-        batch_id=scope_batch_id,
+        batch_id=(int(batch_id) if batch_id is not None else None),
         decision_key=di_input.decision_key,
         rules_version=rules_version,
         engine_key=ENGINE_KEY,
@@ -458,8 +531,6 @@ def compute_di_output(
     """
 
     rules_version = f"{pol.name}:{pol.version}:{pol.policy_semantics_hash[:12]}"
-
-    scope_batch_id = int(di_input.scope_id)
 
     template_entry = None
     template_error = ""
@@ -587,19 +658,80 @@ def compute_di_output(
 
         return {"rules_version": rules_version, "inputs_obj": inputs_obj, "output": out, "evidence_ids": evidence_ids}
 
-    sel = select_batch_measurements(
-        db,
-        batch_id=scope_batch_id,
-        as_of_ts=di_input.as_of_ts,
-        qc_mode=di_input.qc_mode,
-        metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}),
-        policy_qc=(pol.policy_body.get("qc_modes") or {}),
-    )
+    if di_input.scope_type == "batch":
+        scope_batch_id = int(di_input.scope_id)
+        sel = select_batch_measurements(
+            db,
+            batch_id=scope_batch_id,
+            as_of_ts=di_input.as_of_ts,
+            qc_mode=di_input.qc_mode,
+            metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}),
+            policy_qc=(pol.policy_body.get("qc_modes") or {}),
+        )
 
-    used_by_metric = sel["used_by_metric"]
-    ignored = sel["ignored"]
-    warnings = sel["warnings"]
-    selection_provenance = sel.get("selection_provenance") or {}
+        used_by_metric = sel["used_by_metric"]
+        ignored = sel["ignored"]
+        warnings = sel["warnings"]
+        selection_provenance = sel.get("selection_provenance") or {}
+    elif di_input.scope_type == "molecule":
+        molecule_id = int(di_input.scope_id)
+        batch_rows = _select_batches_for_molecule(db, molecule_id=molecule_id)
+        batch_ids_all = [int(r["batch_id"]) for r in batch_rows]
+        # Aggregation priority: newest-first (created_at DESC, id DESC).
+        batch_ids_ordered = list(reversed(batch_ids_all))
+
+        used_by_metric: Dict[str, Any] = {}
+        ignored: list[Any] = []
+        warnings: list[Dict[str, Any]] = []
+        metric_source_batch: Dict[str, int] = {}
+        duplicate_metrics: Dict[str, list[int]] = {}
+        batch_summaries: list[Dict[str, Any]] = []
+
+        for bid in batch_ids_ordered:
+            sel = select_batch_measurements(
+                db,
+                batch_id=int(bid),
+                as_of_ts=di_input.as_of_ts,
+                qc_mode=di_input.qc_mode,
+                metric_alias_map=(pol.policy_body.get("metric_alias_map") or {}),
+                policy_qc=(pol.policy_body.get("qc_modes") or {}),
+            )
+
+            per_used = sel["used_by_metric"]
+            for mk in sorted([str(k) for k in per_used.keys()]):
+                if mk not in used_by_metric:
+                    used_by_metric[mk] = per_used[mk]
+                    metric_source_batch[mk] = int(bid)
+                else:
+                    duplicate_metrics.setdefault(mk, []).append(int(bid))
+
+            ignored.extend(sel["ignored"])
+            warnings.extend(sel["warnings"])
+            batch_summaries.append(
+                {
+                    "batch_id": int(bid),
+                    "used_metric_count": int(len(per_used)),
+                    "ignored_count": int(len(sel["ignored"])),
+                    "warning_count": int(len(sel["warnings"])),
+                }
+            )
+
+        ignored = _sort_ignored_entries(ignored)
+        warnings = _sort_warning_entries(warnings)
+
+        selection_provenance = {
+            "scope_type": "molecule",
+            "molecule_id": int(molecule_id),
+            "batch_ids_all": batch_ids_all,
+            "batch_ids_ordered": batch_ids_ordered,
+            "batch_selection_rule": "include all batches for molecule_id; order by created_at asc, id asc",
+            "aggregation_rule": "per metric_key, select first evidence from newest batch (created_at desc, id desc)",
+            "metric_source_batch_ids": {str(k): int(v) for k, v in metric_source_batch.items()},
+            "duplicate_metrics": {str(k): sorted(list(set(v))) for k, v in duplicate_metrics.items()},
+            "batch_summaries": batch_summaries,
+        }
+    else:
+        raise ValueError(f"Unknown DI scope_type: {di_input.scope_type}")
 
     # Catalog reference + hash (catalog JSON is NOT embedded in snapshots).
     cat_ref = pol.experiment_catalog_ref
