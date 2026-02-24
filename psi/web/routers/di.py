@@ -55,6 +55,13 @@ def di_run_execute(
         as_of_ts=(str(as_of_ts).strip() if as_of_ts else None),
     )
 
-    res = run_di(db, di_input=di_in, policy_path=Path(pol_path))
+    try:
+        res = run_di(db, di_input=di_in, policy_path=Path(pol_path))
+    except ValueError as e:
+        templates = get_templates(request)
+        ctx = build_di_run_context(db, decision_key=decision_key, batch_id=batch_id)
+        ctx["request"] = request
+        ctx["error"] = str(e)
+        return templates.TemplateResponse("di/run.html", ctx, status_code=400)
     snap_id = int(res.get("snapshot_id"))
     return RedirectResponse(url=f"/decisions/{snap_id}", status_code=303)

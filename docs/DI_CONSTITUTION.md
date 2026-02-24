@@ -121,6 +121,8 @@ context_knobs:
 * model
 * study_intent
 
+Note: context knobs are store-only inputs in v0.1 and do not affect gating or readiness derivation.
+
 gate_categories:
 
 * material_readiness

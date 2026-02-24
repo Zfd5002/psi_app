@@ -57,7 +57,10 @@ def main() -> None:
     )
 
     with get_db(args.db.strip() or None, ensure=True) as db:
-        res = run_di(db, di_input=di_in, policy_path=policy_path)
+        try:
+            res = run_di(db, di_input=di_in, policy_path=policy_path)
+        except ValueError as e:
+            raise SystemExit(f"DI run failed: {e}")
 
     print(json.dumps(res["output"], sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=_json_default))
     print(f"\nSNAPSHOT_ID={res['snapshot_id']}")

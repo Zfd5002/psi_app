@@ -27,6 +27,7 @@ from psi.services.di.integrity import compute_decision_output_hash, compute_deci
 from psi.services.di.integrity import extract_evidence_tuples_from_used
 from psi.services.di.compute import _compute_di_from_used_by_metric
 from psi.services.di.runner import compute_di_output
+from psi.services.di.util import qc_status_from_flag, stable_json_dumps
 
 # Anchored replay recomputation (verification-only).
 from sqlalchemy import text, bindparam
@@ -35,27 +36,12 @@ from psi.core.measurement_schema import measurement_cols
 from psi.core.di.schema import EvidenceRef
 from types import SimpleNamespace
 
-def _stable_json_dumps(obj) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
-
 def _canonical_json_bytes(obj) -> bytes:
-    return _stable_json_dumps(obj).encode("utf-8")
+    return stable_json_dumps(obj).encode("utf-8")
 
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
-def _qc_status_from_flag(raw: Any) -> str:
-    # Back-compat: older tooling uses qc_flag like a boolean "flagged".
-    if raw in (None, "", 0, "0"):
-        return "unreviewed"
-    s = str(raw).strip().lower()
-    if s in ("approved", "pass", "ok"):
-        return "approved"
-    if s in ("rejected", "fail", "bad", "flagged", "1", "true"):
-        return "rejected"
-    if s in ("quarantined", "quarantine"):
-        return "quarantined"
-    return "unknown"
 from psi.services.di.integrity import compute_evidence_fingerprint, compute_snapshot_content_hash
 
 
@@ -137,7 +123,7 @@ def _qc_status_for_mid(db: Session, *, mid: int, qc_flag_raw: Any) -> Tuple[str,
     qc = db.query(MeasurementQC).filter(MeasurementQC.measurement_id == int(mid)).first()
     if qc and qc.status:
         return str(qc.status), "measurement_qc"
-    return _qc_status_from_flag(qc_flag_raw), "qc_flag_fallback"
+    return qc_status_from_flag(qc_flag_raw), "qc_flag_fallback"
 
 
 def _build_evidence_ref_from_row(

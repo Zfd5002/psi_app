@@ -38,6 +38,7 @@ from psi.services.di.integrity import (
     compute_evidence_fingerprint,
     compute_snapshot_content_hash,
 )
+from psi.services.di.util import stable_json_dumps
 from psi.version import PSI_VERSION
 
 
@@ -76,17 +77,25 @@ def _normalize_ignored(ignored: List[Any]) -> List[IgnoredEvidence]:
             continue
         if isinstance(ig, dict):
             try:
-                out.append(IgnoredEvidence(**ig))
+                payload = dict(ig)
+                if "qc_source" not in payload and "qc_status" in payload:
+                    payload["qc_source"] = payload.get("qc_status")
+                out.append(IgnoredEvidence(**payload))
                 continue
             except Exception:
                 # Fall back to minimal safe representation; keep determinism.
+                qc_source = None
+                if ig.get("qc_source") is not None:
+                    qc_source = str(ig.get("qc_source"))
+                elif ig.get("qc_status") is not None:
+                    qc_source = str(ig.get("qc_status"))
                 out.append(IgnoredEvidence(
                     measurement_id=int(ig.get("measurement_id") or 0),
                     data_record_id=int(ig.get("data_record_id") or 0),
                     metric_key=str(ig.get("metric_key") or ""),
                     reason_key=str(ig.get("reason_key") or ""),
                     reason_detail=(str(ig.get("reason_detail")) if ig.get("reason_detail") is not None else None),
-                    qc_status=(str(ig.get("qc_status")) if ig.get("qc_status") is not None else None),
+                    qc_source=qc_source,
                 ))
                 continue
         # Unknown type: stringify deterministically into reason_detail
@@ -96,15 +105,11 @@ def _normalize_ignored(ignored: List[Any]) -> List[IgnoredEvidence]:
             metric_key="",
             reason_key="unknown",
             reason_detail=str(ig),
-            qc_status=None,
+            qc_source=None,
         ))
     return out
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
-
-
 def _sha256_of_stable_json(obj: Any) -> str:
-    return hashlib.sha256(_stable_json(obj).encode("utf-8")).hexdigest()
+    return hashlib.sha256(stable_json_dumps(obj).encode("utf-8")).hexdigest()
 
 
 def _ignored_reason_key(x: Any) -> str:

@@ -20,7 +20,6 @@ This tool is an orchestrator and report renderer.
 """
 
 import argparse
-import json
 from pathlib import Path
 import sys
 from typing import Any, Dict, Iterable, List, Tuple
@@ -29,16 +28,13 @@ from sqlalchemy.orm import Session
 
 from psi.core.db import DB_PATH, get_db
 from psi.core.models import DecisionSnapshot
+from psi.core.utils import stable_json_dumps
 from psi.services.di.verify import verify_snapshot
 from psi.version import PSI_VERSION
 
 # Internal verifier helpers (kept in verify.py so web + CLI share semantics).
 from psi.services.di import verify as verify_mod
 from psi.core.di.schema import DIInput
-
-
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 def _iter_snapshots(
@@ -347,7 +343,7 @@ def main() -> None:
     }
 
     print("---")
-    print(_stable_json(summary))
+    print(stable_json_dumps(summary))
 
     if failed > 0:
         sys.exit(2)

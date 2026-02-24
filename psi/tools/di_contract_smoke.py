@@ -23,7 +23,8 @@ from pathlib import Path
 
 from psi.core.di.catalog import load_catalog
 from psi.core.di.policy import canonical_policy_json, load_policy, sha256_hex_of_canonical_json
-from psi.services.decisions import stable_json_dumps
+from psi.core.utils import stable_json_dumps
+from psi.services.di.compute import _normalize_ignored
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
 from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
 
@@ -64,6 +65,31 @@ def test_stable_json_dumps() -> None:
     # Verify it parses.
     p = json.loads(s1)
     _assert(isinstance(p, dict) and p.get("z") == 1, "stable_json_dumps output should parse")
+
+
+def test_normalize_ignored_schema_compat() -> None:
+    ignored = [
+        {
+            "measurement_id": 1,
+            "data_record_id": 2,
+            "metric_key": "m",
+            "reason_key": "qc",
+            "reason_detail": "flagged",
+            "qc_status": "qc_flag",
+        },
+        {
+            "measurement_id": 3,
+            "data_record_id": 4,
+            "metric_key": "m2",
+            "reason_key": "qc",
+            "reason_detail": "ok",
+            "qc_source": "measurement_qc",
+        },
+    ]
+    out = _normalize_ignored(ignored)
+    _assert(len(out) == 2, "normalize_ignored should preserve list length")
+    _assert(getattr(out[0], "qc_source", None) == "qc_flag", "qc_status should map to qc_source")
+    _assert(getattr(out[1], "qc_source", None) == "measurement_qc", "qc_source should be preserved")
 
 
 def test_policy_package_dual_hash_stability() -> None:
@@ -779,6 +805,7 @@ def main() -> int:
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()
+        test_normalize_ignored_schema_compat()
         test_soe_v0_2_contract_snapshot_shape_and_determinism()
         test_baseline_cutoff_prevents_walk()
         test_cross_version_snapshot_content_hash_stability()

@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 
 from psi.core.db import get_db
 from psi.core.models import DecisionSnapshot
+from psi.core.utils import stable_json_dumps
 from psi.services.di.verify import verify_snapshot
 
 
@@ -29,10 +30,6 @@ def _detect_is_di(snap: DecisionSnapshot, inputs: dict, output: dict) -> bool:
         or (isinstance(inputs, dict) and (str(inputs.get("engine_key") or "").strip() == "di"))
         or (isinstance(inputs, dict) and str(inputs.get("schema_version") or "").startswith("di."))
     )
-
-
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 def main() -> None:
@@ -140,7 +137,7 @@ def main() -> None:
     }
 
     print("---")
-    print(_stable_json(summary))
+    print(stable_json_dumps(summary))
 
     if hard_failed > 0:
         sys.exit(2)

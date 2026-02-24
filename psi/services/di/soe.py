@@ -1,34 +1,20 @@
 from __future__ import annotations
 
-import datetime as _dt
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from psi.core.measurement_schema import measurement_cols
+from psi.services.di.util import parse_iso, qc_status_from_flag
 
 
-def _parse_iso(ts: Optional[str]) -> Optional[_dt.datetime]:
-    if not ts:
-        return None
-    s = str(ts).strip()
-    if not s:
-        return None
-    if s.endswith("Z"):
-        s = s[:-1] + "+00:00"
-    try:
-        dt = _dt.datetime.fromisoformat(s)
-    except Exception:
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.astimezone(_dt.timezone.utc).replace(tzinfo=None)
-    return dt
+import datetime as _dt
 
 
 def _timestamp_used(produced_at: Optional[str], created_at: Optional[str]) -> Dict[str, Any]:
-    dp = _parse_iso(produced_at)
-    dc = _parse_iso(created_at)
+    dp = parse_iso(produced_at)
+    dc = parse_iso(created_at)
     if dp is not None:
         return {"timestamp_used": "produced_at", "timestamp_value": produced_at}
     if dc is not None:
@@ -300,7 +286,7 @@ def build_soe_v0_2(
 
         if tu in ("produced_at", "created_at"):
             basis_set.add(str(tu))
-        dtv = _parse_iso(tv) if isinstance(tv, str) else None
+        dtv = parse_iso(tv) if isinstance(tv, str) else None
         if dtv is not None:
             ts_values.append(dtv)
 
@@ -367,8 +353,7 @@ def build_soe_v0_3(
     updated_col = cols.get("updated_at")
     ignore_col = cols.get("ignore_for_model")
     qc_flag_col = cols.get("qc_flag")
-
-    dt_asof = _parse_iso(as_of_ts) if as_of_ts else None
+    dt_asof = parse_iso(as_of_ts) if as_of_ts else None
 
     # Canonicalize using policy alias map.
     alias_to_canonical: Dict[str, str] = {}
@@ -432,18 +417,6 @@ def build_soe_v0_3(
     reject = set(str(x) for x in (qc_conf.get("reject_statuses") or []))
     treat_unreviewed_as = str(qc_conf.get("treat_unreviewed_as") or "accept")
 
-    def qc_status_from_flag(raw: Any) -> str:
-        if raw in (None, "", 0, "0"):
-            return "unreviewed"
-        s = str(raw).strip().lower()
-        if s in ("approved", "pass", "ok"):
-            return "approved"
-        if s in ("rejected", "fail", "bad", "flagged", "1", "true"):
-            return "rejected"
-        if s in ("quarantined", "quarantine"):
-            return "quarantined"
-        return "unknown"
-
     def accept_qc(qs: str) -> bool:
         if qs in reject:
             return False
@@ -467,8 +440,8 @@ def build_soe_v0_3(
 
         # Apply as-of exclusion consistent with selectors.
         if dt_asof is not None:
-            dp = _parse_iso(r.get("produced_at"))
-            dc = _parse_iso(r.get("created_at"))
+            dp = parse_iso(r.get("produced_at"))
+            dc = parse_iso(r.get("created_at"))
             chk = dp or dc
             if chk is not None and chk > dt_asof:
                 continue
@@ -495,8 +468,8 @@ def build_soe_v0_3(
             if u is not None and str(u).strip():
                 units_present.append(str(u).strip())
 
-            dp = _parse_iso(r.get("produced_at"))
-            dc = _parse_iso(r.get("created_at"))
+            dp = parse_iso(r.get("produced_at"))
+            dc = parse_iso(r.get("created_at"))
             chk = dp or dc
             if chk is not None:
                 if latest_dt is None or chk > latest_dt:

@@ -46,6 +46,11 @@ def json_dumps_compact(obj: Any) -> str:
     return json.dumps(obj, default=str, separators=(",", ":"), ensure_ascii=False)
 
 
+def stable_json_dumps(obj: Any) -> str:
+    """Stable JSON serialization with deterministic ordering."""
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+
+
 def model_to_dict(obj: Any) -> Dict[str, Any]:
     """Best-effort shallow model serializer for audit logs."""
     if obj is None:

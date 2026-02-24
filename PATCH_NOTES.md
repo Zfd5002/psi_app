@@ -1459,3 +1459,25 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+
+## 2026-02-24 — v1.2.9w32
+What changed:
+- Patch A hardening/determinism hygiene: normalize_ignored qc alias, stable_json canonicalization, ISO/QC util dedupe, context docs correction, remove program_id fallback.
+
+Why it changed:
+- Eliminate replay brittleness, hash authority drift, and silent lineage corruption.
+
+Determinism/contract impact:
+- Ignored evidence normalization accepts both qc_status and qc_source, canonicalizing to qc_source.
+- Stable JSON hashing/printing uses a single canonical implementation.
+- ISO parsing and qc flag status derivation are centralized and deterministic.
+- Context knobs remain store-only inputs; no gating impact.
+- Missing program_id now fails explicitly; no silent lineage fallback.
+
+Behavior changes:
+- run_di CLI and DI web route surface clear errors when program_id lineage is missing.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

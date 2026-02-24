@@ -21,7 +21,6 @@ All lists are deterministically ordered.
 
 from __future__ import annotations
 
-import datetime as _dt
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import text
@@ -29,26 +28,10 @@ from sqlalchemy.orm import Session
 
 from psi.core.measurement_schema import measurement_all_cols, measurement_cols
 from psi.core.models import MeasurementQC
+from psi.services.di.util import parse_iso, qc_status_from_flag
 
 
 _SEVERITY_ORDER = {"high": 0, "moderate": 1, "low": 2}
-
-
-def _parse_iso(ts: Optional[str]) -> Optional[_dt.datetime]:
-    if not ts:
-        return None
-    s = str(ts).strip()
-    if not s:
-        return None
-    if s.endswith("Z"):
-        s = s[:-1] + "+00:00"
-    try:
-        dt = _dt.datetime.fromisoformat(s)
-    except Exception:
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.astimezone(_dt.timezone.utc).replace(tzinfo=None)
-    return dt
 
 
 def _norm_str(x: Any) -> str:
@@ -58,18 +41,7 @@ def _norm_str(x: Any) -> str:
     return s if s else "unknown"
 
 
-def _qc_status_from_flag(raw: Any) -> str:
-    # Back-compat: older tooling uses qc_flag like a boolean "flagged".
-    if raw in (None, "", 0, "0"):
-        return "unreviewed"
-    s = str(raw).strip().lower()
-    if s in ("approved", "pass", "ok"):
-        return "approved"
-    if s in ("rejected", "fail", "bad", "flagged", "1", "true"):
-        return "rejected"
-    if s in ("quarantined", "quarantine"):
-        return "quarantined"
-    return "unknown"
+import datetime as _dt
 
 
 def _canonical_method_signature(*, method: Any, producer: Any, producer_version: Any) -> str:
@@ -155,7 +127,7 @@ def compute_comparability(
             if mq.measurement_id is not None and mq.status:
                 qc_map[int(mq.measurement_id)] = str(mq.status)
 
-    dt_asof = _parse_iso(as_of_ts) if as_of_ts else None
+    dt_asof = parse_iso(as_of_ts) if as_of_ts else None
 
     # alias → canonical
     alias_to_canonical: Dict[str, str] = {}
@@ -166,8 +138,8 @@ def compute_comparability(
     grouped: Dict[str, List[Dict[str, Any]]] = {}
 
     def _row_dt(r: Dict[str, Any]) -> Optional[_dt.datetime]:
-        dp = _parse_iso(str(r.get(produced_col))) if produced_col and r.get(produced_col) is not None else None
-        dc = _parse_iso(str(r.get(created_col) or r.get(updated_col))) if (created_col or updated_col) and (r.get(created_col) is not None or r.get(updated_col) is not None) else None
+        dp = parse_iso(str(r.get(produced_col))) if produced_col and r.get(produced_col) is not None else None
+        dc = parse_iso(str(r.get(created_col) or r.get(updated_col))) if (created_col or updated_col) and (r.get(created_col) is not None or r.get(updated_col) is not None) else None
         return dp or dc
 
     # Build candidate universe per metric_key
@@ -272,7 +244,7 @@ def compute_comparability(
                 mid = int(v)
             except Exception:
                 continue
-            qc_status = qc_map.get(mid) or _qc_status_from_flag(r.get(qc_flag_col) if qc_flag_col else None)
+            qc_status = qc_map.get(mid) or qc_status_from_flag(r.get(qc_flag_col) if qc_flag_col else None)
             qc_status = str(qc_status).strip() if qc_status is not None else "unknown"
             if qc_status not in states_set:
                 states_set.add(qc_status)

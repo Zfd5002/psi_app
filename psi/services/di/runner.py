@@ -20,13 +20,9 @@ from psi.services.di.selection import select_batch_measurements
 from psi.services.di.compute import _compute_di_from_used_by_metric
 from psi.services.di.enrich import coverage_fingerprint_payload
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2, compute_evidence_fingerprint, compute_snapshot_content_hash
+from psi.services.di.util import stable_json_dumps
 from psi.services.di.templates.registry import resolve_template_entry
 from psi.version import PSI_VERSION
-
-
-def _stable_json(obj: Any) -> str:
-    # Deterministic snapshot serialization for identical inputs/DB state.
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 # DI snapshot contract identifiers (stable, explicit, portable)
@@ -43,7 +39,7 @@ ALLOWED_POLICY_SCHEMA_VERSIONS = {"di.policy_package.v0_1"}
 
 
 def _sha256_of_stable_json(obj: Any) -> str:
-    s = _stable_json(obj)
+    s = stable_json_dumps(obj)
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
@@ -395,9 +391,9 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
         engine_key=ENGINE_KEY,
         schema_version=SNAPSHOT_SCHEMA_VERSION,
         is_superseded=0,
-        inputs_json=_stable_json(inputs_obj),
-        outputs_json=_stable_json(out),
-        evidence_ids_json=_stable_json(sorted(list(evidence_ids))),
+        inputs_json=stable_json_dumps(inputs_obj),
+        outputs_json=stable_json_dumps(out),
+        evidence_ids_json=stable_json_dumps(sorted(list(evidence_ids))),
         as_of_ts=_parse_asof_to_utc_naive(di_input.as_of_ts),
         created_at=now_utc(),
     )
@@ -443,8 +439,7 @@ def _resolve_snapshot_lineage(db: Session, *, batch_id: int) -> Tuple[int, Optio
     molecule_id = int(row["molecule_id"]) if row.get("molecule_id") is not None else None
     program_id = int(row["program_id"]) if row.get("program_id") is not None else None
     if program_id is None:
-        p = db.query(Program).filter(Program.name == "PSI_EXAMPLES").first()
-        program_id = int(p.id) if p else 1
+        raise ValueError(f"Missing program_id for batch_id={int(batch_id)}; cannot resolve lineage")
     return int(program_id), molecule_id
 
 

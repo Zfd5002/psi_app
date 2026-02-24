@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
 from typing import Any, Dict, Iterable, List, Tuple
 
 
@@ -10,13 +9,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 MACHINE_LOCAL_INPUT_KEYS = {"policy_path", "drift_context"}
 
 
-def _stable_json(obj: Any) -> str:
-    """Deterministic JSON serialization.
-
-    Keep settings aligned with DI snapshot serialization.
-    """
-
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+from psi.services.di.util import stable_json_dumps
 
 
 def _sha256_hex(s: str) -> str:
@@ -85,7 +78,7 @@ def compute_evidence_fingerprint(*, used_by_metric: Dict[str, Any]) -> str:
     All None values are normalized to "" for stability.
     """
     payload = extract_evidence_tuples_from_used(used_by_metric)
-    return _sha256_hex(_stable_json(payload))
+    return _sha256_hex(stable_json_dumps(payload))
 
 
 def compute_snapshot_content_hash(
@@ -130,7 +123,7 @@ def compute_snapshot_content_hash(
         "evidence_ids": list(evidence_ids or []),
     }
 
-    return _sha256_hex(_stable_json(payload))
+    return _sha256_hex(stable_json_dumps(payload))
 
 
 def _sorted_list_of_dicts(items: Any, *, key_fields: List[str]) -> List[Dict[str, Any]]:
@@ -149,7 +142,7 @@ def _sorted_list_of_dicts(items: Any, *, key_fields: List[str]) -> List[Dict[str
 
     def _k(d: Dict[str, Any]) -> str:
         kobj = {f: d.get(f) for f in key_fields}
-        return _stable_json(kobj)
+        return stable_json_dumps(kobj)
 
     return sorted(out, key=_k)
 
@@ -339,7 +332,7 @@ def compute_decision_output_hash(
         "inputs": canon_inputs,
         "decision": canon_outputs,
     }
-    return _sha256_hex(_stable_json(payload))
+    return _sha256_hex(stable_json_dumps(payload))
 
 
 def compute_decision_output_hash_v2(
@@ -357,4 +350,4 @@ def compute_decision_output_hash_v2(
     payload = {
         "decision": canon_outputs,
     }
-    return _sha256_hex(_stable_json(payload))
+    return _sha256_hex(stable_json_dumps(payload))

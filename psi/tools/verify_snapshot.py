@@ -6,15 +6,11 @@ Implementation lives in `psi.services.di.verify` so web + CLI share the exact sa
 """
 
 import argparse
-import json
 from typing import Any
 
 from psi.core.db import get_db
+from psi.core.utils import stable_json_dumps
 from psi.services.di.verify import verify_snapshot
-
-
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 def main() -> None:
@@ -29,7 +25,7 @@ def main() -> None:
 
     with get_db(args.db.strip() or None, ensure=True) as db:
         report = verify_snapshot(db=db, snapshot_id=int(args.snapshot_id), debug=bool(args.debug))
-        print(_stable_json(report))
+        print(stable_json_dumps(report))
 
 
 if __name__ == "__main__":

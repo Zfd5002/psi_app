@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import datetime
 from typing import Optional, Any
 
@@ -22,7 +21,7 @@ from psi.core.models import (
     OutcomeLabel,
 )
 
-from psi.core.utils import json_dumps_compact, model_to_dict, now_utc
+from psi.core.utils import json_dumps_compact, model_to_dict, now_utc, stable_json_dumps
 
 OUTCOME_LABEL_TYPES = [
     {"key": "correct", "label": "Correct", "note_required": False},
@@ -37,11 +36,6 @@ DI_REVIEW_VERDICTS = [
     {"key": "incorrect", "label": "Incorrect"},
     {"key": "mixed", "label": "Mixed"},
 ]
-
-
-def stable_json_dumps(obj: Any) -> str:
-    """Stable JSON serialization for exports/diffs (deterministic ordering, no whitespace drift)."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
 def list_decision_snapshots(db: Session) -> list[DecisionSnapshot]:
