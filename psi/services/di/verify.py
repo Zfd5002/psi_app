@@ -266,6 +266,11 @@ def _compute_anchored_replay(
         warnings=warnings,
         selection_provenance=selection_provenance,
     )
+    out = _scrub_output_for_replay(
+        out,
+        policy_version=str(stored_inputs_obj.get("policy_version") or ""),
+        schema_version=str(stored_inputs_obj.get("schema_version") or ""),
+    )
 
     # --- Legacy compatibility (verification-only) ---
     # Some early snapshots were created before certain provenance fields were
@@ -621,7 +626,47 @@ def _semantic_fingerprint(outputs_obj: Dict[str, Any]) -> str:
         return ""
 
 
-def _resolve_policy_from_repo(*, policy_id: str, policy_version: str) -> Tuple[Any, Path]:
+def _scrub_output_for_replay(output: Dict[str, Any], *, policy_version: str, schema_version: str) -> Dict[str, Any]:
+    """Replay-only compatibility scrub for historical canonical surfaces.
+
+    Historical v0.3 snapshots (DI snapshot v0.1) must not receive post-w52
+    context-branch fields in canonical replay outputs.
+    """
+
+    if not isinstance(output, dict):
+        return output
+    pv = str(policy_version or "").strip().lower()
+    sv = str(schema_version or "").strip().lower()
+    if not (pv.startswith("v0.3") or sv == "di.snapshot.v0_1"):
+        return output
+
+    out = dict(output)
+    out.pop("context_evaluation", None)
+    gate_outcomes = out.get("gate_outcomes")
+    if isinstance(gate_outcomes, dict):
+        cleaned: Dict[str, Any] = {}
+        for gk in sorted([str(k) for k in gate_outcomes.keys()]):
+            gd = gate_outcomes.get(gk)
+            if not isinstance(gd, dict):
+                cleaned[gk] = gd
+                continue
+            g2 = dict(gd)
+            g2.pop("required_metrics_base", None)
+            g2.pop("requirement_mode", None)
+            g2.pop("context_branch", None)
+            cleaned[gk] = g2
+        out["gate_outcomes"] = cleaned
+    return out
+
+
+def _resolve_policy_from_repo(
+    *,
+    policy_id: str,
+    policy_version: str,
+    policy_semantics_hash: str = "",
+    policy_package_hash: str = "",
+    require_exact_hash_match: bool = False,
+) -> Tuple[Any, Path]:
     base = Path(__file__).resolve().parents[2]  # psi/
     pol_dir = base / "core" / "di" / "policies"
     if not pol_dir.exists():
@@ -638,6 +683,27 @@ def _resolve_policy_from_repo(*, policy_id: str, policy_version: str) -> Tuple[A
 
     if not matches:
         raise ValueError(f"Policy not found in repo for policy_id={policy_id!r} policy_version={policy_version!r}")
+    sem_h = str(policy_semantics_hash or "")
+    pkg_h = str(policy_package_hash or "")
+    if sem_h or pkg_h:
+        exact_matches: List[Tuple[Any, Path]] = []
+        for pol, p in matches:
+            pol_sem = str(getattr(pol, "policy_semantics_hash", "") or "")
+            pol_pkg = str(getattr(pol, "policy_package_hash", "") or "")
+            if sem_h and pol_sem != sem_h:
+                continue
+            if pkg_h and pol_pkg != pkg_h:
+                continue
+            exact_matches.append((pol, p))
+        if exact_matches:
+            if len(exact_matches) > 1:
+                exact_matches.sort(key=lambda t: str(t[1]))
+            return exact_matches[0]
+        if require_exact_hash_match:
+            raise ValueError(
+                f"Policy exact hash match not found in repo for policy_id={policy_id!r} "
+                f"policy_version={policy_version!r}"
+            )
     if len(matches) > 1:
         # Deterministic choice, but treat as governance warning.
         matches.sort(key=lambda t: str(t[1]))
@@ -913,7 +979,30 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
     stored_policy_semantics_hash = str(inputs_obj.get("policy_semantics_hash") or "")
     stored_policy_package_hash = str(inputs_obj.get("policy_package_hash") or "")
 
-    pol, pol_path = _resolve_policy_from_repo(policy_id=stored_policy_id, policy_version=stored_policy_version)
+    try:
+        pol, pol_path = _resolve_policy_from_repo(
+            policy_id=stored_policy_id,
+            policy_version=stored_policy_version,
+            policy_semantics_hash=stored_policy_semantics_hash,
+            policy_package_hash=stored_policy_package_hash,
+            require_exact_hash_match=True,
+        )
+    except Exception as e:
+        return {
+            "snapshot_id": int(snapshot_id),
+            "classification": "POLICY_UNAVAILABLE",
+            "stored": {
+                "policy_id": stored_policy_id,
+                "policy_version": stored_policy_version,
+                "policy_semantics_hash": stored_policy_semantics_hash,
+                "policy_package_hash": stored_policy_package_hash,
+            },
+            "anchored_replay": {
+                "available": False,
+                "reason": "policy_exact_match_not_found",
+                "detail": str(e),
+            },
+        }
 
     recomputed_policy_semantics_hash = str(pol.policy_semantics_hash)
     recomputed_policy_package_hash = str(pol.policy_package_hash)

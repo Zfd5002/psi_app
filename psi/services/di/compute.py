@@ -75,6 +75,14 @@ def _ranking_enabled(policy_body: Dict[str, Any]) -> bool:
     return bool(pol_short.get("allow_shortlisting") or pol_short.get("allow"))
 
 
+def _policy_supports_context_branch_surface(pol: Any) -> bool:
+    try:
+        v = str(getattr(pol, "version", "") or "").strip().lower()
+    except Exception:
+        v = ""
+    return v.startswith("v0.4")
+
+
 def _score_from_factors(factors: List[Dict[str, Any]]) -> float:
     score = 0.0
     for f in factors:
@@ -246,6 +254,189 @@ def _normalize_ignored(ignored: List[Any]) -> List[IgnoredEvidence]:
             qc_source=None,
         ))
     return out
+
+
+def _why_pointer_list_for_metric_ref(*, metric_key: str, ev: Any) -> List[Dict[str, Any]]:
+    if ev is None:
+        return []
+    out: List[Dict[str, Any]] = []
+    try:
+        mid = getattr(ev, "measurement_id", None)
+    except Exception:
+        mid = None
+    try:
+        drid = getattr(ev, "data_record_id", None)
+    except Exception:
+        drid = None
+    try:
+        mks = str(getattr(ev, "metric_key_source", "") or "").strip()
+    except Exception:
+        mks = ""
+
+    if mid is not None:
+        out.append({"kind": "measurement", "id": int(mid), "metric_key": str(metric_key)})
+        out.append({"kind": "measurement_field", "id": int(mid), "field": "qc_status", "metric_key": str(metric_key)})
+        if mks:
+            out.append({"kind": "measurement_field", "id": int(mid), "field": "metric_key_source", "metric_key": str(metric_key)})
+    if drid is not None:
+        out.append({"kind": "data_record", "id": int(drid), "metric_key": str(metric_key)})
+    return sorted(
+        out,
+        key=lambda x: (
+            str(x.get("kind") or ""),
+            int(x.get("id") or 0),
+            str(x.get("field") or ""),
+            str(x.get("metric_key") or ""),
+        ),
+    )
+
+
+def _why_gate_evidence_map(*, gate_outcomes: Dict[str, Any], used_by_metric: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for gk in sorted([str(k) for k in (gate_outcomes or {}).keys()]):
+        gd = gate_outcomes.get(gk) if isinstance(gate_outcomes, dict) else None
+        if not isinstance(gd, dict):
+            out[gk] = []
+            continue
+        metric_keys = sorted(set([str(m) for m in (gd.get("present_metrics") or []) if str(m).strip()]))
+        ptrs: List[Dict[str, Any]] = []
+        for mk in metric_keys:
+            ptrs.extend(_why_pointer_list_for_metric_ref(metric_key=mk, ev=(used_by_metric or {}).get(mk)))
+        out[gk] = sorted(
+            ptrs,
+            key=lambda x: (
+                str(x.get("kind") or ""),
+                int(x.get("id") or 0),
+                str(x.get("field") or ""),
+                str(x.get("metric_key") or ""),
+            ),
+        )
+    return out
+
+
+def _build_why_evidence(
+    *,
+    out: Dict[str, Any],
+    used_by_metric: Dict[str, Any],
+    selection_provenance: Dict[str, Any],
+) -> Dict[str, Any]:
+    gate_outcomes = out.get("gate_outcomes") if isinstance(out.get("gate_outcomes"), dict) else {}
+    readiness = out.get("readiness") if isinstance(out.get("readiness"), dict) else {}
+    shortlisting = out.get("shortlisting") if isinstance(out.get("shortlisting"), dict) else None
+    ranking = out.get("ranking") if isinstance(out.get("ranking"), dict) else None
+
+    gate_evidence = _why_gate_evidence_map(gate_outcomes=gate_outcomes, used_by_metric=used_by_metric)
+
+    readiness_blocking_gates = [str(x) for x in (readiness.get("blocking_gates") or []) if str(x).strip()]
+    readiness_evidence = {
+        "blocking_gates": {
+            gk: list(gate_evidence.get(gk) or []) for gk in sorted(set(readiness_blocking_gates))
+        }
+    }
+
+    shortlisting_evidence: Dict[str, Any] = {
+        "hard_gates": {},
+        "ranked_candidates": [],
+    }
+    if isinstance(shortlisting, dict):
+        refusal_reasons = shortlisting.get("refusal_reasons") if isinstance(shortlisting.get("refusal_reasons"), list) else []
+        hard_gate_keys: List[str] = []
+        for rr in refusal_reasons:
+            if not isinstance(rr, dict):
+                continue
+            if str(rr.get("kind") or "") != "hard_gates_not_passed":
+                continue
+            hard_gate_keys.extend([str(x) for x in (rr.get("gates") or []) if str(x).strip()])
+        shortlisting_evidence["hard_gates"] = {
+            gk: list(gate_evidence.get(gk) or []) for gk in sorted(set(hard_gate_keys))
+        }
+
+        for cand in (shortlisting.get("ranked_candidates") or []):
+            if not isinstance(cand, dict):
+                continue
+            candidate_id = str(cand.get("candidate_id") or "")
+            metric_keys: List[str] = []
+            purity = cand.get("purity_aggregation") if isinstance(cand.get("purity_aggregation"), dict) else {}
+            metric_keys.extend(sorted([str(k) for k in purity.keys() if str(k).strip()]))
+            func = cand.get("functional_potency") if isinstance(cand.get("functional_potency"), dict) else {}
+            func_metrics = func.get("metrics") if isinstance(func.get("metrics"), dict) else {}
+            metric_keys.extend(sorted([str(k) for k in func_metrics.keys() if str(k).strip()]))
+            ptrs: List[Dict[str, Any]] = []
+            for mk in sorted(set(metric_keys)):
+                ptrs.extend(_why_pointer_list_for_metric_ref(metric_key=mk, ev=(used_by_metric or {}).get(mk)))
+            shortlisting_evidence["ranked_candidates"].append(
+                {
+                    "candidate_id": candidate_id,
+                    "evidence": sorted(
+                        ptrs,
+                        key=lambda x: (
+                            str(x.get("kind") or ""),
+                            int(x.get("id") or 0),
+                            str(x.get("field") or ""),
+                            str(x.get("metric_key") or ""),
+                        ),
+                    ),
+                }
+            )
+        shortlisting_evidence["ranked_candidates"] = sorted(
+            shortlisting_evidence["ranked_candidates"],
+            key=lambda x: str(x.get("candidate_id") or ""),
+        )
+
+    ranking_evidence: Dict[str, Any] = {"candidates": []}
+    if isinstance(ranking, dict):
+        metric_src = (
+            selection_provenance.get("metric_source_batch_ids")
+            if isinstance(selection_provenance.get("metric_source_batch_ids"), dict)
+            else {}
+        )
+        for cand in (ranking.get("candidates") or []):
+            if not isinstance(cand, dict):
+                continue
+            cid = cand.get("candidate_id")
+            ctype = str(cand.get("candidate_type") or "")
+            ptrs: List[Dict[str, Any]] = []
+            if ctype == "batch":
+                try:
+                    cid_i = int(cid)
+                except Exception:
+                    cid_i = None
+                if cid_i is not None:
+                    for mk in sorted([str(k) for k in (used_by_metric or {}).keys()]):
+                        ev = (used_by_metric or {}).get(mk)
+                        if ev is None:
+                            continue
+                        ev_drid = getattr(ev, "data_record_id", None)
+                        ev_mid = getattr(ev, "measurement_id", None)
+                        if int(metric_src.get(mk)) == cid_i if (mk in metric_src and str(metric_src.get(mk)).isdigit()) else True:
+                            ptrs.extend(_why_pointer_list_for_metric_ref(metric_key=mk, ev=ev))
+                    ptrs.append({"kind": "ranking_candidate", "id": cid_i, "field": "candidate_id", "candidate_type": ctype})
+            ranking_evidence["candidates"].append(
+                {
+                    "candidate_id": cid,
+                    "candidate_type": ctype,
+                    "evidence": sorted(
+                        ptrs,
+                        key=lambda x: (
+                            str(x.get("kind") or ""),
+                            int(x.get("id") or 0),
+                            str(x.get("field") or ""),
+                            str(x.get("metric_key") or ""),
+                        ),
+                    ),
+                }
+            )
+        ranking_evidence["candidates"] = sorted(
+            ranking_evidence["candidates"],
+            key=lambda x: (str(x.get("candidate_type") or ""), int(x.get("candidate_id") or 0)),
+        )
+
+    return {
+        "gates": gate_evidence,
+        "readiness": readiness_evidence,
+        "shortlisting": shortlisting_evidence,
+        "ranking": ranking_evidence,
+    }
 def _sha256_of_stable_json(obj: Any) -> str:
     return hashlib.sha256(stable_json_dumps(obj).encode("utf-8")).hexdigest()
 
@@ -505,6 +696,20 @@ def _compute_di_from_used_by_metric(
             "as_of_ts": di_in.as_of_ts,
             "qc_mode": di_in.qc_mode,
             "selection_semantics_version": str(inputs_obj.get("selection_semantics_version") or ""),
+            "decision_template": {
+                "template_key": str(inputs_obj.get("template_key") or ""),
+                "template_name": str(inputs_obj.get("template_name") or inputs_obj.get("template_key") or ""),
+            },
+            "decision_scope": {
+                "scope_type": str(di_in.scope_type or ""),
+                "scope_id": int(di_in.scope_id),
+            },
+            "policy_ref": {
+                "policy_name": str(getattr(pol, "name", "") or ""),
+                "policy_version": str(getattr(pol, "version", "") or ""),
+                "policy_semantics_hash": str(getattr(pol, "policy_semantics_hash", "") or ""),
+                "policy_package_hash": str(getattr(pol, "policy_package_hash", "") or ""),
+            },
             "experiment_catalog": {"catalog_id": catalog_id, "catalog_version": catalog_version, "catalog_hash": catalog_hash},
             "selection_semantics": {
                 "ignore_for_model": "always_ignored",
@@ -544,18 +749,41 @@ def _compute_di_from_used_by_metric(
             if mid is not None and str(mid).strip() and int(mid) > 0
         ]),
     }
-    if _ranking_enabled((pol.policy_body or {}) if isinstance(pol.policy_body, dict) else {}):
-        out["ranking"] = _build_ranking(di_in=di_in, out=out, selection_provenance=selection_provenance)
+    # Governance hardening (w47): weighted ranking is not part of canonical DI output.
+    # Deterministic shortlisting/tie-break remains under `shortlisting`.
     if metric_evaluations:
         out["metric_evaluations"] = metric_evaluations
     if recommended_experiments:
         out["recommended_experiments"] = recommended_experiments
 
+    emit_context_branch_surface = _policy_supports_context_branch_surface(pol)
     gate_outcomes = derive_gate_outcomes(
         policy_body=(pol.policy_body or {}),
         gate_results=templ.get("gates") or [],
         used_by_metric=used_by_metric,
+        inputs_context=(di_in.context if isinstance(di_in.context, dict) else {}),
+        emit_context_branch_surface=emit_context_branch_surface,
     )
+    if emit_context_branch_surface:
+        ctx_knobs = (
+            ((pol.package or {}).get("template_structure") or {}).get("context_knobs")
+            if isinstance(getattr(pol, "package", None), dict)
+            else []
+        )
+        knob_keys = [str(x) for x in (ctx_knobs or []) if str(x).strip()]
+        input_ctx = di_in.context if isinstance(di_in.context, dict) else {}
+        out["context_evaluation"] = {
+            "policy_version": str(getattr(pol, "version", "") or ""),
+            "inputs": {k: input_ctx.get(k) for k in knob_keys},
+            "gate_branches": [
+                {
+                    "gate_key": gk,
+                    "branch": dict((gate_outcomes.get(gk) or {}).get("context_branch") or {}),
+                }
+                for gk in sorted([str(k) for k in gate_outcomes.keys()])
+                if isinstance((gate_outcomes.get(gk) or {}).get("context_branch"), dict)
+            ],
+        }
 
     readiness = derive_readiness(
         decision_state=decision_state,
@@ -615,11 +843,22 @@ def _compute_di_from_used_by_metric(
         blockers=templ.get("blockers") or [],
         comparability=comparability if isinstance(comparability, dict) else {},
         metric_evaluations=metric_evaluations if isinstance(metric_evaluations, dict) else {},
+        evidence_summary=(
+            (soe_v0_3.get("evidence_summary") if isinstance(soe_v0_3, dict) else [])
+            if isinstance(soe_v0_3, dict)
+            else []
+        ),
         scope_type=di_in.scope_type,
         scope_id=int(di_in.scope_id),
     )
     if shortlisting is not None:
         out["shortlisting"] = shortlisting
+
+    out["why_evidence"] = _build_why_evidence(
+        out=out,
+        used_by_metric=used_by_metric,
+        selection_provenance=selection_provenance if isinstance(selection_provenance, dict) else {},
+    )
 
     # Integrity (canonical, additive-only)
     evidence_ids = sorted([ev.measurement_id for ev in used_by_metric.values()])

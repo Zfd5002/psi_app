@@ -20,12 +20,13 @@ import shutil
 
 from datetime import datetime, timezone
 from pathlib import Path
+from jinja2 import Environment, FileSystemLoader
 
 from psi.core.di.catalog import load_catalog
 from psi.core.di.policy import canonical_policy_json, load_policy, sha256_hex_of_canonical_json
 from psi.core.utils import stable_json_dumps
 from psi.services.di.compute import _normalize_ignored
-from psi.services.di.eval import derive_readiness, derive_shortlisting
+from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
 from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
 
@@ -33,6 +34,34 @@ from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
 def _assert(cond: bool, msg: str) -> None:
     if not cond:
         raise AssertionError(msg)
+
+
+def _assert_snapshot_provenance_block(prov: dict, *, expected_scope_type: str) -> None:
+    _assert(isinstance(prov, dict), "di_snapshot_provenance must be a dict")
+    for k in (
+        "policy_name",
+        "template_name",
+        "template_key",
+        "policy_version",
+        "policy_semantics_hash",
+        "shortlisting_enabled",
+        "scope_type",
+        "scope_id",
+    ):
+        _assert(k in prov, f"di_snapshot_provenance missing key: {k}")
+    _assert(str(prov.get("scope_type") or "") == expected_scope_type, f"di_snapshot_provenance.scope_type must be {expected_scope_type}")
+    _assert(prov.get("scope_id") is not None, "di_snapshot_provenance.scope_id must be present")
+    _assert(bool(str(prov.get("policy_version") or "")), "di_snapshot_provenance.policy_version must be non-empty")
+    _assert(bool(str(prov.get("policy_semantics_hash") or "")), "di_snapshot_provenance.policy_semantics_hash must be non-empty")
+    _assert(isinstance(prov.get("shortlisting_enabled"), bool), "di_snapshot_provenance.shortlisting_enabled must be bool")
+
+
+def _render_di_snapshot_template_smoke(ctx: dict) -> str:
+    repo_root = Path(__file__).resolve().parents[2]
+    tpl_dir = repo_root / "psi" / "web" / "templates"
+    env = Environment(loader=FileSystemLoader(str(tpl_dir)))
+    tmpl = env.get_template("decisions/_di_snapshot.html")
+    return tmpl.render(**(ctx or {}))
 
 
 def _assert_single_active_snapshot_per_scope(db) -> None:
@@ -217,6 +246,81 @@ def test_policy_authoritative_required_gate_keys() -> None:
     hg = [r for r in reasons if isinstance(r, dict) and r.get("kind") == "hard_gates_not_passed"]
     _assert(bool(hg), "shortlisting refusal must include hard_gates_not_passed")
     _assert("G3_stability" in (hg[0].get("gates") or []), "shortlisting must use template policy gates, not hardcoded advance gates")
+
+
+def test_context_knob_branching_gate_outcomes_deterministic() -> None:
+    policy_body = {
+        "gates": {
+            "G_ctx": {
+                "require_any": ["m_base"],
+                "context_require_any_by_value": {
+                    "route": {
+                        "SC": {"require_any": ["m_base", "m_sc"], "explanation": "SC branch"},
+                        "_default": {"require_any": ["m_base"], "explanation": "default branch"},
+                    }
+                },
+            }
+        }
+    }
+    used = {"m_base": object()}
+    out_iv_1 = derive_gate_outcomes(policy_body=policy_body, gate_results=[], used_by_metric=used, inputs_context={"route": "IV"}, emit_context_branch_surface=True)
+    out_iv_2 = derive_gate_outcomes(policy_body=policy_body, gate_results=[], used_by_metric=used, inputs_context={"route": "IV"}, emit_context_branch_surface=True)
+    out_sc = derive_gate_outcomes(policy_body=policy_body, gate_results=[], used_by_metric=used, inputs_context={"route": "SC"}, emit_context_branch_surface=True)
+
+    _assert(stable_json_dumps(out_iv_1) == stable_json_dumps(out_iv_2), "context branch selection must be deterministic for identical knobs")
+    g_iv = (out_iv_1 or {}).get("G_ctx") or {}
+    g_sc = (out_sc or {}).get("G_ctx") or {}
+    b_iv = g_iv.get("context_branch") if isinstance(g_iv.get("context_branch"), dict) else {}
+    b_sc = g_sc.get("context_branch") if isinstance(g_sc.get("context_branch"), dict) else {}
+    _assert(bool(b_iv) and bool(b_sc), "context branch selection must be present in gate outputs when policy defines branches")
+    _assert(str(b_iv.get("selected_branch") or "") == "_default", "IV should select default branch in smoke fixture")
+    _assert(str(b_sc.get("selected_branch") or "") == "SC", "SC should select SC branch in smoke fixture")
+    _assert((g_iv.get("required_metrics") or []) == ["m_base"], "default branch must keep baseline required metrics")
+    _assert((g_sc.get("required_metrics") or []) == ["m_base", "m_sc"], "SC branch must switch required metrics deterministically")
+
+
+
+
+def test_shortlisting_reproducibility_from_soe_evidence_summary() -> None:
+    policy_body = {
+        "shortlisting": {"allow_shortlisting": True, "min_required_coverage_ratio": 1.0, "min_readiness_state": "ready"},
+        "gates": {
+            "G1": {"require_all": ["m_a", "m_b"]},
+            "G2": {"require_all": ["m_c"]},
+        },
+    }
+    short = derive_shortlisting(
+        policy_body=policy_body,
+        decision_state="ready",
+        readiness={"state": "ready", "coverage": {"coverage_ratio": 1.0}},
+        gate_outcomes={"G1": {"status": "pass"}, "G2": {"status": "pass"}},
+        blockers=[],
+        comparability={"summary": {"high_severity_count": 0, "total_flags": 0}},
+        metric_evaluations={},
+        evidence_summary=[
+            {"metric_key": "m_b", "total_count": 1, "usable_count": 1},
+            {"metric_key": "m_a", "total_count": 2, "usable_count": 2},
+            {"metric_key": "m_c", "total_count": 3, "usable_count": 2},
+        ],
+        scope_type="batch",
+        scope_id=1,
+    )
+    _assert(isinstance(short, dict) and not bool(short.get("refused")), "shortlisting should produce ranked candidate")
+    cands = short.get("ranked_candidates") if isinstance(short.get("ranked_candidates"), list) else []
+    _assert(len(cands) == 1 and isinstance(cands[0], dict), "shortlisting must emit one candidate in smoke fixture")
+    cand = cands[0]
+    repro = cand.get("reproducibility") if isinstance(cand.get("reproducibility"), dict) else None
+    _assert(isinstance(repro, dict), "candidate.reproducibility must exist when evidence_summary is provided")
+    _assert(str(repro.get("status") or "") == "available", "reproducibility.status must be available when evidence_summary exists")
+    _assert(int(repro.get("required_metric_count") or 0) == 3, "reproducibility.required_metric_count must match required policy metrics")
+    _assert(int(repro.get("positive_required_metric_count") or 0) == 2, "reproducibility positive count must follow total_count/usable_count > 1 rule")
+    metrics = repro.get("metrics") if isinstance(repro.get("metrics"), list) else []
+    _assert([str((m or {}).get("metric_key") or "") for m in metrics] == ["m_a", "m_b", "m_c"], "reproducibility.metrics must be deterministically ordered")
+    expl = cand.get("tie_break_explanations") if isinstance(cand.get("tie_break_explanations"), list) else []
+    repro_expl = [x for x in expl if isinstance(x, dict) and str(x.get("key") or "") == "reproducibility"]
+    _assert(bool(repro_expl), "tie_break_explanations must include reproducibility")
+    details = repro_expl[0].get("details") if isinstance(repro_expl[0].get("details"), dict) else {}
+    _assert(int(details.get("positive_required_metric_count") or 0) == 2, "reproducibility why.details must include deterministic summary")
 
 
 def test_policy_blocker_taxonomy_and_experiment_suggestions() -> None:
@@ -423,6 +527,8 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     out1, db1 = _run_once(db1_path)
     out2, db2 = _run_once(db2_path)
 
+    from psi.services.decisions import add_outcome_label, get_snapshot_detail
+
     # NOTE: run_di persists a new DecisionSnapshot row per call, so snapshot_id will
     # naturally differ. Determinism is asserted over the pure DI output payload.
     s1 = stable_json_dumps(out1.get("output") or {})
@@ -437,7 +543,28 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
 
     _assert(s1 == s2, "DI output must be deterministic for identical DB + inputs")
 
-    _assert("ranking" in (out1.get("output") or {}), "ranking must be present when policy shortlisting is enabled")
+    _assert("ranking" not in (out1.get("output") or {}), "weighted ranking must be absent from canonical DI output")
+
+    snap_ctx1 = get_snapshot_detail(db1, int(out1.get("snapshot_id")))
+    snap_ctx2 = get_snapshot_detail(db2, int(out2.get("snapshot_id")))
+    prov_block1 = snap_ctx1.get("di_snapshot_provenance")
+    prov_block2 = snap_ctx2.get("di_snapshot_provenance")
+    _assert_snapshot_provenance_block(prov_block1, expected_scope_type="batch")
+    _assert_snapshot_provenance_block(prov_block2, expected_scope_type="batch")
+    _assert(
+        stable_json_dumps(prov_block1) == stable_json_dumps(prov_block2),
+        "di_snapshot_provenance block must be stable across deterministic reruns",
+    )
+    # w44: snapshot template rendering must tolerate both absent labels and present labels.
+    html_no_labels = _render_di_snapshot_template_smoke(snap_ctx1)
+    _assert("No DI review yet." in html_no_labels, "DI snapshot render should tolerate missing review labels")
+    add_outcome_label(db1, snapshot_id=int(out1.get("snapshot_id")), name="correct", value_text="manual smoke")
+    add_outcome_label(db1, snapshot_id=int(out1.get("snapshot_id")), name="di_review_verdict", value_text="useful")
+    add_outcome_label(db1, snapshot_id=int(out1.get("snapshot_id")), name="di_review_rationale", value_text="stable render check")
+    snap_ctx1_labeled = get_snapshot_detail(db1, int(out1.get("snapshot_id")))
+    html_with_labels = _render_di_snapshot_template_smoke(snap_ctx1_labeled)
+    _assert("Latest outcome label" in html_with_labels, "DI snapshot render should show latest outcome label summary")
+    _assert("stable render check" in html_with_labels, "DI snapshot render should show latest DI review rationale")
 
     # v1.2.9k: provenance.integrity must exist and be stable across deterministic reruns
     out1_obj = (out1.get("output") or {})
@@ -452,7 +579,7 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         _assert(bool(str(integ2.get(k) or "")), f"provenance.integrity.{k} must be non-empty")
         _assert(str(integ1.get(k)) == str(integ2.get(k)), f"provenance.integrity.{k} must be stable across reruns")
 
-    # Ranking governance gate: disabling policy shortlisting must suppress ranking emission.
+    # Governance gate: weighted ranking is suppressed in canonical output even if policy shortlisting is configured.
     disabled_pol = json.loads(policy_path.read_text(encoding="utf-8"))
     pb = disabled_pol.get("policy_body")
     if not isinstance(pb, dict):
@@ -468,15 +595,12 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     disabled_path.write_text(json.dumps(disabled_pol, sort_keys=True, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
     out_disabled, db_disabled = _run_once(db2_path, policy_path_override=disabled_path)
     try:
-        _assert("ranking" not in (out_disabled.get("output") or {}), "ranking must be absent when policy shortlisting is disabled")
+        _assert("ranking" not in (out_disabled.get("output") or {}), "ranking must remain absent when policy shortlisting is disabled")
     finally:
         db_disabled.close()
 
-    ranking = out1_obj.get("ranking") if isinstance(out1_obj, dict) else None
-    _assert(isinstance(ranking, dict), "ranking must be present for batch scope")
-    _assert(str(ranking.get("scope_type") or "") == "batch", "ranking.scope_type must be batch for batch scope")
-    cands = ranking.get("candidates") if isinstance(ranking.get("candidates"), list) else []
-    _assert(len(cands) == 1, "batch scope ranking must include exactly one candidate")
+    _assert("ranking" not in out1_obj, "batch scope canonical output must not include weighted ranking")
+    _assert("Ranking candidates" not in html_with_labels, "DI snapshot UI must not render weighted ranking table")
 
     # v1.2.9n: anchored replay must match runner output for all compute-derived fingerprints after a clean run
     rep = verify_snapshot(db=db1, snapshot_id=int(out1.get("snapshot_id")), debug=False)
@@ -644,6 +768,8 @@ def test_molecule_scope_determinism() -> None:
     out1, batch_ids1, db1 = _run_once(db1_path)
     out2, batch_ids2, db2 = _run_once(db2_path)
 
+    from psi.services.decisions import get_snapshot_detail
+
     s1 = stable_json_dumps(out1.get("output") or {})
     s2 = stable_json_dumps(out2.get("output") or {})
     _assert(s1 == s2, "molecule-scope DI output must be deterministic for identical DB + inputs")
@@ -655,11 +781,23 @@ def test_molecule_scope_determinism() -> None:
     _assert(isinstance(ordered, list) and len(ordered) >= 2, "molecule selection must include ordered batch_ids")
     _assert(set(int(x) for x in ordered) == set(int(x) for x in batch_ids1), "ordered batch_ids must match selected batches")
 
-    ranking = out1_obj.get("ranking") if isinstance(out1_obj, dict) else None
-    _assert(isinstance(ranking, dict), "ranking must be present for molecule scope")
-    _assert(str(ranking.get("scope_type") or "") == "molecule", "ranking.scope_type must be molecule for molecule scope")
-    cands = ranking.get("candidates") if isinstance(ranking.get("candidates"), list) else []
-    _assert(len(cands) >= 2, "molecule scope ranking must include candidate batches")
+    _assert("ranking" not in out1_obj, "molecule scope canonical output must not include weighted ranking")
+    why_evidence = out1_obj.get("why_evidence")
+    _assert(isinstance(why_evidence, dict), "molecule output.why_evidence must exist and be a dict")
+    ranking_why = (why_evidence.get("ranking") or {}).get("candidates") if isinstance(why_evidence.get("ranking"), dict) else None
+    _assert(isinstance(ranking_why, list), "why_evidence.ranking.candidates must be a list")
+    _assert(len(ranking_why) == 0, "why_evidence.ranking.candidates must be empty when canonical ranking is suppressed")
+
+    snap_ctx1 = get_snapshot_detail(db1, int(out1.get("snapshot_id")))
+    snap_ctx2 = get_snapshot_detail(db2, int(out2.get("snapshot_id")))
+    prov_block1 = snap_ctx1.get("di_snapshot_provenance")
+    prov_block2 = snap_ctx2.get("di_snapshot_provenance")
+    _assert_snapshot_provenance_block(prov_block1, expected_scope_type="molecule")
+    _assert_snapshot_provenance_block(prov_block2, expected_scope_type="molecule")
+    _assert(
+        stable_json_dumps(prov_block1) == stable_json_dumps(prov_block2),
+        "molecule di_snapshot_provenance block must be stable across deterministic reruns",
+    )
 
     db1.close()
     db2.close()
@@ -732,6 +870,30 @@ def test_molecule_scope_determinism() -> None:
                 v = gi.get(lk)
                 _assert(isinstance(v, list), f"gate_outcomes[{gk}].{lk} must be a list")
                 _assert(v == sorted(v), f"gate_outcomes[{gk}].{lk} must be sorted")
+
+    why_evidence = out_payload.get("why_evidence")
+    _assert(isinstance(why_evidence, dict), "output.why_evidence must exist and be a dict")
+    for k in ("gates", "readiness", "shortlisting", "ranking"):
+        _assert(k in why_evidence, f"why_evidence missing key: {k}")
+    gates_why = why_evidence.get("gates") or {}
+    _assert(isinstance(gates_why, dict), "why_evidence.gates must be a dict")
+    _assert(list(gates_why.keys()) == sorted(list(gates_why.keys())), "why_evidence.gates keys must be sorted")
+    for gk, gi in gate_outcomes.items():
+        gi = gi or {}
+        ptrs = gates_why.get(gk) or []
+        _assert(isinstance(ptrs, list), f"why_evidence.gates[{gk}] must be a list")
+        if (gi.get("present_metrics") or []):
+            _assert(ptrs, f"why_evidence.gates[{gk}] must contain pointers when present_metrics exist")
+        ptr_sort = [
+            (
+                str((p or {}).get("kind") or ""),
+                int((p or {}).get("id") or 0),
+                str((p or {}).get("field") or ""),
+                str((p or {}).get("metric_key") or ""),
+            )
+            for p in ptrs
+        ]
+        _assert(ptr_sort == sorted(ptr_sort), f"why_evidence.gates[{gk}] pointers must be deterministically sorted")
 
     soe = (out_payload.get("state_of_evidence") or {})
     _assert("used" in soe and "ignored_evidence" in soe and "warnings" in soe, "legacy SoE fields must remain")
@@ -1090,6 +1252,8 @@ def main() -> int:
         test_policy_template_structure_present()
         test_selection_semantics_version_constant()
         test_policy_authoritative_required_gate_keys()
+        test_context_knob_branching_gate_outcomes_deterministic()
+        test_shortlisting_reproducibility_from_soe_evidence_summary()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()

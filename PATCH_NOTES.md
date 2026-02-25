@@ -1720,3 +1720,25 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w52
+What changed:
+- Byte-copied `advance_to_in_vivo_v0_3.json` from canonical `psi_repo` to restore exact bytes and prevent historical policy hash drift.
+- Added opt-in context-aware policy package `advance_to_in_vivo_v0_4.json` with deterministic route-based functional gate branching (`SC` vs default) expressed in policy data.
+- Threaded `DIInput.context` into derived gate-outcome evaluation and version-gated new context branch surfacing to v0.4+ only (`gate_outcomes.*.context_branch` and `output.context_evaluation`).
+- DI run UI default policy selection remains pinned to `advance_to_in_vivo` v0.3; selecting v0.4 is explicit via policy dropdown.
+- Replay verification now hard-pins policy resolution by stored policy hashes (exact match first) and skips locally drifted snapshots whose exact policy package is not available in repo (`policy_exact_match_not_found`).
+- Anchored replay applies a legacy v0.3 surface scrub to prevent post-w52 context-branch fields from leaking into historical replay outputs.
+- DI contract smoke asserts deterministic context-branch selection via pure gate derivation fixtures.
+
+Why it changed:
+- Make `route`/`model`/`study_intent` context knobs materially affect gate evaluation in a deterministic, policy-authoritative way without changing replay surfaces for historical snapshots.
+
+Determinism/contract impact:
+- Historical v0.3 snapshots retain their prior canonical output surface and policy hashes.
+- New context branch surfaces are emitted only for v0.4+ outputs; branch selection is exact-match and deterministic.
+- No scoring/heuristics introduced; schema compatibility preserved additively.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

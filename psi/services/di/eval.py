@@ -66,6 +66,92 @@ def _policy_required_gate_keys(policy_body: Dict[str, Any]) -> List[str]:
     return out
 
 
+def _policy_required_metric_keys(policy_body: Dict[str, Any]) -> List[str]:
+    """Policy-authoritative required metric keys in deterministic order."""
+
+    gates = (policy_body or {}).get("gates") or {}
+    if not isinstance(gates, dict):
+        return []
+
+    out: List[str] = []
+    seen: set[str] = set()
+    for gk in _policy_required_gate_keys(policy_body):
+        gd = gates.get(gk) or {}
+        if not isinstance(gd, dict):
+            continue
+        req: List[str] = []
+        if isinstance(gd.get("require_all"), list):
+            req = [str(x).strip() for x in gd.get("require_all") if str(x).strip()]
+        elif isinstance(gd.get("require_any"), list):
+            req = [str(x).strip() for x in gd.get("require_any") if str(x).strip()]
+        for mk in req:
+            if mk in seen:
+                continue
+            seen.add(mk)
+            out.append(mk)
+    return out
+
+
+def _derive_reproducibility_signal(*, policy_body: Dict[str, Any], evidence_summary: list[Dict[str, Any]] | None) -> Dict[str, Any]:
+    """Deterministic reproducibility signal from SoE evidence_summary counts.
+
+    A required metric is reproducibility-positive when:
+    - total_count > 1
+    - usable_count > 1
+    """
+
+    required_metrics = sorted(set(_policy_required_metric_keys(policy_body)))
+    summary_map: Dict[str, Dict[str, Any]] = {}
+    if isinstance(evidence_summary, list):
+        for row in evidence_summary:
+            if not isinstance(row, dict):
+                continue
+            mk = str(row.get("metric_key") or "").strip()
+            if not mk or mk in summary_map:
+                continue
+            summary_map[mk] = row
+
+    metrics: List[Dict[str, Any]] = []
+    positive_count = 0
+    for mk in required_metrics:
+        row = summary_map.get(mk) or {}
+        try:
+            total_count = int(row.get("total_count") or 0)
+        except Exception:
+            total_count = 0
+        try:
+            usable_count = int(row.get("usable_count") or 0)
+        except Exception:
+            usable_count = 0
+        is_positive = bool(total_count > 1 and usable_count > 1)
+        if is_positive:
+            positive_count += 1
+        metrics.append(
+            {
+                "metric_key": mk,
+                "total_count": int(total_count),
+                "usable_count": int(usable_count),
+                "reproducibility_positive": is_positive,
+            }
+        )
+
+    required_count = len(required_metrics)
+    if required_count == 0:
+        status = "not_applicable"
+    elif not summary_map:
+        status = "not_available"
+    else:
+        status = "available"
+
+    return {
+        "status": status,
+        "required_metric_count": int(required_count),
+        "positive_required_metric_count": int(positive_count),
+        "all_required_metrics_positive": bool(required_count > 0 and positive_count == required_count),
+        "metrics": metrics,
+    }
+
+
 def _gate_results_by_key(gate_results: list[Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for g in gate_results or []:
@@ -79,7 +165,69 @@ def _gate_results_by_key(gate_results: list[Any]) -> Dict[str, Any]:
     return out
 
 
-def derive_gate_outcomes(*, policy_body: Dict[str, Any], gate_results: list[Any], used_by_metric: Dict[str, Any]) -> Dict[str, Any]:
+def _coerce_context_branch_require_any(x: Any) -> tuple[list[str], str]:
+    if isinstance(x, list):
+        vals = [str(v).strip() for v in x if str(v).strip()]
+        return sorted(set(vals)), ""
+    if isinstance(x, dict):
+        req = x.get("require_any")
+        vals = [str(v).strip() for v in req] if isinstance(req, list) else []
+        vals = [v for v in vals if v]
+        return sorted(set(vals)), str(x.get("explanation") or "").strip()
+    return [], ""
+
+
+def _resolve_gate_context_branch(*, gate_key: str, gate_def: Dict[str, Any], inputs_context: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    gd = gate_def if isinstance(gate_def, dict) else {}
+    branch_map = gd.get("context_require_any_by_value")
+    if not isinstance(branch_map, dict):
+        return None
+
+    ctx = inputs_context if isinstance(inputs_context, dict) else {}
+    branch_keys = sorted([str(k).strip() for k in branch_map.keys() if str(k).strip()])
+    selected_context_key = ""
+    selected_context_value = ""
+    selected_branch_key = ""
+    selected_require_any: list[str] = []
+    selected_expl = ""
+
+    for ck in branch_keys:
+        raw_map = branch_map.get(ck)
+        if not isinstance(raw_map, dict):
+            continue
+        cval = str(ctx.get(ck) or "").strip()
+        chosen = cval if cval in raw_map else ("_default" if "_default" in raw_map else "")
+        if not chosen:
+            continue
+        req_any, expl = _coerce_context_branch_require_any(raw_map.get(chosen))
+        selected_context_key = ck
+        selected_context_value = cval
+        selected_branch_key = chosen
+        selected_require_any = req_any
+        selected_expl = expl
+        break
+
+    if not selected_context_key:
+        return None
+
+    return {
+        "gate_key": str(gate_key),
+        "context_key": selected_context_key,
+        "context_value": selected_context_value if selected_context_value else None,
+        "selected_branch": selected_branch_key,
+        "require_any": selected_require_any,
+        "explanation": selected_expl or f"Selected {selected_context_key} branch {selected_branch_key}.",
+    }
+
+
+def derive_gate_outcomes(
+    *,
+    policy_body: Dict[str, Any],
+    gate_results: list[Any],
+    used_by_metric: Dict[str, Any],
+    inputs_context: Dict[str, Any] | None = None,
+    emit_context_branch_surface: bool = False,
+) -> Dict[str, Any]:
     gates = (policy_body or {}).get("gates") or {}
     if not isinstance(gates, dict):
         gates = {}
@@ -94,10 +242,25 @@ def derive_gate_outcomes(*, policy_body: Dict[str, Any], gate_results: list[Any]
             gd = {}
 
         required_metrics: List[str] = []
+        requirement_mode = "none"
         if isinstance(gd.get("require_all"), list):
             required_metrics = [str(x).strip() for x in gd.get("require_all") if str(x).strip()]
+            requirement_mode = "require_all"
         elif isinstance(gd.get("require_any"), list):
             required_metrics = [str(x).strip() for x in gd.get("require_any") if str(x).strip()]
+            requirement_mode = "require_any"
+        required_metrics_base = sorted(set(required_metrics))
+        context_branch = _resolve_gate_context_branch(gate_key=gk, gate_def=gd, inputs_context=inputs_context)
+        if isinstance(context_branch, dict) and context_branch.get("require_any"):
+            if requirement_mode == "require_any":
+                required_metrics = list(context_branch.get("require_any") or [])
+                context_branch["applied"] = True
+            else:
+                context_branch["applied"] = False
+                context_branch["explanation"] = (
+                    str(context_branch.get("explanation") or "").strip()
+                    + " Branch map ignored because gate does not use require_any."
+                ).strip()
         required_metrics = sorted(set(required_metrics))
 
         present_metrics = sorted([m for m in required_metrics if m in used_keys])
@@ -138,6 +301,13 @@ def derive_gate_outcomes(*, policy_body: Dict[str, Any], gate_results: list[Any]
             "missing_metrics": missing_metrics,
             "qc_notes": sorted(qc_notes),
         }
+        if emit_context_branch_surface:
+            out[gk]["requirement_mode"] = requirement_mode
+            out[gk]["required_metrics_base"] = required_metrics_base
+            if isinstance(context_branch, dict):
+                branch_out = dict(context_branch)
+                branch_out["require_any"] = sorted([str(x) for x in (context_branch.get("require_any") or []) if str(x).strip()])
+                out[gk]["context_branch"] = branch_out
 
     return out
 
@@ -371,6 +541,7 @@ def derive_shortlisting(
     metric_evaluations: Dict[str, Any],
     scope_type: str,
     scope_id: int,
+    evidence_summary: list[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any] | None:
     """Deterministic shortlisting (single-scope baseline).
 
@@ -462,6 +633,7 @@ def derive_shortlisting(
     }
     func_gap = any(v.get("interpretation_gap") for v in func_metrics.values())
     functional = {"context_valid": (not func_gap), "metrics": func_metrics}
+    reproducibility = _derive_reproducibility_signal(policy_body=policy_body, evidence_summary=evidence_summary)
 
     candidate = {
         "candidate_id": f"{scope_type}:{int(scope_id)}",
@@ -471,13 +643,13 @@ def derive_shortlisting(
         "readiness_completeness": cov_ratio,
         "qc_coherence": {"high_severity_count": qc_high, "total_flags": qc_total},
         "purity_aggregation": purity,
-        "reproducibility": {"status": "not_available"},
+        "reproducibility": reproducibility,
         "functional_potency": functional,
         "tie_breaks": [
             {"key": "readiness_completeness", "value": cov_ratio},
             {"key": "qc_coherence", "value": {"high_severity_count": qc_high, "total_flags": qc_total}},
             {"key": "purity_aggregation", "value": purity},
-            {"key": "reproducibility", "value": "not_available"},
+            {"key": "reproducibility", "value": reproducibility},
             {"key": "functional_potency", "value": functional},
         ],
         "tie_break_explanations": [
@@ -498,8 +670,8 @@ def derive_shortlisting(
             },
             {
                 "key": "reproducibility",
-                "summary": "Reproducibility not yet available in v0.5.",
-                "details": {"status": "not_available"},
+                "summary": "Reproducibility uses SoE evidence_summary counts for required metrics (positive when total_count>1 and usable_count>1).",
+                "details": reproducibility,
             },
             {
                 "key": "functional_potency",

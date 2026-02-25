@@ -259,6 +259,11 @@ def main() -> None:
                 cls = anchored.get("stored_vs_replay_classification") if isinstance(anchored, dict) else None
 
                 if not av:
+                    anchored_reason = str(anchored.get("reason") if isinstance(anchored, dict) else "")
+                    if anchored_reason == "policy_exact_match_not_found":
+                        skipped += 1
+                        print(f"SKIP snapshot_id={sid} reason=policy_exact_match_not_found")
+                        continue
                     if bool(args.allow_skip_unavailable):
                         skipped += 1
                         print(f"SKIP snapshot_id={sid} reason=anchored_replay_unavailable")

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 from sqlalchemy.orm import Session
 
 from psi.core.di.policy import load_policy
-from psi.core.models import Batch
+from psi.core.models import Batch, Molecule
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
 
 
@@ -69,24 +69,36 @@ def build_di_run_context(
     decision_key: str | None = None,
     batch_id: int | None = None,
     molecule_id: int | None = None,
+    scope_type: str | None = None,
 ) -> Dict[str, Any]:
     decision_keys = sorted(DECISION_KEY_TO_TEMPLATE_KEY.keys())
     dk = str(decision_key or "").strip() or (decision_keys[0] if decision_keys else "")
+    selected_scope_type = str(scope_type or "").strip().lower()
+    if selected_scope_type not in ("batch", "molecule"):
+        selected_scope_type = "batch" if batch_id else ("molecule" if molecule_id else "batch")
     policies = list_di_policies()
     selected_policy = latest_policy_for_decision(dk)
+    # w52: context-aware policy v0.4 is opt-in; keep default UI selection pinned to v0.3.
+    if dk == "advance_to_in_vivo":
+        stable_default = next((p for p in policies if p["decision_key"] == dk and p["policy_version"] == "v0.3"), None)
+        if stable_default is not None:
+            selected_policy = stable_default
     selected_policy_path = selected_policy["path"] if selected_policy else ""
 
     q = db.query(Batch)
     if molecule_id:
         q = q.filter(Batch.molecule_id == int(molecule_id))
     batches = q.order_by(Batch.created_at.desc()).all()
+    molecules = db.query(Molecule).order_by(Molecule.created_at.desc()).all()
 
     return {
+        "selected_scope_type": selected_scope_type,
         "decision_keys": decision_keys,
         "policies": policies,
         "selected_decision_key": dk,
         "selected_policy_path": selected_policy_path,
         "batches": batches,
+        "molecules": molecules,
         "selected_batch_id": int(batch_id) if batch_id else None,
         "selected_molecule_id": int(molecule_id) if molecule_id else None,
     }
