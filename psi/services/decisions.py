@@ -39,6 +39,122 @@ DI_REVIEW_VERDICTS = [
 ]
 
 
+def _di_snapshot_provenance_view_model(*, output: dict, inputs: dict) -> dict:
+    out = output if isinstance(output, dict) else {}
+    ins = inputs if isinstance(inputs, dict) else {}
+    policy = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+    prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+    prov_template = prov.get("decision_template") if isinstance(prov.get("decision_template"), dict) else {}
+    prov_scope = prov.get("decision_scope") if isinstance(prov.get("decision_scope"), dict) else {}
+    short = (policy.get("shortlisting") if isinstance(policy.get("shortlisting"), dict) else None)
+    if short is None:
+        short = out.get("shortlisting")
+
+    shortlisting_enabled = None
+    if isinstance(short, dict):
+        if "enabled" in short:
+            shortlisting_enabled = bool(short.get("enabled"))
+        elif "refused" in short or "ranked_candidates" in short:
+            shortlisting_enabled = True
+    elif "shortlisting" not in out:
+        shortlisting_enabled = False
+
+    return {
+        "policy_name": str(policy.get("policy_name") or policy.get("name") or ins.get("policy_name") or ""),
+        "template_name": str(prov_template.get("template_name") or prov_template.get("template_key") or ins.get("template_name") or ins.get("template_key") or ""),
+        "template_key": str(prov_template.get("template_key") or ins.get("template_key") or ""),
+        "policy_version": str(policy.get("policy_version") or policy.get("version") or ins.get("policy_version") or ""),
+        "policy_semantics_hash": str(policy.get("policy_semantics_hash") or policy.get("hash") or ins.get("policy_semantics_hash") or ins.get("policy_hash") or ""),
+        "policy_package_hash": str(policy.get("policy_package_hash") or ins.get("policy_package_hash") or ""),
+        "shortlisting_enabled": shortlisting_enabled,
+        "scope_type": str(prov_scope.get("scope_type") or ((prov.get("inputs_fingerprint") or {}).get("scope_type") if isinstance(prov.get("inputs_fingerprint"), dict) else "") or ins.get("scope_type") or ""),
+        "scope_id": (
+            prov_scope.get("scope_id")
+            if (prov_scope.get("scope_id") is not None)
+            else ((prov.get("inputs_fingerprint") or {}).get("scope_id") if isinstance(prov.get("inputs_fingerprint"), dict) else ins.get("scope_id"))
+        ),
+    }
+
+
+def _latest_snapshot_label_summaries(outcomes: list[OutcomeLabel]) -> tuple[dict, dict]:
+    latest_outcome = {"name": None, "value_text": None, "created_at": None}
+    di_review = {"verdict": None, "rationale": None, "created_at": None}
+    if not isinstance(outcomes, list):
+        return latest_outcome, di_review
+
+    for o in outcomes:
+        name = str(getattr(o, "name", "") or "")
+        if name == "di_review_verdict":
+            di_review["verdict"] = getattr(o, "value_text", None)
+            di_review["created_at"] = getattr(o, "created_at", None)
+            continue
+        if name == "di_review_rationale":
+            di_review["rationale"] = getattr(o, "value_text", None)
+            if di_review.get("created_at") is None:
+                di_review["created_at"] = getattr(o, "created_at", None)
+            continue
+        latest_outcome = {
+            "name": getattr(o, "name", None),
+            "value_text": getattr(o, "value_text", None),
+            "created_at": getattr(o, "created_at", None),
+        }
+    return latest_outcome, di_review
+
+
+def _di_snapshot_ui_view_model(*, output: dict, outcomes: list[OutcomeLabel]) -> dict:
+    out = output if isinstance(output, dict) else {}
+    gate_outcomes = out.get("gate_outcomes") if isinstance(out.get("gate_outcomes"), dict) else {}
+    ranking = out.get("ranking") if isinstance(out.get("ranking"), dict) else {}
+    warnings = ((out.get("state_of_evidence") or {}).get("warnings") if isinstance(out.get("state_of_evidence"), dict) else [])
+    blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
+    readiness = out.get("readiness") if isinstance(out.get("readiness"), dict) else {}
+
+    gate_outcomes_ordered = [
+        {"gate_key": gk, "data": (gate_outcomes.get(gk) or {})}
+        for gk in sorted([str(k) for k in gate_outcomes.keys()])
+    ]
+
+    outcomes_ordered = list(outcomes or [])
+
+    ranking_candidates = ranking.get("candidates") if isinstance(ranking.get("candidates"), list) else []
+    ranking_candidates_ordered = sorted(
+        [c for c in ranking_candidates if isinstance(c, dict)],
+        key=lambda c: (
+            str(c.get("candidate_type") or ""),
+            -float(c.get("score") or 0.0),
+            str(((c.get("tie_breaker") or {}).get("created_at") if isinstance(c.get("tie_breaker"), dict) else "") or ""),
+            int(c.get("candidate_id") or 0),
+        ),
+    )
+
+    warning_items = [w for w in (warnings or []) if isinstance(w, dict)]
+    error_kind = ""
+    error_detail = None
+    if warning_items:
+        first = warning_items[0]
+        error_kind = str(first.get("kind") or "")
+        error_detail = first.get("detail")
+    if not error_kind and blockers:
+        b0 = blockers[0] if isinstance(blockers[0], dict) else {}
+        error_kind = str((b0 or {}).get("blocker_key") or "")
+        error_detail = (b0 or {}).get("detail")
+
+    error_block = {
+        "present": bool(error_kind),
+        "kind": error_kind,
+        "detail": error_detail if isinstance(error_detail, (dict, list, str, int, float, bool)) or error_detail is None else str(error_detail),
+        "readiness_state": str(readiness.get("state") or ""),
+        "blocking_reasons": [str(x) for x in (readiness.get("blocking_reasons") or []) if str(x).strip()],
+    }
+
+    return {
+        "gate_outcomes_ordered": gate_outcomes_ordered,
+        "outcomes_ordered": outcomes_ordered,
+        "ranking_candidates_ordered": ranking_candidates_ordered,
+        "error_block": error_block,
+    }
+
+
 def _reconcile_single_active_snapshot_for_scope(
     db: Session,
     *,
@@ -374,12 +490,7 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
         .order_by(OutcomeLabel.created_at.asc())
         .all()
     )
-    di_review = {"verdict": None, "rationale": None}
-    for o in outcomes:
-        if o.name == "di_review_verdict":
-            di_review["verdict"] = o.value_text
-        if o.name == "di_review_rationale":
-            di_review["rationale"] = o.value_text
+    latest_outcome_label, di_review = _latest_snapshot_label_summaries(outcomes)
 
     # Legacy rules-engine evidence tracing
     evidence = []
@@ -419,9 +530,12 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
         "outcome_label_types": OUTCOME_LABEL_TYPES,
         "di_review_verdicts": DI_REVIEW_VERDICTS,
         "di_review": di_review,
+        "latest_outcome_label": latest_outcome_label,
         "outcomes": outcomes,
         "output": output,
         "inputs": inputs,
+        "di_snapshot_provenance": (_di_snapshot_provenance_view_model(output=output, inputs=inputs) if is_di else None),
+        "di_snapshot_ui": (_di_snapshot_ui_view_model(output=output, outcomes=outcomes) if is_di else None),
         "is_di": is_di,
         "evidence": evidence,
         "citations": citations,

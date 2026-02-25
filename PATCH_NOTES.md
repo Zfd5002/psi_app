@@ -1,3 +1,55 @@
+## v1.2.9w46
+
+Why:
+- Make the DI snapshot UI more audit-friendly with deterministic ordering and clearer error snapshot rendering.
+
+What changed:
+- `get_snapshot_detail` now provides `di_snapshot_ui` with pre-ordered gate outcomes, outcomes history, ranking candidates, and a unified DI error block.
+- DI snapshot template uses pre-ordered lists for gate summary counts and outcomes history, renders a deterministic ranking candidates table, and surfaces a clear DI error snapshot block.
+
+What did NOT change:
+- No DI scoring/selection logic changes. No schema changes. No layout overhaul.
+
+## v1.2.9w45
+
+Why:
+- Add stable evidence pointers so audit users can trace gate/readiness/shortlisting/ranking “why” back to concrete inputs.
+
+What changed:
+- Added additive `output.why_evidence` with deterministic sub-blocks for `gates`, `readiness`, `shortlisting`, and `ranking`.
+- Evidence pointers are direct references only (measurement IDs, data_record IDs, and selected evidence field pointers already present in selected inputs).
+- `di_contract_smoke` now asserts `why_evidence` presence, ordering, and gate-pointer coverage when gate metrics are present.
+
+What did NOT change:
+- No new ranking factors. No heuristic inference. No schema changes.
+
+## v1.2.9w44
+
+Why:
+- Render outcome labels and DI review verdicts in the snapshot UI as read-only audit context.
+
+What changed:
+- `get_snapshot_detail` now exposes `latest_outcome_label` with latest-wins semantics (excluding DI review label rows).
+- DI snapshot UI shows latest outcome label + latest DI review verdict/rationale read-only and removes inline label write forms from the snapshot panel.
+- `di_contract_smoke` renders the DI snapshot template with/without labels to verify no render errors.
+
+What did NOT change:
+- No DI output schema changes. No labeling semantics changes. No new tables.
+
+## v1.2.9w43
+
+Why:
+- Surface DI snapshot provenance explicitly in the snapshot UI and lock the contract with smoke assertions.
+
+What changed:
+- DI outputs now include additive provenance sub-blocks for template, policy ref, and decision scope.
+- Decision snapshot detail context exposes explicit `di_snapshot_provenance` for Jinja rendering.
+- DI snapshot template renders policy/template/version/hash, shortlisting-enabled, and scope identifiers.
+- `di_contract_smoke` asserts provenance fields exist for batch + molecule snapshots and remain deterministic across reruns.
+
+What did NOT change:
+- No schema changes. No DI scoring/heuristics changes. No labeling semantics changes.
+
 ## v1.2.9v15 (final-2)
 
 Why:

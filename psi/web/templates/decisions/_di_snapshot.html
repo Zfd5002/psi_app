@@ -15,14 +15,71 @@
 {% set metric_evals = output.metric_evaluations if output.metric_evaluations is defined else {} %}
 {% set shortlisting = output.shortlisting if output.shortlisting is defined else None %}
 {% set superseded = (snap.is_superseded if snap is defined else None) %}
+{% set di_ui = di_snapshot_ui if di_snapshot_ui is defined and di_snapshot_ui else {} %}
+{% set gate_outcomes_ordered = di_ui.gate_outcomes_ordered if di_ui is defined and di_ui.gate_outcomes_ordered is defined else [] %}
+{% set outcomes_ordered = di_ui.outcomes_ordered if di_ui is defined and di_ui.outcomes_ordered is defined else (outcomes if outcomes is defined else []) %}
+{% set ranking_candidates_ordered = di_ui.ranking_candidates_ordered if di_ui is defined and di_ui.ranking_candidates_ordered is defined else [] %}
+{% set error_block = di_ui.error_block if di_ui is defined and di_ui.error_block is defined else {} %}
 
 {% if verification is defined or verification_error is defined %}
   {% include "decisions/_di_verification.html" %}
 {% endif %}
 
+{% set snap_prov = di_snapshot_provenance if di_snapshot_provenance is defined and di_snapshot_provenance else {} %}
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Snapshot provenance</h2>
+  <div class="grid cols-2" style="gap:12px;">
+    <div>
+      <div class="muted">Policy / template</div>
+      <div><b>{{ snap_prov.policy_name if snap_prov.policy_name is defined and snap_prov.policy_name else '—' }}</b></div>
+      <div class="muted">Template: {{ snap_prov.template_name if snap_prov.template_name is defined and snap_prov.template_name else (snap_prov.template_key if snap_prov.template_key is defined and snap_prov.template_key else '—') }}</div>
+      {% if snap_prov.template_key is defined and snap_prov.template_key %}
+        <div class="muted mini">template_key={{ snap_prov.template_key }}</div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="muted">Policy version / hash</div>
+      <div>{{ snap_prov.policy_version if snap_prov.policy_version is defined and snap_prov.policy_version else '—' }}</div>
+      <div class="muted mini">{{ (snap_prov.policy_semantics_hash[:12] ~ '…') if snap_prov.policy_semantics_hash is defined and snap_prov.policy_semantics_hash else 'hash: —' }}</div>
+      <div class="muted mini">Shortlisting enabled: {% if snap_prov.shortlisting_enabled is sameas true %}yes{% elif snap_prov.shortlisting_enabled is sameas false %}no{% else %}unknown{% endif %}</div>
+      <div class="muted mini">Scope: {{ snap_prov.scope_type if snap_prov.scope_type is defined and snap_prov.scope_type else '—' }} / {{ snap_prov.scope_id if snap_prov.scope_id is defined and snap_prov.scope_id is not none else '—' }}</div>
+    </div>
+  </div>
+</div>
+
+{% if error_block is defined and error_block.present %}
+<div class="notice" style="border-color:var(--warn);margin-top:12px;">
+  <b>DI error snapshot</b>
+  <div class="muted" style="margin-top:4px;">kind={{ error_block.kind if error_block.kind is defined and error_block.kind else 'unknown' }}</div>
+  {% if error_block.readiness_state is defined and error_block.readiness_state %}
+    <div class="muted mini">readiness_state={{ error_block.readiness_state }}</div>
+  {% endif %}
+  {% if error_block.blocking_reasons is defined and error_block.blocking_reasons %}
+    <div class="muted mini">blocking_reasons={{ error_block.blocking_reasons|join(', ') }}</div>
+  {% endif %}
+  {% if error_block.detail is defined %}
+    <details style="margin-top:6px;">
+      <summary class="muted">error detail</summary>
+      <pre style="white-space:pre-wrap;overflow:auto;max-height:260px;">{{ error_block.detail | tojson(indent=2) }}</pre>
+    </details>
+  {% endif %}
+</div>
+{% endif %}
+
 {# --- Outcome labels (capture only) --- #}
 <div class="card" style="margin-top:12px;">
   <h2 style="margin-top:0;">DI post-hoc review</h2>
+  <div class="muted">Snapshot view is read-only</div>
+  <div style="margin-top:8px;">
+    <div class="muted">Latest outcome label</div>
+    {% if latest_outcome_label is defined and latest_outcome_label and latest_outcome_label.name %}
+      <div><b>{{ latest_outcome_label.name }}</b></div>
+      <div class="muted" style="margin-top:4px;">{{ latest_outcome_label.value_text if latest_outcome_label.value_text else '—' }}</div>
+    {% else %}
+      <div class="muted">No outcome label yet.</div>
+    {% endif %}
+  </div>
+  <hr style="margin:12px 0;opacity:0.4;" />
   {% if di_review is defined and (di_review.verdict or di_review.rationale) %}
     <div class="muted">Latest review</div>
     <div><b>{{ di_review.verdict if di_review.verdict else '—' }}</b></div>
@@ -31,31 +88,13 @@
     <div class="muted">No DI review yet.</div>
   {% endif %}
 
-  {% if di_review_verdicts is defined and di_review_verdicts|length %}
-    <form method="post" action="/decisions/{{ snap.id }}/outcomes" style="margin-top:10px;display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end;">
-      <div>
-        <div class="muted mini">Verdict</div>
-        <select name="di_review_verdict">
-          {% for lt in di_review_verdicts %}
-            <option value="{{ lt.key }}">{{ lt.label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <div class="muted mini">Rationale (required)</div>
-        <input name="di_review_rationale" placeholder="Why this verdict?" />
-      </div>
-      <button class="btn" type="submit">Save DI review</button>
-    </form>
-  {% endif %}
-
   <hr style="margin:12px 0;opacity:0.4;" />
-  <h2 style="margin:0 0 6px 0;">Outcome review</h2>
-  {% if outcomes is defined and outcomes|length %}
+  <h2 style="margin:0 0 6px 0;">Outcome review history</h2>
+  {% if outcomes_ordered is defined and outcomes_ordered|length %}
     <table class="table compact">
       <thead><tr><th>label</th><th>note</th><th>created_at</th></tr></thead>
       <tbody>
-        {% for o in outcomes %}
+        {% for o in outcomes_ordered %}
           <tr>
             <td><b>{{ o.name }}</b></td>
             <td class="muted">{{ o.value_text if o.value_text else '—' }}</td>
@@ -67,24 +106,6 @@
   {% else %}
     <div class="muted">No outcome labels yet.</div>
   {% endif %}
-
-  {% if outcome_label_types is defined and outcome_label_types|length %}
-    <form method="post" action="/decisions/{{ snap.id }}/outcomes" style="margin-top:10px;display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end;">
-      <div>
-        <div class="muted mini">Label type</div>
-        <select name="label_type">
-          {% for lt in outcome_label_types %}
-            <option value="{{ lt.key }}">{{ lt.label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <div class="muted mini">Note (required for “Other”)</div>
-        <input name="note" placeholder="Optional note" />
-      </div>
-      <button class="btn" type="submit">Add label</button>
-    </form>
-  {% endif %}
 </div>
 
 {# --- Top summary (fast interpretation) --- #}
@@ -94,11 +115,12 @@
       <div class="muted">Decision state</div>
       <div style="font-size:22px;font-weight:800;">{{ output.decision_state }}</div>
       <div class="muted">Decision: {{ snap.decision_key }}</div>
-      {% if gate_outcomes and gate_outcomes|length %}
+      {% if gate_outcomes_ordered and gate_outcomes_ordered|length %}
         {% set pass_n = 0 %}
         {% set fail_n = 0 %}
         {% set na_n = 0 %}
-        {% for gk, gd in gate_outcomes.items() %}
+        {% for go in gate_outcomes_ordered %}
+          {% set gd = go.data if go is mapping and go.data is defined else {} %}
           {% set st = (gd.status if gd is mapping and gd.status is defined else '') %}
           {% if st == 'pass' %}{% set pass_n = pass_n + 1 %}{% elif st == 'fail' or st == 'hold' %}{% set fail_n = fail_n + 1 %}{% else %}{% set na_n = na_n + 1 %}{% endif %}
         {% endfor %}
@@ -178,6 +200,25 @@
     </div>
   </div>
 </div>
+
+{% if ranking_candidates_ordered and ranking_candidates_ordered|length %}
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Ranking candidates</h2>
+  <table class="table compact">
+    <thead><tr><th>candidate</th><th>score</th><th>tie-breaker</th><th>factors</th></tr></thead>
+    <tbody>
+      {% for c in ranking_candidates_ordered %}
+        <tr>
+          <td><b>{{ c.candidate_type if c.candidate_type is defined else 'candidate' }}</b>: {{ c.candidate_id if c.candidate_id is defined else '—' }}</td>
+          <td class="muted">{{ c.score if c.score is defined else '—' }}</td>
+          <td class="muted">{{ c.tie_breaker | tojson if c.tie_breaker is defined else '—' }}</td>
+          <td class="muted">{{ c.factors|length if c.factors is defined and c.factors else 0 }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 
 <div class="grid cols-3" style="margin-top:12px;">
   <div class="card" style="margin:0;">
