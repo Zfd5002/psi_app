@@ -83,6 +83,84 @@ def _policy_supports_context_branch_surface(pol: Any) -> bool:
     return v.startswith("v0.4")
 
 
+def _build_scope_semantics(
+    *,
+    di_in: DIInput,
+    shortlisting: Dict[str, Any] | None,
+    selection_provenance: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build v0.4+ explicit scope semantics (batch-first) without introducing scores."""
+
+    scope_type = str(di_in.scope_type or "")
+    refused = bool((shortlisting or {}).get("refused")) if isinstance(shortlisting, dict) else False
+    batch_ranked_candidates: List[Dict[str, Any]] = []
+
+    if not refused:
+        if scope_type == "batch":
+            batch_ranked_candidates = [{"batch_id": int(di_in.scope_id), "rank_source": "scope_batch"}]
+        elif scope_type == "molecule":
+            ordered = selection_provenance.get("batch_ids_ordered") or selection_provenance.get("batch_ids_all") or []
+            seen: set[int] = set()
+            for x in ordered:
+                try:
+                    bid = int(x)
+                except Exception:
+                    continue
+                if bid in seen:
+                    continue
+                seen.add(bid)
+                batch_ranked_candidates.append({"batch_id": bid, "rank_source": "selection_provenance_batch_order"})
+
+    molecule_derived_candidates: List[Dict[str, Any]] = []
+    if not refused:
+        if scope_type == "molecule":
+            mol_id = selection_provenance.get("molecule_id")
+            try:
+                mol_id_i = int(mol_id) if mol_id is not None else None
+            except Exception:
+                mol_id_i = None
+            if mol_id_i is not None and batch_ranked_candidates:
+                molecule_derived_candidates.append(
+                    {
+                        "molecule_id": mol_id_i,
+                        "best_batch_id": int(batch_ranked_candidates[0]["batch_id"]),
+                        "derivation_rule": "best_ready_batch_per_molecule",
+                    }
+                )
+        elif scope_type == "batch":
+            mol_id = selection_provenance.get("molecule_id")
+            try:
+                mol_id_i = int(mol_id) if mol_id is not None else None
+            except Exception:
+                mol_id_i = None
+            if mol_id_i is not None:
+                molecule_derived_candidates.append(
+                    {
+                        "molecule_id": mol_id_i,
+                        "best_batch_id": int(di_in.scope_id),
+                        "derivation_rule": "best_ready_batch_per_molecule",
+                    }
+                )
+
+    notes = [
+        "batch-first scope semantics (deterministic; no weighted scoring)",
+        "molecule derivation uses best_ready_batch_per_molecule and never fabricates rankings when shortlisting is refused",
+    ]
+    if scope_type == "molecule":
+        notes.append("batch ranking uses selection_provenance batch order as deterministic tie-break baseline for aggregated molecule scope")
+
+    return {
+        "ranked_entity": "batch",
+        "scope_type": scope_type,
+        "scope_id": int(di_in.scope_id),
+        "molecule_derivation": "best_ready_batch_per_molecule",
+        "refused": bool(refused),
+        "batch_ranked_candidates": batch_ranked_candidates,
+        "molecule_derived_candidates": molecule_derived_candidates,
+        "notes": notes,
+    }
+
+
 def _score_from_factors(factors: List[Dict[str, Any]]) -> float:
     score = 0.0
     for f in factors:
@@ -854,6 +932,12 @@ def _compute_di_from_used_by_metric(
     )
     if shortlisting is not None:
         out["shortlisting"] = shortlisting
+    if emit_context_branch_surface:
+        out["scope_semantics"] = _build_scope_semantics(
+            di_in=di_in,
+            shortlisting=(shortlisting if isinstance(shortlisting, dict) else None),
+            selection_provenance=(selection_provenance if isinstance(selection_provenance, dict) else {}),
+        )
 
     out["why_evidence"] = _build_why_evidence(
         out=out,

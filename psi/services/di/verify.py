@@ -642,6 +642,7 @@ def _scrub_output_for_replay(output: Dict[str, Any], *, policy_version: str, sch
 
     out = dict(output)
     out.pop("context_evaluation", None)
+    out.pop("scope_semantics", None)
     gate_outcomes = out.get("gate_outcomes")
     if isinstance(gate_outcomes, dict):
         cleaned: Dict[str, Any] = {}

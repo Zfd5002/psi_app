@@ -25,7 +25,7 @@ from jinja2 import Environment, FileSystemLoader
 from psi.core.di.catalog import load_catalog
 from psi.core.di.policy import canonical_policy_json, load_policy, sha256_hex_of_canonical_json
 from psi.core.utils import stable_json_dumps
-from psi.services.di.compute import _normalize_ignored
+from psi.services.di.compute import _build_scope_semantics, _normalize_ignored
 from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
 from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
@@ -391,6 +391,30 @@ def test_tie_break_dimensions_v04_complete_and_deterministic() -> None:
     tb = (out1 or {}).get("tie_break") if isinstance((out1 or {}).get("tie_break"), dict) else {}
     tb_dims = tb.get("dimensions") if isinstance(tb.get("dimensions"), list) else []
     _assert([str((d or {}).get("key") or "") for d in tb_dims] == keys, "shortlisting.tie_break.dimensions must align with candidate tie-break dimensions")
+
+
+def test_scope_semantics_v04_deterministic() -> None:
+    from psi.core.di.schema import DIInput
+
+    di_in = DIInput(
+        decision_key="advance_to_in_vivo",
+        scope_type="molecule",
+        scope_id=42,
+        as_of_ts=None,
+        qc_mode="model_safe",
+        context={"route": "SC"},
+    )
+    shortlisting = {"enabled": True, "refused": False, "ranked_candidates": [{"candidate_id": "molecule:42"}]}
+    selection_provenance = {"molecule_id": 42, "batch_ids_ordered": [9, 7, 5]}
+    s1 = _build_scope_semantics(di_in=di_in, shortlisting=shortlisting, selection_provenance=selection_provenance)
+    s2 = _build_scope_semantics(di_in=di_in, shortlisting=shortlisting, selection_provenance=selection_provenance)
+    _assert(stable_json_dumps(s1) == stable_json_dumps(s2), "scope_semantics must be deterministic")
+    _assert(str(s1.get("ranked_entity") or "") == "batch", "scope_semantics.ranked_entity must be batch")
+    _assert(str(s1.get("molecule_derivation") or "") == "best_ready_batch_per_molecule", "scope_semantics.molecule_derivation must be explicit")
+    batch_ids = [int((x or {}).get("batch_id") or 0) for x in (s1.get("batch_ranked_candidates") or [])]
+    _assert(batch_ids == [9, 7, 5], "scope_semantics batch-ranked view must preserve deterministic batch order")
+    mols = s1.get("molecule_derived_candidates") if isinstance(s1.get("molecule_derived_candidates"), list) else []
+    _assert(len(mols) == 1 and int((mols[0] or {}).get("best_batch_id") or 0) == 9, "scope semantics molecule derivation must align with batch-ranked best candidate")
 
 
 def test_policy_blocker_taxonomy_and_experiment_suggestions() -> None:
@@ -1325,6 +1349,7 @@ def main() -> int:
         test_context_knob_branching_gate_outcomes_deterministic()
         test_shortlisting_refusal_v04_extensions_deterministic()
         test_tie_break_dimensions_v04_complete_and_deterministic()
+        test_scope_semantics_v04_deterministic()
         test_shortlisting_reproducibility_from_soe_evidence_summary()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_ignore_reason_keys_allowed_set()

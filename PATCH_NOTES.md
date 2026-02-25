@@ -1777,3 +1777,21 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w55
+What changed:
+- Added v0.4-only additive `output.scope_semantics` with explicit batch-first ranking semantics and molecule derivation metadata (`best_ready_batch_per_molecule`).
+- Scope semantics include deterministic batch-ranked and molecule-derived views, and respect shortlisting refusal (no fabricated rankings).
+- DI snapshot UI now displays a read-only scope-semantics summary.
+- Replay scrub removes `scope_semantics` from historical v0.3 replay outputs.
+
+Why it changed:
+- Codify batch-vs-molecule shortlisting semantics explicitly and auditably without introducing scores.
+
+Determinism/contract impact:
+- `scope_semantics` is emitted only for v0.4+ and is derived from deterministic inputs (`scope_type`, `scope_id`, `selection_provenance`, refusal state).
+- v0.3 replay surfaces remain unchanged via replay scrub.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

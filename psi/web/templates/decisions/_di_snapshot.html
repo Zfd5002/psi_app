@@ -14,6 +14,7 @@
 {% set risk_flags = output.risk_flags_enriched if output.risk_flags_enriched is defined else (output.risk_flags if output.risk_flags is defined else []) %}
 {% set metric_evals = output.metric_evaluations if output.metric_evaluations is defined else {} %}
 {% set shortlisting = output.shortlisting if output.shortlisting is defined else None %}
+{% set scope_semantics = output.scope_semantics if output.scope_semantics is defined else None %}
 {% set superseded = (snap.is_superseded if snap is defined else None) %}
 {% set di_ui = di_snapshot_ui if di_snapshot_ui is defined and di_snapshot_ui else {} %}
 {% set gate_outcomes_ordered = di_ui.gate_outcomes_ordered if di_ui is defined and di_ui.gate_outcomes_ordered is defined else [] %}
@@ -205,6 +206,15 @@
         {% endif %}
       {% else %}
         <div class="muted">Not enabled</div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="muted">Scope semantics</div>
+      {% if scope_semantics is mapping %}
+        <div><span class="chip">{{ scope_semantics.ranked_entity if scope_semantics.ranked_entity is defined else '—' }}</span> <span class="muted">{{ scope_semantics.molecule_derivation if scope_semantics.molecule_derivation is defined else '' }}</span></div>
+        <div class="muted mini" style="margin-top:4px;">scope={{ scope_semantics.scope_type if scope_semantics.scope_type is defined else '—' }} / {{ scope_semantics.scope_id if scope_semantics.scope_id is defined else '—' }}</div>
+      {% else %}
+        <div class="muted">Not emitted</div>
       {% endif %}
     </div>
   </div>
