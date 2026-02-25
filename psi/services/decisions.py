@@ -39,6 +39,80 @@ DI_REVIEW_VERDICTS = [
 ]
 
 
+def _reconcile_single_active_snapshot_for_scope(
+    db: Session,
+    *,
+    decision_key: str,
+    program_id: int,
+    molecule_id: Optional[int],
+    batch_id: Optional[int],
+    new_snapshot_id: int,
+) -> None:
+    """Enforce one active snapshot per exact scope before commit.
+
+    Authoritative "active/latest" semantics use `superseded_by_snapshot_id IS NULL`.
+    This reconciles any concurrently-created active rows to point at the new snapshot.
+    """
+    extra_active_ids = [
+        int(r[0])
+        for r in db.execute(
+            text(
+                """
+                SELECT id
+                FROM decision_snapshots
+                WHERE decision_key = :dk
+                  AND program_id = :pid
+                  AND COALESCE(molecule_id, 0) = COALESCE(:mid, 0)
+                  AND COALESCE(batch_id, 0) = COALESCE(:bid, 0)
+                  AND superseded_by_snapshot_id IS NULL
+                  AND id <> :new_id
+                """
+            ),
+            {
+                "dk": str(decision_key),
+                "pid": int(program_id),
+                "mid": molecule_id,
+                "bid": batch_id,
+                "new_id": int(new_snapshot_id),
+            },
+        ).fetchall()
+    ]
+    if extra_active_ids:
+        q = text(
+            """
+            UPDATE decision_snapshots
+            SET is_superseded = 1,
+                superseded_at = CURRENT_TIMESTAMP,
+                superseded_by_snapshot_id = :new_id
+            WHERE id IN :ids
+            """
+        ).bindparams(bindparam("ids", expanding=True))
+        db.execute(q, {"new_id": int(new_snapshot_id), "ids": list(extra_active_ids)})
+
+    active_count = int(
+        db.execute(
+            text(
+                """
+                SELECT COUNT(1)
+                FROM decision_snapshots
+                WHERE decision_key = :dk
+                  AND program_id = :pid
+                  AND COALESCE(molecule_id, 0) = COALESCE(:mid, 0)
+                  AND COALESCE(batch_id, 0) = COALESCE(:bid, 0)
+                  AND superseded_by_snapshot_id IS NULL
+                """
+            ),
+            {"dk": str(decision_key), "pid": int(program_id), "mid": molecule_id, "bid": batch_id},
+        ).scalar()
+        or 0
+    )
+    if active_count != 1:
+        raise RuntimeError(
+            "DecisionSnapshot supersession integrity violation: "
+            f"expected exactly one active snapshot for scope, found {active_count}"
+        )
+
+
 def list_decision_snapshots(db: Session) -> list[DecisionSnapshot]:
     return db.query(DecisionSnapshot).order_by(DecisionSnapshot.created_at.desc()).limit(200).all()
 
@@ -115,51 +189,63 @@ def run_and_snapshot(
         ).fetchall()
     ]
 
-    if active_ids:
-        q = text(
-            '''
-            UPDATE decision_snapshots
-            SET is_superseded = 1,
-                superseded_at = CURRENT_TIMESTAMP,
-                superseded_by_snapshot_id = NULL
-            WHERE id IN :ids
-            '''
-        ).bindparams(bindparam("ids", expanding=True))
-        db.execute(q, {"ids": list(active_ids)})
+    try:
+        if active_ids:
+            q = text(
+                '''
+                UPDATE decision_snapshots
+                SET is_superseded = 1,
+                    superseded_at = CURRENT_TIMESTAMP,
+                    superseded_by_snapshot_id = NULL
+                WHERE id IN :ids
+                '''
+            ).bindparams(bindparam("ids", expanding=True))
+            db.execute(q, {"ids": list(active_ids)})
 
-    snap = DecisionSnapshot(
-        program_id=program_id,
-        molecule_id=molecule_id,
-        batch_id=batch_id,
-        decision_key=decision_key,
-        rules_version=str(rules.get("version")),
-        is_superseded=0,
-        inputs_json=json_dumps_compact(
-            {
-                "program_id": program_id,
-                "molecule_id": molecule_id,
-                "batch_id": batch_id,
-                "decision_key": decision_key,
-            }
-        ),
-        outputs_json=json_dumps_compact(result),
-        evidence_ids_json=json_dumps_compact(result.get("evidence_ids_used", [])),
-        created_at=now_utc(),
-    )
-    db.add(snap)
-    db.flush()
+        snap = DecisionSnapshot(
+            program_id=program_id,
+            molecule_id=molecule_id,
+            batch_id=batch_id,
+            decision_key=decision_key,
+            rules_version=str(rules.get("version")),
+            is_superseded=0,
+            inputs_json=json_dumps_compact(
+                {
+                    "program_id": program_id,
+                    "molecule_id": molecule_id,
+                    "batch_id": batch_id,
+                    "decision_key": decision_key,
+                }
+            ),
+            outputs_json=json_dumps_compact(result),
+            evidence_ids_json=json_dumps_compact(result.get("evidence_ids_used", [])),
+            created_at=now_utc(),
+        )
+        db.add(snap)
+        db.flush()
 
-    if active_ids:
-        q = text(
-            '''
-            UPDATE decision_snapshots
-            SET superseded_by_snapshot_id = :new_id
-            WHERE id IN :ids
-            '''
-        ).bindparams(bindparam("ids", expanding=True))
-        db.execute(q, {"new_id": int(snap.id), "ids": list(active_ids)})
+        if active_ids:
+            q = text(
+                '''
+                UPDATE decision_snapshots
+                SET superseded_by_snapshot_id = :new_id
+                WHERE id IN :ids
+                '''
+            ).bindparams(bindparam("ids", expanding=True))
+            db.execute(q, {"new_id": int(snap.id), "ids": list(active_ids)})
 
-    db.commit()
+        _reconcile_single_active_snapshot_for_scope(
+            db,
+            decision_key=str(decision_key),
+            program_id=int(program_id),
+            molecule_id=molecule_id,
+            batch_id=batch_id,
+            new_snapshot_id=int(snap.id),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(snap)
 
     record_audit(db, entity_type="DecisionSnapshot", entity_id=snap.id, action="create", before=None, after=model_to_dict(snap))

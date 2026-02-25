@@ -1583,3 +1583,8 @@ What changed:
 What changed:
 - Remove DI imports from legacy decisions service (`stable_json_dumps` now DI-owned via `psi.services.di.util`).
 - Unify duplicated DI error output builder to reduce drift risk; snapshot error schema preserved.
+
+## 2026-02-25 — v1.2.9w42
+What changed:
+- Snapshot supersession integrity hardening: write paths now reconcile to a single active snapshot per exact scope before commit (authoritative active semantics: `superseded_by_snapshot_id IS NULL`), with explicit rollback on write failure.
+- DI contract smoke now asserts the one-active-snapshot-per-scope invariant after DI writes.

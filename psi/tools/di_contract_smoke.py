@@ -35,6 +35,33 @@ def _assert(cond: bool, msg: str) -> None:
         raise AssertionError(msg)
 
 
+def _assert_single_active_snapshot_per_scope(db) -> None:
+    from sqlalchemy import text
+
+    rows = (
+        db.execute(
+            text(
+                """
+                SELECT
+                  decision_key,
+                  program_id,
+                  COALESCE(molecule_id, 0) AS molecule_id_norm,
+                  COALESCE(batch_id, 0) AS batch_id_norm,
+                  COUNT(1) AS active_count
+                FROM decision_snapshots
+                WHERE superseded_by_snapshot_id IS NULL
+                GROUP BY decision_key, program_id, COALESCE(molecule_id, 0), COALESCE(batch_id, 0)
+                HAVING COUNT(1) > 1
+                ORDER BY decision_key ASC, program_id ASC, molecule_id_norm ASC, batch_id_norm ASC
+                """
+            )
+        )
+        .mappings()
+        .all()
+    )
+    _assert(not rows, f"decision_snapshots must have at most one active row per scope; duplicates={rows}")
+
+
 _SMOKE_SET_BASELINE_CUTOFF = False
 
 
@@ -356,6 +383,7 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
                 context={},
             )
             out = run_di(db, di_input=di_input, policy_path=(policy_path_override or policy_path))
+            _assert_single_active_snapshot_per_scope(db)
             return out, db
         except Exception:
             db.close()
@@ -580,6 +608,7 @@ def test_molecule_scope_determinism() -> None:
                 context={},
             )
             out = run_di(db, di_input=di_input, policy_path=policy_path)
+            _assert_single_active_snapshot_per_scope(db)
             return out, batch_ids, db
         except Exception:
             db.close()
