@@ -1970,3 +1970,69 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-25 — v1.2.9w65
+Naming note:
+- Prior tag `v2.0a` corresponds to the w64-equivalent infrastructure-first work (SoE refactor + error parity + progress policy catalog). Human-facing patch tracking resumes at `w65+`.
+
+What changed:
+- Added a scientist-first molecule header scaffold (view-only) on molecule detail pages with a Scientist/Governance toggle (default Scientist; localStorage persisted in browser).
+- Added deterministic progress bar rendering derived from `progress_policy_v0_1.json`, molecule measurement-key presence, and latest DI snapshot states (read-only view-model only).
+- Added deterministic plain-English drift summary text for the latest DI snapshot drift context and a heavy-compute banner from `PSI_HEAVY_COMPUTE` (default OFF).
+
+Why it changed:
+- Begin Roadmap v2.0b scientist UX foundation without changing DI snapshot contents or hashes.
+
+Determinism/contract impact:
+- No DI snapshot compute changes and no hash-bearing DI output changes.
+- View-model logic is read-only and deterministic (sorted milestones, stable snapshot ordering).
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+## 2026-02-25 — v1.2.9w66
+Naming note:
+- Prior tag `v2.0a` corresponds to the w64-equivalent infrastructure-first work (SoE refactor + error parity + progress policy catalog). Human-facing patch tracking resumes at `w65+`.
+
+What changed:
+- Added a policy-visible template prerequisites catalog (`template_prerequisites_v0_1.json`) with deterministic loader/validator.
+- Added molecule-header prerequisite advisory logic so UI progress interpretation does not claim later DI milestones when prerequisite template outcomes are missing/failed.
+- Added risk severity tier scaffolding in molecule governance view (`high|medium|low|unspecified`) derived read-only from existing DI risk flags.
+
+Why it changed:
+- Implement Roadmap v2.0c structural coherence in the scientist/governance UI layer without changing DI snapshot hashes or replay behavior.
+
+Determinism/contract impact:
+- UI-only/view-model derivations are deterministic and advisory; no DI compute contract or snapshot schema changes.
+- Historical policy artifacts remain unchanged; prerequisite semantics are stored in a new versioned catalog file.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+## 2026-02-25 — v1.2.9w67
+Naming note:
+- Prior tag `v2.0a` corresponds to the w64-equivalent infrastructure-first work (SoE refactor + error parity + progress policy catalog). Human-facing patch tracking resumes at `w65+`.
+
+What changed:
+- Added a deterministic molecule-page confidence model (UI-only, render-time) with components for QC Quality, Reproducibility, Comparability, and Interpretability.
+- Added a confidence bar UI in the scientist header plus visible rule text in governance view.
+- Confidence summary state is derived by explicit counting rules only (no weighted scoring; missing components remain `Not Assessed`).
+
+Why it changed:
+- Implement Roadmap v2.0d confidence-bar rendering without changing DI snapshot hashes or DI engine behavior.
+
+Determinism/contract impact:
+- All confidence logic is read-only view-model derivation from existing snapshot outputs/risk flags and deterministic rules.
+- No DI compute changes, no schema changes, and no replay-surface changes.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`

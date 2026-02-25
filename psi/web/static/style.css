@@ -177,3 +177,32 @@ textarea{min-height:110px;resize:vertical}
 .batch-summary{display:flex;flex-direction:column;gap:4px}
 .batch-id{font-weight:800;font-size:16px}
 .batch-headlines{display:flex;flex-wrap:wrap;gap:6px}
+
+/* --- v2.0b / w65: scientist-first molecule header scaffold --- */
+.molecule-header { border:1px solid rgba(0,0,0,.08); }
+.molecule-header-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+.molecule-progress-title { font-weight:800; font-size:20px; text-transform:capitalize; }
+.molecule-view-toggle { display:flex; gap:6px; }
+.molecule-progress-bar { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+.molecule-progress-step { border:1px solid rgba(0,0,0,.12); border-radius:999px; padding:4px 10px; font-size:12px; }
+.molecule-progress-step.is-on { background:rgba(46,204,113,.14); border-color:rgba(39,174,96,.35); }
+.molecule-progress-step.is-off { background:rgba(149,165,166,.12); color:var(--muted); }
+.molecule-header-banner { margin-top:10px; padding:8px 10px; border-radius:8px; border:1px solid rgba(0,0,0,.08); font-size:13px; }
+.molecule-header-banner.is-off { background:rgba(149,165,166,.10); }
+.molecule-header-banner.is-on { background:rgba(241,196,15,.14); border-color:rgba(243,156,18,.35); }
+.molecule-header-grid { display:grid; grid-template-columns:1.2fr 1fr; gap:12px; margin-top:10px; }
+.molecule-header[data-view-mode="scientist"] [data-governance-panel] { display:none; }
+.molecule-confidence-summary { margin-top:6px; display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; border:1px solid rgba(0,0,0,.12); font-weight:700; font-size:12px; }
+.molecule-confidence-summary.state-green { background:rgba(46,204,113,.14); border-color:rgba(39,174,96,.35); }
+.molecule-confidence-summary.state-amber { background:rgba(241,196,15,.16); border-color:rgba(243,156,18,.35); }
+.molecule-confidence-summary.state-red { background:rgba(231,76,60,.14); border-color:rgba(192,57,43,.35); }
+.molecule-confidence-summary.state-unknown { background:rgba(149,165,166,.10); color:var(--muted); }
+.molecule-confidence-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; margin-top:8px; }
+.molecule-confidence-item { border:1px solid rgba(0,0,0,.10); border-radius:8px; padding:8px; }
+.molecule-confidence-item.state-good { background:rgba(46,204,113,.08); }
+.molecule-confidence-item.state-concern { background:rgba(241,196,15,.10); }
+.molecule-confidence-item.state-not_assessed { background:rgba(149,165,166,.08); color:var(--muted); }
+.molecule-confidence-item-name { font-weight:700; }
+.molecule-confidence-item-state { text-transform:capitalize; font-size:12px; margin-top:2px; }
+@media (max-width: 900px) { .molecule-confidence-grid { grid-template-columns:1fr; } }
+@media (max-width: 900px) { .molecule-header-grid { grid-template-columns:1fr; } }

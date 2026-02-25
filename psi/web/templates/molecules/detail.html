@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ molecule.primary_id }} | PSI{% endblock %}
 {% block content %}
+{% set mh = molecule_header_model if molecule_header_model is defined and molecule_header_model else {} %}
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
     <div>
@@ -53,9 +54,129 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
       <a class="btn primary" href="/batches/new?molecule_id={{ molecule.id }}">New Batch</a>
-      <a class="btn" href="/di/run?molecule_id={{ molecule.id }}">Run DI</a>
+      <a class="btn primary" href="/di/run?molecule_id={{ molecule.id }}">Run DI for this molecule</a>
       <a class="btn" href="/decisions/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}">Run Legacy YAML</a>
       <a class="btn" href="/molecules/{{ molecule.id }}/edit">Edit</a>
+    </div>
+  </div>
+
+  <div class="molecule-header card" style="margin-top:12px;">
+    <div class="molecule-header-top">
+      <div>
+        <div class="muted mini">Scientist header (view-only; does not affect DI snapshots)</div>
+        <div class="molecule-progress-title">{{ mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else 'not started' }}</div>
+      </div>
+      <div class="molecule-view-toggle no-print" role="tablist" aria-label="Molecule detail view mode">
+        <button type="button" class="btn mini" id="mh_view_scientist" data-view-mode="scientist">Scientist</button>
+        <button type="button" class="btn mini" id="mh_view_governance" data-view-mode="governance">Governance</button>
+      </div>
+    </div>
+
+    <div class="molecule-progress-bar" title="{{ mh.progress_explain if mh.progress_explain is defined else '' }}">
+      {% set ms = mh.progress_milestones if mh.progress_milestones is defined and mh.progress_milestones else [] %}
+      {% for m in ms %}
+        <div class="molecule-progress-step {% if m.satisfied %}is-on{% else %}is-off{% endif %}">
+          <span class="molecule-progress-step-label">{{ m.label }}</span>
+        </div>
+      {% else %}
+        <div class="muted">No progress policy milestones available.</div>
+      {% endfor %}
+    </div>
+
+    <div class="molecule-header-banner {% if mh.heavy_compute_enabled %}is-on{% else %}is-off{% endif %}">
+      {{ mh.heavy_compute_banner if mh.heavy_compute_banner is defined else 'Heavy compute status unavailable.' }}
+    </div>
+
+    <div class="molecule-header-grid">
+      <div>
+        <div class="muted mini">Drift summary</div>
+        <div>{{ mh.drift_summary_plain if mh.drift_summary_plain is defined else 'No drift summary available.' }}</div>
+        {% if mh.latest_di_snapshot_id is defined and mh.latest_di_snapshot_id %}
+          <div class="muted mini" style="margin-top:4px;">Latest DI snapshot: <a href="/decisions/{{ mh.latest_di_snapshot_id }}">#{{ mh.latest_di_snapshot_id }}</a>{% if mh.latest_di_drift_type is defined and mh.latest_di_drift_type %} · {{ mh.latest_di_drift_type }}{% endif %}</div>
+        {% endif %}
+        {% if mh.prerequisite_advisories is defined and mh.prerequisite_advisories %}
+          <div class="notice" style="margin-top:8px;border-color:var(--warn);">
+            <b>Structural advisory</b>
+            <ul class="clean" style="margin-top:4px;">
+              {% for a in mh.prerequisite_advisories %}
+                <li>
+                  {{ a.milestone_key }} is not claimed yet because prerequisite template(s) are missing/failed:
+                  {{ (a.missing_templates if a.missing_templates is defined else [])|join(', ') }}
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+        {% if mh.confidence_model is defined and mh.confidence_model %}
+          {% set cm = mh.confidence_model %}
+          <div class="molecule-confidence" style="margin-top:10px;">
+            <div class="muted mini">Confidence bar (UI-only; derived from latest DI snapshot and risk flags)</div>
+            <div class="molecule-confidence-summary state-{{ cm.scalar_state if cm.scalar_state is defined else 'unknown' }}" title="{{ cm.rule_text if cm.rule_text is defined else '' }}">
+              {{ cm.scalar_label if cm.scalar_label is defined else 'Unknown' }}
+            </div>
+            {% if cm.components is defined and cm.components %}
+              <div class="molecule-confidence-grid">
+                {% for c in cm.components %}
+                  <div class="molecule-confidence-item state-{{ c.state if c.state is defined else 'not_assessed' }}">
+                    <div class="molecule-confidence-item-name">{{ c.name }}</div>
+                    <div class="molecule-confidence-item-state">
+                      {{ (c.state if c.state is defined else 'not_assessed')|replace('_', ' ') }}
+                      {% if c.severity is defined and c.severity %} · {{ c.severity }}{% endif %}
+                    </div>
+                    {% if c.details is defined and c.details %}
+                      <div class="muted mini">{{ c.details }}</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+      <div data-governance-panel>
+        <div class="muted mini">Progress ladder details</div>
+        {% if ms and ms|length %}
+          <ul class="clean" style="margin-top:6px;">
+            {% for m in ms %}
+              <li>
+                <b>{{ m.key }}</b> — {% if m.satisfied %}satisfied{% else %}not yet{% endif %}
+                {% if m.kind == 'early' and m.detail is mapping %}
+                  <div class="muted mini">
+                    required={{ (m.detail.required_metrics if m.detail.required_metrics is defined else [])|join(', ') }}
+                    {% if m.detail.missing_metrics is defined and m.detail.missing_metrics %}
+                      · missing={{ m.detail.missing_metrics|join(', ') }}
+                    {% endif %}
+                  </div>
+                {% elif m.kind == 'di' and m.detail is mapping %}
+                  <div class="muted mini">
+                    template={{ m.detail.template_key if m.detail.template_key is defined else '—' }}
+                    {% if m.detail.latest_snapshot_id is defined and m.detail.latest_snapshot_id %}
+                      · snapshot={{ m.detail.latest_snapshot_id }}
+                    {% endif %}
+                    {% if m.detail.latest_decision_state is defined and m.detail.latest_decision_state %}
+                      · state={{ m.detail.latest_decision_state }}
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">No progress milestones available.</div>
+        {% endif %}
+        {% if mh.risk_severity_counts is defined and mh.risk_severity_counts %}
+          <div class="muted mini" style="margin-top:10px;">Risk severity tiers (latest DI; UI-only scaffolding)</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+            <span class="chip">high: {{ mh.risk_severity_counts.high if mh.risk_severity_counts.high is defined else 0 }}</span>
+            <span class="chip">medium: {{ mh.risk_severity_counts.medium if mh.risk_severity_counts.medium is defined else 0 }}</span>
+            <span class="chip">low: {{ mh.risk_severity_counts.low if mh.risk_severity_counts.low is defined else 0 }}</span>
+            <span class="chip">unspecified: {{ mh.risk_severity_counts.unspecified if mh.risk_severity_counts.unspecified is defined else 0 }}</span>
+          </div>
+        {% endif %}
+        {% if mh.confidence_model is defined and mh.confidence_model and mh.confidence_model.rule_text is defined %}
+          <div class="muted mini" style="margin-top:10px;">Confidence rule: {{ mh.confidence_model.rule_text }}</div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
@@ -1120,6 +1241,29 @@
   <h2 id="audit">Audit</h2>
   {% include "partials/audit_table.html" %}
 </div>
+
+<script>
+  (function () {
+    var root = document.querySelector(".molecule-header");
+    if (!root) return;
+    var btnSci = document.getElementById("mh_view_scientist");
+    var btnGov = document.getElementById("mh_view_governance");
+    if (!btnSci || !btnGov) return;
+    var storageKey = "psi.molecule.detail.view_mode";
+    function setMode(mode) {
+      var m = (mode === "governance") ? "governance" : "scientist";
+      root.setAttribute("data-view-mode", m);
+      btnSci.classList.toggle("primary", m === "scientist");
+      btnGov.classList.toggle("primary", m === "governance");
+      try { localStorage.setItem(storageKey, m); } catch (e) {}
+    }
+    btnSci.addEventListener("click", function () { setMode("scientist"); });
+    btnGov.addEventListener("click", function () { setMode("governance"); });
+    var initial = "scientist";
+    try { initial = localStorage.getItem(storageKey) || "scientist"; } catch (e) {}
+    setMode(initial);
+  })();
+</script>
 {% endblock %}
 
 {% block scripts %}

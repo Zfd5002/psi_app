@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+import os
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import Any
+from sqlalchemy import text
 
 from psi.core.audit import record_audit
 from psi.core.models import (
@@ -38,6 +40,9 @@ from psi.core.reference_features import detect_pdl1_features
 from psi.core.deps import heavy_compute_available_for_molecule
 from psi.core.biochem import liability_sites
 from psi.core.annotations import detect_linker_spans, detect_fc_region, dedupe_features
+from psi.core.di.catalog import load_progress_policy_v0_1, load_template_prerequisites_v0_1
+from psi.core.measurement_schema import measurement_cols
+from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
 
 
 def _confidence_from_mismatches(mismatches: int, length: int) -> float:
@@ -186,6 +191,380 @@ def get_molecule(db: Session, molecule_id: int) -> Molecule | None:
     return db.get(Molecule, molecule_id)
 
 
+def _query_molecule_metric_keys_present(db: Session, *, molecule_id: int) -> list[str]:
+    cols = measurement_cols(db)
+    record_fk = cols["record_fk"]
+    name_col = cols["name"]
+    q = text(
+        f"""
+        SELECT DISTINCT dm.{name_col} AS metric_key
+        FROM data_measurements dm
+        JOIN data_records dr ON dr.id = dm.{record_fk}
+        WHERE dr.molecule_id = :mid
+        ORDER BY dm.{name_col} ASC
+        """
+    )
+    rows = db.execute(q, {"mid": int(molecule_id)}).mappings().all()
+    out: list[str] = []
+    for r in rows:
+        mk = str(r.get("metric_key") or "").strip()
+        if mk:
+            out.append(mk)
+    return sorted(set(out))
+
+
+def _di_template_key_from_history_row(row: dict[str, Any]) -> str:
+    inputs_obj = row.get("_in") if isinstance(row.get("_in"), dict) else {}
+    tk = str(inputs_obj.get("template_key") or "").strip()
+    if tk:
+        return tk
+    dk = str(row.get("decision_key") or "").strip()
+    return str(DECISION_KEY_TO_TEMPLATE_KEY.get(dk) or "")
+
+
+def _build_drift_summary_plain(row: dict[str, Any]) -> str:
+    out = row.get("_out") if isinstance(row.get("_out"), dict) else {}
+    inputs_obj = row.get("_in") if isinstance(row.get("_in"), dict) else {}
+    drift_ctx = inputs_obj.get("drift_context") if isinstance(inputs_obj.get("drift_context"), dict) else {}
+    drift_type = str(out.get("drift_type") or "")
+    st = out.get("state_transition") if isinstance(out.get("state_transition"), dict) else {}
+    if not drift_ctx:
+        return "No prior DI baseline for drift comparison."
+    if drift_type == "NO_CHANGE":
+        return "No DI drift detected versus the previous comparable snapshot."
+    if drift_type == "EVIDENCE_ONLY":
+        return "Evidence changed while policy semantics stayed the same."
+    if drift_type == "POLICY_ONLY":
+        return "Policy semantics changed while evidence fingerprint stayed the same."
+    if drift_type == "BOTH":
+        return "Both evidence and policy semantics changed."
+    if drift_type == "INCOMPARABLE":
+        return "Drift detected (details in governance view): snapshots are not comparable under current comparability rules."
+    if st:
+        return "Drift detected (details in governance view): " + ", ".join(sorted([str(k) for k in st.keys()]))
+    return "Drift detected (details in governance view)."
+
+
+def _shortlisting_tie_break_dimensions(out_obj: dict[str, Any]) -> list[dict[str, Any]]:
+    shortlisting = out_obj.get("shortlisting") if isinstance(out_obj.get("shortlisting"), dict) else {}
+    tie_break = shortlisting.get("tie_break") if isinstance(shortlisting.get("tie_break"), dict) else {}
+    dims = tie_break.get("dimensions")
+    if isinstance(dims, list):
+        return [d for d in dims if isinstance(d, dict)]
+    ranked = shortlisting.get("ranked_candidates")
+    if isinstance(ranked, list) and ranked and isinstance(ranked[0], dict):
+        dims = ranked[0].get("tie_break_dimensions")
+        if isinstance(dims, list):
+            return [d for d in dims if isinstance(d, dict)]
+    return []
+
+
+def _build_confidence_model(*, latest_di_row: dict[str, Any] | None, risk_severity_counts: dict[str, int]) -> dict[str, Any]:
+    if not latest_di_row or not isinstance((latest_di_row.get("_out") or {}), dict):
+        return {
+            "components": [
+                {"name": "QC Quality", "key": "qc_quality", "state": "not_assessed", "details": "No DI snapshot available yet."},
+                {"name": "Reproducibility", "key": "reproducibility", "state": "not_assessed", "details": "No DI snapshot available yet."},
+                {"name": "Comparability", "key": "comparability", "state": "not_assessed", "details": "No DI snapshot available yet."},
+                {"name": "Interpretability", "key": "interpretability", "state": "not_assessed", "details": "No DI snapshot available yet."},
+            ],
+            "scalar_state": "unknown",
+            "scalar_label": "Unknown",
+            "rule_text": "Confidence summary is derived from component counts only (no weights). Missing components are Not Assessed.",
+        }
+
+    out_obj = latest_di_row.get("_out") or {}
+    dims = _shortlisting_tie_break_dimensions(out_obj)
+    dim_by_key = {str(d.get("key") or ""): d for d in dims if str(d.get("key") or "")}
+
+    components: list[dict[str, Any]] = []
+
+    # QC Quality: prefer tie-break qc_confidence signal (v0.4+), fallback to gate statuses.
+    qc_dim = dim_by_key.get("qc_confidence")
+    if isinstance(qc_dim, dict) and str(qc_dim.get("status") or "") == "implemented" and isinstance(qc_dim.get("value"), dict):
+        qcv = qc_dim.get("value") or {}
+        concerns = qcv.get("concerns") if isinstance(qcv.get("concerns"), list) else []
+        high_ct = sum(
+            1
+            for c in concerns
+            if isinstance(c, dict) and str(c.get("severity") or "").strip().lower() == "high"
+        )
+        state = "concern" if concerns else "good"
+        severity = "high" if high_ct > 0 else ("medium" if concerns else None)
+        components.append(
+            {
+                "name": "QC Quality",
+                "key": "qc_quality",
+                "state": state,
+                "severity": severity,
+                "details": f"qc_confidence concerns={len(concerns)}",
+            }
+        )
+    else:
+        gates = out_obj.get("gates") if isinstance(out_obj.get("gates"), list) else []
+        gate_status = {
+            str(g.get("gate_key") or ""): str(g.get("status") or "").strip().lower()
+            for g in gates
+            if isinstance(g, dict)
+        }
+        observed = [k for k in ("G2_purity_integrity", "G3_endotoxin") if k in gate_status]
+        if not observed:
+            components.append({"name": "QC Quality", "key": "qc_quality", "state": "not_assessed", "details": "No QC confidence signal in latest snapshot."})
+        else:
+            failed = [k for k in observed if gate_status.get(k) != "pass"]
+            components.append(
+                {
+                    "name": "QC Quality",
+                    "key": "qc_quality",
+                    "state": ("concern" if failed else "good"),
+                    "severity": ("high" if "G3_endotoxin" in failed else ("medium" if failed else None)),
+                    "details": ("Failed gates: " + ", ".join(sorted(failed))) if failed else "Purity/endotoxin gates passed.",
+                }
+            )
+
+    # Reproducibility: use v0.4 tie-break dimension when present.
+    rep_dim = dim_by_key.get("reproducibility")
+    if isinstance(rep_dim, dict) and str(rep_dim.get("status") or "") == "implemented" and isinstance(rep_dim.get("value"), dict):
+        repv = rep_dim.get("value") or {}
+        req = repv.get("required_metrics") if isinstance(repv.get("required_metrics"), list) else []
+        rows = [r for r in req if isinstance(r, dict)]
+        if not rows:
+            components.append({"name": "Reproducibility", "key": "reproducibility", "state": "not_assessed", "details": "No required metrics in reproducibility signal."})
+        else:
+            positives = sum(1 for r in rows if bool(r.get("reproducibility_positive")))
+            total = len(rows)
+            components.append(
+                {
+                    "name": "Reproducibility",
+                    "key": "reproducibility",
+                    "state": ("good" if positives == total else "concern"),
+                    "severity": (None if positives == total else "medium"),
+                    "details": f"{positives}/{total} required metrics have reproducibility-positive SoE counts.",
+                }
+            )
+    else:
+        components.append({"name": "Reproducibility", "key": "reproducibility", "state": "not_assessed", "details": "No reproducibility tie-break signal on latest snapshot."})
+
+    # Comparability: interpret drift comparability state deterministically from drift_type.
+    drift_type = str(out_obj.get("drift_type") or "").strip().upper()
+    if not drift_type:
+        components.append({"name": "Comparability", "key": "comparability", "state": "not_assessed", "details": "No drift comparability signal on latest snapshot."})
+    elif drift_type == "INCOMPARABLE":
+        components.append({"name": "Comparability", "key": "comparability", "state": "concern", "severity": "high", "details": "Latest snapshot is incomparable to prior baseline."})
+    else:
+        components.append({"name": "Comparability", "key": "comparability", "state": "good", "details": f"Drift comparability available (drift_type={drift_type})."})
+
+    # Interpretability: severity-aware, derived from risk flags only (UI/read-only).
+    high_n = int(risk_severity_counts.get("high") or 0)
+    med_n = int(risk_severity_counts.get("medium") or 0)
+    low_n = int(risk_severity_counts.get("low") or 0)
+    uns_n = int(risk_severity_counts.get("unspecified") or 0)
+    total_risk = high_n + med_n + low_n + uns_n
+    if total_risk <= 0:
+        components.append({"name": "Interpretability", "key": "interpretability", "state": "good", "details": "No risk flags on latest snapshot."})
+    else:
+        if high_n > 0:
+            sev = "high"
+        elif med_n > 0:
+            sev = "medium"
+        elif low_n > 0:
+            sev = "low"
+        else:
+            sev = "unspecified"
+        components.append(
+            {
+                "name": "Interpretability",
+                "key": "interpretability",
+                "state": "concern",
+                "severity": sev,
+                "details": f"Risk flags: high={high_n}, medium={med_n}, low={low_n}, unspecified={uns_n}.",
+            }
+        )
+
+    concern_components = [c for c in components if str(c.get("state") or "") == "concern"]
+    concern_sev = [str(c.get("severity") or "") for c in concern_components]
+    medium_concerns = sum(1 for s in concern_sev if s == "medium")
+    high_concerns = sum(1 for s in concern_sev if s == "high")
+    assessed_count = sum(1 for c in components if str(c.get("state") or "") != "not_assessed")
+
+    if assessed_count == 0:
+        scalar_state, scalar_label = "unknown", "Unknown"
+    elif high_concerns >= 1:
+        scalar_state, scalar_label = "red", "Concern (High)"
+    elif medium_concerns >= 2:
+        scalar_state, scalar_label = "amber", "Caution (Multiple Medium)"
+    elif concern_components:
+        scalar_state, scalar_label = "amber", "Caution"
+    else:
+        scalar_state, scalar_label = "green", "Good"
+
+    return {
+        "components": components,
+        "scalar_state": scalar_state,
+        "scalar_label": scalar_label,
+        "rule_text": (
+            "Summary uses counts only (no weights): any high-severity concern => red; "
+            "two or more medium concerns => amber; any remaining concern => amber; "
+            "otherwise green. Missing components are Not Assessed."
+        ),
+    }
+
+
+def _build_molecule_header_model(
+    db: Session,
+    *,
+    molecule_id: int,
+    di_rows_chrono: list[dict[str, Any]],
+) -> dict[str, Any]:
+    try:
+        prog = load_progress_policy_v0_1()
+        prog_body = prog.policy if isinstance(prog.policy, dict) else {}
+    except Exception:
+        prog_body = {}
+    try:
+        prereq_pol = load_template_prerequisites_v0_1()
+        prereq_body = prereq_pol.policy if isinstance(prereq_pol.policy, dict) else {}
+    except Exception:
+        prereq_body = {}
+
+    early = prog_body.get("early_milestones") if isinstance(prog_body.get("early_milestones"), dict) else {}
+    di_m = prog_body.get("di_milestones") if isinstance(prog_body.get("di_milestones"), dict) else {}
+    measurement_keys_present = set(_query_molecule_metric_keys_present(db, molecule_id=int(molecule_id)))
+
+    latest_pass_by_template: dict[str, bool] = {}
+    latest_snapshot_by_template: dict[str, dict[str, Any]] = {}
+    for row in sorted(di_rows_chrono, key=lambda r: (r.get("created_at") or "", int(r.get("snapshot_id") or 0)), reverse=True):
+        tk = _di_template_key_from_history_row(row)
+        if not tk or tk in latest_pass_by_template:
+            continue
+        out = row.get("_out") if isinstance(row.get("_out"), dict) else {}
+        latest_pass_by_template[tk] = str(out.get("decision_state") or "") == "ready"
+        latest_snapshot_by_template[tk] = row
+
+    template_prereqs = (
+        prereq_body.get("template_prerequisites")
+        if isinstance(prereq_body.get("template_prerequisites"), dict)
+        else {}
+    )
+
+    milestones: list[dict[str, Any]] = []
+    for key in sorted([str(k) for k in early.keys()]):
+        metrics = [str(x) for x in (early.get(key) or []) if str(x).strip()]
+        present = sorted([m for m in metrics if m in measurement_keys_present])
+        missing = sorted([m for m in metrics if m not in measurement_keys_present])
+        milestones.append(
+            {
+                "key": key,
+                "kind": "early",
+                "label": key.replace("_", " "),
+                "satisfied": bool(metrics) and len(missing) == 0,
+                "detail": {"required_metrics": metrics, "present_metrics": present, "missing_metrics": missing},
+            }
+        )
+    for key in sorted([str(k) for k in di_m.keys()]):
+        template_key = str(di_m.get(key) or "").strip()
+        is_ready_raw = bool(latest_pass_by_template.get(template_key))
+        prereqs = [str(x) for x in (template_prereqs.get(template_key) or []) if str(x).strip()]
+        missing_prereqs = [tk for tk in prereqs if not bool(latest_pass_by_template.get(tk))]
+        is_advisory_blocked = bool(is_ready_raw and missing_prereqs)
+        is_ready = bool(is_ready_raw and not is_advisory_blocked)
+        row = latest_snapshot_by_template.get(template_key) or {}
+        prereq_statuses = [
+            {
+                "template_key": tk,
+                "latest_snapshot_id": (latest_snapshot_by_template.get(tk) or {}).get("snapshot_id"),
+                "ready": bool(latest_pass_by_template.get(tk)),
+            }
+            for tk in prereqs
+        ]
+        milestones.append(
+            {
+                "key": key,
+                "kind": "di",
+                "label": key.replace("_", " "),
+                "satisfied": bool(is_ready),
+                "detail": {
+                    "template_key": template_key,
+                    "latest_snapshot_id": row.get("snapshot_id"),
+                    "latest_decision_state": ((row.get("_out") or {}).get("decision_state") if isinstance(row.get("_out"), dict) else None),
+                    "prerequisites": prereq_statuses,
+                    "advisory_blocked": bool(is_advisory_blocked),
+                    "advisory_missing_templates": missing_prereqs,
+                },
+            }
+        )
+
+    last_sat = next((m for m in reversed(milestones) if bool(m.get("satisfied"))), None)
+    progress_stage = str(last_sat.get("label")) if isinstance(last_sat, dict) else "not started"
+    progress_explain_parts = []
+    for m in milestones:
+        marker = "yes" if m.get("satisfied") else "no"
+        progress_explain_parts.append(f"{m.get('key')}: {marker}")
+
+    latest_di_row = next(
+        (
+            r
+            for r in sorted(di_rows_chrono, key=lambda x: (x.get("created_at") or "", int(x.get("snapshot_id") or 0)), reverse=True)
+            if isinstance(r.get("_out"), dict)
+        ),
+        None,
+    )
+    drift_summary_plain = _build_drift_summary_plain(latest_di_row or {}) if latest_di_row else "No DI snapshots yet."
+
+    risk_severity_counts = {"high": 0, "medium": 0, "low": 0, "unspecified": 0}
+    if latest_di_row and isinstance((latest_di_row.get("_out") or {}), dict):
+        out_obj = latest_di_row.get("_out") or {}
+        rf_list = out_obj.get("risk_flags_enriched")
+        if not isinstance(rf_list, list):
+            rf_list = out_obj.get("risk_flags")
+        if isinstance(rf_list, list):
+            for r in rf_list:
+                if not isinstance(r, dict):
+                    risk_severity_counts["unspecified"] += 1
+                    continue
+                sev = str(r.get("severity") or "").strip().lower()
+                if sev in ("high", "medium", "low"):
+                    risk_severity_counts[sev] += 1
+                else:
+                    risk_severity_counts["unspecified"] += 1
+
+    prereq_advisories = [
+        {
+            "milestone_key": m.get("key"),
+            "template_key": ((m.get("detail") or {}).get("template_key") if isinstance(m.get("detail"), dict) else None),
+            "missing_templates": (((m.get("detail") or {}).get("advisory_missing_templates")) if isinstance(m.get("detail"), dict) else []),
+        }
+        for m in milestones
+        if m.get("kind") == "di"
+        and isinstance(m.get("detail"), dict)
+        and bool((m.get("detail") or {}).get("advisory_blocked"))
+    ]
+
+    heavy_compute_enabled = str(os.getenv("PSI_HEAVY_COMPUTE", "0") or "0").strip() == "1"
+    confidence_model = _build_confidence_model(
+        latest_di_row=latest_di_row,
+        risk_severity_counts=risk_severity_counts,
+    )
+    return {
+        "view_mode_default": "scientist",
+        "progress_stage": progress_stage,
+        "progress_explain": "; ".join(progress_explain_parts),
+        "progress_milestones": milestones,
+        "heavy_compute_enabled": bool(heavy_compute_enabled),
+        "heavy_compute_banner": (
+            "Heavy compute is ON (PSI_HEAVY_COMPUTE=1). DI hashes remain unaffected."
+            if heavy_compute_enabled
+            else "Heavy compute is OFF by default (PSI_HEAVY_COMPUTE=0). DI outputs are unaffected."
+        ),
+        "drift_summary_plain": drift_summary_plain,
+        "prerequisite_advisories": prereq_advisories,
+        "risk_severity_counts": risk_severity_counts,
+        "confidence_model": confidence_model,
+        "latest_di_snapshot_id": (latest_di_row or {}).get("snapshot_id"),
+        "latest_di_drift_type": (((latest_di_row or {}).get("_out") or {}).get("drift_type") if latest_di_row else None),
+    }
+
+
 def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatches: int = 0) -> dict:
     m = get_molecule(db, molecule_id)
     if not m:
@@ -284,6 +663,12 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
             row["prev_snapshot_id"] = None
             row["drift_vs_prev"] = None
         prev_by_decision_key[dk] = row
+
+    molecule_header_model = _build_molecule_header_model(
+        db,
+        molecule_id=int(molecule_id),
+        di_rows_chrono=_tmp_sorted,
+    )
 
     # Final display ordering: newest first.
     di_history: list[dict[str, Any]] = []
@@ -690,6 +1075,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "molecule": m,
         "batches": batches,
         "di_history": di_history,
+        "molecule_header_model": molecule_header_model,
         "data_records": data_records,
         "evidence": evidence,
         "file_links": file_links,
