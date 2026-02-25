@@ -150,41 +150,45 @@ def decisions_add_outcome(
     verdict = (di_review_verdict or "").strip()
     rationale = (di_review_rationale or "").strip()
     if verdict or rationale:
-        valid = {lt["key"] for lt in (snap_ctx.get("di_review_verdicts") or []) if isinstance(lt, dict)}
-        if not verdict or verdict not in valid:
+        try:
+            review_payload = svc.validate_di_review_submission(
+                verdict=verdict,
+                rationale=rationale,
+                di_review_verdicts=(snap_ctx.get("di_review_verdicts") or []),
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if not review_payload:
             raise HTTPException(400, "Invalid DI review verdict")
-        if not rationale:
-            raise HTTPException(400, "Rationale is required for DI review")
 
         svc.add_outcome_label(
             db,
             snapshot_id=int(snap_id),
             name="di_review_verdict",
-            value_text=verdict,
+            value_text=str(review_payload["di_review_verdict"]),
         )
         svc.add_outcome_label(
             db,
             snapshot_id=int(snap_id),
             name="di_review_rationale",
-            value_text=rationale,
+            value_text=str(review_payload["di_review_rationale"]),
         )
         return RedirectResponse(url=f"/decisions/{snap_id}", status_code=303)
 
-    valid = {lt["key"]: lt for lt in (snap_ctx.get("outcome_label_types") or []) if isinstance(lt, dict)}
-    label_type = (label_type or "").strip()
-    spec = valid.get(label_type)
-    if not spec:
-        raise HTTPException(400, "Invalid label type")
-
-    note_val = (note or "").strip()
-    if spec.get("note_required") and not note_val:
-        raise HTTPException(400, "Note required for this label type")
+    try:
+        label_payload = svc.validate_outcome_label_submission(
+            label_type=label_type,
+            note=note,
+            outcome_label_types=(snap_ctx.get("outcome_label_types") or []),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
     svc.add_outcome_label(
         db,
         snapshot_id=int(snap_id),
-        name=label_type,
-        value_text=(note_val if note_val else None),
+        name=str(label_payload["label_type"]),
+        value_text=label_payload.get("note"),
     )
 
     return RedirectResponse(url=f"/decisions/{snap_id}", status_code=303)

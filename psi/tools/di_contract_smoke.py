@@ -25,6 +25,7 @@ from jinja2 import Environment, FileSystemLoader
 from psi.core.di.catalog import load_catalog
 from psi.core.di.policy import canonical_policy_json, load_policy, sha256_hex_of_canonical_json
 from psi.core.utils import stable_json_dumps
+from psi.services import decisions as decisions_svc
 from psi.services.di.compute import _build_scope_semantics, _normalize_ignored
 from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
@@ -450,6 +451,27 @@ def test_shared_sub_assessments_pure_helpers() -> None:
             self.status = status
     ds, meta = decision_state_from_gate_statuses(gates=[_Gate("G1", "pass")], required_gate_keys=["G1"], blockers=[])
     _assert(ds == "ready" and bool(meta.get("required_pass")), "shared decision-state helper must be deterministic and pure")
+
+
+def test_outcome_label_validation_helpers_deterministic() -> None:
+    label_types = list(decisions_svc.OUTCOME_LABEL_TYPES)
+    verdicts = list(decisions_svc.DI_REVIEW_VERDICTS)
+    a = decisions_svc.validate_outcome_label_submission(label_type="correct", note="  ok  ", outcome_label_types=label_types)
+    b = decisions_svc.validate_outcome_label_submission(label_type="correct", note="ok", outcome_label_types=label_types)
+    _assert(stable_json_dumps(a) == stable_json_dumps(b), "outcome label validation should normalize deterministically")
+    _assert(a.get("label_type") == "correct" and a.get("note") == "ok", "outcome label validation should preserve allowed key and normalized note")
+    try:
+        decisions_svc.validate_outcome_label_submission(label_type="other", note="", outcome_label_types=label_types)
+        raise AssertionError("expected note-required validation error")
+    except ValueError as e:
+        _assert(str(e) == "Note required for this label type", "note-required validation message must be stable")
+    review = decisions_svc.validate_di_review_submission(verdict="useful", rationale="  stable  ", di_review_verdicts=verdicts)
+    _assert(isinstance(review, dict) and review.get("di_review_verdict") == "useful" and review.get("di_review_rationale") == "stable", "di review validation must normalize deterministically")
+    try:
+        decisions_svc.validate_di_review_submission(verdict="unknown", rationale="x", di_review_verdicts=verdicts)
+        raise AssertionError("expected invalid verdict validation error")
+    except ValueError as e:
+        _assert(str(e) == "Invalid DI review verdict", "invalid verdict validation message must be stable")
 
 
 def test_policy_blocker_taxonomy_and_experiment_suggestions() -> None:
@@ -1387,6 +1409,7 @@ def main() -> int:
         test_scope_semantics_v04_deterministic()
         test_template_registry_and_dependency_graph_deterministic()
         test_shared_sub_assessments_pure_helpers()
+        test_outcome_label_validation_helpers_deterministic()
         test_shortlisting_reproducibility_from_soe_evidence_summary()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_ignore_reason_keys_allowed_set()

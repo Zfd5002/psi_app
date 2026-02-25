@@ -39,6 +39,45 @@ DI_REVIEW_VERDICTS = [
 ]
 
 
+def validate_outcome_label_submission(
+    *,
+    label_type: str | None,
+    note: str | None,
+    outcome_label_types: list[dict] | None,
+) -> dict:
+    """Validate standard outcome-label submission deterministically (no DB writes)."""
+
+    valid = {str(lt.get("key") or ""): lt for lt in (outcome_label_types or []) if isinstance(lt, dict)}
+    lt_key = str(label_type or "").strip()
+    spec = valid.get(lt_key)
+    if not spec:
+        raise ValueError("Invalid label type")
+    note_val = str(note or "").strip()
+    if bool(spec.get("note_required")) and not note_val:
+        raise ValueError("Note required for this label type")
+    return {"label_type": lt_key, "note": (note_val if note_val else None)}
+
+
+def validate_di_review_submission(
+    *,
+    verdict: str | None,
+    rationale: str | None,
+    di_review_verdicts: list[dict] | None,
+) -> dict | None:
+    """Validate DI review verdict+rationale pair deterministically (no DB writes)."""
+
+    v = str(verdict or "").strip()
+    r = str(rationale or "").strip()
+    if not v and not r:
+        return None
+    valid = {str(x.get("key") or "") for x in (di_review_verdicts or []) if isinstance(x, dict)}
+    if not v or v not in valid:
+        raise ValueError("Invalid DI review verdict")
+    if not r:
+        raise ValueError("Rationale is required for DI review")
+    return {"di_review_verdict": v, "di_review_rationale": r}
+
+
 def _di_snapshot_provenance_view_model(*, output: dict, inputs: dict) -> dict:
     out = output if isinstance(output, dict) else {}
     ins = inputs if isinstance(inputs, dict) else {}

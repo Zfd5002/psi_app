@@ -106,6 +106,52 @@
   {% else %}
     <div class="muted">No outcome labels yet.</div>
   {% endif %}
+
+  {% if snap is defined and snap and snap.id %}
+  <hr style="margin:12px 0;opacity:0.4;" />
+  <div class="grid cols-2" style="gap:12px;">
+    <div>
+      <div class="muted" style="margin-bottom:6px;">Add outcome label</div>
+      <form method="post" action="/decisions/{{ snap.id }}/outcomes" class="form">
+        <div class="field">
+          <label class="muted mini">Label type</label>
+          <select name="label_type" required>
+            {% for lt in outcome_label_types if outcome_label_types is defined %}
+              <option value="{{ lt.key }}">{{ lt.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="muted mini">Note (optional unless label requires it)</label>
+          <input type="text" name="note" placeholder="optional note">
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit">Add Label</button>
+        </div>
+      </form>
+    </div>
+    <div>
+      <div class="muted" style="margin-bottom:6px;">Add DI review</div>
+      <form method="post" action="/decisions/{{ snap.id }}/outcomes" class="form">
+        <div class="field">
+          <label class="muted mini">Verdict</label>
+          <select name="di_review_verdict" required>
+            {% for v in di_review_verdicts if di_review_verdicts is defined %}
+              <option value="{{ v.key }}">{{ v.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="muted mini">Rationale (required)</label>
+          <textarea name="di_review_rationale" rows="3" required placeholder="why this review verdict was chosen"></textarea>
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit">Add Review</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 {# --- Top summary (fast interpretation) --- #}

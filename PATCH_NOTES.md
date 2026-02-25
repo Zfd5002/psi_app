@@ -1814,3 +1814,21 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w57
+What changed:
+- Added minimal DI snapshot forms for structured post-hoc labeling (`outcome label type + note`, and `DI review verdict + rationale`) using the existing `/decisions/{snap_id}/outcomes` write path.
+- Added deterministic server-side validation helpers for outcome labels and DI review submissions in `psi/services/decisions.py`.
+- Router outcome POST handler now uses the shared validation helpers (behavior preserved; controlled keys and rationale requirements enforced server-side).
+- DI contract smoke now tests validation helpers deterministically without DB writes.
+
+Why it changed:
+- Complete the v1.1 baseline structured outcome-labeling workflow without affecting DI decision logic.
+
+Determinism/contract impact:
+- Outcome label validation is deterministic and server-side authoritative.
+- DI logic and snapshot computation outputs are unchanged.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
