@@ -86,6 +86,59 @@ def _policy_schema_mismatch_output(*, di_input: DIInput, pol: Any, mismatch: str
     )
 
 
+def _build_di_inputs_obj(
+    *,
+    di_input: DIInput,
+    pol: Any,
+    evaluator_version: str,
+    template_key: str,
+    template_name: str,
+    catalog_id: str,
+    catalog_version: str,
+    catalog_hash: str,
+    policy_path: Optional[Path],
+    drift_context: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build the authoritative DI snapshot inputs payload.
+
+    Centralized to keep success and deterministic error paths schema-aligned.
+    """
+
+    inputs_obj = {
+        "decision_key": di_input.decision_key,
+        "scope_type": di_input.scope_type,
+        "scope_id": int(di_input.scope_id),
+        "as_of_ts": di_input.as_of_ts,
+        "qc_mode": di_input.qc_mode,
+        "context": di_input.context or {},
+        "engine_key": ENGINE_KEY,
+        "engine_id": ENGINE_ID,
+        "schema_version": SNAPSHOT_SCHEMA_VERSION,
+        "selector_version": SELECTOR_VERSION,
+        "evaluator_version": evaluator_version,
+        "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
+        "template_key": str(template_key or ""),
+        "template_name": str(template_name or template_key or ""),
+        "policy_id": pol.policy_id,
+        "policy_version": pol.version,
+        "policy_name": pol.name,
+        "policy_semantics_hash": pol.policy_semantics_hash,
+        "policy_package_hash": pol.policy_package_hash,
+        "policy_schema_version": pol.schema_version,
+        "policy_hash": pol.policy_semantics_hash,
+        "policy_source": pol.source_name,
+        "policy_json_canonical": pol.policy_body_canonical_json,
+        "catalog_id": str(catalog_id or ""),
+        "catalog_version": str(catalog_version or ""),
+        "catalog_hash": str(catalog_hash or ""),
+        # Non-authoritative, machine-local metadata (debugging only)
+        "policy_path": str(policy_path) if policy_path is not None else "",
+    }
+    if isinstance(drift_context, dict) and drift_context:
+        inputs_obj["drift_context"] = drift_context
+    return inputs_obj
+
+
 def _build_di_error_output(
     *,
     di_input: DIInput,
@@ -599,6 +652,8 @@ def compute_di_output(
         template_error = str(exc)
 
     evaluator_version = str((template_entry or {}).get("evaluator_version") or "unknown")
+    template_key = str(getattr(pol, "template_key", "") or "")
+    template_name = template_key
 
     # Policy governance guardrail: enforce known package schema versions.
     if str(pol.schema_version) not in ALLOWED_POLICY_SCHEMA_VERSIONS:
@@ -608,36 +663,18 @@ def compute_di_output(
             mismatch="unknown_policy_schema_version",
             evaluator_version=evaluator_version,
         )
-        inputs_obj = {
-            "decision_key": di_input.decision_key,
-            "scope_type": di_input.scope_type,
-            "scope_id": int(di_input.scope_id),
-            "as_of_ts": di_input.as_of_ts,
-            "qc_mode": di_input.qc_mode,
-            "context": di_input.context or {},
-            "engine_key": ENGINE_KEY,
-            "engine_id": ENGINE_ID,
-            "schema_version": SNAPSHOT_SCHEMA_VERSION,
-            "selector_version": SELECTOR_VERSION,
-            "evaluator_version": evaluator_version,
-            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
-            "policy_id": pol.policy_id,
-            "policy_version": pol.version,
-            "policy_name": pol.name,
-            "policy_semantics_hash": pol.policy_semantics_hash,
-            "policy_package_hash": pol.policy_package_hash,
-            "policy_schema_version": pol.schema_version,
-            "policy_hash": pol.policy_semantics_hash,
-            "policy_source": pol.source_name,
-            "policy_json_canonical": pol.policy_body_canonical_json,
-            "catalog_id": "",
-            "catalog_version": "",
-            "catalog_hash": "",
-            # Non-authoritative, machine-local metadata (debugging only)
-            "policy_path": str(policy_path) if policy_path is not None else "",
-        }
-        if isinstance(drift_context, dict) and drift_context:
-            inputs_obj["drift_context"] = drift_context
+        inputs_obj = _build_di_inputs_obj(
+            di_input=di_input,
+            pol=pol,
+            evaluator_version=evaluator_version,
+            template_key=template_key,
+            template_name=template_name,
+            catalog_id="",
+            catalog_version="",
+            catalog_hash="",
+            policy_path=policy_path,
+            drift_context=drift_context,
+        )
         evidence_ids: list[int] = []
 
         # v1.2.9k integrity
@@ -665,35 +702,18 @@ def compute_di_output(
             reason=template_error or "unknown_template",
             evaluator_version=evaluator_version,
         )
-        inputs_obj = {
-            "decision_key": di_input.decision_key,
-            "scope_type": di_input.scope_type,
-            "scope_id": int(di_input.scope_id),
-            "as_of_ts": di_input.as_of_ts,
-            "qc_mode": di_input.qc_mode,
-            "context": di_input.context or {},
-            "engine_key": ENGINE_KEY,
-            "engine_id": ENGINE_ID,
-            "schema_version": SNAPSHOT_SCHEMA_VERSION,
-            "selector_version": SELECTOR_VERSION,
-            "evaluator_version": evaluator_version,
-            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
-            "policy_id": pol.policy_id,
-            "policy_version": pol.version,
-            "policy_name": pol.name,
-            "policy_semantics_hash": pol.policy_semantics_hash,
-            "policy_package_hash": pol.policy_package_hash,
-            "policy_schema_version": pol.schema_version,
-            "policy_hash": pol.policy_semantics_hash,
-            "policy_source": pol.source_name,
-            "policy_json_canonical": pol.policy_body_canonical_json,
-            "catalog_id": "",
-            "catalog_version": "",
-            "catalog_hash": "",
-            "policy_path": str(policy_path) if policy_path is not None else "",
-        }
-        if isinstance(drift_context, dict) and drift_context:
-            inputs_obj["drift_context"] = drift_context
+        inputs_obj = _build_di_inputs_obj(
+            di_input=di_input,
+            pol=pol,
+            evaluator_version=evaluator_version,
+            template_key=template_key,
+            template_name=template_name,
+            catalog_id="",
+            catalog_version="",
+            catalog_hash="",
+            policy_path=policy_path,
+            drift_context=drift_context,
+        )
         evidence_ids: list[int] = []
 
         prov = out.get("provenance")
@@ -806,39 +826,18 @@ def compute_di_output(
         catalog_hash = cat.catalog_hash
 
 
-    inputs_obj = {
-        "decision_key": di_input.decision_key,
-        "scope_type": di_input.scope_type,
-        "scope_id": int(di_input.scope_id),
-        "as_of_ts": di_input.as_of_ts,
-        "qc_mode": di_input.qc_mode,
-        "context": di_input.context or {},
-        "engine_key": ENGINE_KEY,
-        "engine_id": ENGINE_ID,
-        "schema_version": SNAPSHOT_SCHEMA_VERSION,
-        "selector_version": SELECTOR_VERSION,
-        "evaluator_version": evaluator_version,
-        "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
-        # Policy packaging
-        "policy_id": pol.policy_id,
-        "policy_version": pol.version,
-        "policy_name": pol.name,
-        "policy_semantics_hash": pol.policy_semantics_hash,
-        "policy_package_hash": pol.policy_package_hash,
-        "policy_schema_version": pol.schema_version,
-        # Back-compat fields
-        "policy_hash": pol.policy_semantics_hash,
-        "policy_source": pol.source_name,
-        "policy_json_canonical": pol.policy_body_canonical_json,
-        # Experiment catalog reference
-        "catalog_id": catalog_id,
-        "catalog_version": catalog_version,
-        "catalog_hash": catalog_hash,
-        # Non-authoritative, machine-local metadata (debugging only)
-        "policy_path": str(policy_path) if policy_path is not None else "",
-    }
-    if isinstance(drift_context, dict) and drift_context:
-        inputs_obj["drift_context"] = drift_context
+    inputs_obj = _build_di_inputs_obj(
+        di_input=di_input,
+        pol=pol,
+        evaluator_version=evaluator_version,
+        template_key=template_key,
+        template_name=template_name,
+        catalog_id=catalog_id,
+        catalog_version=catalog_version,
+        catalog_hash=catalog_hash,
+        policy_path=policy_path,
+        drift_context=drift_context,
+    )
 
     out = _compute_di_from_used_by_metric(
         db,

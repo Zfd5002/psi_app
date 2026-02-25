@@ -89,6 +89,11 @@ def compute_snapshot_content_hash(
 ) -> str:
     """Compute a deterministic snapshot content hash.
 
+    Integrity hash hierarchy (why multiple hashes exist):
+    - `evidence_fingerprint`: selected evidence identity surface only
+    - `snapshot_content_hash`: exact canonical snapshot payload (storage/replay integrity)
+    - `decision_output_hash` / `decision_output_hash_v2`: semantic decision surfaces for cross-version verification
+
     AUTHORITATIVE SNAPSHOT PAYLOAD:
       {
         "inputs": inputs_obj stripped of machine-local debug fields,
@@ -344,6 +349,8 @@ def compute_decision_output_hash_v2(
 
     v2 is the preferred verification surface for determining VERIFIED when
     policy hashes and evidence fingerprint are unchanged.
+    It is intentionally less strict than `snapshot_content_hash`: additive
+    diagnostics may change while the semantic decision remains identical.
     """
 
     canon_outputs = canonical_outputs_for_decision_hash_v2(outputs_obj or {})

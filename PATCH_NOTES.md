@@ -1640,3 +1640,83 @@ What changed:
 What changed:
 - Snapshot supersession integrity hardening: write paths now reconcile to a single active snapshot per exact scope before commit (authoritative active semantics: `superseded_by_snapshot_id IS NULL`), with explicit rollback on write failure.
 - DI contract smoke now asserts the one-active-snapshot-per-scope invariant after DI writes.
+## 2026-02-25 — v1.2.9w47
+What changed:
+- Governance hardening: removed weighted ranking emission from canonical DI outputs (`output.ranking`) and removed the weighted ranking table from the DI snapshot UI.
+- DI contract smoke now asserts weighted ranking is absent while deterministic output and snapshot rendering remain stable.
+
+Why it changed:
+- Canonical DI outputs/UI should not present or rely on a weighted-sum "one score" ranking; deterministic shortlisting/tie-break remains the policy-authorized path.
+
+Determinism/contract impact:
+- `shortlisting` remains deterministic and canonical; weighted ranking is no longer emitted in canonical snapshots.
+- `why_evidence` structure remains additive-compatible, with `why_evidence.ranking.candidates` empty when no canonical ranking is emitted.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w48
+What changed:
+- `/di/run` now supports both `batch` and `molecule` scope types via a scope selector and separate scope inputs.
+- GET query prefills work for both `batch_id` and `molecule_id`; POST now passes the selected scope type/id through to `DIInput`.
+
+Why it changed:
+- Complete v0.6 DI run usability for molecule-scope runs without changing DI compute behavior.
+
+Determinism/contract impact:
+- No DI compute/output changes; this is UI/router plumbing only.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w49
+What changed:
+- Confirmed and preserved DI run links on batch and molecule detail pages.
+- Applied a small UI consistency polish on the molecule detail page DI action button label/style.
+
+Why it changed:
+- Improve DI run discoverability in the batch/molecule detail workflows with consistent call-to-action styling.
+
+Determinism/contract impact:
+- No DI compute/output or schema changes; template-only discoverability update.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w50
+What changed:
+- Implemented deterministic shortlisting reproducibility signal from SoE `evidence_summary` counts for required metrics (`total_count > 1` and `usable_count > 1`).
+- Added reproducibility details to shortlisting tie-break payloads and tie-break explanations.
+- DI contract smoke now asserts the reproducibility block is emitted when evidence summaries are present.
+
+Why it changed:
+- Complete the v0.5 tie-break chain reproducibility signal using existing deterministic SoE evidence summaries, without introducing weighted scoring.
+
+Determinism/contract impact:
+- Reproducibility signal ordering is deterministic (`metrics` ordered by metric key).
+- No global score/ranking reintroduced; shortlisting remains deterministic and additive.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w51
+What changed:
+- Deduplicated DI `inputs_obj` construction in `runner.py` so success and deterministic error paths emit the same snapshot input keys.
+- Added an additive/idempotent `ensure_schema()` backfill for `decision_snapshots.engine_key='di'` when `engine_key IS NULL` and `schema_version` indicates DI (`di.%`).
+- Clarified DI integrity hash hierarchy docs and the `psi.services.di.enrich` shim/facade role (behavior unchanged).
+
+Why it changed:
+- Reduce maintenance drift and make DI metadata/integrity behavior easier to understand without changing canonical DI outputs.
+
+Determinism/contract impact:
+- No schema drops/renames; backfill only updates NULL `engine_key` rows and is safe to rerun.
+- DI output behavior remains unchanged (helper extraction + docs only).
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

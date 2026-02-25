@@ -399,6 +399,22 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
                 if col not in existing:
                     conn.execute(text("ALTER TABLE " + table + " ADD COLUMN " + col + " " + coltype))
 
+    # v1.2.9w51: additive DI snapshot metadata backfill (idempotent).
+    # Only touches legacy rows with NULL engine_key and a DI schema_version marker.
+    with eng.begin() as conn:
+        try:
+            cols = {r[1] for r in conn.execute(text("PRAGMA table_info(decision_snapshots)")).fetchall()}
+        except Exception:
+            cols = set()
+        if "engine_key" in cols and "schema_version" in cols:
+            conn.execute(
+                text(
+                    "UPDATE decision_snapshots "
+                    "SET engine_key = 'di' "
+                    "WHERE engine_key IS NULL AND schema_version LIKE 'di.%'"
+                )
+            )
+
 
     # v1.2.9q: backfill snapshot supersession metadata (deterministic).
     # Goal: ensure at most one ACTIVE snapshot per scope (decision_key, program_id, molecule_id, batch_id).
