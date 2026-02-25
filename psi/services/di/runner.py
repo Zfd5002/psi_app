@@ -61,118 +61,47 @@ def _parse_asof_to_utc_naive(ts: Optional[str]) -> Optional[_dt.datetime]:
 
 def _policy_schema_mismatch_output(*, di_input: DIInput, pol: Any, mismatch: str, evaluator_version: str) -> Dict[str, Any]:
     # Deterministic NOT_READY snapshot payload that does not raise.
-    return {
-        "decision_state": "not_ready",
-        "policy": {
-            "policy_id": getattr(pol, "policy_id", ""),
-            "policy_name": getattr(pol, "name", ""),
-            "policy_version": getattr(pol, "version", ""),
+    return _build_di_error_output(
+        di_input=di_input,
+        pol=pol,
+        evaluator_version=evaluator_version,
+        warning_kind="policy_schema_mismatch",
+        warning_detail={
             "policy_schema_version": getattr(pol, "schema_version", ""),
-            "policy_semantics_hash": getattr(pol, "policy_semantics_hash", ""),
-            "policy_package_hash": getattr(pol, "policy_package_hash", ""),
-            "name": getattr(pol, "name", ""),
-            "version": getattr(pol, "version", ""),
-            "hash": getattr(pol, "policy_semantics_hash", ""),
-            "source": getattr(pol, "source_name", ""),
-            "changelog": getattr(pol, "changelog", []) if getattr(pol, "changelog", None) is not None else [],
+            "allowed": sorted(list(ALLOWED_POLICY_SCHEMA_VERSIONS)),
+            "mismatch": mismatch,
         },
-        "engine": {
-            "engine_id": ENGINE_ID,
-            "schema_version": SNAPSHOT_SCHEMA_VERSION,
-            "selector_version": SELECTOR_VERSION,
-            "evaluator_version": str(evaluator_version),
-            "evaluation_version": str(evaluator_version),
-            "code_version": PSI_VERSION,
+        blocker_key="policy_schema_mismatch",
+        blocker_detail={
+            "policy_schema_version": getattr(pol, "schema_version", ""),
+            "allowed": sorted(list(ALLOWED_POLICY_SCHEMA_VERSIONS)),
         },
-        "provenance": {
-            "as_of_ts": di_input.as_of_ts,
-            "qc_mode": di_input.qc_mode,
-            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
-            "experiment_catalog": {"catalog_id": "", "catalog_version": "", "catalog_hash": ""},
-            "selection_provenance": {},
-            "inputs_fingerprint": {
-                "decision_key": di_input.decision_key,
-                "scope_type": di_input.scope_type,
-                "scope_id": int(di_input.scope_id),
-                "context_keys": sorted(list((di_input.context or {}).keys())),
-            },
-        },
-        "state_of_evidence": {
-            "used": {},
-            "ignored_evidence": [],
-            "warnings": [
-                {
-                    "kind": "policy_schema_mismatch",
-                    "detail": {
-                        "policy_schema_version": getattr(pol, "schema_version", ""),
-                        "allowed": sorted(list(ALLOWED_POLICY_SCHEMA_VERSIONS)),
-                        "mismatch": mismatch,
-                    },
-                }
-            ],
-        },
-        "gates": [],
-        "blockers": [
-            {
-                "blocker_key": "policy_schema_mismatch",
-                "detail": {
-                    "policy_schema_version": getattr(pol, "schema_version", ""),
-                    "allowed": sorted(list(ALLOWED_POLICY_SCHEMA_VERSIONS)),
-                },
-            }
-        ],
-        "risk_flags": [
-            {
-                "risk_flag": "policy_schema_mismatch",
-                "detail": {"note": "Policy package schema version is not supported by this PSI build."},
-            }
-        ],
-        "risk_flags_enriched": [
-            {
-                "key": "policy_schema_mismatch",
-                "category": "governance",
-                "severity": "high",
-                "related_metrics": [],
-                "explanation": "Policy package schema version is not supported by this PSI build.",
-            }
-        ],
-        "experiment_suggestions": {},
-        "measurement_ids_used": [],
-        "gate_outcomes": {},
-        "readiness": {
-            "state": "blocked",
-            "blockers": [
-                {
-                    "key": "policy_schema_mismatch",
-                    "severity": "high",
-                    "metrics": [],
-                    "gates": [],
-                    "explanation": "Unsupported policy package schema version.",
-                }
-            ],
-            "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0},
-            "qc_confidence": {"qc_mode": str(di_input.qc_mode), "reviewed_required_present": 0, "unreviewed_required_present": 0, "notes": []},
-            "comparability": {"method_incomparable_metrics": [], "notes": []},
-            "decision_context": str(di_input.decision_key),
-            "readiness_level": "blocked",
-            "blocking_gates": [],
-            "blocking_reasons": ["Unsupported policy package schema version."],
-            "assumptions": [],
-            "required_next_steps": [],
-        },
-        "coverage_fingerprint": _sha256_of_stable_json(
-            coverage_fingerprint_payload(readiness={"blockers": [], "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0}, "comparability": {"method_incomparable_metrics": [], "notes": []}}, gate_outcomes={})
-        ),
-        "suggestions": [],
-    }
+        risk_flag="policy_schema_mismatch",
+        risk_note="Policy package schema version is not supported by this PSI build.",
+        risk_enriched_key="policy_schema_mismatch",
+        risk_enriched_explanation="Policy package schema version is not supported by this PSI build.",
+        readiness_blocker_key="policy_schema_mismatch",
+        readiness_blocker_explanation="Unsupported policy package schema version.",
+        readiness_blocking_reason="Unsupported policy package schema version.",
+    )
 
 
-def _unsupported_template_output(
+def _build_di_error_output(
     *,
     di_input: DIInput,
     pol: Any,
-    reason: str,
     evaluator_version: str,
+    warning_kind: str,
+    warning_detail: Dict[str, Any],
+    blocker_key: str,
+    blocker_detail: Dict[str, Any],
+    risk_flag: str,
+    risk_note: str,
+    risk_enriched_key: str,
+    risk_enriched_explanation: str,
+    readiness_blocker_key: str,
+    readiness_blocker_explanation: str,
+    readiness_blocking_reason: str,
 ) -> Dict[str, Any]:
     return {
         "decision_state": "not_ready",
@@ -215,39 +144,31 @@ def _unsupported_template_output(
             "ignored_evidence": [],
             "warnings": [
                 {
-                    "kind": "unsupported_template",
-                    "detail": {
-                        "decision_key": di_input.decision_key,
-                        "template_key": getattr(pol, "template_key", ""),
-                        "reason": str(reason),
-                    },
+                    "kind": str(warning_kind),
+                    "detail": dict(warning_detail or {}),
                 }
             ],
         },
         "gates": [],
         "blockers": [
             {
-                "blocker_key": "unsupported_template",
-                "detail": {
-                    "decision_key": di_input.decision_key,
-                    "template_key": getattr(pol, "template_key", ""),
-                    "reason": str(reason),
-                },
+                "blocker_key": str(blocker_key),
+                "detail": dict(blocker_detail or {}),
             }
         ],
         "risk_flags": [
             {
-                "risk_flag": "unsupported_template",
-                "detail": {"note": "Decision template is not supported by this PSI build."},
+                "risk_flag": str(risk_flag),
+                "detail": {"note": str(risk_note)},
             }
         ],
         "risk_flags_enriched": [
             {
-                "key": "unsupported_template",
+                "key": str(risk_enriched_key),
                 "category": "governance",
                 "severity": "high",
                 "related_metrics": [],
-                "explanation": "Decision template is not supported by this PSI build.",
+                "explanation": str(risk_enriched_explanation),
             }
         ],
         "experiment_suggestions": {},
@@ -257,11 +178,11 @@ def _unsupported_template_output(
             "state": "blocked",
             "blockers": [
                 {
-                    "key": "unsupported_template",
+                    "key": str(readiness_blocker_key),
                     "severity": "high",
                     "metrics": [],
                     "gates": [],
-                    "explanation": "Unsupported decision template.",
+                    "explanation": str(readiness_blocker_explanation),
                 }
             ],
             "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0},
@@ -270,7 +191,7 @@ def _unsupported_template_output(
             "decision_context": str(di_input.decision_key),
             "readiness_level": "blocked",
             "blocking_gates": [],
-            "blocking_reasons": ["Unsupported decision template."],
+            "blocking_reasons": [str(readiness_blocking_reason)],
             "assumptions": [],
             "required_next_steps": [],
         },
@@ -279,6 +200,36 @@ def _unsupported_template_output(
         ),
         "suggestions": [],
     }
+
+
+def _unsupported_template_output(
+    *,
+    di_input: DIInput,
+    pol: Any,
+    reason: str,
+    evaluator_version: str,
+) -> Dict[str, Any]:
+    detail = {
+        "decision_key": di_input.decision_key,
+        "template_key": getattr(pol, "template_key", ""),
+        "reason": str(reason),
+    }
+    return _build_di_error_output(
+        di_input=di_input,
+        pol=pol,
+        evaluator_version=evaluator_version,
+        warning_kind="unsupported_template",
+        warning_detail=detail,
+        blocker_key="unsupported_template",
+        blocker_detail=detail,
+        risk_flag="unsupported_template",
+        risk_note="Decision template is not supported by this PSI build.",
+        risk_enriched_key="unsupported_template",
+        risk_enriched_explanation="Decision template is not supported by this PSI build.",
+        readiness_blocker_key="unsupported_template",
+        readiness_blocker_explanation="Unsupported decision template.",
+        readiness_blocking_reason="Unsupported decision template.",
+    )
 
 
 def _drift_context_for_scope(

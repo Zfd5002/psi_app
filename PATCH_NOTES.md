@@ -1578,3 +1578,8 @@ What changed:
 What changed:
 - Required gate keys now policy/template-authoritative; removes hardcoded readiness keys; fixes multi-template correctness.
 - Readiness and shortlisting fallback gate evaluation now derive required gates from policy ordering and gate metadata.
+
+## 2026-02-25 — v1.2.9w41
+What changed:
+- Remove DI imports from legacy decisions service (`stable_json_dumps` now DI-owned via `psi.services.di.util`).
+- Unify duplicated DI error output builder to reduce drift risk; snapshot error schema preserved.

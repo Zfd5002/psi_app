@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from psi.core.models import DecisionSnapshot
-from psi.services.decisions import stable_json_dumps
+from psi.services.di.util import stable_json_dumps
 
 
 def _json_load(text: str) -> Any:

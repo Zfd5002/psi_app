@@ -18,7 +18,7 @@ from typing import List, Optional
 
 from psi.core.db import DB_PATH, get_db
 
-from psi.services.decisions import stable_json_dumps
+from psi.services.di.util import stable_json_dumps
 from psi.services.di.snapshot_diff import DriftResult, compute_snapshot_diff_by_id
 
 
