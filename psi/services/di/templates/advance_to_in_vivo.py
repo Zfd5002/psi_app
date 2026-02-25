@@ -1,21 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from psi.core.di.schema import EvidenceRef, GateResult
 from psi.services.di.gates import evaluate_gates
 from psi.services.di.sub_assessments import baseline_risk_flags_from_used, decision_state_from_gate_statuses
-
-
-def _require_any(used: Dict[str, EvidenceRef], keys: List[str]) -> Tuple[bool, List[EvidenceRef]]:
-    evs = [used[k] for k in keys if k in used]
-    return (len(evs) > 0), evs
-
-
-def _require_all(used: Dict[str, EvidenceRef], keys: List[str]) -> Tuple[bool, List[EvidenceRef], List[str]]:
-    missing = [k for k in keys if k not in used]
-    evs = [used[k] for k in keys if k in used]
-    return (len(missing) == 0), evs, missing
 
 
 def _metric_status(metric_evaluations: Dict[str, Any], metric_key: str) -> str:
@@ -23,15 +12,6 @@ def _metric_status(metric_evaluations: Dict[str, Any], metric_key: str) -> str:
     if not isinstance(ev, dict):
         return ""
     return str(ev.get("evaluated_status") or "").strip().upper()
-
-
-def _metric_ok(metric_evaluations: Dict[str, Any], metric_key: str) -> bool:
-    status = _metric_status(metric_evaluations, metric_key)
-    if not status:
-        return True  # no value function defined
-    return status in ("PASS", "WARN", "INFO")
-
-
 def evaluate(
     *,
     used_by_metric: Dict[str, EvidenceRef],

@@ -32,6 +32,7 @@ SELECTOR_VERSION = "di.selector.v0_1"
 
 # explicit selection semantics version (constitution-locked)
 DI_SELECTION_SEMANTICS_VERSION = "di.selection.v0_1"
+OUTPUT_EXTENSION_FLAGS = ["value_functions_enforced_v0_1"]
 
 # Policy package schema allowlist (governance guardrail)
 ALLOWED_POLICY_SCHEMA_VERSIONS = {"di.policy_package.v0_1"}
@@ -117,6 +118,7 @@ def _build_di_inputs_obj(
         "selector_version": SELECTOR_VERSION,
         "evaluator_version": evaluator_version,
         "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
+        "output_extensions": list(OUTPUT_EXTENSION_FLAGS),
         "template_key": str(template_key or ""),
         "template_name": str(template_name or template_key or ""),
         "policy_id": pol.policy_id,
@@ -520,7 +522,11 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
 
 
 
-    # v1.2.9q: supersede prior ACTIVE snapshots for this exact scope, transactionally.
+    # v1.2.9q+: intentional two-pass supersession (no behavior change):
+    # 1) mark prior ACTIVE rows superseded before inserting the new snapshot so the
+    #    partial unique ACTIVE index can never reject the insert;
+    # 2) after the new row has an id, backfill superseded_by_snapshot_id to point at it.
+    # A final reconcile step remains as the concurrency guardrail if another writer raced us.
     active_ids = [
         int(r[0])
         for r in db.execute(
@@ -676,6 +682,8 @@ def compute_di_output(
             drift_context=drift_context,
         )
         evidence_ids: list[int] = []
+        if "value_functions_enforced_v0_1" in (inputs_obj.get("output_extensions") or []):
+            out["value_functions_enforced"] = False
 
         # v1.2.9k integrity
         prov = out.get("provenance")
@@ -715,6 +723,8 @@ def compute_di_output(
             drift_context=drift_context,
         )
         evidence_ids: list[int] = []
+        if "value_functions_enforced_v0_1" in (inputs_obj.get("output_extensions") or []):
+            out["value_functions_enforced"] = False
 
         prov = out.get("provenance")
         if isinstance(prov, dict):

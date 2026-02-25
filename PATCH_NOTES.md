@@ -1891,3 +1891,61 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-25 — v1.2.9w61
+What changed:
+- Added additive DI output field `value_functions_enforced` for new snapshots via an explicit output-extension flag in DI inputs, keeping historical replay surfaces unchanged.
+- DI snapshot UI now shows a concise **Run semantics** section (`qc_mode`, `as_of_ts`, stable-rendered `context`, `drift_type`, `state_transition`, `value_functions_enforced`).
+- Extended deterministic NBE suggestions so catalog experiment suggestions can also be triggered by specific risk flags (in addition to blockers), with stable ordering and risk-flag suggestion display in the snapshot UI.
+
+Why it changed:
+- Make value-function enforcement and run semantics explicit/auditable, and broaden deterministic experiment suggestion triggers without introducing scoring.
+
+Determinism/contract impact:
+- No heuristic ranking or weighted scoring added.
+- New `value_functions_enforced` field is replay-safe by explicit new-snapshot emission gating.
+- NBE ordering remains deterministic (`time_tier`, `cost_tier`, `experiment_key`).
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+## 2026-02-25 — v1.2.9w62
+What changed:
+- Added standalone deterministic fixture regression tool: `python -m psi.tools.di_fixture_regression`.
+- Tool runs small DB-write-free fixture cases that validate stable ordering for gates/blockers/risk-flags/NBE suggestions and checks the `w61` `value_functions_enforced` field on DI error-path outputs.
+
+Why it changed:
+- Provide a lightweight deterministic regression harness for DI governance surfaces without introducing a heavy test framework.
+
+Determinism/contract impact:
+- Read-only/pure fixture checks only; no DI runtime behavior changes.
+- No schema changes or replay surface changes.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+- `python -m psi.tools.di_fixture_regression`
+## 2026-02-25 — v1.2.9w63
+What changed:
+- Removed truly unused local helpers from `psi/services/di/templates/advance_to_in_vivo.py` (no behavior change).
+- Added clarifying comments in `psi/services/di/runner.py` documenting the intentional two-pass supersession sequence and why it preserves the single-active-snapshot invariant without changing semantics.
+
+Why it changed:
+- Governance-safe hygiene cleanup to reduce maintenance drift and make supersession behavior easier to audit.
+
+Determinism/contract impact:
+- No DI output semantics changes.
+- No schema changes and no replay surface changes.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+- `python -m psi.tools.di_fixture_regression`

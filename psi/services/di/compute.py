@@ -83,6 +83,13 @@ def _policy_supports_context_branch_surface(pol: Any) -> bool:
     return v.startswith("v0.4")
 
 
+def _should_emit_value_functions_enforced(inputs_obj: Dict[str, Any]) -> bool:
+    flags = inputs_obj.get("output_extensions") if isinstance(inputs_obj, dict) else []
+    if not isinstance(flags, list):
+        return False
+    return "value_functions_enforced_v0_1" in [str(x) for x in flags]
+
+
 def _build_scope_semantics(
     *,
     di_in: DIInput,
@@ -742,6 +749,7 @@ def _compute_di_from_used_by_metric(
     # Catalog-driven experiment suggestions (deterministic; no scoring)
     experiment_suggestions, recommended_experiments = build_experiment_suggestions(
         blockers=(templ.get("blockers") or []),
+        risk_flags=((templ.get("risk_flags") or []) + (interpretation_gap_flags or [])),
         catalog_id=catalog_id,
         catalog_version=catalog_version,
         allow_recommended_list=True,
@@ -833,6 +841,8 @@ def _compute_di_from_used_by_metric(
         out["metric_evaluations"] = metric_evaluations
     if recommended_experiments:
         out["recommended_experiments"] = recommended_experiments
+    if _should_emit_value_functions_enforced(inputs_obj):
+        out["value_functions_enforced"] = bool(enforce_value_functions)
 
     emit_context_branch_surface = _policy_supports_context_branch_surface(pol)
     if emit_context_branch_surface:

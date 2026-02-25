@@ -44,9 +44,32 @@ def _missing_metrics_from_blocker(b: Any) -> list[str]:
     return sorted(set(out))
 
 
+def _risk_flag_key(r: Any) -> str:
+    if isinstance(r, dict):
+        for k in ("risk_key", "risk_flag", "key"):
+            v = str(r.get(k) or "").strip()
+            if v:
+                return v
+        return ""
+    for k in ("risk_key", "risk_flag", "key"):
+        v = str(getattr(r, k, "") or "").strip()
+        if v:
+            return v
+    return ""
+
+
+# Deterministic, policy-visible NBE extension (w61): risk flags may trigger suggestions.
+# Keyed only by explicit flag names; no scoring or hidden ranking.
+_RISK_FLAG_TO_EXPERIMENT_KEYS: Dict[str, List[str]] = {
+    "aggregated_purity_interpretation_gap": ["run_sec_hplc", "repeat_assay_or_review_qc"],
+    "interpretation_gap": ["run_functional_assay", "run_sec_hplc"],
+}
+
+
 def build_experiment_suggestions(
     *,
     blockers: List[Any],
+    risk_flags: List[Any] | None = None,
     catalog_id: str,
     catalog_version: str,
     allow_recommended_list: bool = True,
@@ -127,6 +150,7 @@ def build_experiment_suggestions(
                         "cost_tier": str(e.get("cost_tier") or ""),
                         "notes": str(e.get("notes") or ""),
                         "triggered_by_blockers": [],
+                        "triggered_by_risk_flags": [],
                     }
                     recommended_map[ek] = entry
 
@@ -143,6 +167,54 @@ def build_experiment_suggestions(
                 prereq = e.get("prerequisites") if isinstance(e.get("prerequisites"), list) else []
                 entry["prerequisites"] = sorted(list(set((entry.get("prerequisites") or []) + prereq)))
 
+                entry["metric_keys"] = sorted(list(set((entry.get("metric_keys") or []) + (metrics_by_exp.get(ek) or []))))
+
+    for rf in sorted({_risk_flag_key(r) for r in (risk_flags or []) if _risk_flag_key(r)}):
+        mapped_keys = [str(x).strip() for x in (_RISK_FLAG_TO_EXPERIMENT_KEYS.get(rf) or []) if str(x).strip()]
+        if not mapped_keys:
+            continue
+        matches = [exp_by_key[ek] for ek in mapped_keys if ek in exp_by_key]
+        matches.sort(
+            key=lambda e: (
+                _tier_rank(e.get("time_tier")),
+                _tier_rank(e.get("cost_tier")),
+                str(e.get("experiment_key") or ""),
+            )
+        )
+        keys = [str(e.get("experiment_key") or "") for e in matches if str(e.get("experiment_key") or "")]
+        if not keys:
+            continue
+        suggestions[f"risk_flag:{rf}"] = keys
+        if allow_recommended_list:
+            for e in matches:
+                ek = str(e.get("experiment_key") or "")
+                if not ek:
+                    continue
+                entry = recommended_map.get(ek)
+                if entry is None:
+                    entry = {
+                        "experiment_key": ek,
+                        "name": str(e.get("name") or ""),
+                        "resolves": [],
+                        "outputs": [],
+                        "metric_keys": [],
+                        "prerequisites": [],
+                        "time_tier": str(e.get("time_tier") or ""),
+                        "cost_tier": str(e.get("cost_tier") or ""),
+                        "notes": str(e.get("notes") or ""),
+                        "triggered_by_blockers": [],
+                        "triggered_by_risk_flags": [],
+                    }
+                    recommended_map[ek] = entry
+                entry["triggered_by_risk_flags"] = sorted(
+                    list(set((entry.get("triggered_by_risk_flags") or []) + [rf]))
+                )
+                resolves = e.get("resolves") if isinstance(e.get("resolves"), list) else []
+                entry["resolves"] = sorted(list(set((entry.get("resolves") or []) + resolves)))
+                outputs = e.get("outputs") if isinstance(e.get("outputs"), list) else []
+                entry["outputs"] = sorted(list(set((entry.get("outputs") or []) + outputs)))
+                prereq = e.get("prerequisites") if isinstance(e.get("prerequisites"), list) else []
+                entry["prerequisites"] = sorted(list(set((entry.get("prerequisites") or []) + prereq)))
                 entry["metric_keys"] = sorted(list(set((entry.get("metric_keys") or []) + (metrics_by_exp.get(ek) or []))))
 
     recommended = sorted(

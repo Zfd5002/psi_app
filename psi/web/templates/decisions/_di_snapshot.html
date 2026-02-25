@@ -15,6 +15,8 @@
 {% set metric_evals = output.metric_evaluations if output.metric_evaluations is defined else {} %}
 {% set shortlisting = output.shortlisting if output.shortlisting is defined else None %}
 {% set scope_semantics = output.scope_semantics if output.scope_semantics is defined else None %}
+{% set inputs_obj = inputs if inputs is defined and inputs else {} %}
+{% set inputs_ctx = inputs_obj.context if inputs_obj is mapping and inputs_obj.context is defined and inputs_obj.context is mapping else {} %}
 {% set superseded = (snap.is_superseded if snap is defined else None) %}
 {% set di_ui = di_snapshot_ui if di_snapshot_ui is defined and di_snapshot_ui else {} %}
 {% set gate_outcomes_ordered = di_ui.gate_outcomes_ordered if di_ui is defined and di_ui.gate_outcomes_ordered is defined else [] %}
@@ -45,6 +47,43 @@
       <div class="muted mini">Scope: {{ snap_prov.scope_type if snap_prov.scope_type is defined and snap_prov.scope_type else '—' }} / {{ snap_prov.scope_id if snap_prov.scope_id is defined and snap_prov.scope_id is not none else '—' }}</div>
     </div>
   </div>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Run semantics</h2>
+  <div class="grid cols-2" style="gap:12px;">
+    <div>
+      <div class="muted">qc_mode</div>
+      <div>{{ prov.qc_mode if prov is mapping and prov.qc_mode is defined and prov.qc_mode else '—' }}</div>
+      <div class="muted" style="margin-top:8px;">as_of_ts</div>
+      <div>{{ prov.as_of_ts if prov is mapping and prov.as_of_ts is defined and prov.as_of_ts else '—' }}</div>
+      <div class="muted" style="margin-top:8px;">value_functions_enforced</div>
+      <div>{% if output.value_functions_enforced is defined %}{{ 'true' if output.value_functions_enforced else 'false' }}{% else %}—{% endif %}</div>
+    </div>
+    <div>
+      <div class="muted">drift_type</div>
+      <div>{{ output.drift_type if output.drift_type is defined and output.drift_type else '—' }}</div>
+      <div class="muted" style="margin-top:8px;">state_transition</div>
+      {% if output.state_transition is defined and output.state_transition %}
+        <pre style="white-space:pre-wrap;overflow:auto;max-height:120px;">{{ output.state_transition | tojson(indent=2) }}</pre>
+      {% else %}
+        <div>—</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="muted" style="margin-top:10px;">context</div>
+  {% if inputs_ctx and inputs_ctx|length %}
+    <table class="table compact" style="margin-top:6px;">
+      <thead><tr><th>key</th><th>value</th></tr></thead>
+      <tbody>
+        {% for k, v in inputs_ctx|dictsort %}
+          <tr><td><b>{{ k }}</b></td><td class="muted">{{ v if v is not none else 'null' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="muted">No context fields.</div>
+  {% endif %}
 </div>
 
 {% if error_block is defined and error_block.present %}
@@ -570,9 +609,16 @@
     <ul class="clean" style="margin-top:6px;">
       {% for r in output.risk_flags %}
         {% if r is mapping %}
+          {% set rkey = (r.risk_key if r.risk_key is defined and r.risk_key else (r.risk_flag if r.risk_flag is defined and r.risk_flag else (r.key if r.key is defined and r.key else ''))) %}
           <li>
-            <b>{{ r.risk_key if r.risk_key is defined else 'risk' }}</b>
+            <b>{{ rkey if rkey else 'risk' }}</b>
             {% if r.summary is defined %}<span class="muted"> — {{ r.summary }}</span>{% endif %}
+            {% if exp_sugg and rkey and (('risk_flag:' ~ rkey) in exp_sugg) %}
+              <div class="muted" style="margin-top:4px;">Experiments triggered by this risk flag</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+                {% for ek in exp_sugg['risk_flag:' ~ rkey] %}<span class="tag">{{ ek }}</span>{% endfor %}
+              </div>
+            {% endif %}
             {% if r.detail is defined %}
               <details style="margin-top:4px;">
                 <summary class="muted">details</summary>
