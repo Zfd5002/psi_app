@@ -697,6 +697,9 @@ def derive_shortlisting(
     func_gap = any(v.get("interpretation_gap") for v in func_metrics.values())
     functional = {"context_valid": (not func_gap), "metrics": func_metrics}
     reproducibility = _derive_reproducibility_signal(policy_body=policy_body, evidence_summary=evidence_summary)
+    qc_confidence = (readiness or {}).get("qc_confidence") if isinstance((readiness or {}).get("qc_confidence"), dict) else None
+    required_metric_keys = set(_policy_required_metric_keys(policy_body))
+    functional_required = sorted([mk for mk in ("percent_killing", "ec50", "pass_fail") if mk in required_metric_keys])
 
     candidate = {
         "candidate_id": f"{scope_type}:{int(scope_id)}",
@@ -743,6 +746,37 @@ def derive_shortlisting(
             },
         ],
     }
+    if emit_v0_4_extensions:
+        tie_break_dimensions: List[Dict[str, Any]] = [
+            {
+                "key": "readiness_completeness",
+                "status": "implemented",
+                "value": {"coverage_ratio": cov_ratio},
+            },
+            {
+                "key": "qc_confidence",
+                "status": ("implemented" if isinstance(qc_confidence, dict) else "deferred"),
+                "value": (qc_confidence if isinstance(qc_confidence, dict) else None),
+                "reason": (None if isinstance(qc_confidence, dict) else "missing_readiness_qc_confidence"),
+            },
+            {
+                "key": "purity_aggregation_profile",
+                "status": "implemented",
+                "value": purity,
+            },
+            {
+                "key": "reproducibility",
+                "status": "implemented",
+                "value": reproducibility,
+            },
+            {
+                "key": "potency_functional",
+                "status": ("implemented" if functional_required else "deferred"),
+                "value": (functional if functional_required else None),
+                "reason": (None if functional_required else "missing_metric:functional_policy_required"),
+            },
+        ]
+        candidate["tie_break_dimensions"] = tie_break_dimensions
 
     out_ok = {
         "enabled": True,
@@ -754,6 +788,10 @@ def derive_shortlisting(
     }
     if emit_v0_4_extensions:
         out_ok["refusal_reasons_text"] = []
-        out_ok["tie_break"] = {"status": "evaluated", "hierarchy": tie_break_hierarchy}
+        out_ok["tie_break"] = {
+            "status": "evaluated",
+            "hierarchy": tie_break_hierarchy,
+            "dimensions": list(candidate.get("tie_break_dimensions") or []),
+        }
         out_ok["candidates"] = [{"candidate_id": candidate.get("candidate_id")}]
     return out_ok

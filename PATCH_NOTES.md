@@ -1760,3 +1760,20 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w54
+What changed:
+- Added v0.4-only explicit tie-break dimension payloads (`tie_break_dimensions` and `shortlisting.tie_break.dimensions`) with stable ordering and `implemented`/`deferred` statuses.
+- Completed deterministic dimension coverage for readiness completeness, QC confidence, purity aggregation profile, reproducibility, and potency/functional (with explicit deferral reason when not policy-required).
+- Replay scrub removes these v0.4 tie-break extension fields from historical v0.3 replay outputs.
+
+Why it changed:
+- Complete the tie-break hierarchy transparently without introducing any global score or weighted ranking.
+
+Determinism/contract impact:
+- Tie-break dimension keys and order are fixed and deterministic for v0.4+.
+- v0.3 replay surfaces remain unchanged via replay scrub.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

@@ -323,6 +323,76 @@ def test_shortlisting_reproducibility_from_soe_evidence_summary() -> None:
     _assert(int(details.get("positive_required_metric_count") or 0) == 2, "reproducibility why.details must include deterministic summary")
 
 
+def test_shortlisting_refusal_v04_extensions_deterministic() -> None:
+    policy_body = {
+        "shortlisting": {"allow_shortlisting": True, "min_required_coverage_ratio": 1.0, "min_readiness_state": "ready"},
+        "gates": {"G1": {"require_all": ["m_a", "m_b"]}},
+    }
+    common = dict(
+        policy_body=policy_body,
+        decision_state="not_ready",
+        readiness={"state": "not_ready", "coverage": {"coverage_ratio": 0.5}},
+        gate_outcomes={"G1": {"status": "fail"}},
+        blockers=[],
+        comparability={"summary": {"high_severity_count": 0, "total_flags": 0}},
+        metric_evaluations={},
+        evidence_summary=[{"metric_key": "m_a", "total_count": 1, "usable_count": 1}],
+        scope_type="batch",
+        scope_id=1,
+    )
+    out1 = derive_shortlisting(**common, emit_v0_4_extensions=True)
+    out2 = derive_shortlisting(**common, emit_v0_4_extensions=True)
+    _assert(stable_json_dumps(out1 or {}) == stable_json_dumps(out2 or {}), "v0.4 refusal extension surface must be deterministic")
+    _assert(isinstance(out1, dict) and bool(out1.get("refused")), "fixture must refuse shortlisting")
+    txt = out1.get("refusal_reasons_text") if isinstance(out1.get("refusal_reasons_text"), list) else []
+    _assert(any(str(x).startswith("insufficient_reproducibility_counts:") for x in txt), "v0.4 refusal text must include reproducibility-count reason")
+    legacy = derive_shortlisting(**common, emit_v0_4_extensions=False)
+    _assert(isinstance(legacy, dict), "legacy fixture must return shortlisting dict")
+    for k in ("refusal_reasons_text", "tie_break", "candidates"):
+        _assert(k not in legacy, f"v0.3 shortlisting surface must not include {k}")
+
+
+def test_tie_break_dimensions_v04_complete_and_deterministic() -> None:
+    policy_body = {
+        "shortlisting": {"allow_shortlisting": True, "min_required_coverage_ratio": 1.0, "min_readiness_state": "ready"},
+        "gates": {"G1": {"require_all": ["monomer_pct", "hmw_pct", "lmw_pct", "percent_killing"]}},
+    }
+    kwargs = dict(
+        policy_body=policy_body,
+        decision_state="ready",
+        readiness={"state": "ready", "coverage": {"coverage_ratio": 1.0}, "qc_confidence": {"reviewed_required_present": 2, "unreviewed_required_present": 0, "mode": "model_safe"}},
+        gate_outcomes={"G1": {"status": "pass"}},
+        blockers=[],
+        comparability={"summary": {"high_severity_count": 0, "total_flags": 0}},
+        metric_evaluations={
+            "monomer_pct": {"evaluated_status": "PASS", "interpretation_gap": False},
+            "hmw_pct": {"evaluated_status": "PASS", "interpretation_gap": False},
+            "lmw_pct": {"evaluated_status": "PASS", "interpretation_gap": False},
+            "percent_killing": {"evaluated_status": "PASS", "interpretation_gap": False},
+        },
+        evidence_summary=[
+            {"metric_key": "monomer_pct", "total_count": 2, "usable_count": 2},
+            {"metric_key": "hmw_pct", "total_count": 2, "usable_count": 2},
+            {"metric_key": "lmw_pct", "total_count": 2, "usable_count": 2},
+            {"metric_key": "percent_killing", "total_count": 2, "usable_count": 2},
+        ],
+        scope_type="batch",
+        scope_id=7,
+        emit_v0_4_extensions=True,
+    )
+    out1 = derive_shortlisting(**kwargs)
+    out2 = derive_shortlisting(**kwargs)
+    _assert(stable_json_dumps(out1 or {}) == stable_json_dumps(out2 or {}), "v0.4 tie-break payload must be deterministic")
+    cand = ((out1 or {}).get("ranked_candidates") or [{}])[0]
+    dims = cand.get("tie_break_dimensions") if isinstance(cand, dict) and isinstance(cand.get("tie_break_dimensions"), list) else []
+    keys = [str((d or {}).get("key") or "") for d in dims]
+    _assert(keys == ["readiness_completeness", "qc_confidence", "purity_aggregation_profile", "reproducibility", "potency_functional"], "tie-break dimension keys must be complete and in stable order")
+    _assert(all(str((d or {}).get("status") or "") in ("implemented", "deferred") for d in dims), "tie-break dimensions must declare implemented/deferred status")
+    tb = (out1 or {}).get("tie_break") if isinstance((out1 or {}).get("tie_break"), dict) else {}
+    tb_dims = tb.get("dimensions") if isinstance(tb.get("dimensions"), list) else []
+    _assert([str((d or {}).get("key") or "") for d in tb_dims] == keys, "shortlisting.tie_break.dimensions must align with candidate tie-break dimensions")
+
+
 def test_policy_blocker_taxonomy_and_experiment_suggestions() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     pol_path = repo_root / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_1.json"
@@ -1253,6 +1323,8 @@ def main() -> int:
         test_selection_semantics_version_constant()
         test_policy_authoritative_required_gate_keys()
         test_context_knob_branching_gate_outcomes_deterministic()
+        test_shortlisting_refusal_v04_extensions_deterministic()
+        test_tie_break_dimensions_v04_complete_and_deterministic()
         test_shortlisting_reproducibility_from_soe_evidence_summary()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_ignore_reason_keys_allowed_set()

@@ -662,6 +662,17 @@ def _scrub_output_for_replay(output: Dict[str, Any], *, policy_version: str, sch
         s2.pop("refusal_reasons_text", None)
         s2.pop("tie_break", None)
         s2.pop("candidates", None)
+        rc = s2.get("ranked_candidates")
+        if isinstance(rc, list):
+            rc2 = []
+            for c in rc:
+                if not isinstance(c, dict):
+                    rc2.append(c)
+                    continue
+                c2 = dict(c)
+                c2.pop("tie_break_dimensions", None)
+                rc2.append(c2)
+            s2["ranked_candidates"] = rc2
         out["shortlisting"] = s2
     return out
 
