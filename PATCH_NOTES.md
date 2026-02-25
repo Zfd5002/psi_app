@@ -1573,3 +1573,8 @@ What changed:
 What changed:
 - Governance fix: DI ranking/weighted scoring is now emitted only when policy shortlisting is explicitly enabled (`shortlisting.allow_shortlisting` / `allow`).
 - Contract smoke now asserts ranking is present when enabled and absent when disabled.
+
+## 2026-02-24 — v1.2.9w40
+What changed:
+- Required gate keys now policy/template-authoritative; removes hardcoded readiness keys; fixes multi-template correctness.
+- Readiness and shortlisting fallback gate evaluation now derive required gates from policy ordering and gate metadata.

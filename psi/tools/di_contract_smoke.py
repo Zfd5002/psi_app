@@ -25,6 +25,7 @@ from psi.core.di.catalog import load_catalog
 from psi.core.di.policy import canonical_policy_json, load_policy, sha256_hex_of_canonical_json
 from psi.core.utils import stable_json_dumps
 from psi.services.di.compute import _normalize_ignored
+from psi.services.di.eval import derive_readiness, derive_shortlisting
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
 from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
 
@@ -130,6 +131,65 @@ def test_policy_template_structure_present() -> None:
 
 def test_selection_semantics_version_constant() -> None:
     _assert(DI_SELECTION_SEMANTICS_VERSION == "di.selection.v0_1", "selection semantics version must be di.selection.v0_1")
+
+
+def test_policy_authoritative_required_gate_keys() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    pol_adv = load_policy(repo_root / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_3.json")
+    pol_scale = load_policy(repo_root / "psi" / "core" / "di" / "policies" / "ready_for_scaleup_screen_v0_1.json")
+
+    r_adv = derive_readiness(
+        decision_state="not_ready",
+        decision_key="advance_to_in_vivo",
+        policy_body=(pol_adv.policy_body or {}),
+        gate_results=[],
+        templ_blockers=[],
+        used_by_metric={},
+        ignored=[],
+        warnings=[],
+        qc_mode="model_safe",
+    )
+    cov_adv = (r_adv.get("coverage") or {}) if isinstance(r_adv, dict) else {}
+    _assert(int(cov_adv.get("required_total") or 0) == 10, "advance_to_in_vivo required metrics must come from policy-defined required gates")
+    _assert(int(cov_adv.get("optional_total") or 0) == 5, "advance_to_in_vivo optional metrics must exclude conditional/optional policy gates")
+
+    r_scale = derive_readiness(
+        decision_state="not_ready",
+        decision_key="ready_for_scaleup_screen",
+        policy_body=(pol_scale.policy_body or {}),
+        gate_results=[],
+        templ_blockers=[],
+        used_by_metric={},
+        ignored=[],
+        warnings=[],
+        qc_mode="model_safe",
+    )
+    cov_scale = (r_scale.get("coverage") or {}) if isinstance(r_scale, dict) else {}
+    _assert(int(cov_scale.get("required_total") or 0) == 6, "ready_for_scaleup_screen required metrics must follow template policy gates")
+    _assert(int(cov_scale.get("optional_total") or 0) == 0, "ready_for_scaleup_screen should not inherit hardcoded optional gate behavior")
+
+    pol_scale_short = dict(pol_scale.policy_body or {})
+    pol_scale_short["shortlisting"] = {"allow_shortlisting": True}
+    short = derive_shortlisting(
+        policy_body=pol_scale_short,
+        decision_state="ready",
+        readiness={"state": "ready", "coverage": {"coverage_ratio": 1.0}},
+        gate_outcomes={
+            "G1_material_readiness": {"status": "pass"},
+            "G2_purity_integrity": {"status": "pass"},
+            "G3_stability": {"status": "fail"},
+        },
+        blockers=[],
+        comparability={"summary": {"high_severity_count": 0, "total_flags": 0}},
+        metric_evaluations={},
+        scope_type="batch",
+        scope_id=1,
+    )
+    _assert(isinstance(short, dict) and bool(short.get("refused")), "shortlisting should refuse when policy-derived required gate fails")
+    reasons = short.get("refusal_reasons") if isinstance(short.get("refusal_reasons"), list) else []
+    hg = [r for r in reasons if isinstance(r, dict) and r.get("kind") == "hard_gates_not_passed"]
+    _assert(bool(hg), "shortlisting refusal must include hard_gates_not_passed")
+    _assert("G3_stability" in (hg[0].get("gates") or []), "shortlisting must use template policy gates, not hardcoded advance gates")
 
 
 def test_policy_blocker_taxonomy_and_experiment_suggestions() -> None:
@@ -1000,6 +1060,7 @@ def main() -> int:
         test_catalog_hash_validation()
         test_policy_template_structure_present()
         test_selection_semantics_version_constant()
+        test_policy_authoritative_required_gate_keys()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()

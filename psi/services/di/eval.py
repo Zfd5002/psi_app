@@ -23,6 +23,49 @@ def _stable_float_ratio(n: int, d: int, *, places: int = 6) -> float:
         return 0.0
 
 
+def _policy_required_gate_keys(policy_body: Dict[str, Any]) -> List[str]:
+    """Policy-authoritative required gate keys in deterministic order.
+
+    Authority order:
+    1) `policy.shortlisting.required_gates` (preserve list order)
+    2) infer from `policy.gates` insertion order, excluding conditional/optional gates
+       (`if_present` gates and keys ending with `_optional`)
+    """
+
+    pol_short = (policy_body or {}).get("shortlisting") or {}
+    if isinstance(pol_short, dict):
+        req = pol_short.get("required_gates")
+        if isinstance(req, list):
+            out: List[str] = []
+            seen: set[str] = set()
+            for x in req:
+                s = str(x).strip()
+                if not s or s in seen:
+                    continue
+                seen.add(s)
+                out.append(s)
+            if out:
+                return out
+
+    gates = (policy_body or {}).get("gates") or {}
+    if not isinstance(gates, dict):
+        return []
+
+    out: List[str] = []
+    for gk, gd in gates.items():
+        key = str(gk).strip()
+        if not key:
+            continue
+        if not isinstance(gd, dict):
+            gd = {}
+        if isinstance(gd.get("if_present"), list):
+            continue
+        if key.lower().endswith("_optional"):
+            continue
+        out.append(key)
+    return out
+
+
 def _gate_results_by_key(gate_results: list[Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for g in gate_results or []:
@@ -123,7 +166,8 @@ def derive_readiness(
     if not isinstance(gates, dict):
         gates = {}
 
-    required_gate_keys = ["G1_material_readiness", "G2_purity_integrity", "G3_endotoxin", "G4_functional"]
+    required_gate_keys = _policy_required_gate_keys(policy_body)
+    required_gate_key_set = set(required_gate_keys)
     required_metrics_set: set[str] = set()
     optional_metrics_set: set[str] = set()
     for gk, gd in gates.items():
@@ -134,7 +178,7 @@ def derive_readiness(
             req = [str(x).strip() for x in gd.get("require_all") if str(x).strip()]
         elif isinstance(gd.get("require_any"), list):
             req = [str(x).strip() for x in gd.get("require_any") if str(x).strip()]
-        if str(gk) in required_gate_keys:
+        if str(gk) in required_gate_key_set:
             required_metrics_set.update(req)
         else:
             optional_metrics_set.update(req)
@@ -346,9 +390,7 @@ def derive_shortlisting(
         min_cov_f = 1.0
 
     min_state = str(pol_short.get("min_readiness_state") or "ready").strip().lower()
-    required_gates = pol_short.get("required_gates")
-    if not isinstance(required_gates, list) or not required_gates:
-        required_gates = ["G1_material_readiness", "G2_purity_integrity", "G3_endotoxin", "G4_functional"]
+    required_gates = _policy_required_gate_keys(policy_body)
 
     reasons: list[Dict[str, Any]] = []
 
