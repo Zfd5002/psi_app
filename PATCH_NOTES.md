@@ -1832,3 +1832,21 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w58
+What changed:
+- Confirmed `/di/run` web execution supports both `batch` and `molecule` scope POSTs and DIInput passthrough.
+- Tightened deterministic ordering for `/di/run` selector lists with explicit `created_at DESC, id DESC` ordering for batches and molecules.
+
+Why it changed:
+- Close the remaining audit gap for molecule-scope DI execution from the web form with stable selector ordering.
+
+Determinism/contract impact:
+- No DI engine logic changes.
+- No replay surface changes.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
