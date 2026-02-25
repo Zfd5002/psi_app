@@ -848,6 +848,7 @@ def _compute_di_from_used_by_metric(
             if isinstance(soe_v0_3, dict)
             else []
         ),
+        emit_v0_4_extensions=emit_context_branch_surface,
         scope_type=di_in.scope_type,
         scope_id=int(di_in.scope_id),
     )

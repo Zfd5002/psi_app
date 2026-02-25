@@ -1742,3 +1742,21 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w53
+What changed:
+- Added v0.4-only deterministic shortlisting refusal extension fields: `refusal_reasons_text`, `tie_break`, and `candidates`.
+- Added a deterministic reproducibility-count refusal trigger for v0.4 shortlisting (`total_count>1` and `usable_count>1` on required metrics).
+- DI snapshot UI now shows stable refusal reason text when present.
+- Replay scrub removes these v0.4 refusal extension fields from historical v0.3 replay outputs.
+
+Why it changed:
+- Make refusal-to-rank explicit and contract-stable for v0.4+ while preserving v0.3 replay surfaces unchanged.
+
+Determinism/contract impact:
+- v0.4 refusal extensions are deterministically ordered and text-normalized.
+- Historical v0.3 replay outputs remain scrubbed to prior surfaces.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

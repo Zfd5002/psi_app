@@ -542,6 +542,7 @@ def derive_shortlisting(
     scope_type: str,
     scope_id: int,
     evidence_summary: list[Dict[str, Any]] | None = None,
+    emit_v0_4_extensions: bool = False,
 ) -> Dict[str, Any] | None:
     """Deterministic shortlisting (single-scope baseline).
 
@@ -587,6 +588,37 @@ def derive_shortlisting(
         cov_ratio = 0.0
     if cov_ratio < min_cov_f:
         reasons.append({"kind": "coverage_below_threshold", "coverage_ratio": cov_ratio, "required": min_cov_f})
+    if emit_v0_4_extensions:
+        summary_map: Dict[str, Dict[str, Any]] = {}
+        for row in (evidence_summary or []):
+            if not isinstance(row, dict):
+                continue
+            mk = str(row.get("metric_key") or "").strip()
+            if mk and mk not in summary_map:
+                summary_map[mk] = row
+        insufficient_counts: List[Dict[str, Any]] = []
+        for mk in _policy_required_metric_keys(policy_body):
+            row = summary_map.get(mk) or {}
+            try:
+                total_count = int(row.get("total_count") or 0)
+            except Exception:
+                total_count = 0
+            try:
+                usable_count = int(row.get("usable_count") or 0)
+            except Exception:
+                usable_count = 0
+            if total_count <= 1 or usable_count <= 1:
+                insufficient_counts.append(
+                    {"metric_key": mk, "total_count": int(total_count), "usable_count": int(usable_count)}
+                )
+        if insufficient_counts:
+            reasons.append(
+                {
+                    "kind": "insufficient_reproducibility_counts",
+                    "metrics": insufficient_counts,
+                    "rule": "total_count>1_and_usable_count>1",
+                }
+            )
 
     tie_break_hierarchy = [
         "readiness_completeness",
@@ -597,7 +629,7 @@ def derive_shortlisting(
     ]
 
     if reasons:
-        return {
+        out_refusal = {
             "enabled": True,
             "refused": True,
             "refusal_reason": "insufficient evidence to rank",
@@ -605,6 +637,37 @@ def derive_shortlisting(
             "tie_break_hierarchy": tie_break_hierarchy,
             "ranked_candidates": [],
         }
+        if emit_v0_4_extensions:
+            texts: List[str] = []
+            for r in reasons:
+                if not isinstance(r, dict):
+                    texts.append(str(r))
+                    continue
+                kind = str(r.get("kind") or "")
+                if kind == "insufficient_reproducibility_counts":
+                    parts = []
+                    for m in (r.get("metrics") or []):
+                        if not isinstance(m, dict):
+                            continue
+                        parts.append(f"{m.get('metric_key')}:{int(m.get('total_count') or 0)}/{int(m.get('usable_count') or 0)}")
+                    texts.append("insufficient_reproducibility_counts:" + ",".join(parts))
+                elif kind == "hard_gates_not_passed":
+                    gates = [str(x) for x in (r.get("gates") or []) if str(x).strip()]
+                    texts.append("hard_gates_not_passed:" + ",".join(gates))
+                elif kind == "coverage_below_threshold":
+                    texts.append(
+                        f"coverage_below_threshold:{float(r.get('coverage_ratio') or 0.0):.6f}<{float(r.get('required') or 0.0):.6f}"
+                    )
+                elif kind == "readiness_state_below_threshold":
+                    texts.append(f"readiness_state:{r.get('state') or ''}!={r.get('required') or ''}")
+                elif kind == "blockers_present":
+                    texts.append(f"blockers_present:{int(r.get('count') or 0)}")
+                else:
+                    texts.append(kind or str(r))
+            out_refusal["refusal_reasons_text"] = sorted(set(texts))
+            out_refusal["tie_break"] = {"status": "refused", "hierarchy": tie_break_hierarchy}
+            out_refusal["candidates"] = []
+        return out_refusal
 
     def _eval_for(mk: str) -> Dict[str, Any]:
         ev = metric_evaluations.get(mk) if isinstance(metric_evaluations, dict) else None
@@ -681,7 +744,7 @@ def derive_shortlisting(
         ],
     }
 
-    return {
+    out_ok = {
         "enabled": True,
         "refused": False,
         "refusal_reason": "",
@@ -689,3 +752,8 @@ def derive_shortlisting(
         "tie_break_hierarchy": tie_break_hierarchy,
         "ranked_candidates": [candidate],
     }
+    if emit_v0_4_extensions:
+        out_ok["refusal_reasons_text"] = []
+        out_ok["tie_break"] = {"status": "evaluated", "hierarchy": tie_break_hierarchy}
+        out_ok["candidates"] = [{"candidate_id": candidate.get("candidate_id")}]
+    return out_ok

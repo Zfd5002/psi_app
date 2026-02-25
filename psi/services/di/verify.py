@@ -656,6 +656,13 @@ def _scrub_output_for_replay(output: Dict[str, Any], *, policy_version: str, sch
             g2.pop("context_branch", None)
             cleaned[gk] = g2
         out["gate_outcomes"] = cleaned
+    shortlisting = out.get("shortlisting")
+    if isinstance(shortlisting, dict):
+        s2 = dict(shortlisting)
+        s2.pop("refusal_reasons_text", None)
+        s2.pop("tie_break", None)
+        s2.pop("candidates", None)
+        out["shortlisting"] = s2
     return out
 
 
