@@ -44,6 +44,14 @@ class LoadedProgressPolicy:
         return str(self.policy.get("policy_version") or "")
 
 
+@dataclass(frozen=True)
+class LoadedTemplatePrerequisites:
+    policy: Dict[str, Any]
+    policy_hash: str
+    canonical_json: str
+    source_name: str
+
+
 def load_catalog(path: Path) -> LoadedCatalog:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -103,3 +111,36 @@ def load_progress_policy(path: Path) -> LoadedProgressPolicy:
 def load_progress_policy_v0_1() -> LoadedProgressPolicy:
     pol_path = Path(__file__).resolve().parent / "catalogs" / "progress_policy_v0_1.json"
     return load_progress_policy(pol_path)
+
+
+def _validate_template_prerequisites(raw: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError("template prerequisites JSON must be an object")
+    mappings = raw.get("template_prerequisites")
+    if not isinstance(mappings, dict):
+        raise ValueError("template_prerequisites must be an object")
+    norm: Dict[str, list[str]] = {}
+    for k in sorted([str(x) for x in mappings.keys() if str(x).strip()]):
+        vals = mappings.get(k)
+        if not isinstance(vals, list):
+            raise ValueError(f"template_prerequisites[{k}] must be a list")
+        items = [str(x).strip() for x in vals if str(x).strip()]
+        if len(items) != len(set(items)):
+            raise ValueError(f"template_prerequisites[{k}] contains duplicates")
+        norm[k] = items
+    out = dict(raw)
+    out["template_prerequisites"] = norm
+    return out
+
+
+def load_template_prerequisites(path: Path) -> LoadedTemplatePrerequisites:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    validated = _validate_template_prerequisites(raw)
+    canon = canonical_package_json(validated)
+    h = sha256_hex_of_canonical_json(validated)
+    return LoadedTemplatePrerequisites(policy=validated, policy_hash=h, canonical_json=canon, source_name=path.name)
+
+
+def load_template_prerequisites_v0_1() -> LoadedTemplatePrerequisites:
+    pol_path = Path(__file__).resolve().parent / "catalogs" / "template_prerequisites_v0_1.json"
+    return load_template_prerequisites(pol_path)

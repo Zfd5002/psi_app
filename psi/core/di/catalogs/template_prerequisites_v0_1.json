@@ -1,0 +1,9 @@
+{
+  "policy_id": "template_prerequisites_v0_1",
+  "policy_version": "v0.1",
+  "schema_version": "di.template_prerequisites.v0_1",
+  "template_prerequisites": {
+    "advance_to_in_vivo.v0_1": ["ready_for_scaleup_screen.v0_1"],
+    "ready_for_scaleup_screen.v0_1": []
+  }
+}

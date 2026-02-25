@@ -207,6 +207,20 @@ def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
         _assert(isinstance(tv, str) and tv, f"di milestone {mk} must map to non-empty template key")
 
 
+def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
+    from psi.core.di.catalog import load_template_prerequisites_v0_1
+
+    pol = load_template_prerequisites_v0_1()
+    body = pol.policy if isinstance(pol.policy, dict) else {}
+    mappings = body.get("template_prerequisites") if isinstance(body.get("template_prerequisites"), dict) else {}
+    _assert(bool(mappings), "template prerequisites mapping must be present")
+    for tk, deps in sorted(mappings.items()):
+        _assert(isinstance(tk, str) and tk, "template prerequisite key must be non-empty string")
+        _assert(isinstance(deps, list), f"template_prerequisites[{tk}] must be list")
+        _assert(all(isinstance(x, str) and x for x in deps), f"template_prerequisites[{tk}] values must be non-empty strings")
+        _assert(len(deps) == len(set(deps)), f"template_prerequisites[{tk}] must be duplicate-free")
+
+
 def test_selection_semantics_version_constant() -> None:
     _assert(DI_SELECTION_SEMANTICS_VERSION == "di.selection.v0_1", "selection semantics version must be di.selection.v0_1")
 
@@ -1506,6 +1520,7 @@ def main() -> int:
         test_catalog_hash_validation()
         test_policy_template_structure_present()
         test_progress_policy_catalog_v0_1_loads_and_validates()
+        test_template_prerequisites_catalog_v0_1_loads_and_validates()
         test_selection_semantics_version_constant()
         test_policy_authoritative_required_gate_keys()
         test_context_knob_branching_gate_outcomes_deterministic()
