@@ -32,7 +32,7 @@ SELECTOR_VERSION = "di.selector.v0_1"
 
 # explicit selection semantics version (constitution-locked)
 DI_SELECTION_SEMANTICS_VERSION = "di.selection.v0_1"
-OUTPUT_EXTENSION_FLAGS = ["value_functions_enforced_v0_1"]
+OUTPUT_EXTENSION_FLAGS = ["value_functions_enforced_v0_1", "error_output_parity_v2_0a"]
 
 # Policy package schema allowlist (governance guardrail)
 ALLOWED_POLICY_SCHEMA_VERSIONS = {"di.policy_package.v0_1"}
@@ -41,6 +41,21 @@ ALLOWED_POLICY_SCHEMA_VERSIONS = {"di.policy_package.v0_1"}
 def _sha256_of_stable_json(obj: Any) -> str:
     s = stable_json_dumps(obj)
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+def _has_output_extension(inputs_obj: Dict[str, Any], flag: str) -> bool:
+    vals = inputs_obj.get("output_extensions") if isinstance(inputs_obj, dict) else []
+    if not isinstance(vals, list):
+        return False
+    return str(flag) in [str(x) for x in vals]
+
+
+def _policy_supports_v0_4_extensions(pol: Any) -> bool:
+    try:
+        v = str(getattr(pol, "version", "") or "").strip().lower()
+    except Exception:
+        v = ""
+    return v.startswith("v0.4")
 
 
 def _parse_asof_to_utc_naive(ts: Optional[str]) -> Optional[_dt.datetime]:
@@ -255,6 +270,53 @@ def _build_di_error_output(
         ),
         "suggestions": [],
     }
+
+
+def _complete_di_error_output_contract_parity(
+    *,
+    out: Dict[str, Any],
+    di_input: DIInput,
+    pol: Any,
+    inputs_obj: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Additive, replay-safe error-output parity completion for new snapshots only.
+
+    Historical snapshots replay using stored inputs_obj without the parity extension flag,
+    so this helper becomes a no-op and preserves old replay surfaces.
+    """
+    if not _has_output_extension(inputs_obj, "error_output_parity_v2_0a"):
+        if _has_output_extension(inputs_obj, "value_functions_enforced_v0_1"):
+            out["value_functions_enforced"] = False
+        return out
+
+    out.setdefault("metric_evaluations", {})
+    out.setdefault("recommended_experiments", [])
+    out.setdefault("comparability", {
+        "metric_level": [],
+        "qc_coherence": [],
+        "summary": {"total_flags": 0, "high_severity_count": 0},
+        "is_comparable": False,
+        "reason": "error_output",
+        "policy_semantics_hash_changed": False,
+        "evidence_fingerprint_changed": False,
+    })
+    out.setdefault("confidence_degradation", {"triggered": False, "reasons": []})
+    out.setdefault("why_evidence", {})
+    out.setdefault("drift_type", "NO_CHANGE")
+    out.setdefault("state_transition", None)
+    out.setdefault("shortlisting", None)
+    out.setdefault("scope_semantics", None)
+    out.setdefault("context_evaluation", None)
+    out.setdefault("template_dependency_graph", None)
+    if _has_output_extension(inputs_obj, "value_functions_enforced_v0_1"):
+        out.setdefault("value_functions_enforced", False)
+    if not _policy_supports_v0_4_extensions(pol):
+        # Keep v0.3 surfaces aligned for new v0.3 snapshots too: the parity helper is enabled
+        # for all new snapshots, but v0.4-only extension surfaces remain gated by policy version.
+        out.pop("scope_semantics", None)
+        out.pop("context_evaluation", None)
+        out.pop("template_dependency_graph", None)
+    return out
 
 
 def _unsupported_template_output(
@@ -682,8 +744,12 @@ def compute_di_output(
             drift_context=drift_context,
         )
         evidence_ids: list[int] = []
-        if "value_functions_enforced_v0_1" in (inputs_obj.get("output_extensions") or []):
-            out["value_functions_enforced"] = False
+        out = _complete_di_error_output_contract_parity(
+            out=out,
+            di_input=di_input,
+            pol=pol,
+            inputs_obj=inputs_obj,
+        )
 
         # v1.2.9k integrity
         prov = out.get("provenance")
@@ -723,8 +789,12 @@ def compute_di_output(
             drift_context=drift_context,
         )
         evidence_ids: list[int] = []
-        if "value_functions_enforced_v0_1" in (inputs_obj.get("output_extensions") or []):
-            out["value_functions_enforced"] = False
+        out = _complete_di_error_output_contract_parity(
+            out=out,
+            di_input=di_input,
+            pol=pol,
+            inputs_obj=inputs_obj,
+        )
 
         prov = out.get("provenance")
         if isinstance(prov, dict):

@@ -188,6 +188,25 @@ def test_policy_template_structure_present() -> None:
         _assert(isinstance(ts.get(k), list), f"template_structure.{k} must be a list")
 
 
+def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
+    from psi.core.di.catalog import load_progress_policy_v0_1
+
+    pol = load_progress_policy_v0_1()
+    _assert(pol.policy_id == "progress_policy_v0_1", "progress policy id mismatch")
+    _assert(pol.policy_version == "v0.1", "progress policy version mismatch")
+    body = pol.policy if isinstance(pol.policy, dict) else {}
+    early = body.get("early_milestones") if isinstance(body.get("early_milestones"), dict) else {}
+    di_m = body.get("di_milestones") if isinstance(body.get("di_milestones"), dict) else {}
+    _assert(bool(early), "progress policy early_milestones must be present")
+    _assert(bool(di_m), "progress policy di_milestones must be present")
+    for mk, vals in sorted(early.items()):
+        _assert(isinstance(vals, list), f"early milestone {mk} must be list")
+        _assert(all(isinstance(x, str) and x for x in vals), f"early milestone {mk} values must be non-empty strings")
+        _assert(len(vals) == len(set(vals)), f"early milestone {mk} list must be duplicate-free")
+    for mk, tv in sorted(di_m.items()):
+        _assert(isinstance(tv, str) and tv, f"di milestone {mk} must map to non-empty template key")
+
+
 def test_selection_semantics_version_constant() -> None:
     _assert(DI_SELECTION_SEMANTICS_VERSION == "di.selection.v0_1", "selection semantics version must be di.selection.v0_1")
 
@@ -1391,6 +1410,91 @@ def test_cross_version_snapshot_content_hash_stability() -> None:
 
     db.close()
 
+
+def test_di_error_output_top_level_key_parity() -> None:
+    """Representative success vs error top-level parity (read-only on existing DB)."""
+    from types import SimpleNamespace
+
+    from psi.core.db import SessionLocal
+    from psi.core.models import DecisionSnapshot
+    from psi.core.di.schema import DIInput
+    from psi.services.di.runner import _build_di_error_output, _complete_di_error_output_contract_parity
+
+    db = SessionLocal()
+    try:
+        snap = (
+            db.query(DecisionSnapshot)
+            .filter(DecisionSnapshot.engine_key == "di")
+            .order_by(DecisionSnapshot.id.desc())
+            .first()
+        )
+        _assert(snap is not None, "need at least one DI snapshot for error parity smoke")
+        try:
+            success_out = json.loads(snap.outputs_json or "{}")
+        except Exception:
+            success_out = {}
+        _assert(isinstance(success_out, dict) and bool(success_out), "representative success output must parse as non-empty dict")
+
+        di_input = DIInput(
+            decision_key=str(getattr(snap, "decision_key", "") or "advance_to_in_vivo"),
+            scope_type="batch",
+            scope_id=int(getattr(snap, "batch_id", None) or 1),
+            as_of_ts=None,
+            qc_mode="model_safe",
+            context={},
+        )
+        pol_stub = SimpleNamespace(
+            policy_id="stub.policy",
+            name="stub",
+            version="v0.4",
+            schema_version="di.policy_package.v0_1",
+            policy_semantics_hash="0" * 64,
+            policy_package_hash="1" * 64,
+            source_name="stub.json",
+            changelog=[],
+        )
+        err = _build_di_error_output(
+            di_input=di_input,
+            pol=pol_stub,
+            evaluator_version="di.template.stub.v0",
+            warning_kind="contract_smoke",
+            warning_detail={"reason": "parity_test"},
+            blocker_key="contract_smoke",
+            blocker_detail={"reason": "parity_test"},
+            risk_flag="contract_smoke",
+            risk_note="contract smoke parity",
+            risk_enriched_key="contract_smoke",
+            risk_enriched_explanation="contract smoke parity",
+            readiness_blocker_key="contract_smoke",
+            readiness_blocker_explanation="contract smoke parity",
+            readiness_blocking_reason="contract smoke parity",
+        )
+        err = _complete_di_error_output_contract_parity(
+            out=err,
+            di_input=di_input,
+            pol=pol_stub,
+            inputs_obj={"output_extensions": ["value_functions_enforced_v0_1", "error_output_parity_v2_0a"]},
+        )
+
+        success_keys = set(str(k) for k in success_out.keys())
+        err_keys = set(str(k) for k in err.keys())
+        missing = sorted([k for k in success_keys if k not in err_keys])
+        _assert(not missing, f"error output missing top-level keys from representative success output: {missing}")
+
+        for k in [
+            "metric_evaluations",
+            "recommended_experiments",
+            "comparability",
+            "confidence_degradation",
+            "why_evidence",
+            "drift_type",
+            "state_transition",
+            "value_functions_enforced",
+        ]:
+            _assert(k in err_keys, f"error output parity must include top-level key: {k}")
+    finally:
+        db.close()
+
 def main() -> int:
     try:
         global _SMOKE_SET_BASELINE_CUTOFF
@@ -1401,6 +1505,7 @@ def main() -> int:
         test_policy_package_dual_hash_stability()
         test_catalog_hash_validation()
         test_policy_template_structure_present()
+        test_progress_policy_catalog_v0_1_loads_and_validates()
         test_selection_semantics_version_constant()
         test_policy_authoritative_required_gate_keys()
         test_context_knob_branching_gate_outcomes_deterministic()
@@ -1419,6 +1524,7 @@ def main() -> int:
         test_molecule_scope_determinism()
         test_baseline_cutoff_prevents_walk()
         test_cross_version_snapshot_content_hash_stability()
+        test_di_error_output_top_level_key_parity()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")
         return 1

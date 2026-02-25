@@ -1949,3 +1949,24 @@ Gates run:
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
 - `python -m psi.tools.di_fixture_regression`
+## 2026-02-25 — v2.0a
+What changed:
+- v2.0a D1 (infrastructure): refactored `psi/services/di/soe.py` to remove duplication across `build_soe_v0_2` / `build_soe_v0_3` and their molecule-scope variants using shared internal deterministic helpers (no output schema change).
+- v2.0a D2 (infrastructure): consolidated DI error-output parity completion in a shared runner helper and added a contract smoke parity guard asserting representative success/error top-level key parity.
+- Added policy-visible progress ladder catalog file `psi/core/di/catalogs/progress_policy_v0_1.json` plus deterministic loader/validator in `psi/core/di/catalog.py`.
+- Added contract smoke validation for the progress policy catalog loader.
+
+Why it changed:
+- Establish v2.0a infrastructure groundwork from `docs/DI_MISSION_AND_ROADMAP_v2.md` while preserving deterministic replay and policy-as-data governance.
+
+Determinism/contract impact:
+- No UI/web changes in v2.0a.
+- No DB schema changes.
+- Replay regression remains stable; new error-output parity fields are extension-gated for new snapshots only.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
