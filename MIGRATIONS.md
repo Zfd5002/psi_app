@@ -11,6 +11,11 @@
 - decision_snapshots: add nullable `engine_key`, `schema_version` (schema discrimination between DI and legacy snapshots).
 - Additive only; existing snapshots remain compatible (NULL allowed).
 
+## 2026-02-25 — v1.2.9w59
+- ensure_schema additive backfill: set `decision_snapshots.engine_key='di'` for legacy rows where `engine_key` is `NULL`/empty and `schema_version LIKE 'di.%'`.
+- Backfill is idempotent and conservative (only updates missing `engine_key` values on DI-marked snapshots).
+- Backfill runs only during `ensure_schema()` / schema-ensure migration paths, and does not run in read-only replay flows that skip ensure (for example `di_replay_regression` with `ensure=False`).
+
 ## v1.2.5b
 - Hotfix: fix indentation bug in export_wide QC attach block (SyntaxError return outside function).
 - Hotfix: ensure scripts/start_psi.sh is executable in overlays.

@@ -399,8 +399,10 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
                 if col not in existing:
                     conn.execute(text("ALTER TABLE " + table + " ADD COLUMN " + col + " " + coltype))
 
-    # v1.2.9w51: additive DI snapshot metadata backfill (idempotent).
-    # Only touches legacy rows with NULL engine_key and a DI schema_version marker.
+    # v1.2.9w59: additive DI snapshot metadata backfill (idempotent).
+    # Only touches legacy rows with NULL/empty engine_key and a DI schema_version marker.
+    # Runs only in ensure_schema() (i.e., startup/schema-ensure paths), not read-only replay
+    # paths that skip ensure_schema (e.g., di_replay_regression mode=read-only ensure=False).
     with eng.begin() as conn:
         try:
             cols = {r[1] for r in conn.execute(text("PRAGMA table_info(decision_snapshots)")).fetchall()}
@@ -411,7 +413,8 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
                 text(
                     "UPDATE decision_snapshots "
                     "SET engine_key = 'di' "
-                    "WHERE engine_key IS NULL AND schema_version LIKE 'di.%'"
+                    "WHERE (engine_key IS NULL OR engine_key = '') "
+                    "AND schema_version LIKE 'di.%'"
                 )
             )
 

@@ -1850,3 +1850,23 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-25 — v1.2.9w59
+What changed:
+- Expanded the existing additive `ensure_schema()` DI snapshot metadata backfill so it sets `decision_snapshots.engine_key='di'` for legacy DI rows where `engine_key` is `NULL` or empty and `schema_version LIKE 'di.%'`.
+- Kept DI snapshot detection logic unchanged; the backfill makes `engine_key` authoritative for historical DI rows during schema-ensure paths.
+- Documented the backfill in `MIGRATIONS.md` (idempotent, conservative, and not run in read-only replay flows that skip `ensure_schema()`).
+
+Why it changed:
+- Eliminate fallback heuristic DI snapshot detection in practice by backfilling missing `engine_key` values on historical DI snapshots.
+
+Determinism/contract impact:
+- No DI compute/ranking logic changes.
+- Additive, idempotent metadata backfill only; no destructive schema changes.
+- Read-only replay remains unchanged because replay flows can skip `ensure_schema()`.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
