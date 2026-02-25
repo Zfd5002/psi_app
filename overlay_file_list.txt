@@ -1,7 +1,10 @@
 PATCH_NOTES.md
 overlay_file_list.txt
 psi/services/di/compute.py
+psi/services/di/sub_assessments.py
+psi/services/di/templates/advance_to_in_vivo.py
+psi/services/di/templates/ready_for_scaleup_screen.py
+psi/services/di/templates/registry.py
 psi/services/di/verify.py
 psi/tools/di_contract_smoke.py
 psi/version.py
-psi/web/templates/decisions/_di_snapshot.html

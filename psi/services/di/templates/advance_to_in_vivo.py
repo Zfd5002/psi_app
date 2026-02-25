@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Tuple
 
 from psi.core.di.schema import EvidenceRef, GateResult
 from psi.services.di.gates import evaluate_gates
+from psi.services.di.sub_assessments import baseline_risk_flags_from_used, decision_state_from_gate_statuses
 
 
 def _require_any(used: Dict[str, EvidenceRef], keys: List[str]) -> Tuple[bool, List[EvidenceRef]]:
@@ -46,11 +47,8 @@ def evaluate(
     metric_evaluations = metric_evaluations or {}
     use_thresholds = bool(enforce_value_functions)
 
-    # Risk flags (v0.1)
-    if any(ev.is_outlier for ev in used_by_metric.values()):
-        risk_flags.append({"risk_flag": "outlier_present"})
-    if any(ev.qc_status in ("unreviewed", "unknown") for ev in used_by_metric.values()):
-        risk_flags.append({"risk_flag": "qc_uncertainty"})
+    # Risk flags (v0.1) via shared deterministic helper.
+    risk_flags.extend(baseline_risk_flags_from_used(used_by_metric=used_by_metric))
 
     gate_keys = [
         "G1_material_readiness",
@@ -139,9 +137,10 @@ def evaluate(
 
     # v0.1 default: require G1–G4 and G3
     required_gate_keys = {"G1_material_readiness", "G2_purity_integrity", "G3_endotoxin", "G4_functional"}
-    gate_map = {g.gate_key: g for g in gates}
-    required_pass = all((k in gate_map and gate_map[k].status == "pass") for k in required_gate_keys)
-
-    decision_state = "ready" if required_pass and not blockers else "not_ready"
+    decision_state, _ = decision_state_from_gate_statuses(
+        gates=gates,
+        required_gate_keys=sorted(list(required_gate_keys)),
+        blockers=blockers,
+    )
 
     return {"decision_state": decision_state, "gates": gates, "blockers": blockers, "risk_flags": risk_flags}

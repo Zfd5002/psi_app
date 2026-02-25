@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from psi.core.di.schema import DIInput, EvidenceRef, IgnoredEvidence
-from psi.services.di.templates.registry import resolve_template_entry
+from psi.services.di.templates.registry import resolve_template_entry, template_dependency_graph
 from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
 from psi.services.di.comparability import compute_comparability, compute_comparability_for_batches
 from psi.services.di.enrich import (
@@ -835,6 +835,13 @@ def _compute_di_from_used_by_metric(
         out["recommended_experiments"] = recommended_experiments
 
     emit_context_branch_surface = _policy_supports_context_branch_surface(pol)
+    if emit_context_branch_surface:
+        dep_graph = template_dependency_graph()
+        out["template_dependency_graph"] = dep_graph
+        prov_obj = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+        prov_obj = dict(prov_obj)
+        prov_obj["template_dependency_graph"] = dep_graph
+        out["provenance"] = prov_obj
     gate_outcomes = derive_gate_outcomes(
         policy_body=(pol.policy_body or {}),
         gate_results=templ.get("gates") or [],

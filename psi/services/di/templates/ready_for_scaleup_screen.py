@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from psi.core.di.schema import EvidenceRef, GateResult
 from psi.services.di.gates import evaluate_gates
+from psi.services.di.sub_assessments import baseline_risk_flags_from_used, decision_state_from_gate_statuses
 
 
 def _gate_order(policy: Dict[str, Any]) -> list[str]:
@@ -39,11 +40,8 @@ def evaluate(
     blockers: List[Dict[str, Any]] = []
     risk_flags: List[Dict[str, Any]] = []
 
-    # Risk flags (minimal, deterministic)
-    if any(ev.is_outlier for ev in used_by_metric.values()):
-        risk_flags.append({"risk_flag": "outlier_present"})
-    if any(ev.qc_status in ("unreviewed", "unknown") for ev in used_by_metric.values()):
-        risk_flags.append({"risk_flag": "qc_uncertainty"})
+    # Risk flags (minimal, deterministic) via shared helper.
+    risk_flags.extend(baseline_risk_flags_from_used(used_by_metric=used_by_metric))
 
     gate_results = evaluate_gates(
         policy_body=policy,
@@ -82,8 +80,10 @@ def evaluate(
             elif missing_any_of:
                 blockers.append({"blocker_key": "missing_required_metric", "detail": {"gate": gk, "missing_any_of": missing_any_of}})
 
-    gate_map = {g.gate_key: g for g in gates}
-    required_pass = all((k in gate_map and gate_map[k].status == "pass") for k in required_gate_keys)
-    decision_state = "ready" if required_pass and not blockers else "not_ready"
+    decision_state, _ = decision_state_from_gate_statuses(
+        gates=gates,
+        required_gate_keys=required_gate_keys,
+        blockers=blockers,
+    )
 
     return {"decision_state": decision_state, "gates": gates, "blockers": blockers, "risk_flags": risk_flags}

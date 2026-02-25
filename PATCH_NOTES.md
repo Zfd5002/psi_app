@@ -1795,3 +1795,22 @@ Gates run (limit 5):
 - `python -m psi.tools.di_contract_smoke`
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
+## 2026-02-25 — v1.2.9w56
+What changed:
+- Added shared pure sub-assessment helpers (`psi/services/di/sub_assessments.py`) and used them in both DI templates for baseline risk flags and decision-state derivation.
+- Extended template registry metadata with deterministic dependency declarations and added a deterministic template dependency graph helper.
+- Exposed template dependency graph additively in DI output/provenance for v0.4+ only.
+- Replay scrub removes template dependency graph fields from historical v0.3 replay outputs.
+
+Why it changed:
+- Establish a minimal v1.0 baseline for multi-template DI governance and reusable deterministic sub-assessments.
+
+Determinism/contract impact:
+- Registry keys and dependency graph nodes/edges are emitted in deterministic order.
+- Existing template behavior is preserved (metadata/additive surfaces only).
+- v0.3 replay surfaces remain unchanged via scrub.
+
+Gates run (limit 5):
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`

@@ -29,6 +29,8 @@ from psi.services.di.compute import _build_scope_semantics, _normalize_ignored
 from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
 from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
+from psi.services.di.sub_assessments import baseline_risk_flags_from_used, decision_state_from_gate_statuses
+from psi.services.di.templates.registry import list_template_keys_sorted, template_dependency_graph
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -415,6 +417,39 @@ def test_scope_semantics_v04_deterministic() -> None:
     _assert(batch_ids == [9, 7, 5], "scope_semantics batch-ranked view must preserve deterministic batch order")
     mols = s1.get("molecule_derived_candidates") if isinstance(s1.get("molecule_derived_candidates"), list) else []
     _assert(len(mols) == 1 and int((mols[0] or {}).get("best_batch_id") or 0) == 9, "scope semantics molecule derivation must align with batch-ranked best candidate")
+
+
+def test_template_registry_and_dependency_graph_deterministic() -> None:
+    keys1 = list_template_keys_sorted()
+    keys2 = list_template_keys_sorted()
+    _assert(keys1 == keys2, "template registry listing must be deterministic")
+    _assert(len(keys1) >= 2, "template registry must include >=2 templates")
+    graph1 = template_dependency_graph()
+    graph2 = template_dependency_graph()
+    _assert(stable_json_dumps(graph1) == stable_json_dumps(graph2), "template dependency graph must be deterministic")
+    nodes = graph1.get("nodes") if isinstance(graph1.get("nodes"), list) else []
+    _assert(nodes == sorted(nodes), "template dependency graph nodes must be sorted")
+    edges = graph1.get("edges") if isinstance(graph1.get("edges"), list) else []
+    _assert(any(isinstance(e, dict) and e.get("depends_on") for e in edges), "template dependency graph must include at least one dependency edge")
+
+
+def test_shared_sub_assessments_pure_helpers() -> None:
+    class _Ev:
+        def __init__(self, *, is_outlier: bool, qc_status: str):
+            self.is_outlier = is_outlier
+            self.qc_status = qc_status
+
+    used = {"a": _Ev(is_outlier=False, qc_status="approved"), "b": _Ev(is_outlier=True, qc_status="unreviewed")}
+    rf1 = baseline_risk_flags_from_used(used_by_metric=used)
+    rf2 = baseline_risk_flags_from_used(used_by_metric=used)
+    _assert(stable_json_dumps(rf1) == stable_json_dumps(rf2), "shared risk-flag helper must be deterministic")
+    _assert([str((x or {}).get('risk_flag') or '') for x in rf1] == ["outlier_present", "qc_uncertainty"], "shared risk-flag helper should return stable baseline flags")
+    class _Gate:
+        def __init__(self, gate_key: str, status: str):
+            self.gate_key = gate_key
+            self.status = status
+    ds, meta = decision_state_from_gate_statuses(gates=[_Gate("G1", "pass")], required_gate_keys=["G1"], blockers=[])
+    _assert(ds == "ready" and bool(meta.get("required_pass")), "shared decision-state helper must be deterministic and pure")
 
 
 def test_policy_blocker_taxonomy_and_experiment_suggestions() -> None:
@@ -1350,6 +1385,8 @@ def main() -> int:
         test_shortlisting_refusal_v04_extensions_deterministic()
         test_tie_break_dimensions_v04_complete_and_deterministic()
         test_scope_semantics_v04_deterministic()
+        test_template_registry_and_dependency_graph_deterministic()
+        test_shared_sub_assessments_pure_helpers()
         test_shortlisting_reproducibility_from_soe_evidence_summary()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_ignore_reason_keys_allowed_set()
