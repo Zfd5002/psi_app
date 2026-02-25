@@ -2,7 +2,7 @@
 
 {% block content %}
   <h1>Run DI</h1>
-  <div class="muted">Creates a DI snapshot for a batch. This does not use the legacy YAML engine.</div>
+  <div class="muted">Creates a DI snapshot for a batch or molecule scope. This does not use the legacy YAML engine.</div>
 
   {% if error %}
     <div class="card" style="border:1px solid #b94a48;background:#fff5f5;color:#8a1f1f;margin-top:10px;">
@@ -11,9 +11,22 @@
   {% endif %}
 
   <form class="form" method="post" action="/di/run" style="margin-top:14px;">
+    {% set scope_type = selected_scope_type if selected_scope_type else 'batch' %}
     <div class="field">
+      <label>Scope type</label>
+      <select name="scope_type" id="di_scope_type">
+        <option value="batch" {% if scope_type == 'batch' %}selected{% endif %}>batch</option>
+        <option value="molecule" {% if scope_type == 'molecule' %}selected{% endif %}>molecule</option>
+      </select>
+      <div class="help">Use query prefills: <code>/di/run?batch_id=&lt;id&gt;</code> or <code>/di/run?molecule_id=&lt;id&gt;</code>.</div>
+    </div>
+
+    <div class="field" id="di_scope_batch_field" {% if scope_type != 'batch' %}style="display:none;"{% endif %}>
       <label>Batch</label>
-      <select name="batch_id" required>
+      <select name="batch_id" id="di_batch_id" {% if scope_type == 'batch' %}required{% endif %}>
+        {% if not batches %}
+          <option value="">No batches available</option>
+        {% endif %}
         {% for b in batches %}
           <option value="{{ b.id }}" {% if selected_batch_id and b.id == selected_batch_id %}selected{% endif %}>
             #{{ b.id }} · {{ b.title }}{% if b.molecule_id %} · molecule {{ b.molecule_id }}{% endif %}
@@ -21,8 +34,22 @@
         {% endfor %}
       </select>
       {% if selected_molecule_id %}
-        <div class="help">Filtered to batches for molecule {{ selected_molecule_id }}.</div>
+        <div class="help">Filtered batch choices to molecule {{ selected_molecule_id }}.</div>
       {% endif %}
+    </div>
+
+    <div class="field" id="di_scope_molecule_field" {% if scope_type != 'molecule' %}style="display:none;"{% endif %}>
+      <label>Molecule</label>
+      <select name="molecule_id" id="di_molecule_id" {% if scope_type == 'molecule' %}required{% endif %}>
+        {% if not molecules %}
+          <option value="">No molecules available</option>
+        {% endif %}
+        {% for m in molecules %}
+          <option value="{{ m.id }}" {% if selected_molecule_id and m.id == selected_molecule_id %}selected{% endif %}>
+            #{{ m.id }} · {{ m.primary_id }}{% if m.title %} · {{ m.title }}{% endif %}
+          </option>
+        {% endfor %}
+      </select>
     </div>
 
     <div class="field">
@@ -68,4 +95,29 @@
       <a class="btn" href="/decisions">Cancel</a>
     </div>
   </form>
+
+  <script>
+    (function () {
+      var scope = document.getElementById("di_scope_type");
+      var batchWrap = document.getElementById("di_scope_batch_field");
+      var molWrap = document.getElementById("di_scope_molecule_field");
+      var batchSel = document.getElementById("di_batch_id");
+      var molSel = document.getElementById("di_molecule_id");
+      if (!scope || !batchWrap || !molWrap || !batchSel || !molSel) return;
+      function sync() {
+        var isBatch = scope.value === "batch";
+        batchWrap.style.display = isBatch ? "" : "none";
+        molWrap.style.display = isBatch ? "none" : "";
+        if (isBatch) {
+          batchSel.setAttribute("required", "required");
+          molSel.removeAttribute("required");
+        } else {
+          molSel.setAttribute("required", "required");
+          batchSel.removeAttribute("required");
+        }
+      }
+      scope.addEventListener("change", sync);
+      sync();
+    })();
+  </script>
 {% endblock %}

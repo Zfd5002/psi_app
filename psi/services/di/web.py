@@ -88,8 +88,8 @@ def build_di_run_context(
     q = db.query(Batch)
     if molecule_id:
         q = q.filter(Batch.molecule_id == int(molecule_id))
-    batches = q.order_by(Batch.created_at.desc()).all()
-    molecules = db.query(Molecule).order_by(Molecule.created_at.desc()).all()
+    batches = q.order_by(Batch.created_at.desc(), Batch.id.desc()).all()
+    molecules = db.query(Molecule).order_by(Molecule.created_at.desc(), Molecule.id.desc()).all()
 
     return {
         "selected_scope_type": selected_scope_type,

@@ -1870,3 +1870,24 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-25 — v1.2.9w60
+What changed:
+- `/di/run` now supports true molecule-scope DI execution end-to-end from the web form (`scope_type=molecule` + `molecule_id`) while preserving batch-scope behavior.
+- DI run form includes a scope selector (`batch`/`molecule`) with deterministic server-rendered option lists and minimal inline JS to toggle the active selector input.
+- DI run context queries use explicit deterministic ordering tie-breaks for selector lists: `created_at DESC, id DESC` for both batches and molecules.
+- POST handler now accepts optional `template_id`, `route`, and `study_intent` fields (if present) and stores them in `DIInput.context` without changing DI engine decision logic.
+
+Why it changed:
+- Close the remaining audit gap by enabling molecule-scope DI runs from `/di/run` rather than only batch-scope POST execution.
+
+Determinism/contract impact:
+- No DI engine compute/ranking logic changes.
+- UI selection ordering is deterministic and stable.
+- Replay surfaces are unchanged.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
