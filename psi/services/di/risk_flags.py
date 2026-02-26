@@ -4,12 +4,12 @@ from typing import Any, Dict
 
 
 def _policy_risk_flag_severity_tiers(*, policy_package: Dict[str, Any] | None, policy_body: Dict[str, Any]) -> Dict[str, str]:
+    raw = (policy_body or {}).get("risk_flag_severity_tiers")
     template_structure = (policy_package or {}).get("template_structure") if isinstance(policy_package, dict) else {}
     if not isinstance(template_structure, dict):
         template_structure = {}
-    raw = template_structure.get("risk_flag_severity_tiers")
     if not isinstance(raw, dict):
-        raw = (policy_body or {}).get("risk_flag_severity_tiers")
+        raw = template_structure.get("risk_flag_severity_tiers")
     if not isinstance(raw, dict):
         raw = {}
     out: Dict[str, str] = {}

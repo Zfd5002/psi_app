@@ -486,6 +486,187 @@ def _build_evidence_summary_v0_3(
     return evidence_summary
 
 
+def _build_soe_core(*, config: Dict[str, Any]) -> Dict[str, Any]:
+    schema_version = str((config or {}).get("schema_version") or "")
+    scope_kind = str((config or {}).get("scope_kind") or "batch")
+    db = config.get("db")
+    if not isinstance(db, Session):
+        raise TypeError("config.db must be a SQLAlchemy Session")
+
+    if schema_version == "0.2":
+        policy_body = (config or {}).get("policy_body") or {}
+        used_by_metric = (config or {}).get("used_by_metric") or {}
+        ignored = (config or {}).get("ignored") or []
+        warnings = (config or {}).get("warnings") or []
+        qc_mode = str((config or {}).get("qc_mode") or "")
+        decision_key = str((config or {}).get("decision_key") or "")
+
+        gates, gate_keys, requirements_by_gate, metrics_sorted = _policy_gate_requirements(policy_body)
+        if scope_kind == "molecule":
+            batch_ids = _dedupe_preserve_order_ints((config or {}).get("batch_ids") or [])
+            raw_keys = _fetch_metric_keys_raw_for_batches(db, batch_ids=batch_ids)
+        else:
+            batch_id = int((config or {}).get("batch_id") or 0)
+            raw_keys = _fetch_batch_metric_keys_raw(db, batch_id=batch_id)
+
+        ignored_by_metric = _ignored_by_metric_map(ignored)
+        metric_status, status_counts_ext = _build_metric_status_v0_2(
+            metrics_sorted=metrics_sorted,
+            used_by_metric=used_by_metric,
+            ignored_by_metric=ignored_by_metric,
+            raw_keys=raw_keys,
+            warnings=warnings,
+        )
+        gate_coverage = _build_gate_coverage_v0_2(
+            gates=gates,
+            gate_keys=gate_keys,
+            metric_status=metric_status,
+            include_satisfied=(scope_kind != "molecule"),
+            sort_present_missing=(scope_kind != "molecule"),
+        )
+
+        if scope_kind == "molecule":
+            batch_ids = _dedupe_preserve_order_ints((config or {}).get("batch_ids") or [])
+            molecule_id = int((config or {}).get("molecule_id") or 0)
+            total_required = sum(len((gate_coverage.get(gk) or {}).get("required") or []) for gk in gate_keys)
+            total_present = sum(len((gate_coverage.get(gk) or {}).get("present") or []) for gk in gate_keys)
+            total_missing = sum(len((gate_coverage.get(gk) or {}).get("missing") or []) for gk in gate_keys)
+
+            summary = {
+                "metrics_required": int(total_required),
+                "metrics_present": int(total_present),
+                "metrics_missing": int(total_missing),
+                "metrics_present_via_alias": int(status_counts_ext["present_via_alias"]),
+                "alias_conflicts_detected": int(status_counts_ext["alias_conflicts"]),
+                "unmapped_related_detected": int(status_counts_ext["unmapped_related_detected"]),
+            }
+
+            qc_summary = {
+                "qc_mode": str(qc_mode),
+                "ignored_count": int(len(ignored or [])),
+            }
+
+            recency_common = _soe_v0_2_recency_from_metric_status(metrics_sorted, metric_status)
+            per_metric_rec = {
+                mk: {
+                    "timestamp_used": (recency_common.get("per_metric", {}).get(mk) or {}).get("timestamp_used"),
+                    "timestamp_value": (recency_common.get("per_metric", {}).get(mk) or {}).get("timestamp_value"),
+                }
+                for mk in metrics_sorted
+            }
+            recency = {"per_metric": per_metric_rec, "batch": recency_common.get("batch")}
+
+            metrics_present = sorted([mk for mk in metrics_sorted if (metric_status.get(mk) or {}).get("status") in ("present", "present_but_non_numeric")])
+            metrics_missing = sorted([mk for mk in metrics_sorted if mk not in metrics_present])
+
+            coverage = {
+                "molecule_id": int(molecule_id),
+                "batch_ids": [int(x) for x in batch_ids],
+                "decision": str(decision_key),
+                "metrics_referenced": metrics_sorted,
+                "metrics_present": metrics_present,
+                "metrics_missing": metrics_missing,
+            }
+        else:
+            batch_id = int((config or {}).get("batch_id") or 0)
+            counts = {"present": 0, "missing": 0, "present_but_ignored": 0, "present_but_non_numeric": 0}
+            for mk in metrics_sorted:
+                st = (metric_status.get(mk) or {}).get("status")
+                if st in counts:
+                    counts[st] += 1
+
+            gates_total = len(gate_keys)
+            cov_sat = sum(1 for gk in gate_keys if bool((gate_coverage.get(gk) or {}).get("satisfied")))
+
+            summary = {
+                "metrics": {
+                    "referenced_total": len(metrics_sorted),
+                    "present": counts["present"],
+                    "missing": counts["missing"],
+                    "present_but_ignored": counts["present_but_ignored"],
+                    "present_but_non_numeric": counts["present_but_non_numeric"],
+                    "present_via_alias": int(status_counts_ext["present_via_alias"]),
+                },
+                "gates": {
+                    "total": gates_total,
+                    "coverage_satisfied": int(cov_sat),
+                    "coverage_unsatisfied": int(gates_total - cov_sat),
+                },
+                "alias_mismatches": {
+                    "unmapped_related_detected": int(status_counts_ext["unmapped_related_detected"]),
+                    "conflicts_detected": int(status_counts_ext["alias_conflicts"]),
+                },
+            }
+
+            qc_counts = {"approved": 0, "unreviewed": 0, "rejected": 0, "quarantined": 0, "unknown": 0}
+            for mk, ev in sorted((used_by_metric or {}).items(), key=lambda kv: str(kv[0])):
+                qs = getattr(ev, "qc_status", None)
+                qs = str(qs) if qs is not None else "unknown"
+                if qs not in qc_counts:
+                    qs = "unknown"
+                qc_counts[qs] += 1
+            qc_summary = {"selected": qc_counts, "qc_mode": qc_mode, "notes": []}
+
+            recency = _soe_v0_2_recency_from_metric_status(metrics_sorted, metric_status)
+
+            metrics_present = sorted([mk for mk in metrics_sorted if (metric_status.get(mk) or {}).get("status") in ("present", "present_but_non_numeric")])
+            metrics_missing = sorted([mk for mk in metrics_sorted if mk not in metrics_present])
+
+            coverage = {
+                "batch_id": int(batch_id),
+                "decision": str(decision_key),
+                "metrics_referenced": metrics_sorted,
+                "metrics_present": metrics_present,
+                "metrics_missing": metrics_missing,
+            }
+
+        return {
+            "requirements": {"by_gate": requirements_by_gate},
+            "metric_status": metric_status,
+            "gate_coverage": gate_coverage,
+            "summary": summary,
+            "qc_summary": qc_summary,
+            "recency": recency,
+            "coverage": coverage,
+        }
+
+    if schema_version == "0.3":
+        policy_body = (config or {}).get("policy_body") or {}
+        ignored = (config or {}).get("ignored") or []
+        qc_mode = str((config or {}).get("qc_mode") or "")
+        as_of_ts = (config or {}).get("as_of_ts")
+        dt_asof = parse_iso(as_of_ts) if as_of_ts else None
+        alias_to_canonical = _build_alias_to_canonical(policy_body)
+        referenced_metrics = _referenced_metrics_from_policy(policy_body)
+        if scope_kind == "molecule":
+            batch_ids = _dedupe_preserve_order_ints((config or {}).get("batch_ids") or [])
+            rows = _fetch_v0_3_measurement_rows_for_batches(db, batch_ids=batch_ids)
+        else:
+            batch_id = int((config or {}).get("batch_id") or 0)
+            rows = _fetch_v0_3_measurement_rows_for_batches(db, batch_ids=[int(batch_id)])
+        ignored_by_metric = _ignored_by_metric_map(ignored)
+        accept_qc = _build_qc_acceptor(policy_body, qc_mode)
+        grouped = _group_rows_for_soe_v0_3(rows=rows, alias_to_canonical=alias_to_canonical, dt_asof=dt_asof)
+        evidence_summary = _build_evidence_summary_v0_3(
+            referenced_metrics=referenced_metrics,
+            grouped=grouped,
+            ignored_by_metric=ignored_by_metric,
+            accept_qc=accept_qc,
+        )
+        if scope_kind == "molecule":
+            batch_ids = _dedupe_preserve_order_ints((config or {}).get("batch_ids") or [])
+            molecule_id = int((config or {}).get("molecule_id") or 0)
+            return {
+                "schema_version": "0.3",
+                "molecule_id": int(molecule_id),
+                "batch_ids": [int(x) for x in batch_ids],
+                "evidence_summary": evidence_summary,
+            }
+        return {"schema_version": "0.3", "evidence_summary": evidence_summary}
+
+    raise ValueError(f"Unsupported SoE schema_version: {schema_version}")
+
+
 def build_soe_v0_2(
     db: Session,
     *,
@@ -498,85 +679,21 @@ def build_soe_v0_2(
     qc_mode: str,
     context: Dict[str, Any],
 ) -> Dict[str, Any]:
-    gates, gate_keys, requirements_by_gate, metrics_sorted = _policy_gate_requirements(policy_body)
-    raw_keys = _fetch_batch_metric_keys_raw(db, batch_id=batch_id)
-    ignored_by_metric = _ignored_by_metric_map(ignored)
-    metric_status, status_counts_ext = _build_metric_status_v0_2(
-        metrics_sorted=metrics_sorted,
-        used_by_metric=used_by_metric,
-        ignored_by_metric=ignored_by_metric,
-        raw_keys=raw_keys,
-        warnings=warnings,
+    return _build_soe_core(
+        config={
+            "schema_version": "0.2",
+            "scope_kind": "batch",
+            "db": db,
+            "batch_id": int(batch_id),
+            "decision_key": str(decision_key),
+            "policy_body": policy_body,
+            "used_by_metric": used_by_metric,
+            "ignored": ignored,
+            "warnings": warnings,
+            "qc_mode": str(qc_mode),
+            "context": context,
+        }
     )
-    gate_coverage = _build_gate_coverage_v0_2(
-        gates=gates,
-        gate_keys=gate_keys,
-        metric_status=metric_status,
-        include_satisfied=True,
-        sort_present_missing=True,
-    )
-
-    counts = {"present": 0, "missing": 0, "present_but_ignored": 0, "present_but_non_numeric": 0}
-    for mk in metrics_sorted:
-        st = (metric_status.get(mk) or {}).get("status")
-        if st in counts:
-            counts[st] += 1
-
-    gates_total = len(gate_keys)
-    cov_sat = sum(1 for gk in gate_keys if bool((gate_coverage.get(gk) or {}).get("satisfied")))
-
-    summary = {
-        "metrics": {
-            "referenced_total": len(metrics_sorted),
-            "present": counts["present"],
-            "missing": counts["missing"],
-            "present_but_ignored": counts["present_but_ignored"],
-            "present_but_non_numeric": counts["present_but_non_numeric"],
-            "present_via_alias": int(status_counts_ext["present_via_alias"]),
-        },
-        "gates": {
-            "total": gates_total,
-            "coverage_satisfied": int(cov_sat),
-            "coverage_unsatisfied": int(gates_total - cov_sat),
-        },
-        "alias_mismatches": {
-            "unmapped_related_detected": int(status_counts_ext["unmapped_related_detected"]),
-            "conflicts_detected": int(status_counts_ext["alias_conflicts"]),
-        },
-    }
-
-    qc_counts = {"approved": 0, "unreviewed": 0, "rejected": 0, "quarantined": 0, "unknown": 0}
-    for mk, ev in sorted((used_by_metric or {}).items(), key=lambda kv: str(kv[0])):
-        qs = getattr(ev, "qc_status", None)
-        qs = str(qs) if qs is not None else "unknown"
-        if qs not in qc_counts:
-            qs = "unknown"
-        qc_counts[qs] += 1
-
-    qc_summary = {"selected": qc_counts, "qc_mode": qc_mode, "notes": []}
-
-    recency = _soe_v0_2_recency_from_metric_status(metrics_sorted, metric_status)
-
-    metrics_present = sorted([mk for mk in metrics_sorted if (metric_status.get(mk) or {}).get("status") in ("present", "present_but_non_numeric")])
-    metrics_missing = sorted([mk for mk in metrics_sorted if mk not in metrics_present])
-
-    coverage = {
-        "batch_id": int(batch_id),
-        "decision": str(decision_key),
-        "metrics_referenced": metrics_sorted,
-        "metrics_present": metrics_present,
-        "metrics_missing": metrics_missing,
-    }
-
-    return {
-        "requirements": {"by_gate": requirements_by_gate},
-        "metric_status": metric_status,
-        "gate_coverage": gate_coverage,
-        "summary": summary,
-        "qc_summary": qc_summary,
-        "recency": recency,
-        "coverage": coverage,
-    }
 
 
 def build_soe_v0_2_molecule(
@@ -593,75 +710,22 @@ def build_soe_v0_2_molecule(
     context: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Additive SoE schema v0.2 for molecule scope (aggregated over batches)."""
-
-    batch_ids = _dedupe_preserve_order_ints(batch_ids)
-    gates, gate_keys, requirements_by_gate, metrics_sorted = _policy_gate_requirements(policy_body)
-    raw_keys = _fetch_metric_keys_raw_for_batches(db, batch_ids=batch_ids)
-    ignored_by_metric = _ignored_by_metric_map(ignored)
-    metric_status, status_counts_ext = _build_metric_status_v0_2(
-        metrics_sorted=metrics_sorted,
-        used_by_metric=used_by_metric,
-        ignored_by_metric=ignored_by_metric,
-        raw_keys=raw_keys,
-        warnings=warnings,
-    )
-    gate_coverage = _build_gate_coverage_v0_2(
-        gates=gates,
-        gate_keys=gate_keys,
-        metric_status=metric_status,
-        include_satisfied=False,
-        sort_present_missing=False,
-    )
-
-    total_required = sum(len((gate_coverage.get(gk) or {}).get("required") or []) for gk in gate_keys)
-    total_present = sum(len((gate_coverage.get(gk) or {}).get("present") or []) for gk in gate_keys)
-    total_missing = sum(len((gate_coverage.get(gk) or {}).get("missing") or []) for gk in gate_keys)
-
-    summary = {
-        "metrics_required": int(total_required),
-        "metrics_present": int(total_present),
-        "metrics_missing": int(total_missing),
-        "metrics_present_via_alias": int(status_counts_ext["present_via_alias"]),
-        "alias_conflicts_detected": int(status_counts_ext["alias_conflicts"]),
-        "unmapped_related_detected": int(status_counts_ext["unmapped_related_detected"]),
-    }
-
-    qc_summary = {
-        "qc_mode": str(qc_mode),
-        "ignored_count": int(len(ignored or [])),
-    }
-
-    recency_common = _soe_v0_2_recency_from_metric_status(metrics_sorted, metric_status)
-    per_metric_rec = {
-        mk: {
-            "timestamp_used": (recency_common.get("per_metric", {}).get(mk) or {}).get("timestamp_used"),
-            "timestamp_value": (recency_common.get("per_metric", {}).get(mk) or {}).get("timestamp_value"),
+    return _build_soe_core(
+        config={
+            "schema_version": "0.2",
+            "scope_kind": "molecule",
+            "db": db,
+            "molecule_id": int(molecule_id),
+            "batch_ids": list(batch_ids or []),
+            "decision_key": str(decision_key),
+            "policy_body": policy_body,
+            "used_by_metric": used_by_metric,
+            "ignored": ignored,
+            "warnings": warnings,
+            "qc_mode": str(qc_mode),
+            "context": context,
         }
-        for mk in metrics_sorted
-    }
-    recency = {"per_metric": per_metric_rec, "batch": recency_common.get("batch")}
-
-    metrics_present = sorted([mk for mk in metrics_sorted if (metric_status.get(mk) or {}).get("status") in ("present", "present_but_non_numeric")])
-    metrics_missing = sorted([mk for mk in metrics_sorted if mk not in metrics_present])
-
-    coverage = {
-        "molecule_id": int(molecule_id),
-        "batch_ids": [int(x) for x in batch_ids],
-        "decision": str(decision_key),
-        "metrics_referenced": metrics_sorted,
-        "metrics_present": metrics_present,
-        "metrics_missing": metrics_missing,
-    }
-
-    return {
-        "requirements": {"by_gate": requirements_by_gate},
-        "metric_status": metric_status,
-        "gate_coverage": gate_coverage,
-        "summary": summary,
-        "qc_summary": qc_summary,
-        "recency": recency,
-        "coverage": coverage,
-    }
+    )
 
 
 def build_soe_v0_3(
@@ -679,20 +743,19 @@ def build_soe_v0_3(
     Evidence summary is computed deterministically from DB measurements + selector outputs.
     """
 
-    dt_asof = parse_iso(as_of_ts) if as_of_ts else None
-    alias_to_canonical = _build_alias_to_canonical(policy_body)
-    referenced_metrics = _referenced_metrics_from_policy(policy_body)
-    rows = _fetch_v0_3_measurement_rows_for_batches(db, batch_ids=[int(batch_id)])
-    ignored_by_metric = _ignored_by_metric_map(ignored)
-    accept_qc = _build_qc_acceptor(policy_body, qc_mode)
-    grouped = _group_rows_for_soe_v0_3(rows=rows, alias_to_canonical=alias_to_canonical, dt_asof=dt_asof)
-    evidence_summary = _build_evidence_summary_v0_3(
-        referenced_metrics=referenced_metrics,
-        grouped=grouped,
-        ignored_by_metric=ignored_by_metric,
-        accept_qc=accept_qc,
+    return _build_soe_core(
+        config={
+            "schema_version": "0.3",
+            "scope_kind": "batch",
+            "db": db,
+            "batch_id": int(batch_id),
+            "as_of_ts": as_of_ts,
+            "qc_mode": str(qc_mode),
+            "policy_body": policy_body,
+            "used_by_metric": used_by_metric,
+            "ignored": ignored,
+        }
     )
-    return {"schema_version": "0.3", "evidence_summary": evidence_summary}
 
 
 def build_soe_v0_3_molecule(
@@ -708,24 +771,17 @@ def build_soe_v0_3_molecule(
 ) -> Dict[str, Any]:
     """Additive SoE schema v0.3 for molecule scope (aggregated over batches)."""
 
-    batch_ids = _dedupe_preserve_order_ints(batch_ids)
-    dt_asof = parse_iso(as_of_ts) if as_of_ts else None
-    alias_to_canonical = _build_alias_to_canonical(policy_body)
-    referenced_metrics = _referenced_metrics_from_policy(policy_body)
-    rows = _fetch_v0_3_measurement_rows_for_batches(db, batch_ids=batch_ids)
-    ignored_by_metric = _ignored_by_metric_map(ignored)
-    accept_qc = _build_qc_acceptor(policy_body, qc_mode)
-    grouped = _group_rows_for_soe_v0_3(rows=rows, alias_to_canonical=alias_to_canonical, dt_asof=dt_asof)
-    evidence_summary = _build_evidence_summary_v0_3(
-        referenced_metrics=referenced_metrics,
-        grouped=grouped,
-        ignored_by_metric=ignored_by_metric,
-        accept_qc=accept_qc,
+    return _build_soe_core(
+        config={
+            "schema_version": "0.3",
+            "scope_kind": "molecule",
+            "db": db,
+            "molecule_id": int(molecule_id),
+            "batch_ids": list(batch_ids or []),
+            "as_of_ts": as_of_ts,
+            "qc_mode": str(qc_mode),
+            "policy_body": policy_body,
+            "used_by_metric": used_by_metric,
+            "ignored": ignored,
+        }
     )
-
-    return {
-        "schema_version": "0.3",
-        "molecule_id": int(molecule_id),
-        "batch_ids": [int(x) for x in batch_ids],
-        "evidence_summary": evidence_summary,
-    }

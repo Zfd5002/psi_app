@@ -1850,6 +1850,265 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-26 — v1.2.9w114
+What changed:
+- Added `psi/services/molecule_sequences.py` and moved the minimal safe sequence/composition helper cluster out of `molecules.py`:
+  - `_next_chain_id`
+  - `_id_allocation_retry_exhausted`
+  - `get_or_create_chain`
+  - `_canonical_composition`
+  - `composition_sha256`
+- Updated `psi/services/molecules.py` to import/re-export the moved helpers and keep orchestration in place.
+- Added contract smoke lock for composition-hash stability (canonical ordering + fixed digest regression).
+
+Why:
+- Complete the second structural split with minimal risk while keeping composition hashing behavior stable.
+
+Determinism/Replay note:
+- Structural split only; no intended DI output/hash changes.
+- Composition hash behavior is explicitly locked by contract smoke.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/services/molecule_sequences.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w113
+What changed:
+- Replaced DI runner stderr print for invalid `PSI_DI_BASELINE_CUTOFF_ISO` with structured logging (`logger.warning(...)`) in `psi/services/di/runner.py`.
+- Added module logger initialization and removed the now-unused `sys` import.
+
+Why:
+- Route runtime warnings through logging without changing DI snapshot content or replay behavior.
+
+Determinism/Replay note:
+- Diagnostics-only change; no DI compute/output/hash changes.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/runner.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w112
+What changed:
+- Hardened molecule auto-primary allocation retry failure reporting in `psi/services/molecules.py`:
+  - existing bounded `IntegrityError` retry loop is preserved
+  - exhaustion error now includes the last attempted primary ID candidate
+
+Why:
+- Improve clarity for concurrent-write primary ID allocation failures without changing schema or retry semantics.
+
+Determinism/Replay note:
+- Molecule CRUD-only error-path message improvement; no DI compute/output/hash changes.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w111
+What changed:
+- Extracted shared DI runner helper `psi/services/di/runner.py::_attach_integrity_hashes(...)`.
+- Replaced duplicated integrity-hash attachment logic in the two deterministic error-output return paths with the shared helper.
+
+Why:
+- Reduce duplication in DI runner error paths while preserving exact integrity metadata fields and ordering.
+
+Determinism/Replay note:
+- Refactor-only patch; DI outputs are intended to remain unchanged.
+- Replay regression is the proof target for no hash-bearing output drift.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/runner.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w110
+What changed:
+- Consolidated SoE v0.2/v0.3 batch+molecule builders into private `psi/services/di/soe.py::_build_soe_core(config=...)`.
+- Updated public entry points to delegate:
+  - `build_soe_v0_2`
+  - `build_soe_v0_2_molecule`
+  - `build_soe_v0_3`
+  - `build_soe_v0_3_molecule`
+
+Why:
+- Complete the planned D1 SoE consolidation while reducing duplication and preserving byte-identical outputs.
+
+Determinism/Replay note:
+- Refactor-only patch; no intended DI output changes.
+- Replay gate passed; any `policy_exact_match_not_found` skips remain carryover from the intentional `w108` policy package update.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/soe.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w109
+What changed:
+- Updated `psi/core/di/catalogs/progress_policy_v0_1.json` additively to include Roadmap v2 early milestones:
+  - `expression_present`: `["expr_yield_mgL"]`
+  - `purification_present`: `["purity_percent"]`
+- Extended progress policy contract smoke to assert the new milestone mappings.
+
+Why:
+- Align the scientist-first progress ladder policy catalog with the approved Roadmap v2 milestone set.
+
+Determinism/Replay note:
+- Policy-as-data catalog update for UI/view-model progress display; no DI snapshot hash logic changed.
+- Replay gate passed with `skipped=2`, both `reason=policy_exact_match_not_found` (carryover from the intentional w108 policy package change).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/progress_policy_v0_1.json`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w108
+What changed:
+- Copied `risk_flag_severity_tiers` into `policy_body` (additive) for all `advance_to_in_vivo_*` policies and `ready_for_scaleup_screen_v0_1`.
+- Updated `psi/services/di/risk_flags.py` to resolve severity tiers in deterministic order:
+  1. `policy_body.risk_flag_severity_tiers`
+  2. `template_structure.risk_flag_severity_tiers` (backward-compatible fallback)
+- Extended contract smoke to assert the new policy-body severity tier copy is present/matches and to lock `policy_body` precedence over `template_structure`.
+
+Why:
+- Move governance semantics (risk severity tiers) into the authoritative `policy_body` surface while preserving backward compatibility for older packages.
+
+Determinism/Replay note:
+- This is an intentional governance semantics surface change for future snapshots and will change future policy semantics/package hashes for the modified policy files.
+- Existing snapshot replay remains valid; if replay skips occur they are expected to be `reason=policy_exact_match_not_found` due package hash mismatch between stored snapshots and updated on-disk policy packages.
+- Replay gate result for this patch: `skipped=5`, all with `reason=policy_exact_match_not_found` (allowed).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/risk_flags.py`
+- `psi/tools/di_contract_smoke.py`
+- `psi/core/di/policies/advance_to_in_vivo_v0_1.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_2.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_3.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_4.json`
+- `psi/core/di/policies/ready_for_scaleup_screen_v0_1.json`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w107
+What changed:
+- Added deterministic header regression harness `psi/tools/molecule_header_regression.py` (stdlib-only script, no pytest dependency).
+- Added dict-based fixtures covering:
+  - `moderate` -> `medium` severity normalization
+  - `2` medium concerns -> amber scalar
+  - missing assay signals remain neutral (`Not Assessed`)
+
+Why:
+- Provide a lightweight executable regression check for the molecule scientist-header invariants after the w106 structural split.
+
+Determinism/Replay note:
+- Tooling only; no DI compute/output/hash changes.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/molecule_header_regression.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w106
+What changed:
+- Extracted molecule scientist-header view-model builders into new module `psi/services/molecule_header.py` (progress ladder, drift/risk summary, confidence builders, header assembly).
+- Updated `psi/services/molecules.py` to act as a thin coordinator and re-export/import the moved helper functions to preserve existing signatures and smoke imports.
+
+Why:
+- Reduce change risk in `molecules.py` by isolating the deterministic molecule-header logic without altering behavior.
+
+Determinism/Replay note:
+- Structural split only; header outputs are intended to remain identical (with the `w105` moderate->medium fix already in place).
+- Replay regression is the proof target for no DI output/hash drift.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/services/molecule_header.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w105
+What changed:
+- Fixed molecule header risk severity counting to normalize `moderate` -> `medium` before bucket aggregation in `_build_molecule_header_model`.
+
+Why:
+- Prevent undercounting medium-severity risk flags in the scientist header confidence summary and avoid scalar rule misfires.
+
+Determinism/Replay note:
+- UI/view-model-only severity counting fix; no DI snapshot output/hash logic changed.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
 ## 2026-02-26 — v1.2.9w104
 What changed:
 - Hardened `psi.tools.export_outcome_dataset` hash/fingerprint field extraction with deterministic stored-field fallback precedence (inputs/output policy/provenance metadata only; no recomputation).

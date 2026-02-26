@@ -3,8 +3,8 @@ from __future__ import annotations
 import datetime as _dt
 import hashlib
 import json
+import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -37,6 +37,7 @@ OUTPUT_EXTENSION_FLAGS = ["value_functions_enforced_v0_1", "error_output_parity_
 
 # Policy package schema allowlist (governance guardrail)
 ALLOWED_POLICY_SCHEMA_VERSIONS = {"di.policy_package.v0_1"}
+logger = logging.getLogger(__name__)
 
 
 def _sha256_of_stable_json(obj: Any) -> str:
@@ -349,6 +350,30 @@ def _complete_di_error_output_contract_parity(
     return out
 
 
+def _attach_integrity_hashes(
+    *,
+    out: Dict[str, Any],
+    inputs_obj: Dict[str, Any],
+    evidence_ids: list[int],
+    used_by_metric: Dict[str, Any],
+) -> None:
+    prov = out.get("provenance")
+    if not isinstance(prov, dict):
+        return
+    integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric=used_by_metric)}
+    integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
+        inputs_obj=inputs_obj,
+        outputs_obj=out,
+        evidence_ids=evidence_ids,
+    )
+    integrity["decision_output_hash"] = compute_decision_output_hash(inputs_obj=inputs_obj, outputs_obj=out)
+    integrity["decision_output_hash_v2"] = compute_decision_output_hash_v2(
+        inputs_obj=inputs_obj,
+        outputs_obj=out,
+    )
+    prov["integrity"] = integrity
+
+
 def _unsupported_template_output(
     *,
     di_input: DIInput,
@@ -390,7 +415,7 @@ def _drift_context_for_scope(
     cutoff_raw = os.environ.get("PSI_DI_BASELINE_CUTOFF_ISO")
     cutoff_dt = _parse_asof_to_utc_naive(cutoff_raw) if cutoff_raw else None
     if cutoff_raw and cutoff_dt is None:
-        print(f"WARNING: invalid PSI_DI_BASELINE_CUTOFF_ISO ignored: {cutoff_raw}", file=sys.stderr)
+        logger.warning("invalid PSI_DI_BASELINE_CUTOFF_ISO ignored: %s", cutoff_raw)
 
     q = (
         db.query(DecisionSnapshot)
@@ -782,20 +807,7 @@ def compute_di_output(
         )
 
         # v1.2.9k integrity
-        prov = out.get("provenance")
-        if isinstance(prov, dict):
-            integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric={})}
-            integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
-                inputs_obj=inputs_obj,
-                outputs_obj=out,
-                evidence_ids=evidence_ids,
-            )
-            integrity["decision_output_hash"] = compute_decision_output_hash(inputs_obj=inputs_obj, outputs_obj=out)
-            integrity["decision_output_hash_v2"] = compute_decision_output_hash_v2(
-                inputs_obj=inputs_obj,
-                outputs_obj=out,
-            )
-            prov["integrity"] = integrity
+        _attach_integrity_hashes(out=out, inputs_obj=inputs_obj, evidence_ids=evidence_ids, used_by_metric={})
 
         return {"rules_version": rules_version, "inputs_obj": inputs_obj, "output": out, "evidence_ids": evidence_ids}
 
@@ -826,20 +838,7 @@ def compute_di_output(
             inputs_obj=inputs_obj,
         )
 
-        prov = out.get("provenance")
-        if isinstance(prov, dict):
-            integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric={})}
-            integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
-                inputs_obj=inputs_obj,
-                outputs_obj=out,
-                evidence_ids=evidence_ids,
-            )
-            integrity["decision_output_hash"] = compute_decision_output_hash(inputs_obj=inputs_obj, outputs_obj=out)
-            integrity["decision_output_hash_v2"] = compute_decision_output_hash_v2(
-                inputs_obj=inputs_obj,
-                outputs_obj=out,
-            )
-            prov["integrity"] = integrity
+        _attach_integrity_hashes(out=out, inputs_obj=inputs_obj, evidence_ids=evidence_ids, used_by_metric={})
 
         return {"rules_version": rules_version, "inputs_obj": inputs_obj, "output": out, "evidence_ids": evidence_ids}
 

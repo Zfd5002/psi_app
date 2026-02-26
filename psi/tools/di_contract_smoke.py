@@ -294,6 +294,10 @@ def test_policy_risk_flag_severity_tiers_present_and_cover_expected_flags() -> N
         ts = pkg.get("template_structure") if isinstance(pkg.get("template_structure"), dict) else {}
         tiers = ts.get("risk_flag_severity_tiers") if isinstance(ts.get("risk_flag_severity_tiers"), dict) else {}
         _assert(bool(tiers), f"{p.name}: template_structure.risk_flag_severity_tiers must be present")
+        body_tiers = (pol.policy_body or {}).get("risk_flag_severity_tiers") if isinstance(pol.policy_body, dict) else {}
+        if str(pol.template_key or "").startswith("advance_to_in_vivo.") or str(pol.template_key or "") == "ready_for_scaleup_screen.v0_1":
+            _assert(isinstance(body_tiers, dict) and bool(body_tiers), f"{p.name}: policy_body.risk_flag_severity_tiers must be present (w108 governance surface)")
+            _assert(dict(body_tiers) == dict(tiers), f"{p.name}: policy_body risk_flag_severity_tiers must match template_structure copy")
         keys = [str(k) for k in tiers.keys()]
         _assert(keys == sorted(keys), f"{p.name}: severity tier keys must be stably sorted in file order")
         for k, v in sorted(tiers.items()):
@@ -310,12 +314,18 @@ def test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically() -> 
     pol_pkg = {
         "template_structure": {
             "risk_flag_severity_tiers": {
-                "custom_flag": "high",
+                "custom_flag": "low",
                 "outlier_present": "moderate",
             }
         }
     }
-    pol_body = {"gates": {}}
+    pol_body = {
+        "gates": {},
+        "risk_flag_severity_tiers": {
+            "custom_flag": "high",
+            "outlier_present": "moderate",
+        },
+    }
     risk_flags = [{"risk_flag": "outlier_present"}, {"risk_flag": "custom_flag"}]
     out1 = derive_risk_flags_enriched(
         risk_flags=risk_flags,
@@ -331,7 +341,7 @@ def test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically() -> 
     )
     _assert(stable_json_dumps(out1) == stable_json_dumps(out2), "risk flag enrichment must be deterministic independent of input order")
     sev_by_key = {str((x or {}).get("key") or ""): str((x or {}).get("severity") or "") for x in out1 if isinstance(x, dict)}
-    _assert(sev_by_key.get("custom_flag") == "high", "policy severity tiers must drive custom_flag severity")
+    _assert(sev_by_key.get("custom_flag") == "high", "policy_body severity tiers must take precedence over template_structure copy")
     _assert(sev_by_key.get("outlier_present") == "moderate", "policy severity tiers must preserve outlier_present severity")
 
 
@@ -406,6 +416,8 @@ def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
     di_m = body.get("di_milestones") if isinstance(body.get("di_milestones"), dict) else {}
     _assert(bool(early), "progress policy early_milestones must be present")
     _assert(bool(di_m), "progress policy di_milestones must be present")
+    _assert(early.get("expression_present") == ["expr_yield_mgL"], "progress policy must include expression_present milestone mapping")
+    _assert(early.get("purification_present") == ["purity_percent"], "progress policy must include purification_present milestone mapping")
     for mk, vals in sorted(early.items()):
         _assert(isinstance(vals, list), f"early milestone {mk} must be list")
         _assert(all(isinstance(x, str) and x for x in vals), f"early milestone {mk} values must be non-empty strings")
@@ -2311,6 +2323,17 @@ def test_label_outcome_cli_outcome_event_date_parser_deterministic() -> None:
         "invalid outcome_event_date message must remain deterministic",
     )
 
+
+def test_molecule_composition_hash_stability_after_helper_split() -> None:
+    from psi.services.molecule_sequences import composition_sha256 as seq_comp_hash
+    from psi.services.molecules import composition_sha256 as mol_comp_hash
+
+    payload = {"HC1": "CHAIN001", "HC2": "CHAIN001", "LC1": "CHAIN002", "LC2": "CHAIN002"}
+    h1 = seq_comp_hash(payload)
+    h2 = mol_comp_hash(dict(reversed(list(payload.items()))))
+    _assert(h1 == h2, "composition hash helper split must preserve canonical hash behavior")
+    _assert(h1 == "d4ac4888670245b6feac67421f49d0e3cfbb1d38d1a46f94f56b83e65faea569", "composition hash digest changed unexpectedly")
+
 def main() -> int:
     try:
         global _SMOKE_SET_BASELINE_CUTOFF
@@ -2368,6 +2391,7 @@ def main() -> int:
         test_outcome_dataset_export_deterministic()
         test_outcome_dataset_export_hash_field_enrichment_from_stored_snapshot_fields()
         test_label_outcome_cli_outcome_event_date_parser_deterministic()
+        test_molecule_composition_hash_stability_after_helper_split()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")
         return 1
