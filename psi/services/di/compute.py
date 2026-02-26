@@ -843,6 +843,7 @@ def _compute_di_from_used_by_metric(
             risk_flags=(templ.get("risk_flags") or []) + (interpretation_gap_flags or []),
             used_by_metric=used_by_metric,
             policy_body=(pol.policy_body or {}),
+            policy_package=(pol.package or {}),
         ),
         "experiment_suggestions": experiment_suggestions,
         "measurement_ids_used": sorted([

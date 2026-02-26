@@ -27,6 +27,17 @@
     "risk_flag_categories": [
       "qc_uncertainty"
     ],
+    "risk_flag_severity_tiers": {
+      "context_missing": "high",
+      "coverage_gap": "high",
+      "internalization_sensitive_binding_gap": "low",
+      "interpretation_gap": "high",
+      "method_incomparable": "moderate",
+      "missing_required_metric": "high",
+      "outlier_present": "moderate",
+      "qc_uncertainty": "moderate",
+      "threshold_violation": "low"
+    },
     "blocker_taxonomy": [
       "missing_required_metric",
       "qc_rejected_required_metric",

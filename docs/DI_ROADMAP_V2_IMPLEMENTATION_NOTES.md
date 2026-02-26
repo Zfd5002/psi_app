@@ -53,6 +53,28 @@ This note summarizes the current PSI DI roadmap v2 implementation surfaces that 
 - To change which experiments are suggested for risk flags, update the experiment catalog data.
 - Avoid embedding risk-flag-to-experiment mappings in Python logic.
 
+## Risk Flag Severity Tiers (Policy-as-Data, UI Display)
+
+### Policy metadata field
+
+- Location: `template_structure.risk_flag_severity_tiers` in packaged DI policy files
+- Shape: object mapping `risk_flag_key -> severity_tier`
+- Current allowed tiers:
+  - `high`
+  - `moderate`
+  - `low`
+
+### Semantics
+
+- Severity tiers are policy/package metadata used for deterministic risk-flag enrichment and UI display.
+- This is display semantics only (not weighted scoring and not adaptive logic).
+- Unknown risk flags fall back to conservative deterministic defaults in code (backward compatibility).
+
+### Operator expectations
+
+- Severity tier changes should be made in policy files (policy-as-data), not by editing Python severity mappings.
+- DI snapshot UI may render severity badges/text distinctly, but this does not change DI snapshot hashing rules.
+
 ## `value_functions_enforcement_reason` Semantics
 
 ### Field

@@ -1850,6 +1850,45 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-26 — v1.2.9w84
+What changed:
+- Added policy-as-data risk severity tiers under `template_structure.risk_flag_severity_tiers` across packaged DI policy files.
+- Wired DI risk-flag enrichment to read policy/package severity tiers (with deterministic fallback behavior), preserving existing severities for current flags.
+- Updated DI snapshot UI risk flag chips to display severity tiers distinctly (display-only, no weighting).
+- Extended contract smoke with:
+  - policy severity-tier coverage audit across packaged policies
+  - deterministic policy-driven risk severity enrichment check
+  - deterministic DI snapshot UI severity rendering check
+- Updated operator notes to document policy-defined risk severity tiers.
+
+Why:
+- Complete the next roadmap v2.0c requirement by moving risk severity display semantics into policy-as-data and proving deterministic coverage/rendering.
+
+Determinism/Replay note:
+- Risk severity tier consumption is deterministic; enriched risk flags remain explicitly sorted.
+- UI rendering change is display-only and does not affect DI snapshot hashes.
+- Replay regression passed; package-level policy metadata changes may cause `policy_exact_match_not_found` skips for older snapshots because `policy_package_hash` changes while policy semantics remain unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/risk_flags.py`
+- `psi/services/di/compute.py`
+- `psi/web/templates/decisions/_di_snapshot.html`
+- `psi/tools/di_contract_smoke.py`
+- `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`
+- `psi/core/di/policies/advance_to_in_vivo_v0_1.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_2.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_3.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_4.json`
+- `psi/core/di/policies/ready_for_scaleup_screen_v0_1.json`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
 ## 2026-02-26 — v1.2.9w83
 What changed:
 - Added `docs/CODE_REVIEW_w83.md` as a docs-first internal checkpoint review covering patches `w75` through `w82`.

@@ -245,7 +245,16 @@
       <div class="muted" style="margin-top:10px;">Risk flags</div>
       {% if risk_flags and risk_flags|length %}
         {% for rf in risk_flags %}
-          <div><span class="chip">{{ rf.key if rf.key is defined else (rf.risk_flag if rf.risk_flag is defined else (rf.get('key') if rf is mapping else '')) }}</span></div>
+          {% set rf_key = rf.key if rf.key is defined else (rf.risk_flag if rf.risk_flag is defined else (rf.get('key') if rf is mapping else '')) %}
+          {% set rf_sev = (rf.severity if rf.severity is defined else (rf.get('severity') if rf is mapping else '')) %}
+          <div>
+            <span class="chip">{{ rf_key }}</span>
+            {% if rf_sev %}
+              <span class="chip" title="Policy-defined risk severity tier (display only)" style="margin-left:4px;border-color:{% if rf_sev == 'high' %}#b94a48{% elif rf_sev == 'moderate' %}#c09853{% else %}#999{% endif %};">
+                severity={{ rf_sev }}
+              </span>
+            {% endif %}
+          </div>
         {% endfor %}
       {% else %}
         <div class="muted">None</div>

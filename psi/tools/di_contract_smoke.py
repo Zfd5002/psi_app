@@ -28,6 +28,7 @@ from psi.core.utils import stable_json_dumps
 from psi.services import decisions as decisions_svc
 from psi.services.di.compute import _build_scope_semantics, _normalize_ignored
 from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
+from psi.services.di.risk_flags import derive_risk_flags_enriched
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
 from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
 from psi.services.di.sub_assessments import (
@@ -259,6 +260,88 @@ def test_policy_template_structure_present() -> None:
     for k in ("context_knobs", "gate_categories", "risk_flag_categories", "blocker_taxonomy"):
         _assert(k in ts, f"template_structure.{k} missing")
         _assert(isinstance(ts.get(k), list), f"template_structure.{k} must be a list")
+
+
+def test_policy_risk_flag_severity_tiers_present_and_cover_expected_flags() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    pol_dir = repo_root / "psi" / "core" / "di" / "policies"
+    allowed = {"high", "moderate", "low"}
+    common_expected = {
+        "context_missing",
+        "coverage_gap",
+        "interpretation_gap",
+        "method_incomparable",
+        "missing_required_metric",
+        "outlier_present",
+        "qc_uncertainty",
+        "threshold_violation",
+    }
+    advance_extra = {"internalization_sensitive_binding_gap"}
+
+    for p in sorted(pol_dir.glob("*.json")):
+        pol = load_policy(p)
+        pkg = pol.package if isinstance(pol.package, dict) else {}
+        ts = pkg.get("template_structure") if isinstance(pkg.get("template_structure"), dict) else {}
+        tiers = ts.get("risk_flag_severity_tiers") if isinstance(ts.get("risk_flag_severity_tiers"), dict) else {}
+        _assert(bool(tiers), f"{p.name}: template_structure.risk_flag_severity_tiers must be present")
+        keys = [str(k) for k in tiers.keys()]
+        _assert(keys == sorted(keys), f"{p.name}: severity tier keys must be stably sorted in file order")
+        for k, v in sorted(tiers.items()):
+            _assert(isinstance(k, str) and k, f"{p.name}: severity tier key must be non-empty string")
+            _assert(str(v) in allowed, f"{p.name}: severity tier for {k} must be one of {sorted(allowed)}")
+        expected = set(common_expected)
+        if str(pol.template_key or "").startswith("advance_to_in_vivo."):
+            expected |= advance_extra
+        missing = sorted([k for k in expected if k not in tiers])
+        _assert(not missing, f"{p.name}: missing risk flag severity tiers for {missing}")
+
+
+def test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically() -> None:
+    pol_pkg = {
+        "template_structure": {
+            "risk_flag_severity_tiers": {
+                "custom_flag": "high",
+                "outlier_present": "moderate",
+            }
+        }
+    }
+    pol_body = {"gates": {}}
+    risk_flags = [{"risk_flag": "outlier_present"}, {"risk_flag": "custom_flag"}]
+    out1 = derive_risk_flags_enriched(
+        risk_flags=risk_flags,
+        used_by_metric={},
+        policy_body=pol_body,
+        policy_package=pol_pkg,
+    )
+    out2 = derive_risk_flags_enriched(
+        risk_flags=list(reversed(risk_flags)),
+        used_by_metric={},
+        policy_body=pol_body,
+        policy_package=pol_pkg,
+    )
+    _assert(stable_json_dumps(out1) == stable_json_dumps(out2), "risk flag enrichment must be deterministic independent of input order")
+    sev_by_key = {str((x or {}).get("key") or ""): str((x or {}).get("severity") or "") for x in out1 if isinstance(x, dict)}
+    _assert(sev_by_key.get("custom_flag") == "high", "policy severity tiers must drive custom_flag severity")
+    _assert(sev_by_key.get("outlier_present") == "moderate", "policy severity tiers must preserve outlier_present severity")
+
+
+def test_di_snapshot_ui_risk_flag_severity_rendering_deterministic() -> None:
+    ctx = {
+        "snap": {"decision_key": "advance_to_in_vivo", "id": 1},
+        "output": {
+            "decision_state": "ready",
+            "risk_flags_enriched": [
+                {"key": "qc_uncertainty", "severity": "moderate"},
+                {"key": "interpretation_gap", "severity": "high"},
+            ],
+        },
+        "inputs": {},
+        "di_snapshot_ui": {"gate_outcomes_ordered": [], "outcomes_ordered": [], "error_block": {"present": False}},
+    }
+    html1 = _render_di_snapshot_template_smoke(ctx)
+    html2 = _render_di_snapshot_template_smoke(ctx)
+    _assert(html1 == html2, "DI snapshot UI render must be deterministic for identical context")
+    _assert("severity=moderate" in html1 and "severity=high" in html1, "DI snapshot UI should render risk severity tiers distinctly")
 
 
 def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
@@ -1780,6 +1863,8 @@ def main() -> int:
         test_catalog_hash_validation()
         test_experiment_catalog_v0_2_latest_loader_and_risk_mapping()
         test_policy_template_structure_present()
+        test_policy_risk_flag_severity_tiers_present_and_cover_expected_flags()
+        test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically()
         test_progress_policy_catalog_v0_1_loads_and_validates()
         test_template_prerequisites_catalog_v0_1_loads_and_validates()
         test_molecule_header_confidence_model_non_weighted_neutral_missing()
@@ -1796,6 +1881,7 @@ def main() -> int:
         test_shortlisting_reproducibility_from_soe_evidence_summary()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_nbe_uses_catalog_risk_mapping_only()
+        test_di_snapshot_ui_risk_flag_severity_rendering_deterministic()
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()
         test_normalize_ignored_schema_compat()
