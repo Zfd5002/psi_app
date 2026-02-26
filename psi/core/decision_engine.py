@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
+import warnings
 
 import yaml
 
 
+_YAML_ENGINE_DEPRECATION_MSG = (
+    "YAML DI engine is deprecated; JSON policy-as-data is canonical; removal timeline TBD."
+)
+
+
+def _warn_yaml_engine_deprecated() -> None:
+    warnings.warn(_YAML_ENGINE_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
+
+
 def load_rules(path: str) -> Dict[str, Any]:
+    _warn_yaml_engine_deprecated()
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -127,6 +138,7 @@ def run_decision(rules: Dict[str, Any], decision_key: str, evidence_rows: List[A
     - Tracks which Evidence IDs were used (one per evidence_type: the max-strength row).
     - Returns a JSON-serializable dict for snapshot storage.
     """
+    _warn_yaml_engine_deprecated()
     strength_by_type: Dict[str, int] = {}
     id_by_type: Dict[str, int] = {}
 

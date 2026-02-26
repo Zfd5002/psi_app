@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from psi.core.di.catalog import load_confidence_policy_latest, load_progress_policy_v0_1, load_template_prerequisites_latest
+from psi.core.di.catalog import load_confidence_policy_latest, load_progress_policy_latest, load_template_prerequisites_latest
 from psi.core.measurement_schema import measurement_cols
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
 from psi.services.di.util import heavy_compute_banner_text, is_heavy_compute_enabled
@@ -491,7 +491,7 @@ def _build_molecule_header_model(
     di_rows_chrono: list[dict[str, Any]],
 ) -> dict[str, Any]:
     try:
-        prog = load_progress_policy_v0_1()
+        prog = load_progress_policy_latest()
         prog_body = prog.policy if isinstance(prog.policy, dict) else {}
     except Exception:
         prog_body = {}

@@ -240,3 +240,14 @@ Determinism guarantees:
   - Keep legacy YAML engine support intact for non-DI compatibility paths.
   - Continue migrating DI/governance-critical logic to deterministic Python + versioned JSON policy/catalog data.
   - Any future YAML deprecation/removal must be a separate explicitly approved migration with replay/compatibility impact analysis.
+- Runtime warning behavior (closeout hardening):
+  - `psi.core.decision_engine.load_rules(...)` and `psi.core.decision_engine.run_decision(...)` emit a `DeprecationWarning` only when the legacy YAML path is invoked.
+  - Normal JSON DI operation does not emit this warning.
+
+## Closeout Hardening Notes (x32)
+
+- `psi/legacy_mvp_app.py` is now an archive tombstone shim; historical source lives at `docs/legacy/legacy_mvp_app.py` and is not part of active PSI runtime paths.
+- CI now runs compile + pytest + contract smoke via GitHub Actions using an ephemeral SQLite DB prepared by `psi.tools.prepare_ci_db` (no dependency on `psi/psi.sqlite`).
+- Progress policy latest loader is now explicit (`progress_policy_v0_2.json`), not filesystem-order-driven.
+- Confidence policy latest loader is now explicit (`confidence_policy_v0_3.json`), with policy-visible `multi_template_aggregation` metadata and no weighted scoring fields.
+- Replay verifier now emits `policy_resolution` metadata and supports a default-off, policy-visible compat fallback catalog (`replay_policy_compat_v0_1.json`) for future explicitly-approved historical replay rescue cases.

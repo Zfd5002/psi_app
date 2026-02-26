@@ -1,3 +1,45 @@
+## 2026-02-26 — v1.2.9x32 (Closeout hardening)
+What changed:
+- Archived legacy MVP app source to `docs/legacy/legacy_mvp_app.py` and replaced `psi/legacy_mvp_app.py` with an overlay-safe tombstone shim so it is not part of active PSI runtime paths.
+- Added GitHub Actions CI workflow (`.github/workflows/ci.yml`) running `compileall`, `pytest -q`, and `di_contract_smoke` with an ephemeral SQLite DB prepared by new tooling (`psi.tools.prepare_ci_db`).
+- Added targeted `DeprecationWarning` emission when the legacy YAML engine entrypoints (`load_rules`, `run_decision`) are actually used; normal JSON DI paths remain silent.
+- Typed SoE core builder config via `SoECoreConfig` dataclass (behavior-preserving compatibility shim retained internally).
+- Extracted DI compute integrity hash finalization into `_finalize_integrity(...)` (behavior-preserving refactor) and added deterministic coverage.
+- Added `progress_policy_v0_2.json` + explicit `load_progress_policy_latest()` mapping; molecule header now uses the deterministic latest progress policy loader.
+- Added `template_prerequisites_v0_2.json` to cover current template versions used by progress policy latest.
+- Added `confidence_policy_v0_3.json` (policy-visible multi-template aggregation strategy metadata, no weights) + explicit `load_confidence_policy_latest()` mapping.
+- Added policy-visible replay compat catalog (`replay_policy_compat_v0_1.json`) and default-off verifier compat fallback wiring with audited `policy_resolution` metadata (strict exact-hash replay remains default).
+- Added deterministic molecule-header regression lock fixture/test and strengthened smoke coverage for progress/confidence latest loaders, replay compat catalog, YAML deprecation warning, and integrity helper determinism.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/legacy_mvp_app.py`
+- `docs/legacy/README.md`
+- `docs/legacy/legacy_mvp_app.py`
+- `.github/workflows/ci.yml`
+- `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`
+- `psi/core/decision_engine.py`
+- `psi/services/di/soe.py`
+- `psi/services/di/compute.py`
+- `psi/core/di/catalog.py`
+- `psi/core/di/catalogs/progress_policy_v0_2.json`
+- `psi/core/di/catalogs/template_prerequisites_v0_2.json`
+- `psi/core/di/catalogs/confidence_policy_v0_3.json`
+- `psi/core/di/catalogs/replay_policy_compat_v0_1.json`
+- `psi/services/molecule_header.py`
+- `psi/services/di/verify.py`
+- `psi/tools/prepare_ci_db.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_di_contract_smoke_pytest_wrapper.py`
+- `tests/test_molecule_header_model.py`
+- `tests/test_compute_finalize_integrity.py`
+- `tests/fixtures/molecule_header_model_lock_v1.json`
+
+Determinism/Replay note:
+- DI semantics and snapshot semantics are unchanged; replay compat fallback is explicit and default-off.
+- Replay strictness remains enforced (`matched=5, failed=0, skipped=0` required).
+
 ## v1.2.9w46
 
 Why:

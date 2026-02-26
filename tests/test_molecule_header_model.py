@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from psi.services import molecule_header as mh
 
 
@@ -22,7 +25,7 @@ def test_build_molecule_header_model_normalizes_moderate_and_keeps_unknown_neutr
         _row(
             1,
             "2026-02-26T00:00:00",
-            "ready_for_scaleup_screen.v0_1",
+            "ready_for_scaleup_screen.v0_2",
             "ready",
             risk_flags_enriched=[
                 {"key": "m_flag", "severity": "moderate"},
@@ -49,8 +52,8 @@ def test_build_molecule_header_model_exposes_stage_advisory_items(monkeypatch):
 
     # advance_to_in_vivo is "ready" but its prerequisite template is missing/failed, so UI advisory should trigger.
     di_rows = [
-        _row(7, "2026-02-26T01:00:00", "advance_to_in_vivo.v0_1", "ready"),
-        _row(6, "2026-02-25T23:00:00", "ready_for_scaleup_screen.v0_1", "not_ready"),
+        _row(7, "2026-02-26T01:00:00", "advance_to_in_vivo.v0_5", "ready"),
+        _row(6, "2026-02-25T23:00:00", "ready_for_scaleup_screen.v0_2", "not_ready"),
     ]
     model = mh._build_molecule_header_model(db=None, molecule_id=123, di_rows_chrono=di_rows)
 
@@ -59,3 +62,35 @@ def test_build_molecule_header_model_exposes_stage_advisory_items(monkeypatch):
     assert isinstance(adv.get("blocked_by_items"), list)
     assert len(adv["blocked_by_items"]) >= 1
     assert "Blocked by prerequisites:" in (adv.get("blocked_by_text") or "")
+
+
+def test_build_molecule_header_model_lock_fixture(monkeypatch):
+    fixture_path = Path(__file__).parent / "fixtures" / "molecule_header_model_lock_v1.json"
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    metrics_present = list(payload.get("metrics_present") or [])
+    monkeypatch.setattr(mh, "_query_molecule_metric_keys_present", lambda db, molecule_id: metrics_present)
+
+    model = mh._build_molecule_header_model(
+        db=None,
+        molecule_id=int(payload.get("molecule_id") or 0),
+        di_rows_chrono=list(payload.get("di_rows_chrono") or []),
+    )
+    locked = {
+        "progress_stage": model.get("progress_stage"),
+        "progress_hover_text": model.get("progress_hover_text"),
+        "progress_stage_advisory": model.get("progress_stage_advisory"),
+        "risk_severity_counts": model.get("risk_severity_counts"),
+        "risk_items": model.get("risk_items"),
+        "confidence_model": model.get("confidence_model"),
+        "progress_milestones": [
+            {
+                "key": m.get("key"),
+                "kind": m.get("kind"),
+                "label": m.get("label"),
+                "satisfied": bool(m.get("satisfied")),
+            }
+            for m in (model.get("progress_milestones") or [])
+        ],
+    }
+    assert locked == payload.get("expected")

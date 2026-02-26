@@ -1,0 +1,17 @@
+{
+  "policy_id": "progress_policy_v0_2",
+  "policy_version": "v0.2",
+  "schema_version": "di.progress_policy.v0_1",
+  "early_milestones": {
+    "basic_qc_present": ["hmw_pct", "lmw_pct", "monomer_pct"],
+    "endotoxin_present": ["value_eu_ml"],
+    "expression_present": ["expr_yield_mgL"],
+    "functional_assay_present": ["percent_killing"],
+    "purification_present": ["purity_percent"],
+    "pk_screen_present": ["pk_t12_h"]
+  },
+  "di_milestones": {
+    "in_vivo_ready": "advance_to_in_vivo.v0_5",
+    "scaleup_ready": "ready_for_scaleup_screen.v0_2"
+  }
+}

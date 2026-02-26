@@ -61,6 +61,14 @@ class LoadedConfidencePolicy:
     source_name: str
 
 
+@dataclass(frozen=True)
+class LoadedReplayPolicyCompat:
+    catalog: Dict[str, Any]
+    catalog_hash: str
+    canonical_json: str
+    source_name: str
+
+
 def load_catalog(path: Path) -> LoadedCatalog:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -201,6 +209,16 @@ def load_progress_policy_v0_1() -> LoadedProgressPolicy:
     return load_progress_policy(pol_path)
 
 
+def load_progress_policy_v0_2() -> LoadedProgressPolicy:
+    pol_path = Path(__file__).resolve().parent / "catalogs" / "progress_policy_v0_2.json"
+    return load_progress_policy(pol_path)
+
+
+def load_progress_policy_latest() -> LoadedProgressPolicy:
+    """Deterministic latest resolver (explicit mapping, no filesystem scan)."""
+    return load_progress_policy_v0_2()
+
+
 def _validate_template_prerequisites(raw: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("template prerequisites JSON must be an object")
@@ -289,6 +307,31 @@ def _validate_confidence_policy(raw: Dict[str, Any]) -> Dict[str, Any]:
     out["component_order"] = comps
     if component_rules is not None:
         out["component_rules"] = norm_component_rules
+    mta = raw.get("multi_template_aggregation")
+    if mta is not None:
+        if not isinstance(mta, dict):
+            raise ValueError("confidence policy multi_template_aggregation must be an object when present")
+        strategy = str(mta.get("strategy") or "").strip()
+        if not strategy:
+            raise ValueError("confidence policy multi_template_aggregation.strategy must be non-empty")
+        cmo = mta.get("component_merge_order")
+        if cmo is not None:
+            if not isinstance(cmo, list):
+                raise ValueError("confidence policy multi_template_aggregation.component_merge_order must be a list when present")
+            cmo_items = [str(x).strip() for x in cmo if str(x).strip()]
+            if cmo_items != [c for c in cmo_items]:
+                raise ValueError("confidence policy multi_template_aggregation.component_merge_order normalization failed")
+            if len(cmo_items) != len(set(cmo_items)):
+                raise ValueError("confidence policy multi_template_aggregation.component_merge_order contains duplicates")
+            if any(x not in comps for x in cmo_items):
+                raise ValueError("confidence policy multi_template_aggregation.component_merge_order contains unknown component keys")
+        out_mta = dict(mta)
+        out_mta["strategy"] = strategy
+        if cmo is not None:
+            out_mta["component_merge_order"] = cmo_items
+        if "weighted_scoring" in out_mta:
+            out_mta["weighted_scoring"] = bool(out_mta.get("weighted_scoring"))
+        out["multi_template_aggregation"] = out_mta
     out["scalar_rules"] = out_rules
     return out
 
@@ -311,16 +354,62 @@ def load_confidence_policy_v0_2() -> LoadedConfidencePolicy:
     return load_confidence_policy(pol_path)
 
 
+def load_confidence_policy_v0_3() -> LoadedConfidencePolicy:
+    pol_path = Path(__file__).resolve().parent / "catalogs" / "confidence_policy_v0_3.json"
+    return load_confidence_policy(pol_path)
+
+
 def load_confidence_policy_latest() -> LoadedConfidencePolicy:
-    cat_dir = Path(__file__).resolve().parent / "catalogs"
-    patt = re.compile(r"^confidence_policy_v(\d+)_(\d+)\.json$")
-    candidates: list[tuple[int, int, Path]] = []
-    for p in sorted(cat_dir.glob("confidence_policy_v*_*.json")):
-        m = patt.match(p.name)
-        if not m:
-            continue
-        candidates.append((int(m.group(1)), int(m.group(2)), p))
-    if not candidates:
-        raise FileNotFoundError("No confidence_policy_v*_*.json files found")
-    _, _, latest_path = sorted(candidates, key=lambda t: (t[0], t[1], t[2].name))[-1]
-    return load_confidence_policy(latest_path)
+    """Deterministic latest resolver (explicit mapping, no filesystem scan)."""
+    return load_confidence_policy_v0_3()
+
+
+def _validate_replay_policy_compat(raw: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError("replay policy compat catalog must be an object")
+    items = raw.get("policies")
+    if not isinstance(items, list):
+        raise ValueError("replay policy compat catalog policies must be a list")
+    norm: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise ValueError(f"replay policy compat policies[{i}] must be an object")
+        pid = str(item.get("policy_id") or "").strip()
+        pver = str(item.get("policy_version") or "").strip()
+        if not pid or not pver:
+            raise ValueError(f"replay policy compat policies[{i}] policy_id/policy_version must be non-empty")
+        key = (pid, pver)
+        if key in seen:
+            raise ValueError(f"replay policy compat duplicate entry for {pid}@{pver}")
+        seen.add(key)
+        out = dict(item)
+        out["policy_id"] = pid
+        out["policy_version"] = pver
+        out["allow_exact_hash_fallback"] = bool(item.get("allow_exact_hash_fallback"))
+        if item.get("fallback_policy_id") is not None:
+            out["fallback_policy_id"] = str(item.get("fallback_policy_id") or "").strip()
+        if item.get("fallback_policy_version") is not None:
+            out["fallback_policy_version"] = str(item.get("fallback_policy_version") or "").strip()
+        norm.append(out)
+    out = dict(raw)
+    out["policies"] = sorted(norm, key=lambda x: (str(x.get("policy_id") or ""), str(x.get("policy_version") or "")))
+    return out
+
+
+def load_replay_policy_compat(path: Path) -> LoadedReplayPolicyCompat:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    validated = _validate_replay_policy_compat(raw)
+    canon = canonical_package_json(validated)
+    h = sha256_hex_of_canonical_json(validated)
+    return LoadedReplayPolicyCompat(catalog=validated, catalog_hash=h, canonical_json=canon, source_name=path.name)
+
+
+def load_replay_policy_compat_v0_1() -> LoadedReplayPolicyCompat:
+    p = Path(__file__).resolve().parent / "catalogs" / "replay_policy_compat_v0_1.json"
+    return load_replay_policy_compat(p)
+
+
+def load_replay_policy_compat_latest() -> LoadedReplayPolicyCompat:
+    """Deterministic latest resolver (explicit mapping, no filesystem scan)."""
+    return load_replay_policy_compat_v0_1()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import bindparam, text
@@ -10,6 +11,29 @@ from psi.services.di.util import parse_iso, qc_status_from_flag
 
 
 import datetime as _dt
+
+
+@dataclass(frozen=True)
+class SoECoreConfig:
+    schema_version: str
+    scope_kind: str
+    db: Session
+    batch_id: Optional[int] = None
+    molecule_id: Optional[int] = None
+    batch_ids: Optional[List[int]] = None
+    decision_key: str = ""
+    policy_body: Optional[Dict[str, Any]] = None
+    used_by_metric: Optional[Dict[str, Any]] = None
+    ignored: Optional[list[Any]] = None
+    warnings: Optional[list[Dict[str, Any]]] = None
+    qc_mode: str = ""
+    context: Optional[Dict[str, Any]] = None
+    as_of_ts: Optional[str] = None
+
+    # Compatibility shim to keep _build_soe_core internals unchanged while typing
+    # the config object at the public entrypoints.
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
 
 
 def _timestamp_used(produced_at: Optional[str], created_at: Optional[str]) -> Dict[str, Any]:
@@ -486,7 +510,7 @@ def _build_evidence_summary_v0_3(
     return evidence_summary
 
 
-def _build_soe_core(*, config: Dict[str, Any]) -> Dict[str, Any]:
+def _build_soe_core(*, config: SoECoreConfig) -> Dict[str, Any]:
     schema_version = str((config or {}).get("schema_version") or "")
     scope_kind = str((config or {}).get("scope_kind") or "batch")
     db = config.get("db")
@@ -680,19 +704,19 @@ def build_soe_v0_2(
     context: Dict[str, Any],
 ) -> Dict[str, Any]:
     return _build_soe_core(
-        config={
-            "schema_version": "0.2",
-            "scope_kind": "batch",
-            "db": db,
-            "batch_id": int(batch_id),
-            "decision_key": str(decision_key),
-            "policy_body": policy_body,
-            "used_by_metric": used_by_metric,
-            "ignored": ignored,
-            "warnings": warnings,
-            "qc_mode": str(qc_mode),
-            "context": context,
-        }
+        config=SoECoreConfig(
+            schema_version="0.2",
+            scope_kind="batch",
+            db=db,
+            batch_id=int(batch_id),
+            decision_key=str(decision_key),
+            policy_body=policy_body,
+            used_by_metric=used_by_metric,
+            ignored=ignored,
+            warnings=warnings,
+            qc_mode=str(qc_mode),
+            context=context,
+        )
     )
 
 
@@ -711,20 +735,20 @@ def build_soe_v0_2_molecule(
 ) -> Dict[str, Any]:
     """Additive SoE schema v0.2 for molecule scope (aggregated over batches)."""
     return _build_soe_core(
-        config={
-            "schema_version": "0.2",
-            "scope_kind": "molecule",
-            "db": db,
-            "molecule_id": int(molecule_id),
-            "batch_ids": list(batch_ids or []),
-            "decision_key": str(decision_key),
-            "policy_body": policy_body,
-            "used_by_metric": used_by_metric,
-            "ignored": ignored,
-            "warnings": warnings,
-            "qc_mode": str(qc_mode),
-            "context": context,
-        }
+        config=SoECoreConfig(
+            schema_version="0.2",
+            scope_kind="molecule",
+            db=db,
+            molecule_id=int(molecule_id),
+            batch_ids=list(batch_ids or []),
+            decision_key=str(decision_key),
+            policy_body=policy_body,
+            used_by_metric=used_by_metric,
+            ignored=ignored,
+            warnings=warnings,
+            qc_mode=str(qc_mode),
+            context=context,
+        )
     )
 
 
@@ -744,17 +768,17 @@ def build_soe_v0_3(
     """
 
     return _build_soe_core(
-        config={
-            "schema_version": "0.3",
-            "scope_kind": "batch",
-            "db": db,
-            "batch_id": int(batch_id),
-            "as_of_ts": as_of_ts,
-            "qc_mode": str(qc_mode),
-            "policy_body": policy_body,
-            "used_by_metric": used_by_metric,
-            "ignored": ignored,
-        }
+        config=SoECoreConfig(
+            schema_version="0.3",
+            scope_kind="batch",
+            db=db,
+            batch_id=int(batch_id),
+            as_of_ts=as_of_ts,
+            qc_mode=str(qc_mode),
+            policy_body=policy_body,
+            used_by_metric=used_by_metric,
+            ignored=ignored,
+        )
     )
 
 
@@ -772,16 +796,16 @@ def build_soe_v0_3_molecule(
     """Additive SoE schema v0.3 for molecule scope (aggregated over batches)."""
 
     return _build_soe_core(
-        config={
-            "schema_version": "0.3",
-            "scope_kind": "molecule",
-            "db": db,
-            "molecule_id": int(molecule_id),
-            "batch_ids": list(batch_ids or []),
-            "as_of_ts": as_of_ts,
-            "qc_mode": str(qc_mode),
-            "policy_body": policy_body,
-            "used_by_metric": used_by_metric,
-            "ignored": ignored,
-        }
+        config=SoECoreConfig(
+            schema_version="0.3",
+            scope_kind="molecule",
+            db=db,
+            molecule_id=int(molecule_id),
+            batch_ids=list(batch_ids or []),
+            as_of_ts=as_of_ts,
+            qc_mode=str(qc_mode),
+            policy_body=policy_body,
+            used_by_metric=used_by_metric,
+            ignored=ignored,
+        )
     )

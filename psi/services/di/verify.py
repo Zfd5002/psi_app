@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Tuple, Optional
 from sqlalchemy.orm import Session
 
 from psi.core.di.policy import load_policy, resolve_versioned_policy_path
+from psi.core.di.catalog import load_replay_policy_compat_latest
 from psi.core.di.schema import DIInput
 from psi.core.models import DecisionSnapshot, MeasurementQC
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2
@@ -754,6 +755,25 @@ def _resolve_policy_from_repo(
     return matches[0]
 
 
+def _replay_policy_compat_entry(*, policy_id: str, policy_version: str) -> Dict[str, Any] | None:
+    try:
+        cat = load_replay_policy_compat_latest()
+    except Exception:
+        return None
+    items = cat.catalog.get("policies") if isinstance(cat.catalog, dict) else None
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("policy_id") or "") != str(policy_id):
+            continue
+        if str(item.get("policy_version") or "") != str(policy_version):
+            continue
+        return dict(item)
+    return None
+
+
 
 def _drift_classification(
     *,
@@ -992,7 +1012,13 @@ def _diff_surface(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return {"changed_fields": changed, "changed_counts": counts, "notes": []}
 
 
-def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Dict[str, Any]:
+def verify_snapshot(
+    *,
+    db: Session,
+    snapshot_id: int,
+    debug: bool = False,
+    allow_policy_compat_fallback: bool = False,
+) -> Dict[str, Any]:
     snap = db.query(DecisionSnapshot).filter(DecisionSnapshot.id == int(snapshot_id)).first()
     if not snap:
         raise KeyError(f"Snapshot not found: {snapshot_id}")
@@ -1023,6 +1049,13 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
     stored_policy_semantics_hash = str(inputs_obj.get("policy_semantics_hash") or "")
     stored_policy_package_hash = str(inputs_obj.get("policy_package_hash") or "")
 
+    policy_resolution_meta: Dict[str, Any] = {
+        "strict_exact_hash_required": True,
+        "compat_fallback_enabled": bool(allow_policy_compat_fallback),
+        "compat_fallback_used": False,
+        "compat_fallback_reason": None,
+    }
+
     try:
         pol, pol_path = _resolve_policy_from_repo(
             policy_id=stored_policy_id,
@@ -1032,21 +1065,62 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
             require_exact_hash_match=True,
         )
     except Exception as e:
-        return {
-            "snapshot_id": int(snapshot_id),
-            "classification": "POLICY_UNAVAILABLE",
-            "stored": {
-                "policy_id": stored_policy_id,
-                "policy_version": stored_policy_version,
-                "policy_semantics_hash": stored_policy_semantics_hash,
-                "policy_package_hash": stored_policy_package_hash,
-            },
-            "anchored_replay": {
-                "available": False,
-                "reason": "policy_exact_match_not_found",
-                "detail": str(e),
-            },
-        }
+        compat = _replay_policy_compat_entry(policy_id=stored_policy_id, policy_version=stored_policy_version)
+        if bool(allow_policy_compat_fallback) and isinstance(compat, dict):
+            allow_hash_fallback = bool(compat.get("allow_exact_hash_fallback"))
+            fb_pid = str(compat.get("fallback_policy_id") or stored_policy_id)
+            fb_ver = str(compat.get("fallback_policy_version") or stored_policy_version)
+            try:
+                if allow_hash_fallback or fb_pid != stored_policy_id or fb_ver != stored_policy_version:
+                    pol, pol_path = _resolve_policy_from_repo(
+                        policy_id=fb_pid,
+                        policy_version=fb_ver,
+                        policy_semantics_hash="",
+                        policy_package_hash="",
+                        require_exact_hash_match=False,
+                    )
+                    policy_resolution_meta["compat_fallback_used"] = True
+                    policy_resolution_meta["compat_fallback_reason"] = (
+                        "version_remap_fallback" if (fb_pid != stored_policy_id or fb_ver != stored_policy_version) else "exact_hash_fallback"
+                    )
+                    policy_resolution_meta["fallback_policy_id"] = fb_pid
+                    policy_resolution_meta["fallback_policy_version"] = fb_ver
+                else:
+                    raise
+            except Exception:
+                return {
+                    "snapshot_id": int(snapshot_id),
+                    "classification": "POLICY_UNAVAILABLE",
+                    "policy_resolution": policy_resolution_meta,
+                    "stored": {
+                        "policy_id": stored_policy_id,
+                        "policy_version": stored_policy_version,
+                        "policy_semantics_hash": stored_policy_semantics_hash,
+                        "policy_package_hash": stored_policy_package_hash,
+                    },
+                    "anchored_replay": {
+                        "available": False,
+                        "reason": "policy_exact_match_not_found",
+                        "detail": str(e),
+                    },
+                }
+        else:
+            return {
+                "snapshot_id": int(snapshot_id),
+                "classification": "POLICY_UNAVAILABLE",
+                "policy_resolution": policy_resolution_meta,
+                "stored": {
+                    "policy_id": stored_policy_id,
+                    "policy_version": stored_policy_version,
+                    "policy_semantics_hash": stored_policy_semantics_hash,
+                    "policy_package_hash": stored_policy_package_hash,
+                },
+                "anchored_replay": {
+                    "available": False,
+                    "reason": "policy_exact_match_not_found",
+                    "detail": str(e),
+                },
+            }
 
     recomputed_policy_semantics_hash = str(pol.policy_semantics_hash)
     recomputed_policy_package_hash = str(pol.policy_package_hash)
@@ -1308,6 +1382,7 @@ def verify_snapshot(*, db: Session, snapshot_id: int, debug: bool = False) -> Di
     report: Dict[str, Any] = {
         "snapshot_id": int(snap.id),
         "classification": classification,
+        "policy_resolution": policy_resolution_meta,
         "evidence_ids": {
             "stored_measurement_ids_used": stored_measurement_ids_used,
             "recomputed_measurement_ids_used": recomputed_measurement_ids_used,

@@ -1,0 +1,6 @@
+{
+  "catalog_id": "replay_policy_compat_v0_1",
+  "catalog_version": "v0.1",
+  "schema_version": "di.replay_policy_compat.v0_1",
+  "policies": []
+}

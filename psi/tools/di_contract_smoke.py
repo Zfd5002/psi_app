@@ -18,6 +18,7 @@ import os
 import tempfile
 import shutil
 import io
+import warnings
 from contextlib import redirect_stderr
 
 from datetime import datetime, timezone
@@ -585,7 +586,7 @@ def test_forward_policy_forks_use_medium_vocabulary_and_no_legacy_moderate() -> 
 
 
 def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
-    from psi.core.di.catalog import load_progress_policy_v0_1
+    from psi.core.di.catalog import load_progress_policy_latest, load_progress_policy_v0_1, load_progress_policy_v0_2
 
     pol = load_progress_policy_v0_1()
     _assert(pol.policy_id == "progress_policy_v0_1", "progress policy id mismatch")
@@ -603,6 +604,17 @@ def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
         _assert(len(vals) == len(set(vals)), f"early milestone {mk} list must be duplicate-free")
     for mk, tv in sorted(di_m.items()):
         _assert(isinstance(tv, str) and tv, f"di milestone {mk} must map to non-empty template key")
+
+    pol_v2 = load_progress_policy_v0_2()
+    body_v2 = pol_v2.policy if isinstance(pol_v2.policy, dict) else {}
+    di_v2 = body_v2.get("di_milestones") if isinstance(body_v2.get("di_milestones"), dict) else {}
+    _assert(di_v2.get("in_vivo_ready") == "advance_to_in_vivo.v0_5", "progress policy v0_2 should reference current in_vivo template")
+    _assert(di_v2.get("scaleup_ready") == "ready_for_scaleup_screen.v0_2", "progress policy v0_2 should reference current scaleup template")
+
+    latest_1 = load_progress_policy_latest()
+    latest_2 = load_progress_policy_latest()
+    _assert(latest_1.source_name == latest_2.source_name == "progress_policy_v0_2.json", "progress policy latest loader must deterministically select v0_2")
+    _assert(latest_1.policy_hash == latest_2.policy_hash, "progress policy latest loader hash must be deterministic")
 
 
 def test_shortlisting_policy_catalog_v0_1_weights_schema_and_values() -> None:
@@ -627,12 +639,8 @@ def test_shortlisting_policy_catalog_v0_1_weights_schema_and_values() -> None:
 
 
 def test_progress_policy_metric_keys_are_representable_in_measurement_registry() -> None:
-    from psi.core.di.catalog import load_progress_policy_v0_1
+    from psi.core.di.catalog import load_progress_policy_latest, load_progress_policy_v0_1
     from psi.core import registry as core_registry
-
-    pol = load_progress_policy_v0_1()
-    body = pol.policy if isinstance(pol.policy, dict) else {}
-    early = body.get("early_milestones") if isinstance(body.get("early_milestones"), dict) else {}
 
     registry_field_keys: set[str] = set()
     schemas = core_registry.DATA_SCHEMAS if isinstance(getattr(core_registry, "DATA_SCHEMAS", None), dict) else {}
@@ -650,11 +658,15 @@ def test_progress_policy_metric_keys_are_representable_in_measurement_registry()
                         registry_field_keys.add(k)
 
     missing: list[str] = []
-    for milestone_key in sorted(early.keys()):
-        vals = early.get(milestone_key) if isinstance(early.get(milestone_key), list) else []
-        for mk in sorted(str(x) for x in vals if str(x).strip()):
-            if mk not in registry_field_keys:
-                missing.append(mk)
+    for pol in (load_progress_policy_v0_1(), load_progress_policy_latest()):
+        body = pol.policy if isinstance(pol.policy, dict) else {}
+        early = body.get("early_milestones") if isinstance(body.get("early_milestones"), dict) else {}
+        for milestone_key in sorted(early.keys()):
+            vals = early.get(milestone_key) if isinstance(early.get(milestone_key), list) else []
+            for mk in sorted(str(x) for x in vals if str(x).strip()):
+                if mk not in registry_field_keys:
+                    missing.append(mk)
+
     _assert(not missing, f"progress policy metric keys must be representable in measurement registry fields: {sorted(set(missing))}")
 
 
@@ -662,6 +674,7 @@ def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
     from pathlib import Path
 
     from psi.core.di.catalog import (
+        load_progress_policy_latest,
         load_progress_policy_v0_1,
         load_template_prerequisites,
         load_template_prerequisites_latest,
@@ -678,16 +691,6 @@ def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
         _assert(all(isinstance(x, str) and x for x in deps), f"template_prerequisites[{tk}] values must be non-empty strings")
         _assert(len(deps) == len(set(deps)), f"template_prerequisites[{tk}] must be duplicate-free")
 
-    # Molecule header milestone coverage audit: every DI milestone template key must be catalog-covered.
-    prog = load_progress_policy_v0_1()
-    prog_body = prog.policy if isinstance(prog.policy, dict) else {}
-    di_m = prog_body.get("di_milestones") if isinstance(prog_body.get("di_milestones"), dict) else {}
-    for milestone_key, template_key in sorted(di_m.items()):
-        _assert(
-            str(template_key) in mappings,
-            f"template prerequisites catalog must cover progress policy DI milestone {milestone_key} -> {template_key}",
-        )
-
     # Deterministic latest-loader selection (future-proof for additive catalog versions).
     latest_1 = load_template_prerequisites_latest()
     latest_2 = load_template_prerequisites_latest()
@@ -702,10 +705,28 @@ def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
         mappings_v02 = body_v02.get("template_prerequisites") if isinstance(body_v02.get("template_prerequisites"), dict) else {}
         _assert(bool(mappings_v02), "template_prerequisites_v0_2 must include non-empty template_prerequisites")
         _assert(latest_1.source_name == "template_prerequisites_v0_2.json", "latest loader must prefer highest template prerequisites catalog version")
+        mappings_for_coverage = mappings_v02
+    else:
+        mappings_for_coverage = mappings
+
+    # Molecule header milestone coverage audit: both baseline and latest progress policies must be catalog-covered.
+    for prog in (load_progress_policy_v0_1(), load_progress_policy_latest()):
+        prog_body = prog.policy if isinstance(prog.policy, dict) else {}
+        di_m = prog_body.get("di_milestones") if isinstance(prog_body.get("di_milestones"), dict) else {}
+        for milestone_key, template_key in sorted(di_m.items()):
+            _assert(
+                str(template_key) in mappings_for_coverage,
+                f"template prerequisites catalog must cover progress policy DI milestone {milestone_key} -> {template_key}",
+            )
 
 
 def test_confidence_policy_catalog_loads_and_latest_loader_is_deterministic() -> None:
-    from psi.core.di.catalog import load_confidence_policy_latest, load_confidence_policy_v0_1, load_confidence_policy_v0_2
+    from psi.core.di.catalog import (
+        load_confidence_policy_latest,
+        load_confidence_policy_v0_1,
+        load_confidence_policy_v0_2,
+        load_confidence_policy_v0_3,
+    )
 
     pol_v1 = load_confidence_policy_v0_1()
     body_v1 = pol_v1.policy if isinstance(pol_v1.policy, dict) else {}
@@ -724,18 +745,33 @@ def test_confidence_policy_catalog_loads_and_latest_loader_is_deterministic() ->
         rv = component_rules.get(ck) if isinstance(component_rules.get(ck), dict) else {}
         _assert(bool(str(rv.get("label") or "")), f"confidence policy component_rules.{ck}.label must be present")
 
+    pol_v3 = load_confidence_policy_v0_3()
+    body_v3 = pol_v3.policy if isinstance(pol_v3.policy, dict) else {}
+    _assert(str(body_v3.get("policy_id") or "") == "confidence_policy_v0_3", "confidence policy v0_3 id mismatch")
+    mta = body_v3.get("multi_template_aggregation") if isinstance(body_v3.get("multi_template_aggregation"), dict) else {}
+    _assert(str(mta.get("strategy") or "") != "", "confidence policy v0_3 multi_template_aggregation.strategy must be present")
+    _assert(bool(mta.get("weighted_scoring")) is False, "confidence policy v0_3 must explicitly keep weighted_scoring=false")
+
     l1 = load_confidence_policy_latest()
     l2 = load_confidence_policy_latest()
-    _assert(l1.source_name == l2.source_name == "confidence_policy_v0_2.json", "confidence policy latest loader must deterministically select v0_2")
+    _assert(l1.source_name == l2.source_name == "confidence_policy_v0_3.json", "confidence policy latest loader must deterministically select v0_3")
     _assert(l1.policy_hash == l2.policy_hash, "confidence policy latest loader hash must be deterministic")
 
 
 def test_confidence_policy_catalog_non_weighted_language_and_keys() -> None:
-    p = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "confidence_policy_v0_2.json"
-    txt = p.read_text(encoding="utf-8").lower()
-    _assert("weight" not in txt, "confidence policy catalog must not introduce weighted scoring fields")
-    _assert("average" not in txt, "confidence policy catalog must not introduce averaging fields")
-    _assert("\"component_rules\"" in txt and "\"scalar_rules\"" in txt, "confidence policy catalog must include component_rules and scalar_rules")
+    base = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs"
+    for name in ("confidence_policy_v0_2.json", "confidence_policy_v0_3.json"):
+        txt = (base / name).read_text(encoding="utf-8").lower()
+        if name == "confidence_policy_v0_3.json":
+            _assert('"weighted_scoring": false' in txt, "confidence policy v0_3 must explicitly record weighted_scoring=false")
+            txt_for_weight_check = txt.replace('"weighted_scoring": false', '')
+        else:
+            txt_for_weight_check = txt
+        _assert("weight" not in txt_for_weight_check, f"{name}: confidence policy catalog must not introduce weighted scoring fields")
+        _assert("average" not in txt, f"{name}: confidence policy catalog must not introduce averaging fields")
+        _assert("\"component_rules\"" in txt and "\"scalar_rules\"" in txt, f"{name}: confidence policy catalog must include component_rules and scalar_rules")
+    txt_v3 = (base / "confidence_policy_v0_3.json").read_text(encoding="utf-8").lower()
+    _assert("\"multi_template_aggregation\"" in txt_v3, "confidence policy v0_3 must make multi-template aggregation strategy policy-visible")
 
 
 def test_molecule_header_confidence_model_non_weighted_neutral_missing() -> None:
@@ -2575,6 +2611,87 @@ def test_molecule_composition_hash_stability_after_helper_split() -> None:
     _assert(h1 == h2, "composition hash helper split must preserve canonical hash behavior")
     _assert(h1 == "d4ac4888670245b6feac67421f49d0e3cfbb1d38d1a46f94f56b83e65faea569", "composition hash digest changed unexpectedly")
 
+
+def test_yaml_engine_deprecation_warning_emits_only_on_use() -> None:
+    from psi.core import decision_engine as de
+
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always", DeprecationWarning)
+        de.run_decision(
+            rules={"decisions": {"d": {"min_domain_scores": {}}}, "domains": {}, "hard_stops": [], "presence_threshold": 2},
+            decision_key="d",
+            evidence_rows=[],
+        )
+    msgs = [str(getattr(w, "message", "")) for w in rec]
+    _assert(any("YAML DI engine is deprecated" in m for m in msgs), "legacy YAML run_decision should emit deprecation warning on use")
+
+
+def test_replay_policy_compat_catalog_loads_and_is_deterministic() -> None:
+    from psi.core.di.catalog import load_replay_policy_compat_latest
+
+    c1 = load_replay_policy_compat_latest()
+    c2 = load_replay_policy_compat_latest()
+    _assert(c1.source_name == c2.source_name == "replay_policy_compat_v0_1.json", "replay policy compat latest loader must be deterministic")
+    _assert(c1.catalog_hash == c2.catalog_hash, "replay policy compat latest loader hash must be deterministic")
+    policies = c1.catalog.get("policies") if isinstance(c1.catalog, dict) else None
+    _assert(isinstance(policies, list), "replay policy compat catalog policies must be a list")
+
+
+def test_verify_snapshot_policy_resolution_metadata_default_strict() -> None:
+    from psi.core.db import get_db
+    from psi.core.models import DecisionSnapshot
+    from psi.services.di.verify import verify_snapshot
+
+    with get_db(None, ensure=False) as db:
+        snap = (
+            db.query(DecisionSnapshot)
+            .order_by(DecisionSnapshot.id.desc())
+            .first()
+        )
+        if snap is None:
+            return
+        rep = verify_snapshot(db=db, snapshot_id=int(snap.id), debug=False)
+    pr = rep.get("policy_resolution") if isinstance(rep, dict) else {}
+    _assert(isinstance(pr, dict), "verify_snapshot report must include policy_resolution metadata")
+    _assert(bool(pr.get("compat_fallback_enabled")) is False, "verify_snapshot default must keep compat fallback disabled")
+    _assert(bool(pr.get("compat_fallback_used")) is False, "verify_snapshot default strict path must not use compat fallback")
+
+
+def test_compute_finalize_integrity_helper_deterministic() -> None:
+    from psi.core.di.schema import EvidenceRef
+    from psi.services.di.compute import _finalize_integrity
+
+    out1 = {"provenance": {"integrity": {"evidence_fingerprint": "seed"}}}
+    out2 = {"provenance": {"integrity": {"evidence_fingerprint": "seed"}}}
+    inputs_obj = {"decision_key": "advance_to_in_vivo", "scope_type": "batch", "scope_id": 1}
+    used = {
+        "hmw_pct": EvidenceRef(
+            measurement_id=10,
+            data_record_id=20,
+            metric_key="hmw_pct",
+            metric_key_source="canonical",
+            value_num=1.0,
+            value_text=None,
+            value_bool=None,
+            unit="%",
+            comparator=None,
+            qc_status="approved",
+            qc_flag_raw=None,
+            qc_source="measurement_qc",
+            is_primary=True,
+            is_outlier=False,
+            produced_at=None,
+            created_at="2026-02-26T00:00:00",
+        )
+    }
+    _finalize_integrity(out=out1, inputs_obj=dict(inputs_obj), used_by_metric=used)
+    _finalize_integrity(out=out2, inputs_obj=dict(inputs_obj), used_by_metric=used)
+    i1 = (((out1.get("provenance") or {}).get("integrity")) if isinstance(out1.get("provenance"), dict) else {})
+    i2 = (((out2.get("provenance") or {}).get("integrity")) if isinstance(out2.get("provenance"), dict) else {})
+    for k in ("snapshot_content_hash", "decision_output_hash", "decision_output_hash_v2"):
+        _assert(bool(str((i1 or {}).get(k) or "")), f"_finalize_integrity must populate {k}")
+    _assert(i1 == i2, "_finalize_integrity helper output must be deterministic for identical inputs")
+
 def main() -> int:
     try:
         global _SMOKE_SET_BASELINE_CUTOFF
@@ -2648,6 +2765,10 @@ def main() -> int:
         test_outcome_dataset_export_hash_field_enrichment_from_stored_snapshot_fields()
         test_label_outcome_cli_outcome_event_date_parser_deterministic()
         test_molecule_composition_hash_stability_after_helper_split()
+        test_yaml_engine_deprecation_warning_emits_only_on_use()
+        test_replay_policy_compat_catalog_loads_and_is_deterministic()
+        test_verify_snapshot_policy_resolution_metadata_default_strict()
+        test_compute_finalize_integrity_helper_deterministic()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")
         return 1

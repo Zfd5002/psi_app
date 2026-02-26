@@ -1,0 +1,65 @@
+{
+  "policy_id": "confidence_policy_v0_3",
+  "policy_version": "v0.3",
+  "schema_version": "di.confidence_policy.v0_2",
+  "component_order": [
+    "qc_quality",
+    "reproducibility",
+    "comparability",
+    "interpretability"
+  ],
+  "component_rules": {
+    "qc_quality": {
+      "label": "QC Quality",
+      "preferred_signal_dimension": "qc_confidence",
+      "fallback_gate_keys": [
+        "G2_purity_integrity",
+        "G3_endotoxin"
+      ],
+      "high_severity_if_failed_gate_keys": [
+        "G3_endotoxin"
+      ]
+    },
+    "reproducibility": {
+      "label": "Reproducibility",
+      "preferred_signal_dimension": "reproducibility",
+      "required_metrics_key": "required_metrics",
+      "positive_field": "reproducibility_positive"
+    },
+    "comparability": {
+      "label": "Comparability",
+      "source_field": "drift_type",
+      "concern_drift_types": [
+        "INCOMPARABLE"
+      ],
+      "concern_severity": "high"
+    },
+    "interpretability": {
+      "label": "Interpretability",
+      "source_field": "risk_flags_enriched",
+      "severity_order": [
+        "high",
+        "medium",
+        "low",
+        "unspecified"
+      ],
+      "unspecified_is_neutral": true
+    }
+  },
+  "multi_template_aggregation": {
+    "strategy": "latest_snapshot_per_template_then_component_union",
+    "component_merge_order": [
+      "qc_quality",
+      "reproducibility",
+      "comparability",
+      "interpretability"
+    ],
+    "scalar_source": "visible_components_only",
+    "weighted_scoring": false
+  },
+  "scalar_rules": {
+    "high_concern_escalates_to": "amber",
+    "medium_concerns_amber_min": 2,
+    "unknown_when_assessed_count_is_zero": true
+  }
+}

@@ -187,6 +187,29 @@ def _build_ranking(
     return build_ranking_payload(di_in=di_in, out=out, selection_provenance=selection_provenance)
 
 
+def _finalize_integrity(
+    *,
+    out: Dict[str, Any],
+    inputs_obj: Dict[str, Any],
+    used_by_metric: Dict[str, EvidenceRef],
+) -> None:
+    """Attach final integrity hashes to the DI output payload (in-place)."""
+    prov = out.get("provenance")
+    if not isinstance(prov, dict):
+        return
+    evidence_ids = sorted([ev.measurement_id for ev in used_by_metric.values()])
+    integrity = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+    integrity = dict(integrity)
+    integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
+        inputs_obj=inputs_obj,
+        outputs_obj=out,
+        evidence_ids=evidence_ids,
+    )
+    integrity["decision_output_hash"] = compute_decision_output_hash(inputs_obj=inputs_obj, outputs_obj=out)
+    integrity["decision_output_hash_v2"] = compute_decision_output_hash_v2(inputs_obj=inputs_obj, outputs_obj=out)
+    prov["integrity"] = integrity
+
+
 
 
 def _normalize_ignored(ignored: List[Any]) -> List[IgnoredEvidence]:
@@ -866,7 +889,6 @@ def _compute_di_from_used_by_metric(
     )
 
     # Integrity (canonical, additive-only)
-    evidence_ids = sorted([ev.measurement_id for ev in used_by_metric.values()])
     prov = out.get("provenance")
     if isinstance(prov, dict):
         integrity = {"evidence_fingerprint": compute_evidence_fingerprint(used_by_metric=used_by_metric)}
@@ -902,16 +924,10 @@ def _compute_di_from_used_by_metric(
     if isinstance(st, dict):
         out["state_transition"] = st
 
-    if isinstance(prov, dict):
-        integrity = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
-        integrity = dict(integrity)
-        integrity["snapshot_content_hash"] = compute_snapshot_content_hash(
-            inputs_obj=inputs_obj,
-            outputs_obj=out,
-            evidence_ids=evidence_ids,
-        )
-        integrity["decision_output_hash"] = compute_decision_output_hash(inputs_obj=inputs_obj, outputs_obj=out)
-        integrity["decision_output_hash_v2"] = compute_decision_output_hash_v2(inputs_obj=inputs_obj, outputs_obj=out)
-        prov["integrity"] = integrity
+    _finalize_integrity(
+        out=out,
+        inputs_obj=(inputs_obj if isinstance(inputs_obj, dict) else {}),
+        used_by_metric=used_by_metric,
+    )
 
     return out
