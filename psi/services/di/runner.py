@@ -297,11 +297,19 @@ def _complete_di_error_output_contract_parity(
         applicable_value_fn = True
     except Exception:
         applicable_value_fn = False
+    engine_obj = out.get("engine") if isinstance(out, dict) else {}
+    if not isinstance(engine_obj, dict):
+        engine_obj = {}
+    evaluator_version_actual = str(
+        (inputs_obj or {}).get("evaluator_version")
+        or engine_obj.get("evaluator_version")
+        or ""
+    )
     value_fn_reason = value_functions_enforcement_reason(
         applicable=applicable_value_fn,
         policy_flag_enabled=template_flag_enabled,
         evaluator_version_expected=expected_eval_version,
-        evaluator_version_actual=str((inputs_obj or {}).get("evaluator_version") or ""),
+        evaluator_version_actual=evaluator_version_actual,
     )
 
     if not _has_output_extension(inputs_obj, "error_output_parity_v2_0a"):

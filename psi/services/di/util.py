@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import os
 from typing import Any, Optional
 
 from psi.core.utils import stable_json_dumps
@@ -63,3 +64,8 @@ def value_functions_enforcement_reason(
     if ev_expected != ev_actual:
         return "evaluator_version_mismatch"
     return "active"
+
+
+def is_heavy_compute_enabled() -> bool:
+    """Global heavy-compute toggle (UI/runtime convenience only; default OFF)."""
+    return str(os.getenv("PSI_HEAVY_COMPUTE", "0") or "0").strip() == "1"

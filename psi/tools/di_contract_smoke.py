@@ -281,7 +281,14 @@ def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
 
 
 def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
-    from psi.core.di.catalog import load_template_prerequisites_v0_1
+    from pathlib import Path
+
+    from psi.core.di.catalog import (
+        load_progress_policy_v0_1,
+        load_template_prerequisites,
+        load_template_prerequisites_latest,
+        load_template_prerequisites_v0_1,
+    )
 
     pol = load_template_prerequisites_v0_1()
     body = pol.policy if isinstance(pol.policy, dict) else {}
@@ -292,6 +299,79 @@ def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
         _assert(isinstance(deps, list), f"template_prerequisites[{tk}] must be list")
         _assert(all(isinstance(x, str) and x for x in deps), f"template_prerequisites[{tk}] values must be non-empty strings")
         _assert(len(deps) == len(set(deps)), f"template_prerequisites[{tk}] must be duplicate-free")
+
+    # Molecule header milestone coverage audit: every DI milestone template key must be catalog-covered.
+    prog = load_progress_policy_v0_1()
+    prog_body = prog.policy if isinstance(prog.policy, dict) else {}
+    di_m = prog_body.get("di_milestones") if isinstance(prog_body.get("di_milestones"), dict) else {}
+    for milestone_key, template_key in sorted(di_m.items()):
+        _assert(
+            str(template_key) in mappings,
+            f"template prerequisites catalog must cover progress policy DI milestone {milestone_key} -> {template_key}",
+        )
+
+    # Deterministic latest-loader selection (future-proof for additive catalog versions).
+    latest_1 = load_template_prerequisites_latest()
+    latest_2 = load_template_prerequisites_latest()
+    _assert(latest_1.source_name == latest_2.source_name, "template prerequisites latest loader must be deterministic")
+    _assert(latest_1.policy_hash == latest_2.policy_hash, "template prerequisites latest loader hash must be deterministic")
+
+    cat_dir = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs"
+    v02_path = cat_dir / "template_prerequisites_v0_2.json"
+    if v02_path.exists():
+        pol_v02 = load_template_prerequisites(v02_path)
+        body_v02 = pol_v02.policy if isinstance(pol_v02.policy, dict) else {}
+        mappings_v02 = body_v02.get("template_prerequisites") if isinstance(body_v02.get("template_prerequisites"), dict) else {}
+        _assert(bool(mappings_v02), "template_prerequisites_v0_2 must include non-empty template_prerequisites")
+        _assert(latest_1.source_name == "template_prerequisites_v0_2.json", "latest loader must prefer highest template prerequisites catalog version")
+
+
+def test_molecule_header_confidence_model_non_weighted_neutral_missing() -> None:
+    from psi.services.molecules import _build_confidence_model
+
+    cm = _build_confidence_model(
+        latest_di_row={"_out": {}},
+        risk_severity_counts={"high": 0, "medium": 0, "low": 0, "unspecified": 0},
+    )
+    comps = cm.get("components") if isinstance(cm, dict) else []
+    _assert(isinstance(comps, list) and len(comps) == 4, "confidence model should emit 4 deterministic components")
+    comp_keys = [str((c or {}).get("key") or "") for c in comps if isinstance(c, dict)]
+    _assert(
+        comp_keys == ["qc_quality", "reproducibility", "comparability", "interpretability"],
+        f"confidence component order must be deterministic and fixed; got {comp_keys}",
+    )
+    _assert(
+        str(cm.get("scalar_state") or "") == "green",
+        "missing evidence components must remain neutral (not negative) when no concerns are present",
+    )
+    _assert(
+        "no weights" in str(cm.get("rule_text") or "").lower(),
+        "confidence rule text must explicitly state non-weighted counting",
+    )
+
+
+def test_molecule_header_prerequisite_blocker_sorting_deterministic() -> None:
+    from psi.services.molecules import _sorted_prerequisite_blockers_for_advisory
+
+    inp = [
+        {"template_key": "z.template", "status": "missing", "latest_snapshot_id": None},
+        {"template_key": "a.template", "status": "failed", "latest_snapshot_id": 42},
+        {"template_key": "a.template", "status": "missing", "latest_snapshot_id": None},
+    ]
+    out1 = _sorted_prerequisite_blockers_for_advisory(inp)
+    out2 = _sorted_prerequisite_blockers_for_advisory(list(reversed(inp)))
+    keys1 = [
+        (str(x.get("template_key") or ""), str(x.get("status") or ""), int(x.get("latest_snapshot_id") or 0))
+        for x in out1
+        if isinstance(x, dict)
+    ]
+    keys2 = [
+        (str(x.get("template_key") or ""), str(x.get("status") or ""), int(x.get("latest_snapshot_id") or 0))
+        for x in out2
+        if isinstance(x, dict)
+    ]
+    _assert(keys1 == keys2, "prerequisite blocker sorting must be deterministic irrespective of input order")
+    _assert(keys1 == [("a.template", "failed", 42), ("a.template", "missing", 0), ("z.template", "missing", 0)], f"unexpected blocker sort order: {keys1}")
 
 
 def test_selection_semantics_version_constant() -> None:
@@ -1580,18 +1660,37 @@ def test_di_error_output_top_level_key_parity() -> None:
 
     db = SessionLocal()
     try:
-        snap = (
+        snap = None
+        success_inputs = {}
+        for cand in (
             db.query(DecisionSnapshot)
             .filter(DecisionSnapshot.engine_key == "di")
             .order_by(DecisionSnapshot.id.desc())
-            .first()
-        )
-        _assert(snap is not None, "need at least one DI snapshot for error parity smoke")
+            .all()
+        ):
+            try:
+                cand_inputs = json.loads(cand.inputs_json or "{}")
+            except Exception:
+                cand_inputs = {}
+            if not isinstance(cand_inputs, dict):
+                continue
+            ext = cand_inputs.get("output_extensions")
+            if not isinstance(ext, list):
+                continue
+            ext_vals = {str(x) for x in ext}
+            if "error_output_parity_v2_0a" not in ext_vals:
+                continue
+            snap = cand
+            success_inputs = cand_inputs
+            break
+
+        _assert(snap is not None, "need at least one parity-gated DI snapshot for error parity smoke")
         try:
             success_out = json.loads(snap.outputs_json or "{}")
         except Exception:
             success_out = {}
         _assert(isinstance(success_out, dict) and bool(success_out), "representative success output must parse as non-empty dict")
+        _assert(isinstance(success_inputs, dict) and bool(success_inputs), "representative success inputs must parse as non-empty dict")
 
         di_input = DIInput(
             decision_key=str(getattr(snap, "decision_key", "") or "advance_to_in_vivo"),
@@ -1602,14 +1701,15 @@ def test_di_error_output_top_level_key_parity() -> None:
             context={},
         )
         pol_stub = SimpleNamespace(
-            policy_id="stub.policy",
-            name="stub",
-            version="v0.4",
-            schema_version="di.policy_package.v0_1",
-            policy_semantics_hash="0" * 64,
-            policy_package_hash="1" * 64,
-            source_name="stub.json",
+            policy_id=str(success_inputs.get("policy_id") or "stub.policy"),
+            name=str(success_inputs.get("policy_name") or "stub"),
+            version=str(success_inputs.get("policy_version") or "v0.4"),
+            schema_version=str(success_inputs.get("policy_schema_version") or "di.policy_package.v0_1"),
+            policy_semantics_hash=str(success_inputs.get("policy_semantics_hash") or ("0" * 64)),
+            policy_package_hash=str(success_inputs.get("policy_package_hash") or ("1" * 64)),
+            source_name=str(success_inputs.get("policy_source") or "stub.json"),
             changelog=[],
+            template_key=str(success_inputs.get("template_key") or ""),
         )
         err = _build_di_error_output(
             di_input=di_input,
@@ -1631,7 +1731,10 @@ def test_di_error_output_top_level_key_parity() -> None:
             out=err,
             di_input=di_input,
             pol=pol_stub,
-            inputs_obj={"output_extensions": ["value_functions_enforced_v0_1", "error_output_parity_v2_0a"]},
+            inputs_obj={
+                "output_extensions": list(success_inputs.get("output_extensions") or []),
+                "evaluator_version": str(success_inputs.get("evaluator_version") or ""),
+            },
         )
 
         success_keys = set(str(k) for k in success_out.keys())
@@ -1651,6 +1754,17 @@ def test_di_error_output_top_level_key_parity() -> None:
             "value_functions_enforcement_reason",
         ]:
             _assert(k in err_keys, f"error output parity must include top-level key: {k}")
+
+        ext_vals = {str(x) for x in (success_inputs.get("output_extensions") or [])}
+        if "value_functions_enforced_v0_1" in ext_vals:
+            _assert(
+                "value_functions_enforcement_reason" in success_keys,
+                "gated success output must include value_functions_enforcement_reason",
+            )
+            _assert(
+                "value_functions_enforcement_reason" in err_keys,
+                "gated error output must include value_functions_enforcement_reason",
+            )
     finally:
         db.close()
 
@@ -1668,6 +1782,8 @@ def main() -> int:
         test_policy_template_structure_present()
         test_progress_policy_catalog_v0_1_loads_and_validates()
         test_template_prerequisites_catalog_v0_1_loads_and_validates()
+        test_molecule_header_confidence_model_non_weighted_neutral_missing()
+        test_molecule_header_prerequisite_blocker_sorting_deterministic()
         test_selection_semantics_version_constant()
         test_policy_authoritative_required_gate_keys()
         test_context_knob_branching_gate_outcomes_deterministic()

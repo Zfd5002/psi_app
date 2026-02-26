@@ -224,3 +224,18 @@ def load_template_prerequisites(path: Path) -> LoadedTemplatePrerequisites:
 def load_template_prerequisites_v0_1() -> LoadedTemplatePrerequisites:
     pol_path = Path(__file__).resolve().parent / "catalogs" / "template_prerequisites_v0_1.json"
     return load_template_prerequisites(pol_path)
+
+
+def load_template_prerequisites_latest() -> LoadedTemplatePrerequisites:
+    cat_dir = Path(__file__).resolve().parent / "catalogs"
+    patt = re.compile(r"^template_prerequisites_v(\d+)_(\d+)\.json$")
+    candidates: list[tuple[int, int, Path]] = []
+    for p in sorted(cat_dir.glob("template_prerequisites_v*_*.json")):
+        m = patt.match(p.name)
+        if not m:
+            continue
+        candidates.append((int(m.group(1)), int(m.group(2)), p))
+    if not candidates:
+        raise FileNotFoundError("No template_prerequisites_v*_*.json files found")
+    _, _, latest_path = sorted(candidates, key=lambda t: (t[0], t[1], t[2].name))[-1]
+    return load_template_prerequisites(latest_path)

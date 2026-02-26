@@ -40,8 +40,9 @@ from psi.core.reference_features import detect_pdl1_features
 from psi.core.deps import heavy_compute_available_for_molecule
 from psi.core.biochem import liability_sites
 from psi.core.annotations import detect_linker_spans, detect_fc_region, dedupe_features
-from psi.core.di.catalog import load_progress_policy_v0_1, load_template_prerequisites_v0_1
+from psi.core.di.catalog import load_progress_policy_v0_1, load_template_prerequisites_latest
 from psi.core.measurement_schema import measurement_cols
+from psi.services.di.util import is_heavy_compute_enabled
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
 
 
@@ -410,6 +411,19 @@ def _build_confidence_model(*, latest_di_row: dict[str, Any] | None, risk_severi
     }
 
 
+def _sorted_prerequisite_blockers_for_advisory(blockers: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    rows = [b for b in (blockers or []) if isinstance(b, dict)]
+    # Explicit sort keeps UI advisory blocker ordering stable even if upstream collection order changes.
+    return sorted(
+        rows,
+        key=lambda b: (
+            str(b.get("template_key") or ""),
+            str(b.get("status") or ""),
+            int(b.get("latest_snapshot_id") or 0),
+        ),
+    )
+
+
 def _build_molecule_header_model(
     db: Session,
     *,
@@ -422,7 +436,7 @@ def _build_molecule_header_model(
     except Exception:
         prog_body = {}
     try:
-        prereq_pol = load_template_prerequisites_v0_1()
+        prereq_pol = load_template_prerequisites_latest()
         prereq_body = prereq_pol.policy if isinstance(prereq_pol.policy, dict) else {}
     except Exception:
         prereq_body = {}
@@ -464,8 +478,22 @@ def _build_molecule_header_model(
     for key in sorted([str(k) for k in di_m.keys()]):
         template_key = str(di_m.get(key) or "").strip()
         is_ready_raw = bool(latest_pass_by_template.get(template_key))
-        prereqs = [str(x) for x in (template_prereqs.get(template_key) or []) if str(x).strip()]
-        missing_prereqs = [tk for tk in prereqs if not bool(latest_pass_by_template.get(tk))]
+        # Sort prerequisite template keys explicitly to keep UI advisories stable.
+        prereqs = sorted([str(x) for x in (template_prereqs.get(template_key) or []) if str(x).strip()])
+        blocked_prerequisites = []
+        for tk in prereqs:
+            latest_row = latest_snapshot_by_template.get(tk) or {}
+            is_ready_prereq = bool(latest_pass_by_template.get(tk))
+            if is_ready_prereq:
+                continue
+            blocked_prerequisites.append(
+                {
+                    "template_key": tk,
+                    "status": ("failed" if latest_row else "missing"),
+                    "latest_snapshot_id": latest_row.get("snapshot_id"),
+                }
+            )
+        missing_prereqs = [str(x.get("template_key") or "") for x in blocked_prerequisites if str(x.get("template_key") or "")]
         is_advisory_blocked = bool(is_ready_raw and missing_prereqs)
         is_ready = bool(is_ready_raw and not is_advisory_blocked)
         row = latest_snapshot_by_template.get(template_key) or {}
@@ -477,6 +505,15 @@ def _build_molecule_header_model(
             }
             for tk in prereqs
         ]
+        # Explicitly sort the rendered prerequisite status list for deterministic UI ordering.
+        prereq_statuses = sorted(
+            prereq_statuses,
+            key=lambda x: (
+                str(x.get("template_key") or ""),
+                0 if bool(x.get("ready")) else 1,
+                int(x.get("latest_snapshot_id") or 0),
+            ),
+        )
         milestones.append(
             {
                 "key": key,
@@ -490,6 +527,7 @@ def _build_molecule_header_model(
                     "prerequisites": prereq_statuses,
                     "advisory_blocked": bool(is_advisory_blocked),
                     "advisory_missing_templates": missing_prereqs,
+                    "advisory_blocked_prerequisites": _sorted_prerequisite_blockers_for_advisory(blocked_prerequisites),
                 },
             }
         )
@@ -533,14 +571,42 @@ def _build_molecule_header_model(
             "milestone_key": m.get("key"),
             "template_key": ((m.get("detail") or {}).get("template_key") if isinstance(m.get("detail"), dict) else None),
             "missing_templates": (((m.get("detail") or {}).get("advisory_missing_templates")) if isinstance(m.get("detail"), dict) else []),
+            "blocked_prerequisites": (((m.get("detail") or {}).get("advisory_blocked_prerequisites")) if isinstance(m.get("detail"), dict) else []),
         }
         for m in milestones
         if m.get("kind") == "di"
         and isinstance(m.get("detail"), dict)
         and bool((m.get("detail") or {}).get("advisory_blocked"))
     ]
+    # Keep advisory rows deterministic for stable UI snapshots/tests.
+    prereq_advisories = sorted(
+        prereq_advisories,
+        key=lambda a: (
+            str(a.get("milestone_key") or ""),
+            str(a.get("template_key") or ""),
+        ),
+    )
+    for adv in prereq_advisories:
+        blocked = _sorted_prerequisite_blockers_for_advisory(
+            adv.get("blocked_prerequisites") if isinstance(adv.get("blocked_prerequisites"), list) else []
+        )
+        adv["blocked_prerequisites"] = blocked
+        parts = []
+        for b in blocked:
+            if not isinstance(b, dict):
+                continue
+            tk = str(b.get("template_key") or "").strip()
+            if not tk:
+                continue
+            status = str(b.get("status") or "missing").strip() or "missing"
+            sid = b.get("latest_snapshot_id")
+            if sid:
+                parts.append(f"{tk} ({status}, latest snapshot #{sid})")
+            else:
+                parts.append(f"{tk} ({status})")
+        adv["blocked_by_text"] = "Blocked by prerequisites: " + (", ".join(parts) if parts else "unknown prerequisite state")
 
-    heavy_compute_enabled = str(os.getenv("PSI_HEAVY_COMPUTE", "0") or "0").strip() == "1"
+    heavy_compute_enabled = is_heavy_compute_enabled()
     confidence_model = _build_confidence_model(
         latest_di_row=latest_di_row,
         risk_severity_counts=risk_severity_counts,

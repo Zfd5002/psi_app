@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from psi.core.di.policy import load_policy
 from psi.core.models import Batch, Molecule
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
+from psi.services.di.util import is_heavy_compute_enabled
 
 
 def _policy_dir() -> Path:
@@ -91,6 +92,7 @@ def build_di_run_context(
     batches = q.order_by(Batch.created_at.desc(), Batch.id.desc()).all()
     molecules = db.query(Molecule).order_by(Molecule.created_at.desc(), Molecule.id.desc()).all()
 
+    heavy_compute_enabled = is_heavy_compute_enabled()
     return {
         "selected_scope_type": selected_scope_type,
         "decision_keys": decision_keys,
@@ -101,6 +103,12 @@ def build_di_run_context(
         "molecules": molecules,
         "selected_batch_id": int(batch_id) if batch_id else None,
         "selected_molecule_id": int(molecule_id) if molecule_id else None,
+        "heavy_compute_enabled": bool(heavy_compute_enabled),
+        "heavy_compute_banner": (
+            "Heavy Compute: ON (PSI_HEAVY_COMPUTE=1). Does not affect DI snapshot hashes."
+            if heavy_compute_enabled
+            else "Heavy Compute: OFF (default, PSI_HEAVY_COMPUTE=0). Does not affect DI snapshot hashes."
+        ),
     }
 
 

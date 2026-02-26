@@ -100,8 +100,12 @@
             <ul class="clean" style="margin-top:4px;">
               {% for a in mh.prerequisite_advisories %}
                 <li>
-                  {{ a.milestone_key }} is not claimed yet because prerequisite template(s) are missing/failed:
-                  {{ (a.missing_templates if a.missing_templates is defined else [])|join(', ') }}
+                  <b>Blocked by prerequisites</b> for {{ a.milestone_key }}:
+                  {% if a.blocked_by_text is defined and a.blocked_by_text %}
+                    {{ a.blocked_by_text }}
+                  {% else %}
+                    {{ (a.missing_templates if a.missing_templates is defined else [])|join(', ') }}
+                  {% endif %}
                 </li>
               {% endfor %}
             </ul>

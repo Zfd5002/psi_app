@@ -3,6 +3,9 @@
 {% block content %}
   <h1>Run DI</h1>
   <div class="muted">Creates a DI snapshot for a batch or molecule scope. This does not use the legacy YAML engine.</div>
+  <div class="card" style="margin-top:10px;padding:10px;border-left:4px solid {% if heavy_compute_enabled %}#2d6a4f{% else %}#8a6d3b{% endif %};">
+    {{ heavy_compute_banner if heavy_compute_banner is defined else 'Heavy Compute: OFF (default). Does not affect DI snapshot hashes.' }}
+  </div>
 
   {% if error %}
     <div class="card" style="border:1px solid #b94a48;background:#fff5f5;color:#8a1f1f;margin-top:10px;">

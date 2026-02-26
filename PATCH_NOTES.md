@@ -1850,6 +1850,239 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-26 — v1.2.9w83
+What changed:
+- Added `docs/CODE_REVIEW_w83.md` as a docs-first internal checkpoint review covering patches `w75` through `w82`.
+- Reviewed determinism, replay safety, policy-as-data alignment, UI-only guarantees, and hash-risk boundaries; documented findings and proof notes.
+- No functional code changes were required from the review (no determinism/replay/hash-safety issues found).
+
+Why:
+- Establish a clear checkpoint record before additional roadmap work and make the audit rationale/proof easy to review.
+
+Determinism/Replay note:
+- Documentation-only patch; no DI compute/schema/output changes.
+- Replay and hash-bearing DI outputs remain unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/CODE_REVIEW_w83.md`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
+## 2026-02-26 — v1.2.9w82
+What changed:
+- Added operator-facing roadmap v2 implementation notes in `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`.
+- Documented progress-policy and template-prerequisites catalog roles (including deterministic latest loader behavior).
+- Documented experiment catalog v0.2 `resolves_risk_flags` catalog-driven risk mapping, `value_functions_enforcement_reason` enum semantics, and heavy-compute OFF-by-default hash-safety guarantees.
+
+Why:
+- Provide a concise operator reference for the roadmap v2 surfaces that are now implemented across catalogs, UI governance fields, and runtime flags.
+
+Determinism/Replay note:
+- Documentation-only patch; no DI compute/schema/output changes.
+- Replay and hash-bearing DI outputs remain unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
+## 2026-02-26 — v1.2.9w81
+What changed:
+- Added read-only deterministic outcome dataset exporter `python -m psi.tools.export_outcome_dataset` (JSONL) using existing DB fields only.
+- Export rows are ordered by `snapshot_id` ascending and serialized with stable JSON key ordering for reproducibility.
+- Each row includes snapshot metadata plus parsed `policy_semantics_hash`, `policy_package_hash`, `evidence_fingerprint`, `decision_state`, and aggregated outcome labels (including DI review labels when present).
+
+Why:
+- Provide deterministic groundwork for closed-loop outcome analysis without schema changes or any DB writes.
+
+Determinism/Replay note:
+- Tool is read-only (`ensure=False`) and does not mutate DB state.
+- Export ordering is explicit and reproducible; no DI compute/output changes.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/export_outcome_dataset.py`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
+## 2026-02-26 — v1.2.9w80
+What changed:
+- Added explicit stable sorts (with comments) for molecule-header prerequisite status rows, blocked prerequisite advisory rows, and top-level prerequisite advisories.
+- Extracted a small `_sorted_prerequisite_blockers_for_advisory()` helper to make the blocker ordering rule explicit and reusable.
+- Added contract smoke determinism coverage that asserts prerequisite blocker ordering is stable regardless of input order.
+
+Why:
+- Prevent accidental UI/view-model ordering drift in scientist header lists and make deterministic ordering rules obvious in code.
+
+Determinism/Replay note:
+- UI/view-model sorting hardening only; no DI compute/schema/output changes.
+- Replay and hash-bearing DI outputs remain unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
+## 2026-02-26 — v1.2.9w79
+What changed:
+- Audited the molecule-header confidence model and confirmed it already uses explicit rule-based counting only (no weighted scoring) with `not_assessed` components treated neutrally.
+- Added contract smoke coverage to lock non-weighted confidence behavior, deterministic component ordering, and neutral handling of missing evidence.
+- Added a smoke assertion that the visible confidence rule text explicitly states the non-weighted rule.
+
+Why:
+- Prevent regressions that could reintroduce implicit weighting or treat missing evidence as negative without an explicit deterministic rule.
+
+Determinism/Replay note:
+- Test-only enforcement of existing UI-only confidence behavior; no DI compute/schema/output changes.
+- Replay and hash-bearing DI outputs remain unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
+## 2026-02-26 — v1.2.9w78
+What changed:
+- Added shared helper `is_heavy_compute_enabled()` in `psi/services/di/util.py` to centralize `PSI_HEAVY_COMPUTE=1` handling with a deterministic OFF-by-default behavior.
+- Switched the molecule header heavy-compute banner to use the shared helper instead of reading the environment variable inline.
+- Added a visible `/di/run` UI indicator (`Heavy Compute: OFF/ON`) sourced from the shared helper and explicitly stating that DI snapshot hashes are unaffected.
+
+Why:
+- Make heavy-compute status handling consistent across UI surfaces and enforce a single OFF-by-default interpretation without affecting DI hash-bearing outputs.
+
+Determinism/Replay note:
+- UI/runtime helper only; no DI snapshot schema/output changes and no hash/replay surface changes.
+- Heavy-compute indicator is display-only and does not participate in DI snapshot hashing.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/util.py`
+- `psi/services/molecules.py`
+- `psi/services/di/web.py`
+- `psi/web/templates/di/run.html`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
+## 2026-02-26 — v1.2.9w77
+What changed:
+- Hardened the molecule-header prerequisite advisory view-model to explicitly classify blocked prerequisite templates as `missing` vs `failed` and include latest snapshot IDs when available.
+- Added explicit sorting for prerequisite template keys before advisory derivation so blocker lists render deterministically.
+- Updated the molecule detail template wording to show a plain-English `Blocked by prerequisites` message for structurally impossible progress claims.
+
+Why:
+- Prevent the UI from implying an impossible progress state without a deterministic, user-visible explanation of which prerequisite templates are blocking the claim.
+
+Determinism/Replay note:
+- UI/view-model only change; no DI compute or snapshot schema/output changes.
+- Advisory blocker ordering is explicit and stable (sorted prerequisite template keys).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
+## 2026-02-26 — v1.2.9w76
+What changed:
+- Added deterministic `load_template_prerequisites_latest()` catalog loader that selects the highest `template_prerequisites_vX_Y.json` version by parsed version tuple (stable tie-break by filename).
+- Switched molecule header prerequisite loading to use the latest template-prerequisites catalog (current behavior unchanged because only `v0_1` exists).
+- Expanded contract smoke coverage to audit progress-policy DI milestone template coverage against the prerequisites catalog, validate latest-loader determinism, and optionally validate `v0_2` loading if a `template_prerequisites_v0_2.json` file is present.
+
+Why:
+- Make template prerequisite policy-as-data expansion future-proof and ensure the molecule header cannot silently reference DI milestone templates missing from the catalog.
+
+Determinism/Replay note:
+- Catalog loading and milestone coverage checks use explicit deterministic ordering.
+- No DI schema/output changes and no replay/hash-bearing compute changes.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalog.py`
+- `psi/services/molecules.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
+## 2026-02-26 — v1.2.9w75
+What changed:
+- Hardened DI error-output parity completion to deterministically fall back to the error output engine evaluator version when `inputs_obj.evaluator_version` is absent, preserving governance/run-semantics reason generation.
+- Tightened DI contract smoke parity coverage to select a representative parity-gated DI snapshot (`error_output_parity_v2_0a`) instead of any DI snapshot.
+- Extended the parity smoke assertion to require `value_functions_enforcement_reason` in both representative success and synthesized error outputs when the value-functions extension gate is active.
+
+Why:
+- Ensure the w75 parity check exercises the intended new-snapshot gated path and validates governance/run-semantics parity consistently across success vs error outputs.
+
+Determinism/Replay note:
+- Error parity completion remains additive and extension-gated for new snapshots only (`error_output_parity_v2_0a`), preserving historical replay surfaces.
+- No schema changes, no ranking/scoring changes, and no non-deterministic behavior introduced.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/runner.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+
 ## 2026-02-26 — v1.2.9w74
 What changed:
 - Extracted deterministic material readiness and mechanism readiness rationale helpers into shared sub-assessment utilities.
