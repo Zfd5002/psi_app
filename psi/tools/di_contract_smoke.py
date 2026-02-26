@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
-from psi.core.di.catalog import load_catalog
+from psi.core.di.catalog import build_experiment_risk_flag_index, load_catalog
 from psi.core.di.policy import canonical_policy_json, load_policy, sha256_hex_of_canonical_json
 from psi.core.utils import stable_json_dumps
 from psi.services import decisions as decisions_svc
@@ -30,8 +30,14 @@ from psi.services.di.compute import _build_scope_semantics, _normalize_ignored
 from psi.services.di.eval import derive_gate_outcomes, derive_readiness, derive_shortlisting
 from psi.services.di.selectors import ALLOWED_IGNORE_REASON_KEYS
 from psi.services.di.runner import DI_SELECTION_SEMANTICS_VERSION
-from psi.services.di.sub_assessments import baseline_risk_flags_from_used, decision_state_from_gate_statuses
+from psi.services.di.sub_assessments import (
+    baseline_risk_flags_from_used,
+    comparability_qc_coherence_summary,
+    decision_state_from_gate_statuses,
+    reproducibility_signal_from_soe,
+)
 from psi.services.di.templates.registry import list_template_keys_sorted, template_dependency_graph
+from psi.services.di.util import value_functions_enforcement_reason
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -127,6 +133,45 @@ def test_stable_json_dumps() -> None:
     _assert(isinstance(p, dict) and p.get("z") == 1, "stable_json_dumps output should parse")
 
 
+def test_value_functions_enforcement_reason_helper() -> None:
+    _assert(
+        value_functions_enforcement_reason(
+            applicable=True,
+            policy_flag_enabled=True,
+            evaluator_version_expected="di.eval.v1",
+            evaluator_version_actual="di.eval.v1",
+        ) == "active",
+        "enforcement reason should be active on exact evaluator version match",
+    )
+    _assert(
+        value_functions_enforcement_reason(
+            applicable=True,
+            policy_flag_enabled=False,
+            evaluator_version_expected="di.eval.v1",
+            evaluator_version_actual="di.eval.v1",
+        ) == "policy_flag_off",
+        "enforcement reason should be policy_flag_off when template policy flag disabled",
+    )
+    _assert(
+        value_functions_enforcement_reason(
+            applicable=True,
+            policy_flag_enabled=True,
+            evaluator_version_expected="di.eval.v1",
+            evaluator_version_actual="di.eval.v2",
+        ) == "evaluator_version_mismatch",
+        "enforcement reason should report evaluator_version_mismatch deterministically",
+    )
+    _assert(
+        value_functions_enforcement_reason(
+            applicable=False,
+            policy_flag_enabled=True,
+            evaluator_version_expected="di.eval.v1",
+            evaluator_version_actual="di.eval.v1",
+        ) == "not_applicable",
+        "enforcement reason should be not_applicable when signal is not applicable",
+    )
+
+
 def test_normalize_ignored_schema_compat() -> None:
     ignored = [
         {
@@ -173,6 +218,32 @@ def test_catalog_hash_validation() -> None:
     # Hash stability
     h2 = sha256_hex_of_canonical_json(cat.catalog)
     _assert(cat.catalog_hash == h2, "catalog_hash must match canonical JSON hash")
+
+
+def test_experiment_catalog_v0_2_latest_loader_and_risk_mapping() -> None:
+    from psi.core.di.catalog import load_experiment_catalog_latest, load_experiment_catalog_v0_2
+
+    cat2 = load_experiment_catalog_v0_2()
+    latest = load_experiment_catalog_latest()
+    _assert(cat2.catalog_id == "experiment_catalog_v0_2", "experiment v0.2 catalog_id mismatch")
+    _assert(cat2.catalog_version == "v0.2", "experiment v0.2 catalog_version mismatch")
+    _assert(latest.catalog_version == "v0.2", "latest experiment catalog loader must select v0.2 deterministically")
+
+    exps = cat2.catalog.get("experiments") if isinstance(cat2.catalog, dict) else []
+    _assert(isinstance(exps, list) and bool(exps), "experiment catalog v0.2 experiments must be present")
+    for i, e in enumerate(exps):
+        _assert(isinstance(e, dict), f"experiment v0.2 experiments[{i}] must be object")
+        rr = e.get("resolves_risk_flags")
+        _assert(isinstance(rr, list), f"experiment v0.2 experiments[{i}].resolves_risk_flags must be list")
+        _assert(all(isinstance(x, str) and x for x in rr), f"experiment v0.2 experiments[{i}].resolves_risk_flags values must be non-empty strings")
+        _assert(rr == sorted(set(rr)), f"experiment v0.2 experiments[{i}].resolves_risk_flags must be sorted duplicate-free")
+
+    idx1 = build_experiment_risk_flag_index(catalog=cat2.catalog)
+    idx2 = build_experiment_risk_flag_index(catalog=json.loads(cat2.canonical_json))
+    _assert(idx1 == idx2, "risk-flag index builder must be deterministic for canonical-equivalent catalog content")
+    for rf, eks in sorted(idx1.items()):
+        _assert(isinstance(rf, str) and rf, "risk-flag index keys must be non-empty strings")
+        _assert(eks == sorted(set(eks)), f"risk-flag index values for {rf} must be sorted duplicate-free")
 
 
 def test_policy_template_structure_present() -> None:
@@ -484,6 +555,24 @@ def test_shared_sub_assessments_pure_helpers() -> None:
             self.status = status
     ds, meta = decision_state_from_gate_statuses(gates=[_Gate("G1", "pass")], required_gate_keys=["G1"], blockers=[])
     _assert(ds == "ready" and bool(meta.get("required_pass")), "shared decision-state helper must be deterministic and pure")
+    qc1 = comparability_qc_coherence_summary(comparability={"summary": {"high_severity_count": 1, "total_flags": 3}})
+    qc2 = comparability_qc_coherence_summary(comparability={"summary": {"total_flags": 3, "high_severity_count": 1}})
+    _assert(stable_json_dumps(qc1) == stable_json_dumps(qc2), "comparability sub-assessment helper must be deterministic")
+    rep1 = reproducibility_signal_from_soe(
+        required_metric_keys=["monomer_pct", "hmw_pct"],
+        evidence_summary=[
+            {"metric_key": "hmw_pct", "total_count": 2, "usable_count": 2},
+            {"metric_key": "monomer_pct", "total_count": 1, "usable_count": 1},
+        ],
+    )
+    rep2 = reproducibility_signal_from_soe(
+        required_metric_keys=["hmw_pct", "monomer_pct"],
+        evidence_summary=[
+            {"metric_key": "monomer_pct", "total_count": 1, "usable_count": 1},
+            {"metric_key": "hmw_pct", "total_count": 2, "usable_count": 2},
+        ],
+    )
+    _assert(stable_json_dumps(rep1) == stable_json_dumps(rep2), "reproducibility sub-assessment helper must be deterministic")
 
 
 def test_outcome_label_validation_helpers_deterministic() -> None:
@@ -537,6 +626,35 @@ def test_policy_blocker_taxonomy_and_experiment_suggestions() -> None:
             _assert(norm == sorted(norm), f"blocker_suggestions[{bk}] must be lexicographically sorted")
             missing = [x for x in norm if x not in exp_keys]
             _assert(not missing, f"blocker_suggestions[{bk}] contains unknown experiment_keys: {missing}")
+
+
+def test_nbe_uses_catalog_risk_mapping_only() -> None:
+    from psi.services.di import nbe as nbe_mod
+
+    _assert(not hasattr(nbe_mod, "_RISK_FLAG_TO_EXPERIMENT_KEYS"), "nbe must not retain hardcoded risk-flag mapping constant")
+
+    suggestions, recommended = nbe_mod.build_experiment_suggestions(
+        blockers=[],
+        risk_flags=[{"risk_flag": "aggregated_purity_interpretation_gap"}],
+        catalog_id="experiment_catalog_v0_2",
+        catalog_version="v0.2",
+        allow_recommended_list=True,
+    )
+    keys = suggestions.get("risk_flag:aggregated_purity_interpretation_gap") or []
+    _assert(bool(keys), "v0.2 catalog risk mapping should provide at least one experiment for aggregated_purity_interpretation_gap")
+    suggestions2, _ = nbe_mod.build_experiment_suggestions(
+        blockers=[],
+        risk_flags=[{"risk_flag": "aggregated_purity_interpretation_gap"}],
+        catalog_id="experiment_catalog_v0_2",
+        catalog_version="v0.2",
+        allow_recommended_list=True,
+    )
+    _assert(
+        stable_json_dumps(suggestions) == stable_json_dumps(suggestions2),
+        "risk-flag-driven suggestions must be deterministic across reruns",
+    )
+    rec_keys = [str((r or {}).get("experiment_key") or "") for r in (recommended or []) if isinstance(r, dict)]
+    _assert(len(rec_keys) == len(set(rec_keys)), "recommended experiments must be deduplicated")
 
 def test_ignore_reason_keys_allowed_set() -> None:
     # Ensure the allowed set is stable and contains required keys.
@@ -728,6 +846,15 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     _assert(s1 == s2, "DI output must be deterministic for identical DB + inputs")
 
     _assert("ranking" not in (out1.get("output") or {}), "weighted ranking must be absent from canonical DI output")
+    _assert(
+        "value_functions_enforcement_reason" in (out1.get("output") or {}),
+        "new snapshots with output extensions must include value_functions_enforcement_reason",
+    )
+    _assert(
+        str((out1.get("output") or {}).get("value_functions_enforcement_reason") or "")
+        in {"active", "policy_flag_off", "evaluator_version_mismatch", "not_applicable"},
+        "value_functions_enforcement_reason must use allowed deterministic enum values",
+    )
 
     snap_ctx1 = get_snapshot_detail(db1, int(out1.get("snapshot_id")))
     snap_ctx2 = get_snapshot_detail(db2, int(out2.get("snapshot_id")))
@@ -1504,6 +1631,7 @@ def test_di_error_output_top_level_key_parity() -> None:
             "drift_type",
             "state_transition",
             "value_functions_enforced",
+            "value_functions_enforcement_reason",
         ]:
             _assert(k in err_keys, f"error output parity must include top-level key: {k}")
     finally:
@@ -1516,8 +1644,10 @@ def main() -> int:
             os.environ["PSI_DI_BASELINE_CUTOFF_ISO"] = datetime.now(timezone.utc).isoformat()
             _SMOKE_SET_BASELINE_CUTOFF = True
         test_policy_canonicalization_and_hash()
+        test_value_functions_enforcement_reason_helper()
         test_policy_package_dual_hash_stability()
         test_catalog_hash_validation()
+        test_experiment_catalog_v0_2_latest_loader_and_risk_mapping()
         test_policy_template_structure_present()
         test_progress_policy_catalog_v0_1_loads_and_validates()
         test_template_prerequisites_catalog_v0_1_loads_and_validates()
@@ -1532,6 +1662,7 @@ def main() -> int:
         test_outcome_label_validation_helpers_deterministic()
         test_shortlisting_reproducibility_from_soe_evidence_summary()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
+        test_nbe_uses_catalog_risk_mapping_only()
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()
         test_normalize_ignored_schema_compat()

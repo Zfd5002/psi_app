@@ -59,6 +59,27 @@
       <div>{{ prov.as_of_ts if prov is mapping and prov.as_of_ts is defined and prov.as_of_ts else '—' }}</div>
       <div class="muted" style="margin-top:8px;">value_functions_enforced</div>
       <div>{% if output.value_functions_enforced is defined %}{{ 'true' if output.value_functions_enforced else 'false' }}{% else %}—{% endif %}</div>
+      <div class="muted" style="margin-top:8px;">value_functions_enforcement_reason</div>
+      <div>
+        {% if output.value_functions_enforcement_reason is defined and output.value_functions_enforcement_reason %}
+          {{ output.value_functions_enforcement_reason }}
+          <div class="muted mini" style="margin-top:2px;">
+            {% if output.value_functions_enforcement_reason == 'active' %}
+              Value functions were enforced for this evaluation.
+            {% elif output.value_functions_enforcement_reason == 'policy_flag_off' %}
+              Template/policy disables value-function enforcement.
+            {% elif output.value_functions_enforcement_reason == 'evaluator_version_mismatch' %}
+              Enforcement skipped because evaluator version did not match the template expectation.
+            {% elif output.value_functions_enforcement_reason == 'not_applicable' %}
+              Enforcement reason is not applicable for this snapshot/error path.
+            {% else %}
+              Deterministic enforcement reason emitted by DI output.
+            {% endif %}
+          </div>
+        {% else %}
+          —
+        {% endif %}
+      </div>
     </div>
     <div>
       <div class="muted">drift_type</div>

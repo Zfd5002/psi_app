@@ -21,6 +21,7 @@ from psi.services.di.compute import _compute_di_from_used_by_metric
 from psi.services.di.enrich import coverage_fingerprint_payload
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2, compute_evidence_fingerprint, compute_snapshot_content_hash
 from psi.services.di.templates.registry import resolve_template_entry
+from psi.services.di.util import value_functions_enforcement_reason
 from psi.version import PSI_VERSION
 
 
@@ -284,9 +285,29 @@ def _complete_di_error_output_contract_parity(
     Historical snapshots replay using stored inputs_obj without the parity extension flag,
     so this helper becomes a no-op and preserves old replay surfaces.
     """
+    template_flag_enabled = False
+    expected_eval_version = ""
+    try:
+        template_entry = resolve_template_entry(
+            decision_key=str(di_input.decision_key or ""),
+            template_key=str(getattr(pol, "template_key", "") or ""),
+        )
+        template_flag_enabled = bool((template_entry or {}).get("enforce_value_functions"))
+        expected_eval_version = str((template_entry or {}).get("evaluator_version") or "")
+        applicable_value_fn = True
+    except Exception:
+        applicable_value_fn = False
+    value_fn_reason = value_functions_enforcement_reason(
+        applicable=applicable_value_fn,
+        policy_flag_enabled=template_flag_enabled,
+        evaluator_version_expected=expected_eval_version,
+        evaluator_version_actual=str((inputs_obj or {}).get("evaluator_version") or ""),
+    )
+
     if not _has_output_extension(inputs_obj, "error_output_parity_v2_0a"):
         if _has_output_extension(inputs_obj, "value_functions_enforced_v0_1"):
             out["value_functions_enforced"] = False
+            out.setdefault("value_functions_enforcement_reason", str(value_fn_reason))
         return out
 
     out.setdefault("metric_evaluations", {})
@@ -310,6 +331,7 @@ def _complete_di_error_output_contract_parity(
     out.setdefault("template_dependency_graph", None)
     if _has_output_extension(inputs_obj, "value_functions_enforced_v0_1"):
         out.setdefault("value_functions_enforced", False)
+        out.setdefault("value_functions_enforcement_reason", str(value_fn_reason))
     if not _policy_supports_v0_4_extensions(pol):
         # Keep v0.3 surfaces aligned for new v0.3 snapshots too: the parity helper is enabled
         # for all new snapshots, but v0.4-only extension surfaces remain gated by policy version.

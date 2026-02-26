@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from psi.core.di.policy import canonical_package_json, sha256_hex_of_canonical_json
 
@@ -65,6 +66,85 @@ def load_experiment_catalog_v0_1() -> LoadedCatalog:
     """Load the canonical experiment catalog from the core catalogs directory."""
     cat_path = Path(__file__).resolve().parent / "catalogs" / "experiment_catalog_v0_1.json"
     return load_catalog(cat_path)
+
+
+def _validate_experiment_catalog(raw: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError("experiment catalog JSON must be an object")
+    exps = raw.get("experiments")
+    if not isinstance(exps, list):
+        raise ValueError("experiment catalog experiments must be a list")
+    seen_keys: set[str] = set()
+    out_exps: List[Dict[str, Any]] = []
+    for i, e in enumerate(exps):
+        if not isinstance(e, dict):
+            raise ValueError(f"experiment catalog experiments[{i}] must be an object")
+        ek = str(e.get("experiment_key") or "").strip()
+        if not ek:
+            raise ValueError(f"experiment catalog experiments[{i}].experiment_key must be non-empty")
+        if ek in seen_keys:
+            raise ValueError(f"experiment catalog duplicate experiment_key: {ek}")
+        seen_keys.add(ek)
+        out_e = dict(e)
+        rr = e.get("resolves_risk_flags")
+        if rr is None:
+            out_e["resolves_risk_flags"] = []
+        else:
+            if not isinstance(rr, list):
+                raise ValueError(f"experiment catalog experiments[{i}].resolves_risk_flags must be a list")
+            rr_items = [str(x).strip() for x in rr if str(x).strip()]
+            if len(rr_items) != len(set(rr_items)):
+                raise ValueError(f"experiment catalog experiments[{i}].resolves_risk_flags contains duplicates")
+            out_e["resolves_risk_flags"] = sorted(rr_items)
+        out_exps.append(out_e)
+    out = dict(raw)
+    out["experiments"] = out_exps
+    return out
+
+
+def load_experiment_catalog(path: Path) -> LoadedCatalog:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    validated = _validate_experiment_catalog(raw)
+    canon = canonical_package_json(validated)
+    h = sha256_hex_of_canonical_json(validated)
+    return LoadedCatalog(catalog=validated, catalog_hash=h, canonical_json=canon, source_name=path.name)
+
+
+def load_experiment_catalog_v0_2() -> LoadedCatalog:
+    cat_path = Path(__file__).resolve().parent / "catalogs" / "experiment_catalog_v0_2.json"
+    return load_experiment_catalog(cat_path)
+
+
+def load_experiment_catalog_latest() -> LoadedCatalog:
+    cat_dir = Path(__file__).resolve().parent / "catalogs"
+    patt = re.compile(r"^experiment_catalog_v(\d+)_(\d+)\.json$")
+    candidates: list[tuple[int, int, Path]] = []
+    for p in sorted(cat_dir.glob("experiment_catalog_v*_*.json")):
+        m = patt.match(p.name)
+        if not m:
+            continue
+        candidates.append((int(m.group(1)), int(m.group(2)), p))
+    if not candidates:
+        raise FileNotFoundError("No experiment_catalog_v*_*.json files found")
+    _, _, latest_path = sorted(candidates, key=lambda t: (t[0], t[1], t[2].name))[-1]
+    return load_experiment_catalog(latest_path)
+
+
+def build_experiment_risk_flag_index(*, catalog: Dict[str, Any]) -> Dict[str, List[str]]:
+    exps = catalog.get("experiments") if isinstance(catalog, dict) else None
+    if not isinstance(exps, list):
+        return {}
+    tmp: Dict[str, set[str]] = {}
+    for e in exps:
+        if not isinstance(e, dict):
+            continue
+        ek = str(e.get("experiment_key") or "").strip()
+        if not ek:
+            continue
+        rr = e.get("resolves_risk_flags") if isinstance(e.get("resolves_risk_flags"), list) else []
+        for rf in sorted({str(x).strip() for x in rr if str(x).strip()}):
+            tmp.setdefault(rf, set()).add(ek)
+    return {rf: sorted(list(tmp.get(rf) or set())) for rf in sorted(tmp.keys())}
 
 
 def _validate_progress_policy(raw: Dict[str, Any]) -> Dict[str, Any]:

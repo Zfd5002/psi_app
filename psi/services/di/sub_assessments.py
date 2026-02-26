@@ -29,3 +29,75 @@ def decision_state_from_gate_statuses(
     decision_state = "ready" if required_pass and not (blockers or []) else "not_ready"
     return decision_state, {"required_gate_keys": req, "required_pass": bool(required_pass)}
 
+
+def comparability_qc_coherence_summary(*, comparability: Dict[str, Any] | None) -> Dict[str, int]:
+    """Pure deterministic extraction of comparability QC coherence summary counts."""
+    comp = comparability if isinstance(comparability, dict) else {}
+    summ = comp.get("summary") if isinstance(comp.get("summary"), dict) else {}
+    try:
+        high_ct = int(summ.get("high_severity_count") or 0)
+    except Exception:
+        high_ct = 0
+    try:
+        total_ct = int(summ.get("total_flags") or 0)
+    except Exception:
+        total_ct = 0
+    return {"high_severity_count": int(high_ct), "total_flags": int(total_ct)}
+
+
+def reproducibility_signal_from_soe(
+    *,
+    required_metric_keys: Iterable[str],
+    evidence_summary: list[Dict[str, Any]] | None,
+) -> Dict[str, Any]:
+    """Pure deterministic reproducibility signal from SoE evidence_summary counts."""
+    required_metrics = sorted({str(x).strip() for x in (required_metric_keys or []) if str(x).strip()})
+    summary_map: Dict[str, Dict[str, Any]] = {}
+    if isinstance(evidence_summary, list):
+        for row in evidence_summary:
+            if not isinstance(row, dict):
+                continue
+            mk = str(row.get("metric_key") or "").strip()
+            if not mk or mk in summary_map:
+                continue
+            summary_map[mk] = row
+
+    metrics: List[Dict[str, Any]] = []
+    positive_count = 0
+    for mk in required_metrics:
+        row = summary_map.get(mk) or {}
+        try:
+            total_count = int(row.get("total_count") or 0)
+        except Exception:
+            total_count = 0
+        try:
+            usable_count = int(row.get("usable_count") or 0)
+        except Exception:
+            usable_count = 0
+        is_positive = bool(total_count > 1 and usable_count > 1)
+        if is_positive:
+            positive_count += 1
+        metrics.append(
+            {
+                "metric_key": mk,
+                "total_count": int(total_count),
+                "usable_count": int(usable_count),
+                "reproducibility_positive": is_positive,
+            }
+        )
+
+    required_count = len(required_metrics)
+    if required_count == 0:
+        status = "not_applicable"
+    elif not summary_map:
+        status = "not_available"
+    else:
+        status = "available"
+
+    return {
+        "status": status,
+        "required_metric_count": int(required_count),
+        "positive_required_metric_count": int(positive_count),
+        "all_required_metrics_positive": bool(required_count > 0 and positive_count == required_count),
+        "metrics": metrics,
+    }

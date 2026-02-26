@@ -35,3 +35,31 @@ def qc_status_from_flag(raw: Any) -> str:
     if s in ("quarantined", "quarantine"):
         return "quarantined"
     return "unknown"
+
+
+def value_functions_enforcement_reason(
+    *,
+    applicable: bool,
+    policy_flag_enabled: bool,
+    evaluator_version_expected: str | None,
+    evaluator_version_actual: str | None,
+) -> str:
+    """Deterministic reason string for value-function enforcement state.
+
+    Allowed values:
+    - active
+    - policy_flag_off
+    - evaluator_version_mismatch
+    - not_applicable
+    """
+    if not applicable:
+        return "not_applicable"
+    if not bool(policy_flag_enabled):
+        return "policy_flag_off"
+    ev_expected = str(evaluator_version_expected or "").strip()
+    ev_actual = str(evaluator_version_actual or "").strip()
+    if not ev_expected or not ev_actual:
+        return "not_applicable"
+    if ev_expected != ev_actual:
+        return "evaluator_version_mismatch"
+    return "active"

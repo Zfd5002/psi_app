@@ -38,7 +38,7 @@ from psi.services.di.integrity import (
     compute_evidence_fingerprint,
     compute_snapshot_content_hash,
 )
-from psi.services.di.util import parse_iso, stable_json_dumps
+from psi.services.di.util import parse_iso, stable_json_dumps, value_functions_enforcement_reason
 from psi.services.di.soe import build_soe_v0_2_molecule, build_soe_v0_3_molecule
 from psi.version import PSI_VERSION
 
@@ -88,6 +88,20 @@ def _should_emit_value_functions_enforced(inputs_obj: Dict[str, Any]) -> bool:
     if not isinstance(flags, list):
         return False
     return "value_functions_enforced_v0_1" in [str(x) for x in flags]
+
+
+def _value_functions_enforcement_reason_for_compute(
+    *,
+    template_flag_enabled: bool,
+    evaluator_version_expected: str,
+    evaluator_version_actual: str,
+) -> str:
+    return value_functions_enforcement_reason(
+        applicable=True,
+        policy_flag_enabled=bool(template_flag_enabled),
+        evaluator_version_expected=evaluator_version_expected,
+        evaluator_version_actual=evaluator_version_actual,
+    )
 
 
 def _build_scope_semantics(
@@ -658,6 +672,11 @@ def _compute_di_from_used_by_metric(
     )
     evaluator_version = str(inputs_obj.get("evaluator_version") or expected_eval_version)
     enforce_value_functions = enforce_value_functions_template and evaluator_version == expected_eval_version
+    value_fn_reason = _value_functions_enforcement_reason_for_compute(
+        template_flag_enabled=enforce_value_functions_template,
+        evaluator_version_expected=expected_eval_version,
+        evaluator_version_actual=evaluator_version,
+    )
     templ = evaluate_fn(
         used_by_metric=used_by_metric,
         policy=pol.policy_body,
@@ -843,6 +862,7 @@ def _compute_di_from_used_by_metric(
         out["recommended_experiments"] = recommended_experiments
     if _should_emit_value_functions_enforced(inputs_obj):
         out["value_functions_enforced"] = bool(enforce_value_functions)
+        out["value_functions_enforcement_reason"] = str(value_fn_reason)
 
     emit_context_branch_surface = _policy_supports_context_branch_surface(pol)
     if emit_context_branch_surface:

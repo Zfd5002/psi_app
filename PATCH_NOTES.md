@@ -2036,3 +2036,114 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-25 — v1.2.9w69
+What changed:
+- Added `experiment_catalog_v0_2.json` (additive catalog version) with optional `resolves_risk_flags` support on experiment entries.
+- Added deterministic experiment catalog validation/loader helpers, latest-version selection, and a pure risk-flag index builder (`risk_flag -> experiment_keys`).
+- Added contract smoke checks for v0.2 catalog loading, latest-loader selection, and deterministic risk-flag mapping index generation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalog.py`
+- `psi/core/di/catalogs/experiment_catalog_v0_2.json`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- No DI compute/NBE behavior changes in this patch; changes are catalog/loader infrastructure only.
+- Replay surfaces and snapshot hashes remain unchanged; replay regression gate verifies this.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+## 2026-02-25 — v1.2.9w70
+What changed:
+- Updated NBE experiment suggestion planning to derive risk-flag-triggered suggestions exclusively from experiment catalog data (`resolves_risk_flags`) via the catalog mapping builder.
+- Added experiment catalog v0.2 support in NBE catalog resolution, with deterministic latest-catalog fallback for forward-compatible experiment catalog refs.
+- Added contract smoke assertions that NBE no longer uses a hardcoded risk->experiment map and that risk-flag suggestions remain deterministic.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/nbe.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Ordering remains deterministic (sorted risk flags, tier/cost/key sorting for experiments).
+- Historical replay remains stable because v0.1 experiment catalogs simply provide empty `resolves_risk_flags`, so no extra risk-driven suggestions are invented for old snapshots.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+## 2026-02-25 — v1.2.9w71
+What changed:
+- Added deterministic `value_functions_enforcement_reason` enum support (`active | policy_flag_off | evaluator_version_mismatch | not_applicable`) via a shared helper.
+- Wired `value_functions_enforcement_reason` into DI success outputs and error outputs under the existing output-extension gating used for `value_functions_enforced`.
+- Extended contract smoke to validate helper enum behavior and assert field presence in representative success/error outputs for new snapshots.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/util.py`
+- `psi/services/di/compute.py`
+- `psi/services/di/runner.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Field emission is extension-gated for new snapshots only (same extension gate as `value_functions_enforced`), preserving historical replay surfaces.
+- No policy/schema changes and no weighted or heuristic logic introduced.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+## 2026-02-25 — v1.2.9w72
+What changed:
+- Surfaced `value_functions_enforcement_reason` in the DI snapshot “Run semantics” governance section with a short deterministic explanation for each allowed enum value.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/decisions/_di_snapshot.html`
+
+Determinism/Replay note:
+- UI-only template rendering change; no DI compute/output changes and no snapshot hash impact.
+- Replay stability remains enforced by the replay regression gate.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
+## 2026-02-25 — v1.2.9w73
+What changed:
+- Extracted reusable deterministic sub-assessment helpers for comparability QC coherence summary and reproducibility-from-SoE evidence summary.
+- Updated DI eval shortlisting/tie-break derivation to call the extracted helpers without changing output shape.
+- Extended contract smoke shared-helper coverage to include deterministic checks for the new helpers.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/sub_assessments.py`
+- `psi/services/di/eval.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Refactor-only patch: no behavior or schema changes intended.
+- Replay regression gate is the proof target for unchanged hash-bearing DI outputs.
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`

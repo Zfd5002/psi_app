@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from psi.services.di.sub_assessments import comparability_qc_coherence_summary, reproducibility_signal_from_soe
+
 
 def _severity_rank(sev: str) -> int:
     s = str(sev or "").strip().lower()
@@ -100,56 +102,10 @@ def _derive_reproducibility_signal(*, policy_body: Dict[str, Any], evidence_summ
     - usable_count > 1
     """
 
-    required_metrics = sorted(set(_policy_required_metric_keys(policy_body)))
-    summary_map: Dict[str, Dict[str, Any]] = {}
-    if isinstance(evidence_summary, list):
-        for row in evidence_summary:
-            if not isinstance(row, dict):
-                continue
-            mk = str(row.get("metric_key") or "").strip()
-            if not mk or mk in summary_map:
-                continue
-            summary_map[mk] = row
-
-    metrics: List[Dict[str, Any]] = []
-    positive_count = 0
-    for mk in required_metrics:
-        row = summary_map.get(mk) or {}
-        try:
-            total_count = int(row.get("total_count") or 0)
-        except Exception:
-            total_count = 0
-        try:
-            usable_count = int(row.get("usable_count") or 0)
-        except Exception:
-            usable_count = 0
-        is_positive = bool(total_count > 1 and usable_count > 1)
-        if is_positive:
-            positive_count += 1
-        metrics.append(
-            {
-                "metric_key": mk,
-                "total_count": int(total_count),
-                "usable_count": int(usable_count),
-                "reproducibility_positive": is_positive,
-            }
-        )
-
-    required_count = len(required_metrics)
-    if required_count == 0:
-        status = "not_applicable"
-    elif not summary_map:
-        status = "not_available"
-    else:
-        status = "available"
-
-    return {
-        "status": status,
-        "required_metric_count": int(required_count),
-        "positive_required_metric_count": int(positive_count),
-        "all_required_metrics_positive": bool(required_count > 0 and positive_count == required_count),
-        "metrics": metrics,
-    }
+    return reproducibility_signal_from_soe(
+        required_metric_keys=_policy_required_metric_keys(policy_body),
+        evidence_summary=evidence_summary,
+    )
 
 
 def _gate_results_by_key(gate_results: list[Any]) -> Dict[str, Any]:
@@ -678,10 +634,9 @@ def derive_shortlisting(
             "interpretation_gap": bool(ev.get("interpretation_gap")),
         }
 
-    comp = comparability or {}
-    summ = (comp.get("summary") or {}) if isinstance(comp, dict) else {}
-    qc_high = int(summ.get("high_severity_count") or 0)
-    qc_total = int(summ.get("total_flags") or 0)
+    qc_summary = comparability_qc_coherence_summary(comparability=comparability)
+    qc_high = int(qc_summary.get("high_severity_count") or 0)
+    qc_total = int(qc_summary.get("total_flags") or 0)
 
     purity = {
         "monomer_pct": _eval_for("monomer_pct"),

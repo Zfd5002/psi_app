@@ -7,7 +7,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from psi.core.di.catalog import load_experiment_catalog_v0_1
+from psi.core.di.catalog import (
+    build_experiment_risk_flag_index,
+    load_experiment_catalog_latest,
+    load_experiment_catalog_v0_1,
+    load_experiment_catalog_v0_2,
+)
 
 
 _TIER_ORDER = {"low": 0, "med": 1, "medium": 1, "high": 2}
@@ -26,6 +31,11 @@ def _blocker_key(b: Any) -> str:
 def _load_catalog_for_ref(*, catalog_id: str, catalog_version: str):
     if catalog_id == "experiment_catalog_v0_1" and catalog_version == "v0.1":
         return load_experiment_catalog_v0_1()
+    if catalog_id == "experiment_catalog_v0_2" and catalog_version == "v0.2":
+        return load_experiment_catalog_v0_2()
+    # Deterministic fallback for newer experiment catalog refs in forward-compatible builds.
+    if str(catalog_id or "").startswith("experiment_catalog_v") and str(catalog_version or "").startswith("v"):
+        return load_experiment_catalog_latest()
     return None
 
 
@@ -58,14 +68,6 @@ def _risk_flag_key(r: Any) -> str:
     return ""
 
 
-# Deterministic, policy-visible NBE extension (w61): risk flags may trigger suggestions.
-# Keyed only by explicit flag names; no scoring or hidden ranking.
-_RISK_FLAG_TO_EXPERIMENT_KEYS: Dict[str, List[str]] = {
-    "aggregated_purity_interpretation_gap": ["run_sec_hplc", "repeat_assay_or_review_qc"],
-    "interpretation_gap": ["run_functional_assay", "run_sec_hplc"],
-}
-
-
 def build_experiment_suggestions(
     *,
     blockers: List[Any],
@@ -93,6 +95,7 @@ def build_experiment_suggestions(
         if ek:
             exp_by_key[ek] = e
             metrics_by_exp[ek] = _metric_keys_from_experiment(e)
+    risk_flag_to_exp_keys = build_experiment_risk_flag_index(catalog=(cat.catalog if isinstance(cat.catalog, dict) else {}))
 
     suggestions: Dict[str, List[str]] = {}
     recommended_map: Dict[str, Dict[str, Any]] = {}
@@ -170,7 +173,7 @@ def build_experiment_suggestions(
                 entry["metric_keys"] = sorted(list(set((entry.get("metric_keys") or []) + (metrics_by_exp.get(ek) or []))))
 
     for rf in sorted({_risk_flag_key(r) for r in (risk_flags or []) if _risk_flag_key(r)}):
-        mapped_keys = [str(x).strip() for x in (_RISK_FLAG_TO_EXPERIMENT_KEYS.get(rf) or []) if str(x).strip()]
+        mapped_keys = [str(x).strip() for x in (risk_flag_to_exp_keys.get(rf) or []) if str(x).strip()]
         if not mapped_keys:
             continue
         matches = [exp_by_key[ek] for ek in mapped_keys if ek in exp_by_key]
