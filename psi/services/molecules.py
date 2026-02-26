@@ -44,13 +44,13 @@ from psi.core.di.catalog import load_confidence_policy_latest, load_progress_pol
 from psi.core.measurement_schema import measurement_cols
 from psi.services.di.util import heavy_compute_banner_text, is_heavy_compute_enabled
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
-
-
-def _confidence_from_mismatches(mismatches: int, length: int) -> float:
-    if length <= 0:
-        return 0.0
-    mm = max(0, int(mismatches))
-    return max(0.0, min(1.0, 1.0 - (mm / float(length))))
+from psi.services.molecule_viewer import (
+    _confidence_from_mismatches,
+    build_feature_tracks,
+    build_numbering_maps,
+    build_viewer_v2_components,
+    domain_instances_by_component,
+)
 
 
 def _pack_segments(segments: list[dict]) -> list[list[dict]]:
@@ -314,67 +314,12 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     )
 
     # --- UI feature tracks (Domains + reference matches, incremental) ---
-    di_by_component: dict[int, list[DomainInstance]] = {}
-    for di in domain_instances:
-        di_by_component.setdefault(int(di.component_id), []).append(di)
-
-    feature_tracks = []
-    for c in components:
-        seq = c.fasta or ""
-        lanes = []
-
-        # Lane: extracted domains (DomainInstance)
-        dom_features = []
-        for di in di_by_component.get(int(c.id), []):
-            dom_features.append(
-                {
-                    "id": f"di:{di.id}",
-                    "name": di.domain_type,
-                    "feature_type": "domain_instance",
-                    "start_idx": int(di.start_idx),
-                    "end_idx": int(di.end_idx),
-                    "source": di.source,
-                    "status": di.status,
-                    "method": di.method,
-                    "tool_name": di.tool_name,
-                    "tool_version": di.tool_version,
-                    "meta": {"error": di.error} if di.error else {},
-                }
-            )
-        if dom_features:
-            lanes.append({"lane_name": "Domains", "features": dom_features})
-
-        # Lane: PD-L1 approximate match
-        ref_features = []
-        for rf in detect_pdl1_features(seq=seq, allowed_mismatches=int(pdl1_allowed_mismatches or 0)):
-            ref_features.append(
-                {
-                    "id": f"ref:{c.id}:{rf.feature_type}:{rf.start_idx}:{rf.end_idx}:{rf.name}",
-                    "name": rf.name,
-                    "feature_type": rf.feature_type,
-                    "start_idx": int(rf.start_idx),
-                    "end_idx": int(rf.end_idx),
-                    "source": "computed",
-                    "status": "success",
-                    "method": rf.method,
-                    "tool_name": rf.tool_name,
-                    "tool_version": rf.tool_version,
-                    "parent_id": rf.parent_id,
-                    "meta": rf.meta or {},
-                }
-            )
-        if ref_features:
-            lanes.append({"lane_name": "Reference matches", "features": ref_features})
-
-        feature_tracks.append(
-            {
-                "component_id": int(c.id),
-                "role": c.role,
-                "sequence": seq,
-                "length": len(seq),
-                "lanes": lanes,
-            }
-        )
+    di_by_component = domain_instances_by_component(domain_instances=domain_instances)
+    feature_tracks = build_feature_tracks(
+        components=components,
+        di_by_component=di_by_component,
+        pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
+    )
 
     # Latest run logs (for troubleshooting)
     run_events = []
@@ -389,244 +334,17 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     # Manual numbering cache (default scheme kabat for display)
     numbering_payload = get_numbering_artifacts_for_molecule(db, molecule_id=molecule_id, scheme="kabat")
 
-    # Normalized numbering maps for UI (Viewer v2 lane + wrapped "Numbering map")
-    # Canonical form: per domain instance -> labels_by_raw_index + mapping back to component raw indices.
-    numbering_maps = []
-    for c in components:
-        comp_id = int(c.id)
-        comp_seq = c.fasta or ""
-        for di in di_by_component.get(comp_id, []):
-            if di.domain_type not in ["VH", "VL"]:
-                continue
-            start = int(di.start_idx)
-            end = int(di.end_idx)
-            dom_seq = comp_seq[start:end]
-            payload = numbering_payload.get(di.domain_type) if isinstance(numbering_payload, dict) else None
-            labels = payload.get("labels_by_raw_index") if isinstance(payload, dict) and payload else None
-            numbering_maps.append(
-                {
-                    "component_id": comp_id,
-                    "component_role": c.role,
-                    "domain_type": di.domain_type,
-                    "start_idx": start,
-                    "end_idx": end,
-                    "sequence": dom_seq,
-                    "scheme": (payload.get("scheme") if isinstance(payload, dict) else None) or "kabat",
-                    "tool_name": "abnumber",
-                    "tool_version": "",
-                    "cache_state": "success" if labels else ("pending" if numbering_payload.get("pending") else "missing"),
-                    "labels_by_raw_index": labels or [],
-                    "cdrs": (payload.get("cdrs") if isinstance(payload, dict) else None) or {},
-                    "warnings": (payload.get("warnings") if isinstance(payload, dict) else None) or [],
-                }
-            )
-
-    # --- Viewer v2 payload (text-first + aligned numbering + grouped features) ---
-    viewer_v2_components = []
-    for t in feature_tracks:
-        length = int(t["length"])
-        seq = t["sequence"]
-        comp_id = int(t["component_id"])
-
-        # Raw index labels (1-based, per residue)
-        raw_labels = [str(i + 1) for i in range(length)]
-
-        # Antibody numbering labels (only within VH/VL spans when available)
-        ab_labels = ["" for _ in range(length)]
-        for di in di_by_component.get(comp_id, []):
-            if di.domain_type not in ["VH", "VL"]:
-                continue
-            payload = numbering_payload.get(di.domain_type)
-            if not payload:
-                continue
-            labels = payload.get("labels_by_raw_index") if isinstance(payload, dict) else None
-            if not labels:
-                continue
-            start = int(di.start_idx)
-            for i, lab in enumerate(labels):
-                pos = start + i
-                if 0 <= pos < length and lab:
-                    ab_labels[pos] = str(lab)
-
-        has_ab_numbering = any(bool(x) for x in ab_labels)
-
-        # Build unified features[] (multi-span ready)
-        # NOTE: This payload is schema-free; DomainInstance remains the only user-editable
-        # persisted label mechanism.
-        features = []
-
-        # Always-present: full sequence feature
-        features.append(
-            {
-                "id": f"whole:{comp_id}",
-                "name": "Full sequence",
-                "group": "Sequence",
-                "kind": "whole",
-                "feature_type": "whole",
-                "spans": [{"start": 0, "end": length}],
-                "confidence": 1.0,
-                "source": "always",
-                "status": "success",
-                "method": "identity",
-                "tool_name": "",
-                "tool_version": "",
-                "meta": {},
-                "parent_id": None,
-            }
-        )
-
-        # Domains (user-editable spans)
-        for di in di_by_component.get(comp_id, []):
-            features.append(
-                {
-                    "id": f"di:{di.id}",
-                    "name": di.domain_type,
-                    "group": "Recognized regions",
-                    "kind": "domain",
-                    "feature_type": "domain",
-                    "spans": [{"start": int(di.start_idx), "end": int(di.end_idx)}],
-                    "confidence": 1.0,
-                    "source": di.source,
-                    "status": di.status,
-                    "method": di.method,
-                    "tool_name": di.tool_name,
-                    "tool_version": di.tool_version,
-                    "meta": {"error": di.error} if di.error else {},
-                    "parent_id": None,
-                }
-            )
-
-        # Fc anchoring (FAST, reference-anchored). Only emits when very confident.
-        fc = detect_fc_region(seq)
-        if fc:
-            features.append(
-                {
-                    "id": f"fc:{comp_id}:{fc.start}:{fc.end}",
-                    "name": fc.name,
-                    "group": "Recognized regions",
-                    "kind": fc.kind,
-                    "feature_type": "region",
-                    "spans": [{"start": int(fc.start), "end": int(fc.end)}],
-                    "confidence": float(fc.confidence),
-                    "source": fc.source,
-                    "status": "success",
-                    "method": fc.method,
-                    "tool_name": fc.tool_name,
-                    "tool_version": fc.tool_version,
-                    "meta": fc.meta or {},
-                    "parent_id": None,
-                }
-            )
-
-        # Reference matches (PD-L1 only for now)
-        for rf in detect_pdl1_features(seq=seq, allowed_mismatches=int(pdl1_allowed_mismatches or 0)):
-            if rf.feature_type == "reference_match":
-                mm = int(rf.meta.get("mismatches_total", 0))
-                ln = int(rf.meta.get("reference_length", max(1, rf.end_idx - rf.start_idx)))
-                conf = _confidence_from_mismatches(mm, ln)
-            else:
-                mm = int(rf.meta.get("mismatches", 0))
-                ln = max(1, int(rf.end_idx - rf.start_idx))
-                conf = _confidence_from_mismatches(mm, ln)
-            features.append(
-                {
-                    "id": f"ref:{comp_id}:{rf.feature_type}:{rf.start_idx}:{rf.end_idx}:{rf.name}",
-                    "name": rf.name,
-                    "group": "Recognized regions",
-                    "kind": "reference",
-                    "feature_type": rf.feature_type,
-                    "spans": [{"start": int(rf.start_idx), "end": int(rf.end_idx)}],
-                    "confidence": conf,
-                    "source": "computed",
-                    "status": "success",
-                    "method": rf.method,
-                    "tool_name": rf.tool_name,
-                    "tool_version": rf.tool_version,
-                    "parent_id": rf.parent_id,
-                    "meta": rf.meta or {},
-                }
-            )
-
-        # Linkers / junctions (heuristics; conservative)
-        for lf in dedupe_features(detect_linker_spans(seq)):
-            features.append(
-                {
-                    "id": f"linker:{comp_id}:{lf.start}:{lf.end}",
-                    "name": lf.name,
-                    "group": "Linkers / junctions",
-                    "kind": lf.kind,
-                    "feature_type": "linker",
-                    "spans": [{"start": int(lf.start), "end": int(lf.end)}],
-                    "confidence": float(lf.confidence),
-                    "source": lf.source,
-                    "status": "success",
-                    "method": lf.method,
-                    "tool_name": lf.tool_name,
-                    "tool_version": lf.tool_version,
-                    "meta": lf.meta or {},
-                    "parent_id": None,
-                }
-            )
-
-        # Motifs / liabilities (FAST)
-        for hit in liability_sites(seq):
-            features.append(
-                {
-                    "id": f"motif:{comp_id}:{hit.get('type')}:{hit.get('start')}:{hit.get('end')}",
-                    "name": hit.get("type", "motif"),
-                    "group": "Motifs / liabilities",
-                    "kind": "motif",
-                    "feature_type": "motif",
-                    "spans": [{"start": int(hit.get("start", 0)), "end": int(hit.get("end", 0))}],
-                    "confidence": 1.0,
-                    "source": "computed",
-                    "status": "success",
-                    "method": "liability_sites",
-                    "tool_name": "psi_biochem",
-                    "tool_version": "v1",
-                    "meta": {k: v for k, v in hit.items() if k not in ("start", "end")},
-                    "parent_id": None,
-                }
-            )
-
-        # Stable, grouped presentation for the Annotations panel.
-        order = [
-            "Sequence",
-            "Recognized regions",
-            "Linkers / junctions",
-            "Engineering features",
-            "Motifs / liabilities",
-            "Diagnostics",
-        ]
-        grouped: dict[str, list[dict]] = {}
-        for feat in features:
-            grouped.setdefault(feat.get("group") or "Other", []).append(feat)
-        annotations_groups = []
-        for gname in order:
-            items = grouped.get(gname, [])
-            if not items:
-                continue
-            # Sort within group by first span start, then name
-            def _key(f):
-                sp = (f.get("spans") or [{}])[0]
-                return (int(sp.get("start", 0)), int(sp.get("end", 0)), str(f.get("name") or ""))
-
-            items_sorted = sorted(items, key=_key)
-            annotations_groups.append({"group": gname, "items": items_sorted})
-
-        viewer_v2_components.append(
-            {
-                "component_id": comp_id,
-                "role": t["role"],
-                "sequence": seq,
-                "length": length,
-                "raw_labels": raw_labels,
-                "ab_labels": ab_labels,
-                "has_ab_numbering": has_ab_numbering,
-                "features": features,
-                "annotations_groups": annotations_groups,
-            }
-        )
+    numbering_maps = build_numbering_maps(
+        components=components,
+        di_by_component=di_by_component,
+        numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
+    )
+    viewer_v2_components = build_viewer_v2_components(
+        feature_tracks=feature_tracks,
+        di_by_component=di_by_component,
+        numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
+        pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
+    )
 
     return {
         "molecule": m,
@@ -659,6 +377,363 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "immuno_values_parsed": immuno_parsed,
         "immuno_values_by_key": immuno_by_key,
     }
+
+
+def _background_compute(molecule_id: int, trigger_reason: str, db_path: str | None = None) -> None:
+    """Run computed properties in a fresh session (for BackgroundTasks)."""
+    import os
+
+    # Avoid import-time SessionLocal for background tasks to preserve db_path correctness in tests/tools.
+    with get_db(db_path, ensure=False) as db:
+        m = db.get(Molecule, molecule_id)
+        heavy_global = os.getenv("PSI_ENABLE_HEAVY_COMPUTE", "").strip() == "1"
+        tier = "FAST+HEAVY" if heavy_global and m and int(m.heavy_compute_enabled or 0) == 1 else "FAST"
+        run_computed_properties(db, molecule_id=molecule_id, trigger_reason=trigger_reason, compute_tier=tier)
+
+
+def _background_domain_extraction(molecule_id: int, db_path: str | None = None) -> None:
+    # Avoid import-time SessionLocal for background tasks to preserve db_path correctness in tests/tools.
+    with get_db(db_path, ensure=False) as db:
+        extract_domains_for_molecule(db, molecule_id)
+
+
+def _resolve_db_path(db: Session, db_path: str | None) -> str | None:
+    if db_path:
+        return db_path
+    try:
+        bind = db.get_bind()
+        url = getattr(bind, "url", None)
+        if url is not None and url.database:
+            return str(url.database)
+    except Exception:
+        return None
+    return None
+
+
+def _next_molecule_primary_id(db: Session) -> str:
+    """Allocate next TCBXXX id (best-effort)."""
+    pat = re.compile(r"^TCB(\d{3})$")
+    max_n = 0
+    rows = db.query(Molecule.primary_id).all()
+    for (pid,) in rows:
+        if not pid:
+            continue
+        mm = pat.match(str(pid).strip())
+        if mm:
+            max_n = max(max_n, int(mm.group(1)))
+    return f"TCB{max_n + 1:03d}"
+
+
+def create_molecule(
+    db: Session,
+    *,
+    program_id: int,
+    primary_id: str,
+    title: str = "",
+    description: str = "",  # legacy form field; treated as user override
+    sequences: str = "",  # legacy/unstructured only
+    molecule_format: str | None = None,
+    description_user: str | None = None,
+    heavy_compute_enabled: int = 0,
+    components: dict[str, str] | None = None,
+    background_tasks=None,
+    db_path: str | None = None,
+) -> Molecule:
+    """Create a molecule.
+
+    v1.2.0 semantics:
+    - Molecule identity is the canonical HC/LC role->CHAIN mapping (composition_sha256)
+    - Chains are globally de-duped via SequenceEntity (sha256)
+    - Duplicate molecule compositions are blocked
+    """
+    # Backward compatibility: keep Molecule.description populated with user description.
+    desc_user = (description_user if description_user is not None else description).strip() or None
+
+    pid = (primary_id or "").strip()
+    auto_primary = not pid
+    max_attempts = 3 if auto_primary else 1
+
+    for attempt in range(max_attempts):
+        if not pid:
+            pid = _next_molecule_primary_id(db)
+
+        try:
+            # Create molecule row early (but don't commit until collision check passes)
+            m = Molecule(
+                program_id=program_id,
+                primary_id=pid,
+                title=title.strip() or None,
+                description=desc_user,
+                description_user=desc_user,
+                molecule_format=(molecule_format or None),
+                heavy_compute_enabled=int(heavy_compute_enabled or 0),
+                sequences=None,
+                created_at=now_utc(),
+                updated_at=now_utc(),
+            )
+
+            # Structured components are the v1.2.0 source of truth. Legacy `sequences` remains populated.
+            role_order = ["HC1", "HC2", "LC1", "LC2"]
+            role_to_seq: dict[str, str] = {}
+
+            if components:
+                # Only accept v1.2.0 user roles; ignore others (legacy remains readable).
+                for r in role_order:
+                    if r in components:
+                        role_to_seq[r] = components.get(r, "") or ""
+
+                # Default infer: HC2=HC1, LC2=LC1 when blank.
+                hc1 = normalize_aa_sequence(role_to_seq.get("HC1", ""))
+                lc1 = normalize_aa_sequence(role_to_seq.get("LC1", ""))
+                if not hc1 or not lc1:
+                    raise ValueError("HC1 and LC1 are required for structured molecule creation")
+
+                hc2 = normalize_aa_sequence(role_to_seq.get("HC2", "")) or hc1
+                lc2 = normalize_aa_sequence(role_to_seq.get("LC2", "")) or lc1
+
+                role_to_seq = {"HC1": hc1, "HC2": hc2, "LC1": lc1, "LC2": lc2}
+
+                # Chain registry + composition hash
+                chains_by_role: dict[str, str | None] = {}
+                ents_by_role = {}
+                for role, seq in role_to_seq.items():
+                    ent = get_or_create_chain(db, seq)
+                    ents_by_role[role] = ent
+                    chains_by_role[role] = getattr(ent, "chain_id", None)
+
+                comp_hash = composition_sha256(chains_by_role)
+                # Collision check (block creation)
+                existing = db.query(Molecule).filter(Molecule.composition_sha256 == comp_hash).first()
+                if existing is not None:
+                    raise DuplicateMoleculeError(existing_molecule_id=existing.id, existing_primary_id=existing.primary_id)
+
+                m.composition_sha256 = comp_hash
+
+                # Populate legacy multi-FASTA
+                m.sequences = to_fasta([(r, role_to_seq[r]) for r in role_order]).strip() or None
+
+                db.add(m)
+                db.flush()  # assign id
+
+                # Create components as join records
+                for role in role_order:
+                    seq = role_to_seq[role]
+                    ent = ents_by_role[role]
+                    c = MoleculeComponent(
+                        molecule_id=m.id,
+                        role=role,
+                        fasta=seq,
+                        sha256=sha256_text(seq),
+                        sequence_entity_id=ent.id,
+                        created_at=now_utc(),
+                        updated_at=now_utc(),
+                    )
+                    db.add(c)
+
+                db.commit()
+                db.refresh(m)
+            else:
+                # Legacy/unstructured path (no collision semantics)
+                m.sequences = sequences.strip() or None
+                db.add(m)
+                db.commit()
+                db.refresh(m)
+
+            record_audit(db, entity_type="Molecule", entity_id=m.id, action="create", before=None, after=model_to_dict(m))
+            db.commit()
+
+            # Auto-run computed properties
+            if background_tasks is not None:
+                background_db_path = _resolve_db_path(db, db_path)
+                background_tasks.add_task(_background_compute, m.id, "molecule_created", background_db_path)
+                background_tasks.add_task(_background_domain_extraction, m.id, background_db_path)
+            return m
+        except IntegrityError as exc:
+            db.rollback()
+            db.expunge_all()
+            if attempt == max_attempts - 1:
+                if auto_primary:
+                    raise _id_allocation_retry_exhausted(
+                        "molecule primary ID",
+                        max_attempts,
+                        exc,
+                        last_candidate=pid,
+                    ) from exc
+                raise
+            pid = ""
+            continue
+
+
+def update_molecule(
+    db: Session,
+    *,
+    molecule_id: int,
+    program_id: int,
+    primary_id: str,
+    title: str = "",
+    description: str = "",  # legacy field; treated as user override
+    sequences: str = "",  # legacy/unstructured only
+    molecule_format: str | None = None,
+    description_user: str | None = None,
+    heavy_compute_enabled: int = 0,
+    components: dict[str, str] | None = None,
+    background_tasks=None,
+    db_path: str | None = None,
+    reason: str = "",
+) -> Molecule:
+    m = get_molecule(db, molecule_id)
+    if not m:
+        raise KeyError("Molecule not found")
+    before = model_to_dict(m)
+    m.program_id = program_id
+    m.primary_id = primary_id.strip()
+    m.title = title.strip() or None
+    desc_user = (description_user if description_user is not None else description).strip() or None
+    m.description = desc_user
+    m.description_user = desc_user
+    m.molecule_format = (molecule_format or None)
+    m.heavy_compute_enabled = int(heavy_compute_enabled or 0)
+
+    sequences_changed = False
+
+    if components is not None:
+        # v1.2.0: only accept HC/LC user roles for structured edits.
+        role_order = ["HC1", "HC2", "LC1", "LC2"]
+
+        # Collect requested structured roles from the incoming payload.
+        requested = {r: (components.get(r, "") or "") for r in role_order if r in components}
+
+        # If the form submitted any of the structured roles, treat this as a structured edit.
+        if any(r in requested for r in ["HC1", "LC1", "HC2", "LC2"]):
+            hc1 = normalize_aa_sequence(requested.get("HC1", ""))
+            lc1 = normalize_aa_sequence(requested.get("LC1", ""))
+            if not hc1 or not lc1:
+                raise ValueError("HC1 and LC1 are required for structured molecule editing")
+
+            hc2 = normalize_aa_sequence(requested.get("HC2", "")) or hc1
+            lc2 = normalize_aa_sequence(requested.get("LC2", "")) or lc1
+
+            role_to_seq = {"HC1": hc1, "HC2": hc2, "LC1": lc1, "LC2": lc2}
+
+            # Chain registry + composition hash
+            chains_by_role: dict[str, str | None] = {}
+            ents_by_role = {}
+            for role, seq in role_to_seq.items():
+                ent = get_or_create_chain(db, seq)
+                ents_by_role[role] = ent
+                chains_by_role[role] = getattr(ent, "chain_id", None)
+
+            comp_hash = composition_sha256(chains_by_role)
+            existing = db.query(Molecule).filter(Molecule.composition_sha256 == comp_hash, Molecule.id != m.id).first()
+            if existing is not None:
+                raise DuplicateMoleculeError(existing_molecule_id=existing.id, existing_primary_id=existing.primary_id)
+
+            m.composition_sha256 = comp_hash
+
+            # Update components (role-unique)
+            existing_components = {c.role: c for c in db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == m.id).all()}
+            for role in role_order:
+                seq = role_to_seq[role]
+                ent = ents_by_role[role]
+                if role in existing_components:
+                    c = existing_components[role]
+                    if c.fasta != seq or c.sequence_entity_id != ent.id:
+                        c.fasta = seq
+                        c.sha256 = sha256_text(seq)
+                        c.sequence_entity_id = ent.id
+                        c.updated_at = now_utc()
+                        db.add(c)
+                        sequences_changed = True
+                else:
+                    db.add(
+                        MoleculeComponent(
+                            molecule_id=m.id,
+                            role=role,
+                            fasta=seq,
+                            sha256=sha256_text(seq),
+                            sequence_entity_id=ent.id,
+                            created_at=now_utc(),
+                            updated_at=now_utc(),
+                        )
+                    )
+                    sequences_changed = True
+
+            # Keep legacy FASTA blob populated
+            m.sequences = to_fasta([(r, role_to_seq[r]) for r in role_order]).strip() or None
+            sequences_changed = True
+        else:
+            # Additive legacy behavior for non-structured roles (kept for backwards compatibility)
+            existing = {c.role: c for c in db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == m.id).all()}
+            for role, fasta in components.items():
+                fasta_n = normalize_aa_sequence(fasta)
+                if not fasta_n:
+                    if role in existing:
+                        db.delete(existing[role])
+                        sequences_changed = True
+                    continue
+                if role in existing:
+                    if existing[role].fasta != fasta_n:
+                        existing[role].fasta = fasta_n
+                        existing[role].sha256 = sha256_text(fasta_n)
+                        existing[role].updated_at = now_utc()
+                        db.add(existing[role])
+                        sequences_changed = True
+                else:
+                    db.add(
+                        MoleculeComponent(
+                            molecule_id=m.id,
+                            role=role,
+                            fasta=fasta_n,
+                            sha256=sha256_text(fasta_n),
+                            created_at=now_utc(),
+                            updated_at=now_utc(),
+                        )
+                    )
+                    sequences_changed = True
+
+        # Legacy/unstructured edit
+        new_sequences = sequences.strip() or None
+        if (m.sequences or "") != (new_sequences or ""):
+            sequences_changed = True
+        m.sequences = new_sequences
+
+    m.updated_at = now_utc()
+    db.add(m)
+    db.commit()
+    record_audit(
+        db,
+        entity_type="Molecule",
+        entity_id=m.id,
+        action="update",
+        before=before,
+        after=model_to_dict(m),
+        reason=reason or None,
+    )
+    db.commit()
+
+    if sequences_changed and background_tasks is not None:
+        background_db_path = _resolve_db_path(db, db_path)
+        background_tasks.add_task(_background_compute, m.id, "molecule_sequences_changed", background_db_path)
+        background_tasks.add_task(_background_domain_extraction, m.id, background_db_path)
+    return m
+
+
+
+from psi.services.molecule_experimental import (
+    _batch_sort_key,
+    _best_measurement,
+    _collect_record_ids_from_panels,
+    _fetch_measurements_for_record,
+    _fmt_num,
+    _fmt_percent,
+    _headline_items_for_record,
+    _latest_record_id,
+    _match_name,
+    _reflect_measurement_cols,
+    _run_qc_summary_for_records,
+    get_molecule_batch_ui_context,
+    get_molecule_experimental_context,
+)
 
 
 def _background_compute(molecule_id: int, trigger_reason: str, db_path: str | None = None) -> None:

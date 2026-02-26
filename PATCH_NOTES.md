@@ -1850,6 +1850,527 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-26 — v1.2.9x10
+What changed:
+- Added `psi/tools/ci_gate_suite.py` (optional, stdlib-only) to run the canonical 4 required gates in the same order used for operator patching.
+- The tool streams command output and prints a stable summary JSON (`ci_gate_suite_v1`) with per-command return codes.
+- Returns non-zero on the first failing gate.
+
+Why:
+- Provide a single deterministic command entry point for CI/humans without changing or replacing the existing gate tools.
+
+Determinism/Replay note:
+- Tooling-only change; no DI compute/output/hash changes.
+- Replay regression remains the proof target.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/ci_gate_suite.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x11
+What changed:
+- Added `psi/core/di/policy_registry_manifest.json` (validation-only registry of policy filename, version, and package hash).
+- Added contract smoke validation to verify the registry manifest entries are filename-sorted and match current package hashes deterministically.
+
+Why:
+- Introduce a committed policy package hash index for governance validation without changing runtime policy selection behavior.
+
+Determinism/Replay note:
+- Validation-only change; no DI runtime policy mutation or hash recomputation changes.
+- Manifest is generated from deterministic file ordering and canonical package hashing via `load_policy`.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/policy_registry_manifest.json`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x12
+What changed:
+- Added strict exact versioned policy path resolver in `psi/core/di/policy.py` (`resolve_versioned_policy_path`).
+- Updated replay policy resolution (`psi/services/di/verify.py::_resolve_policy_from_repo`) to use exact versioned filenames instead of directory-scan fallback for `policy_id + policy_version`.
+- Added contract smoke assertion for strict resolver mapping (`advance_to_in_vivo + v0.5 -> advance_to_in_vivo_v0_5.json`).
+
+Why:
+- Tighten policy loading semantics to deterministic exact versioned filenames and remove implicit fallback behavior.
+
+Determinism/Replay note:
+- Resolution is stricter but deterministic and output-preserving with current versioned policy files present.
+- Replay remains the proof target under strict skip-fatal enforcement.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/policy.py`
+- `psi/services/di/verify.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x13
+What changed:
+- Hardened `psi.tools.di_replay_regression` with a pre-check that each replayed snapshot’s stored `policy_package_hash` exists in `psi/core/di/policy_registry_manifest.json`.
+- Replay now fails explicitly on missing/unknown snapshot policy package hashes before anchored verification.
+- Added contract smoke coverage ensuring the registry manifest contains the forward-default policy package hashes (`advance_to_in_vivo_v0_5`, `ready_for_scaleup_screen_v0_2`).
+
+Why:
+- Add a governance integrity assertion tying replayed snapshots to a committed registry of known policy package hashes.
+
+Determinism/Replay note:
+- Validation-only hardening over stored snapshot metadata; no DI runtime output changes.
+- Replay remains strict (`failed=0`, `skipped=0`) for patch acceptance.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_replay_regression.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x14
+What changed:
+- Added governance diagnostic CLI `psi.tools.policy_hash_audit`:
+  - current policy hashes (from repo files)
+  - snapshot-referenced hashes (read-only DB)
+  - deterministic mismatch report against `policy_registry_manifest.json`
+- Added contract smoke determinism check for the audit report output shape/content on a fixed DB sample.
+
+Why:
+- Provide an operator-facing diagnostic to inspect policy hash state without mutating DB or policy files.
+
+Determinism/Replay note:
+- Read-only diagnostic tooling + validation only; no DI runtime semantics changes.
+- Audit output ordering is explicit and stable.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/policy_hash_audit.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x15
+What changed:
+- Expanded deterministic ordering validation in `psi.tools.di_contract_smoke` for:
+  - risk flag enrichment ordering with `medium`/legacy `moderate` equivalence
+  - policy `blocker_suggestions` mapping key ordering
+  - policy `gate_order` / `required_gate_keys` duplicate-free stability checks
+
+Why:
+- Harden deterministic governance checks without changing runtime DI behavior.
+
+Determinism/Replay note:
+- Validation-only patch; no DI compute/output/hash changes.
+- Replay remains strict and skip-fatal from x10 onward.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x16
+What changed:
+- Added sidecar freeze metadata file `psi/core/di/policy_metadata_freeze.json` to carry immutable-policy warning text without modifying JSON policy bytes.
+- Added contract smoke validation that the sidecar covers the expected legacy snapshot-referenced policy files and carries the freeze notice text.
+
+Why:
+- JSON policy files cannot safely include comments; a sidecar preserves the freeze banner intent without changing policy hashes.
+
+Determinism/Replay note:
+- No policy JSON content changes; legacy policy package hashes remain untouched.
+- Validation-only metadata addition.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/policy_metadata_freeze.json`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x17
+What changed:
+- Added final governance consolidation smoke checks ensuring:
+  - forward policy forks (`advance_to_in_vivo_v0_5.json`, `ready_for_scaleup_screen_v0_2.json`) use `medium`
+  - legacy `moderate` vocabulary does not appear in the forward fork files
+- Final version bump for the x08→x17 governance hardening chain.
+
+Why:
+- Close the chain with explicit deterministic validation of forward severity vocabulary without mutating legacy policy JSON.
+
+Determinism/Replay note:
+- Validation-only patch; no runtime DI behavior changes.
+- Replay remains strict (`failed=0`, `skipped=0`).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x08
+What changed:
+- Added immutable forward policy forks (new files only; no edits to legacy policy JSON):
+  - `psi/core/di/policies/advance_to_in_vivo_v0_5.json`
+  - `psi/core/di/policies/ready_for_scaleup_screen_v0_2.json`
+- Switched DI run-page default policy selection to the new versions (`v0.5` / `v0.2`) in `psi/services/di/web.py`.
+- Added contract smoke lock asserting deterministic latest-policy selection resolves to the new forward forks.
+
+Why:
+- Move forward policy defaults without mutating historical policy packages that may already be snapshot-referenced.
+
+Determinism/Replay note:
+- Legacy policy files were not modified.
+- New policy files are versioned additions only; replay for existing snapshots remains anchored to stored policy hashes.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/web.py`
+- `psi/tools/di_contract_smoke.py`
+- `psi/core/di/policies/advance_to_in_vivo_v0_5.json`
+- `psi/core/di/policies/ready_for_scaleup_screen_v0_2.json`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x09
+What changed:
+- Added committed baseline hash manifest `psi/core/di/policy_immutability_manifest.json` for policy files under `psi/core/di/policies/`.
+- Added stdlib tool `psi/tools/policy_immutability_check.py` to validate policy file contents against the manifest (no rewriting).
+- Added contract smoke invocation to fail gates if policy file content diverges from the committed immutability manifest.
+
+Why:
+- Prevent accidental mutation of snapshot-referenced policy JSON files while preserving deterministic replay integrity.
+
+Determinism/Replay note:
+- Validation-only hardening; no DI runtime semantics or policy loader behavior changes.
+- Manifest hashes are deterministic SHA-256 of file bytes with stable file ordering.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/policy_immutability_manifest.json`
+- `psi/tools/policy_immutability_check.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x10
+What changed:
+- Hardened `psi.tools.di_replay_regression` to exit non-zero when `skipped > 0` (in addition to `failed > 0`).
+- Replay skips are now governance-fatal in CLI automation, not just informational.
+
+Why:
+- Enforce strict replay integrity for patch gating and prevent silent acceptance of unresolved anchored replay policy/hash mismatches.
+
+Determinism/Replay note:
+- Tooling/governance behavior only; no DI runtime compute/output changes.
+- Current patch acceptance requires `matched=5`, `failed=0`, `skipped=0`.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_replay_regression.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x09
+What changed:
+- Updated `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md` to align operator notes with the currently shipped roadmap state through `w114` and the `x01-x08` tooling patches.
+- Documented shipped structural hardening splits (header/sequence/viewer helpers), severity tiers in `policy_body` with fallback, and forward severity vocabulary (`high|medium|low`) with backward compatibility.
+- Added a concise remaining-work status list without changing roadmap intent.
+
+Why:
+- Keep operator-facing implementation notes synchronized with actual shipped deterministic DI behavior and policy-as-data surfaces.
+
+Determinism/Replay note:
+- Docs-only patch; no DI compute/output/hash changes.
+- Replay regression remains the proof target.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x08
+What changed:
+- Added optional stdlib-only tool `psi/tools/code_size_report.py`.
+- The tool prints a deterministic JSON report (stable target ordering) for key module sizes/LOC to help track growth in risk hot-spots.
+- No enforcement behavior is introduced; it is informational only.
+
+Why:
+- Provide a simple deterministic guardrail for code-size drift without changing the required gate suite.
+
+Determinism/Replay note:
+- Tooling-only change; no DI compute/output/hash changes.
+- Replay regression remains the proof target.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/code_size_report.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x07
+What changed:
+- Tightened forward policy severity vocabulary by replacing `moderate` with `medium` in risk severity tiers across shipped DI policy JSONs:
+  - `advance_to_in_vivo_v0_1..v0_4`
+  - `ready_for_scaleup_screen_v0_1`
+- Preserved backward compatibility in `psi/services/di/risk_flags.py` by normalizing legacy `moderate` -> `medium` during policy severity loading.
+- Updated severity sort ranking to treat `medium` and legacy `moderate` equivalently.
+
+Why:
+- Enforce a single forward severity vocabulary (`high|medium|low`) while keeping older snapshots/artifacts readable and deterministically classified.
+
+Determinism/Replay note:
+- Intentional policy-data semantics change for future policy semantics/package hashes where these policy files are used.
+- Runtime compatibility preserves deterministic handling of historical `moderate` values if encountered.
+- Replay regression `failed=0` remains the acceptance criterion.
+- Replay skips observed and allowed: `policy_exact_match_not_found` on snapshots referencing pre-change policy package hashes.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/risk_flags.py`
+- `psi/tools/di_contract_smoke.py`
+- `psi/core/di/policies/advance_to_in_vivo_v0_1.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_2.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_3.json`
+- `psi/core/di/policies/advance_to_in_vivo_v0_4.json`
+- `psi/core/di/policies/ready_for_scaleup_screen_v0_1.json`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x06
+What changed:
+- Added optional stdlib-only regression harness `psi/tools/molecule_viewer_regression.py`.
+- The harness builds minimal dict/namespace fixtures and validates stable viewer helper output shape and ordering expectations.
+- Prints a stable success message (`OK molecule_viewer_regression`) and exits `0` on success.
+
+Why:
+- Add a lightweight deterministic regression check for the newly extracted viewer helper cluster without introducing test/runtime dependencies.
+
+Determinism/Replay note:
+- Tooling-only change; no DI compute/output/hash changes.
+- Replay regression remains the proof target.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/molecule_viewer_regression.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x05
+What changed:
+- Added `psi/services/molecule_viewer.py` and moved the molecule viewer assembly helper cluster out of `psi/services/molecules.py`.
+- Moved (without signature changes):
+  - `_confidence_from_mismatches`
+  - `domain_instances_by_component`
+  - `build_feature_tracks`
+  - `build_numbering_maps`
+  - `build_viewer_v2_components`
+- `molecules.py` now imports/re-exports the viewer helpers and uses them in molecule detail assembly.
+
+Why:
+- Continue reducing `molecules.py` size/risk by isolating a coherent viewer-assembly cluster without changing behavior.
+
+Determinism/Replay note:
+- Structural split only; no intended ordering or output changes.
+- Replay regression is the proof target for unchanged DI/hash-bearing outputs.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/services/molecule_viewer.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x04
+What changed:
+- Extracted the experimental/batch UI context helper cluster from `psi/services/molecules.py` into new module `psi/services/molecule_experimental.py`.
+- Moved (without signature changes):
+  - `get_molecule_experimental_context`
+  - batch/QC/headline helper functions
+  - `get_molecule_batch_ui_context`
+- `molecules.py` now imports/re-exports these helpers as a thin coordinator.
+
+Why:
+- Continue reducing `molecules.py` size/risk by isolating a coherent UI-only helper cluster.
+
+Determinism/Replay note:
+- Structural split only; no intended behavior or ordering changes.
+- Replay regression is the proof target for no DI output drift.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/services/molecule_experimental.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x03
+What changed:
+- Added optional stdlib-only helper `psi/tools/pytest_smoke.py`.
+- Behavior:
+  - runs `pytest -q` via `python -m pytest` when pytest is installed
+  - prints stable `SKIP` message and exits `0` when pytest is unavailable
+
+Why:
+- Provide a convenient test runner entry point without changing the required gate suite or adding runtime dependencies.
+
+Determinism/Replay note:
+- Tooling-only change; no DI compute/output/hash changes.
+- Replay regression remains the required proof target.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/pytest_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x02
+What changed:
+- Added deterministic fixture lock for `decision_output_hash_v2`:
+  - `tests/fixtures/decision_output_minimal_v1.json`
+  - `tests/test_decision_output_hash_v2_lock.py`
+- The test computes the hash via the existing integrity utility and asserts a pinned digest.
+
+Why:
+- Pin a representative semantic decision hash to catch accidental drift in canonical hashing behavior.
+
+Determinism/Replay note:
+- Dev/test-only additions; no runtime DI behavior changes.
+- Replay regression remains the required proof target.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/fixtures/decision_output_minimal_v1.json`
+- `tests/test_decision_output_hash_v2_lock.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9x01
+What changed:
+- Added dev-only test scaffold `requirements-dev.txt` with `pytest` (runtime requirements unchanged).
+- Added `tests/` package and pure-function header confidence tests covering:
+  - `moderate` -> `medium` normalization
+  - `2 medium` concerns => amber scalar
+  - missing assay signals remain neutral (`Not Assessed`)
+
+Why:
+- Close the “no pytest suite” gap with a minimal, DB-free test foothold while preserving runtime dependency purity.
+
+Determinism/Replay note:
+- Dev/test-only additions; no runtime DI behavior changes.
+- Replay regression remains the required proof target.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `requirements-dev.txt`
+- `tests/__init__.py`
+- `tests/test_molecule_header_confidence.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
 ## 2026-02-26 — v1.2.9w114
 What changed:
 - Added `psi/services/molecule_sequences.py` and moved the minimal safe sequence/composition helper cluster out of `molecules.py`:

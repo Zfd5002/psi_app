@@ -1,0 +1,47 @@
+{
+  "entries": [
+    {
+      "filename": "advance_to_in_vivo_v0_1.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "ba362a0bba5824ef57d23e71bb8a3d35a1e79c5d8a28cff5f2acace8980e197d",
+      "policy_version": "v0.1"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_2.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "bc0cdca9fa3828e89e66b2e43926c2e9895b6ba829f7ae677f9e5bd3dad16e14",
+      "policy_version": "v0.2"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_3.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "78e302ff4b9203a30a1be801554cd6071dc7d20ef326cc9944122a55879b5147",
+      "policy_version": "v0.3"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_4.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "9c3408828370f826714617b822ffb958e9182070754451c4a7ce6871c0fe1492",
+      "policy_version": "v0.4"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_5.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "c2f3419e26b2e73f56b81892fcf8919c8311eab133490f49e492009b420f3f4d",
+      "policy_version": "v0.5"
+    },
+    {
+      "filename": "ready_for_scaleup_screen_v0_1.json",
+      "policy_id": "policy.ready_for_scaleup_screen",
+      "policy_package_hash": "e7a59dff859a8e9f3775135cd15242336ca115980941813daeccc84d95196de2",
+      "policy_version": "v0.1"
+    },
+    {
+      "filename": "ready_for_scaleup_screen_v0_2.json",
+      "policy_id": "policy.ready_for_scaleup_screen",
+      "policy_package_hash": "b3af0243fdd8c0702983bae59a65213e4c1eebd8a9f33e3ef27c4286e6fb42cc",
+      "policy_version": "v0.2"
+    }
+  ],
+  "manifest_version": "v0.1"
+}

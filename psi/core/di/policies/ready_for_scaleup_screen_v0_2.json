@@ -1,6 +1,6 @@
 {
   "policy_id": "policy.ready_for_scaleup_screen",
-  "policy_version": "v0.1",
+  "policy_version": "v0.2",
   "policy_name": "ready_for_scaleup_screen",
   "schema_version": "di.policy_package.v0_1",
   "template_key": "ready_for_scaleup_screen.v0_1",
@@ -45,6 +45,11 @@
       "version": "v0.1",
       "date": "2026-02-23",
       "change": "Initial packaged policy for ready_for_scaleup_screen (DI v0.1)."
+    },
+    {
+      "version": "v0.2",
+      "date": "2026-02-26",
+      "change": "Forward policy fork preserving legacy policy immutability; uses medium severity vocabulary in policy metadata."
     }
   ],
   "policy_body": {

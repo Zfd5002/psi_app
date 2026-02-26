@@ -79,9 +79,13 @@ def build_di_run_context(
         selected_scope_type = "batch" if batch_id else ("molecule" if molecule_id else "batch")
     policies = list_di_policies()
     selected_policy = latest_policy_for_decision(dk)
-    # w52: context-aware policy v0.4 is opt-in; keep default UI selection pinned to v0.3.
+    # x08: use immutable forward policy forks as default UI selections.
     if dk == "advance_to_in_vivo":
-        stable_default = next((p for p in policies if p["decision_key"] == dk and p["policy_version"] == "v0.3"), None)
+        stable_default = next((p for p in policies if p["decision_key"] == dk and p["policy_version"] == "v0.5"), None)
+        if stable_default is not None:
+            selected_policy = stable_default
+    if dk == "ready_for_scaleup_screen":
+        stable_default = next((p for p in policies if p["decision_key"] == dk and p["policy_version"] == "v0.2"), None)
         if stable_default is not None:
             selected_policy = stable_default
     selected_policy_path = selected_policy["path"] if selected_policy else ""

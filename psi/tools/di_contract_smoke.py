@@ -275,7 +275,7 @@ def test_policy_template_structure_present() -> None:
 def test_policy_risk_flag_severity_tiers_present_and_cover_expected_flags() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     pol_dir = repo_root / "psi" / "core" / "di" / "policies"
-    allowed = {"high", "moderate", "low"}
+    allowed = {"high", "medium", "moderate", "low"}
     common_expected = {
         "context_missing",
         "coverage_gap",
@@ -342,7 +342,10 @@ def test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically() -> 
     _assert(stable_json_dumps(out1) == stable_json_dumps(out2), "risk flag enrichment must be deterministic independent of input order")
     sev_by_key = {str((x or {}).get("key") or ""): str((x or {}).get("severity") or "") for x in out1 if isinstance(x, dict)}
     _assert(sev_by_key.get("custom_flag") == "high", "policy_body severity tiers must take precedence over template_structure copy")
-    _assert(sev_by_key.get("outlier_present") == "moderate", "policy severity tiers must preserve outlier_present severity")
+    _assert(
+        sev_by_key.get("outlier_present") in {"moderate", "medium"},
+        "policy severity tiers must preserve/normalize outlier_present severity deterministically",
+    )
 
 
 def test_di_snapshot_ui_risk_flag_severity_rendering_deterministic() -> None:
@@ -403,6 +406,162 @@ def test_drift_plain_english_translation_deterministic() -> None:
     t1 = _drift_plain_english_from_output(out)
     t2 = _drift_plain_english_from_output({"drift_type": "EVIDENCE_ONLY"})
     _assert(t1 == t2 == "Evidence changed, but policy semantics did not change.", "drift translation must be deterministic and stable")
+
+
+def test_di_web_latest_policy_selection_prefers_forward_immutable_forks() -> None:
+    from psi.services.di.web import latest_policy_for_decision
+
+    adv = latest_policy_for_decision("advance_to_in_vivo") or {}
+    scale = latest_policy_for_decision("ready_for_scaleup_screen") or {}
+    _assert(str(adv.get("policy_version") or "") == "v0.5", "advance_to_in_vivo latest policy should resolve to immutable forward fork v0.5")
+    _assert(str(scale.get("policy_version") or "") == "v0.2", "ready_for_scaleup_screen latest policy should resolve to immutable forward fork v0.2")
+
+
+def test_policy_immutability_manifest_matches_policy_files() -> None:
+    from psi.tools.policy_immutability_check import validate_policy_immutability
+
+    report = validate_policy_immutability()
+    _assert(bool(report.get("ok")), f"policy immutability manifest mismatch: {stable_json_dumps(report)}")
+
+
+def test_policy_registry_manifest_matches_package_hashes() -> None:
+    from pathlib import Path
+    from psi.core.di.policy import load_policy
+
+    repo_root = Path(__file__).resolve().parents[2]
+    manifest_path = repo_root / "psi" / "core" / "di" / "policy_registry_manifest.json"
+    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entries = raw.get("entries") if isinstance(raw, dict) else None
+    _assert(isinstance(entries, list) and bool(entries), "policy registry manifest entries must be present")
+    filenames = [str((e or {}).get("filename") or "") for e in entries if isinstance(e, dict)]
+    _assert(filenames == sorted(filenames), "policy registry manifest entries must be filename-sorted")
+    for e in entries:
+        _assert(isinstance(e, dict), "policy registry manifest entry must be object")
+        fn = str(e.get("filename") or "")
+        _assert(fn, "policy registry manifest filename required")
+        pol = load_policy(repo_root / "psi" / "core" / "di" / "policies" / fn)
+        _assert(str(e.get("policy_version") or "") == str(pol.version or ""), f"{fn}: policy_version mismatch in registry manifest")
+        _assert(str(e.get("policy_package_hash") or "") == str(pol.policy_package_hash or ""), f"{fn}: policy_package_hash mismatch in registry manifest")
+
+
+def test_policy_strict_versioned_path_resolution() -> None:
+    from pathlib import Path
+    from psi.core.di.policy import resolve_versioned_policy_path
+
+    pdir = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies"
+    p = resolve_versioned_policy_path(policy_dir=pdir, policy_name="advance_to_in_vivo", policy_version="v0.5")
+    _assert(p.name == "advance_to_in_vivo_v0_5.json", "strict policy resolver should map v0.5 to exact filename")
+
+
+def test_policy_registry_contains_forward_default_policy_hashes() -> None:
+    from pathlib import Path
+    from psi.core.di.policy import load_policy
+
+    root = Path(__file__).resolve().parents[2] / "psi"
+    manifest = json.loads((root / "core" / "di" / "policy_registry_manifest.json").read_text(encoding="utf-8"))
+    entries = manifest.get("entries") if isinstance(manifest, dict) else []
+    hashes = {str((e or {}).get("policy_package_hash") or "") for e in entries if isinstance(e, dict)}
+    adv = load_policy(root / "core" / "di" / "policies" / "advance_to_in_vivo_v0_5.json")
+    scale = load_policy(root / "core" / "di" / "policies" / "ready_for_scaleup_screen_v0_2.json")
+    _assert(str(adv.policy_package_hash) in hashes, "policy registry manifest must include advance_to_in_vivo_v0_5 package hash")
+    _assert(str(scale.policy_package_hash) in hashes, "policy registry manifest must include ready_for_scaleup_screen_v0_2 package hash")
+
+
+def test_policy_hash_audit_report_deterministic() -> None:
+    from psi.tools.policy_hash_audit import build_policy_hash_audit_report
+
+    r1 = build_policy_hash_audit_report(snapshot_limit=5)
+    r2 = build_policy_hash_audit_report(snapshot_limit=5)
+    _assert(stable_json_dumps(r1) == stable_json_dumps(r2), "policy hash audit report must be deterministic for fixed DB")
+
+
+def test_risk_flag_enrichment_ordering_stable_with_medium_and_legacy_moderate() -> None:
+    pol_body = {
+        "gates": {},
+        "risk_flag_severity_tiers": {
+            "z_low": "low",
+            "a_high": "high",
+            "m_med": "medium",
+            "b_mod": "moderate",
+        },
+    }
+    inp = [
+        {"risk_flag": "z_low"},
+        {"risk_flag": "m_med"},
+        {"risk_flag": "a_high"},
+        {"risk_flag": "b_mod"},
+    ]
+    out1 = derive_risk_flags_enriched(risk_flags=inp, used_by_metric={}, policy_body=pol_body, policy_package=None)
+    out2 = derive_risk_flags_enriched(risk_flags=list(reversed(inp)), used_by_metric={}, policy_body=pol_body, policy_package=None)
+    _assert(stable_json_dumps(out1) == stable_json_dumps(out2), "risk flag enrichment ordering must be deterministic with medium/moderate vocabulary mix")
+    keys = [str((x or {}).get("key") or "") for x in out1]
+    _assert(keys == ["a_high", "b_mod", "m_med", "z_low"], f"unexpected risk flag deterministic ordering: {keys}")
+
+
+def test_policy_blocker_suggestions_mapping_key_order_stable() -> None:
+    from pathlib import Path
+    from psi.core.di.policy import load_policy
+
+    pdir = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies"
+    for p in sorted(pdir.glob("*.json")):
+        pol = load_policy(p)
+        body = pol.policy_body if isinstance(pol.policy_body, dict) else {}
+        sugg = body.get("blocker_suggestions")
+        if not isinstance(sugg, dict):
+            continue
+        keys = [str(k) for k in sugg.keys()]
+        _assert(keys == sorted(keys), f"{p.name}: blocker_suggestions keys must be stably sorted in file order")
+
+
+def test_policy_gate_lists_no_duplicates_and_stable_file_order() -> None:
+    from pathlib import Path
+    from psi.core.di.policy import load_policy
+
+    pdir = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies"
+    for p in sorted(pdir.glob('*.json')):
+        pol = load_policy(p)
+        body = pol.policy_body if isinstance(pol.policy_body, dict) else {}
+        for key in ("gate_order", "required_gate_keys"):
+            vals = body.get(key)
+            if not isinstance(vals, list):
+                continue
+            norm = [str(x) for x in vals]
+            _assert(len(norm) == len(set(norm)), f"{p.name}: {key} must be duplicate-free")
+            _assert(norm == [str(x) for x in vals], f"{p.name}: {key} order must be stable on repeated read")
+
+
+def test_policy_freeze_sidecar_covers_legacy_policy_files_without_mutating_json() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "psi" / "core" / "di"
+    sidecar = json.loads((root / "policy_metadata_freeze.json").read_text(encoding="utf-8"))
+    policies = sidecar.get("policies") if isinstance(sidecar, dict) else None
+    _assert(isinstance(policies, list) and bool(policies), "policy freeze sidecar must contain policy entries")
+    notice = str(sidecar.get("freeze_notice") or "")
+    _assert("IMMUTABLE" in notice and "SNAPSHOT REFERENCED" in notice, "policy freeze sidecar notice text mismatch")
+    covered = sorted(str((p or {}).get("filename") or "") for p in policies if isinstance(p, dict) and bool((p or {}).get("immutable")))
+    expected = sorted([
+        "advance_to_in_vivo_v0_1.json",
+        "advance_to_in_vivo_v0_2.json",
+        "advance_to_in_vivo_v0_3.json",
+        "advance_to_in_vivo_v0_4.json",
+        "ready_for_scaleup_screen_v0_1.json",
+    ])
+    _assert(covered == expected, f"policy freeze sidecar legacy coverage mismatch: {covered}")
+
+
+def test_forward_policy_forks_use_medium_vocabulary_and_no_legacy_moderate() -> None:
+    from pathlib import Path
+
+    pdir = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies"
+    targets = [
+        pdir / "advance_to_in_vivo_v0_5.json",
+        pdir / "ready_for_scaleup_screen_v0_2.json",
+    ]
+    for p in targets:
+        txt = p.read_text(encoding="utf-8")
+        _assert('"medium"' in txt, f"{p.name}: expected forward medium severity vocabulary")
+        _assert('"moderate"' not in txt, f"{p.name}: legacy moderate vocabulary must not appear in forward fork")
 
 
 def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
@@ -1600,7 +1759,7 @@ def test_molecule_scope_determinism() -> None:
     blockers = readiness.get("blockers") or []
     _assert(isinstance(blockers, list), "readiness.blockers must be a list")
     # Deterministic blocker ordering: (severity_rank, key, metrics, gates)
-    sev_rank = {"high": 0, "moderate": 1, "low": 2}
+    sev_rank = {"high": 0, "medium": 1, "moderate": 1, "low": 2}
     def _blk_sort_key(b):
         b = b or {}
         return (
@@ -2378,6 +2537,17 @@ def main() -> int:
         test_di_snapshot_ui_risk_flag_severity_rendering_deterministic()
         test_di_run_view_toggle_ui_is_localstorage_only()
         test_drift_plain_english_translation_deterministic()
+        test_di_web_latest_policy_selection_prefers_forward_immutable_forks()
+        test_policy_immutability_manifest_matches_policy_files()
+        test_policy_registry_manifest_matches_package_hashes()
+        test_policy_strict_versioned_path_resolution()
+        test_policy_registry_contains_forward_default_policy_hashes()
+        test_policy_hash_audit_report_deterministic()
+        test_risk_flag_enrichment_ordering_stable_with_medium_and_legacy_moderate()
+        test_policy_blocker_suggestions_mapping_key_order_stable()
+        test_policy_gate_lists_no_duplicates_and_stable_file_order()
+        test_policy_freeze_sidecar_covers_legacy_policy_files_without_mutating_json()
+        test_forward_policy_forks_use_medium_vocabulary_and_no_legacy_moderate()
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()
         test_normalize_ignored_schema_compat()

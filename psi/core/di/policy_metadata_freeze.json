@@ -1,0 +1,37 @@
+{
+  "freeze_notice": "IMMUTABLE \u2014 DO NOT MODIFY \u2014 SNAPSHOT REFERENCED",
+  "metadata_version": "v0.1",
+  "policies": [
+    {
+      "filename": "advance_to_in_vivo_v0_1.json",
+      "immutable": true,
+      "notice": "IMMUTABLE \u2014 DO NOT MODIFY \u2014 SNAPSHOT REFERENCED",
+      "reason": "snapshot_referenced_policy"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_2.json",
+      "immutable": true,
+      "notice": "IMMUTABLE \u2014 DO NOT MODIFY \u2014 SNAPSHOT REFERENCED",
+      "reason": "snapshot_referenced_policy"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_3.json",
+      "immutable": true,
+      "notice": "IMMUTABLE \u2014 DO NOT MODIFY \u2014 SNAPSHOT REFERENCED",
+      "reason": "snapshot_referenced_policy"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_4.json",
+      "immutable": true,
+      "notice": "IMMUTABLE \u2014 DO NOT MODIFY \u2014 SNAPSHOT REFERENCED",
+      "reason": "snapshot_referenced_policy"
+    },
+    {
+      "filename": "ready_for_scaleup_screen_v0_1.json",
+      "immutable": true,
+      "notice": "IMMUTABLE \u2014 DO NOT MODIFY \u2014 SNAPSHOT REFERENCED",
+      "reason": "snapshot_referenced_policy"
+    }
+  ],
+  "purpose": "Policy freeze banner sidecar (JSON comments are not allowed in policy files)."
+}

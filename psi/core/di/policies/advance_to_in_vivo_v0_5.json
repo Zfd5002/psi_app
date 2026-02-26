@@ -1,6 +1,6 @@
 {
   "policy_id": "policy.advance_to_in_vivo",
-  "policy_version": "v0.3",
+  "policy_version": "v0.5",
   "policy_name": "advance_to_in_vivo",
   "schema_version": "di.policy_package.v0_1",
   "template_key": "advance_to_in_vivo.v0_1",
@@ -64,6 +64,16 @@
       "version": "v0.3",
       "date": "2026-02-23",
       "change": "Add controlled shortlisting guardrails and tie-break hierarchy."
+    },
+    {
+      "version": "v0.4",
+      "date": "2026-02-25",
+      "change": "Add deterministic route-based context branching for the functional gate requirement set (opt-in policy version)."
+    },
+    {
+      "version": "v0.5",
+      "date": "2026-02-26",
+      "change": "Forward policy fork preserving legacy policy immutability; uses medium severity vocabulary in policy metadata."
     }
   ],
   "policy_body": {
@@ -120,6 +130,28 @@
         ]
       },
       "G4_functional": {
+        "context_require_any_by_value": {
+          "route": {
+            "SC": {
+              "require_any": [
+                "percent_killing",
+                "ec50",
+                "pass_fail",
+                "internalization_t1_2_h",
+                "surface_expression_pct_24h"
+              ],
+              "explanation": "SC route branch expands functional evidence options to include internalization/surface-expression anchors."
+            },
+            "_default": {
+              "require_any": [
+                "percent_killing",
+                "ec50",
+                "pass_fail"
+              ],
+              "explanation": "Default route branch uses the baseline functional evidence set."
+            }
+          }
+        },
         "require_any": [
           "percent_killing",
           "ec50",

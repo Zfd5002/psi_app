@@ -129,6 +129,30 @@ def load_policy(path: Path) -> LoadedPolicy:
     )
 
 
+def _version_to_filename_token(policy_version: str) -> str:
+    return str(policy_version or "").strip().replace(".", "_")
+
+
+def resolve_versioned_policy_path(*, policy_dir: Path, policy_name: str, policy_version: str) -> Path:
+    """Resolve an exact versioned policy filename (no glob fallback, deterministic).
+
+    Example:
+      policy_name='advance_to_in_vivo', policy_version='v0.5'
+      -> advance_to_in_vivo_v0_5.json
+    """
+    pdir = Path(policy_dir)
+    if not pdir.exists():
+        raise ValueError(f"Policy directory not found: {pdir}")
+    name = str(policy_name or "").strip()
+    ver = str(policy_version or "").strip()
+    if not name or not ver:
+        raise ValueError("policy_name and policy_version are required for strict policy path resolution")
+    cand = pdir / f"{name}_{_version_to_filename_token(ver)}.json"
+    if not cand.is_file():
+        raise ValueError(f"Policy exact versioned file not found: {cand.name}")
+    return cand
+
+
 def _wrap_legacy_policy_as_package(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Wrap a legacy v1.2.9c policy into the v1.2.9d policy package schema.
 

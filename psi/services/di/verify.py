@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Tuple, Optional
 
 from sqlalchemy.orm import Session
 
-from psi.core.di.policy import load_policy
+from psi.core.di.policy import load_policy, resolve_versioned_policy_path
 from psi.core.di.schema import DIInput
 from psi.core.models import DecisionSnapshot, MeasurementQC
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2
@@ -697,17 +697,17 @@ def _resolve_policy_from_repo(
     if not pol_dir.exists():
         raise ValueError(f"Policy directory not found: {pol_dir}")
 
-    matches: List[Tuple[Any, Path]] = []
-    for p in sorted(pol_dir.glob("*.json")):
-        try:
-            pol = load_policy(p)
-        except Exception:
-            continue
-        if str(pol.policy_id) == str(policy_id) and str(pol.version) == str(policy_version):
-            matches.append((pol, p))
-
-    if not matches:
-        raise ValueError(f"Policy not found in repo for policy_id={policy_id!r} policy_version={policy_version!r}")
+    inferred_name = str(policy_id or "").strip()
+    if inferred_name.startswith("policy."):
+        inferred_name = inferred_name.split(".", 1)[1]
+    exact_path = resolve_versioned_policy_path(policy_dir=pol_dir, policy_name=inferred_name, policy_version=policy_version)
+    exact_pol = load_policy(exact_path)
+    if str(exact_pol.policy_id) != str(policy_id) or str(exact_pol.version) != str(policy_version):
+        raise ValueError(
+            f"Policy exact versioned file metadata mismatch for policy_id={policy_id!r} "
+            f"policy_version={policy_version!r} path={exact_path.name!r}"
+        )
+    matches: List[Tuple[Any, Path]] = [(exact_pol, exact_path)]
     sem_h = str(policy_semantics_hash or "")
     pkg_h = str(policy_package_hash or "")
     if sem_h or pkg_h:
@@ -729,9 +729,6 @@ def _resolve_policy_from_repo(
                 f"Policy exact hash match not found in repo for policy_id={policy_id!r} "
                 f"policy_version={policy_version!r}"
             )
-    if len(matches) > 1:
-        # Deterministic choice, but treat as governance warning.
-        matches.sort(key=lambda t: str(t[1]))
     return matches[0]
 
 

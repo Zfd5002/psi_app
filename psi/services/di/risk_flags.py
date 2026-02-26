@@ -15,7 +15,9 @@ def _policy_risk_flag_severity_tiers(*, policy_package: Dict[str, Any] | None, p
     out: Dict[str, str] = {}
     for k in sorted([str(x) for x in raw.keys() if str(x).strip()]):
         sev = str(raw.get(k) or "").strip().lower()
-        if sev in ("high", "moderate", "low"):
+        if sev == "moderate":
+            sev = "medium"
+        if sev in ("high", "medium", "low"):
             out[k] = sev
     return out
 
@@ -73,6 +75,6 @@ def derive_risk_flags_enriched(
             }
         )
 
-    sev_rank = {"high": 0, "moderate": 1, "low": 2}
+    sev_rank = {"high": 0, "medium": 1, "moderate": 1, "low": 2}
     out = sorted(out, key=lambda x: (sev_rank.get(str((x or {}).get("severity") or "").strip().lower(), 9), str((x or {}).get("category") or ""), str((x or {}).get("key") or "")))
     return out

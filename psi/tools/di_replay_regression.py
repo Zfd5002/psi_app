@@ -20,6 +20,7 @@ This tool is an orchestrator and report renderer.
 """
 
 import argparse
+import json
 from pathlib import Path
 import sys
 from typing import Any, Dict, Iterable, List, Tuple
@@ -70,6 +71,43 @@ def _iter_snapshots(
         q = q.limit(int(limit))
 
     return list(q.all())
+
+
+def _load_policy_registry_package_hashes() -> set[str]:
+    repo_root = Path(__file__).resolve().parents[2]
+    p = repo_root / "psi" / "core" / "di" / "policy_registry_manifest.json"
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    entries = raw.get("entries") if isinstance(raw, dict) else None
+    out: set[str] = set()
+    if isinstance(entries, list):
+        for e in entries:
+            if not isinstance(e, dict):
+                continue
+            h = str(e.get("policy_package_hash") or "").strip()
+            if h:
+                out.add(h)
+    return out
+
+
+def _extract_snapshot_policy_package_hash(snap: DecisionSnapshot) -> str:
+    inputs_obj = verify_mod._parse_json_field(snap.inputs_json, default={})
+    outputs_obj = verify_mod._parse_json_field(snap.outputs_json, default={})
+    if isinstance(outputs_obj, dict):
+        prov = outputs_obj.get("provenance")
+        if isinstance(prov, dict):
+            pol_ref = prov.get("policy_ref")
+            if isinstance(pol_ref, dict):
+                h = str(pol_ref.get("policy_package_hash") or "").strip()
+                if h:
+                    return h
+        pol = outputs_obj.get("policy")
+        if isinstance(pol, dict):
+            h = str(pol.get("policy_package_hash") or "").strip()
+            if h:
+                return h
+    if isinstance(inputs_obj, dict):
+        return str(inputs_obj.get("policy_package_hash") or "").strip()
+    return ""
 
 
 def _diff_paths(a: Any, b: Any, *, path: str = "$") -> List[str]:
@@ -233,6 +271,12 @@ def main() -> None:
     skipped = 0
 
     failures: List[Dict[str, Any]] = []
+    policy_registry_hashes: set[str] = set()
+    try:
+        policy_registry_hashes = _load_policy_registry_package_hashes()
+    except Exception as e:
+        print(f"replay_regression: ERROR loading policy registry manifest: {e}", file=sys.stderr)
+        sys.exit(2)
 
     with get_db(args.db.strip() or None, ensure=False) as db:
         snaps = _iter_snapshots(
@@ -252,6 +296,18 @@ def main() -> None:
             tested += 1
             sid = int(snap.id)
             try:
+                stored_pkg_hash = _extract_snapshot_policy_package_hash(snap)
+                if not stored_pkg_hash:
+                    failed += 1
+                    failures.append({"snapshot_id": sid, "failure_type": "missing_policy_package_hash"})
+                    print(f"FAIL snapshot_id={sid} type=missing_policy_package_hash")
+                    continue
+                if stored_pkg_hash not in policy_registry_hashes:
+                    failed += 1
+                    failures.append({"snapshot_id": sid, "failure_type": "policy_package_hash_not_in_registry", "policy_package_hash": stored_pkg_hash})
+                    print(f"FAIL snapshot_id={sid} type=policy_package_hash_not_in_registry")
+                    continue
+
                 report = verify_snapshot(db=db, snapshot_id=sid, debug=False)
 
                 anchored = report.get("anchored_replay") if isinstance(report, dict) else None
@@ -350,7 +406,7 @@ def main() -> None:
     print("---")
     print(stable_json_dumps(summary))
 
-    if failed > 0:
+    if failed > 0 or skipped > 0:
         sys.exit(2)
     sys.exit(0)
 

@@ -1,0 +1,39 @@
+{
+  "decision_state": "ready",
+  "policy": {
+    "policy_id": "advance_to_in_vivo",
+    "policy_version": "v0.4",
+    "policy_semantics_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policy_package_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "measurement_ids_used": [
+    7,
+    5,
+    7
+  ],
+  "gate_outcomes": {
+    "G2_purity_integrity": {
+      "status": "pass",
+      "notes": [
+        "ignored for v2 hash canonicalization"
+      ]
+    },
+    "G3_endotoxin": {
+      "status": "pass"
+    }
+  },
+  "readiness": {
+    "state": "ready",
+    "blocking_gates": [],
+    "blocking_reasons": [],
+    "assumptions": [],
+    "required_next_steps": [],
+    "blockers": [],
+    "qc_confidence": {
+      "qc_mode": "model_safe",
+      "notes": [
+        "non-semantic note"
+      ]
+    }
+  }
+}
