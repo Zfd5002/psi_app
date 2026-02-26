@@ -27,6 +27,21 @@ Determinism/Replay note:
 - Presentation-layer only patch; DI engine, policies, registry semantics, and snapshot hash-bearing outputs are unchanged.
 - Molecule list header bars reuse existing deterministic header model builders with explicit ordering preserved.
 
+## 2026-02-26 — v1.2.9x29
+What changed:
+- Molecule detail annotations list now removes per-site `oxidation_susceptible` and `deamidation` rows entirely.
+- Added per-component summary rows directly under the Full sequence viewer section with `Highlight` + `Deselect` buttons for oxidation/deamidation (no Copy buttons on these rows).
+- Existing Copy buttons for all other annotation items remain unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+
+Determinism/Replay note:
+- UI-only template/JS behavior change; no DI, policy, registry, or schema changes.
+- Replay surfaces and snapshot hashes remain unchanged.
+
 ## v1.2.9w45
 
 Why:

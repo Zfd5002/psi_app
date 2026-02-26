@@ -1100,6 +1100,24 @@
             <div class="no-print muted mini">Tip: click-drag to select; ⌘/Ctrl+C copies a clean AA sequence.</div>
           </div>
 
+          <div class="card" style="margin-top:8px;padding:8px 10px;">
+            <div class="muted mini" style="margin-bottom:6px;"><strong>Full sequence</strong></div>
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+              <div>Oxidation susceptible</div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="oxidation_susceptible">Highlight</button>
+                <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+              <div>Deamidation susceptible</div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="deamidation">Highlight</button>
+                <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
+              </div>
+            </div>
+          </div>
+
           <div class="seq-scroll viewer-v2" data-component-id="{{ t.component_id }}" data-molecule-id="{{ molecule.id }}" style="--len: {{ t.length }};" data-seq="{{ t.sequence }}">
             <div class=\"lane\">
               <div class=\"lane-label muted\">Sequence</div>
@@ -1143,12 +1161,10 @@
         <div class="muted mini" style="margin-top:-6px;">Click to highlight. Use “Copy” to copy only raw amino acids for the selected span(s).</div>
 
         {% for t in viewer_v2_components %}
-          <div class="annot-comp" data-component-id="{{ t.component_id }}" style="margin-top:12px;">
+            <div class="annot-comp" data-component-id="{{ t.component_id }}" style="margin-top:12px;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
               <strong>{{ t.role }}</strong>
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                <button class="btn mini" type="button" data-action="annot-bulk-highlight" data-feature-name="oxidation_susceptible">Highlight oxidation susceptible</button>
-                <button class="btn mini" type="button" data-action="annot-bulk-highlight" data-feature-name="deamidation">Highlight deamidation</button>
                 <button class="btn mini" type="button" data-action="annot-clear-highlights">Clear highlights</button>
                 <span class="muted mini">len={{ t.length }}</span>
               </div>
@@ -1159,21 +1175,21 @@
                 <summary class="muted" style="cursor:pointer;"><strong>{{ g.group }}</strong> <span class="muted mini">({{ g["items"]|length }})</span></summary>
                 <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
                   {% for f in g["items"] %}
-                    {% set sp = (f.spans[0] if f.spans and (f.spans|length)>0 else {'start':0,'end':0}) %}
-                    <div class="annot-item" data-component-id="{{ t.component_id }}" data-feature='{{ f | tojson }}'>
-                      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
-                        <div>
-                          <div><strong>{{ f.name }}</strong></div>
-                          <div class="muted mini">[{{ sp.start }}, {{ sp.end }}) · {{ (f.confidence*100) | round(1) }}%</div>
-                        </div>
-                        <div style="display:flex;gap:8px;align-items:center;">
-                          {% if f.name != 'oxidation_susceptible' and f.name != 'deamidation' %}
+                    {% if f.name != 'oxidation_susceptible' and f.name != 'deamidation' %}
+                      {% set sp = (f.spans[0] if f.spans and (f.spans|length)>0 else {'start':0,'end':0}) %}
+                      <div class="annot-item" data-component-id="{{ t.component_id }}" data-feature='{{ f | tojson }}'>
+                        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+                          <div>
+                            <div><strong>{{ f.name }}</strong></div>
+                            <div class="muted mini">[{{ sp.start }}, {{ sp.end }}) · {{ (f.confidence*100) | round(1) }}%</div>
+                          </div>
+                          <div style="display:flex;gap:8px;align-items:center;">
                             <button class="btn mini" type="button" data-action="annot-highlight">Highlight</button>
-                          {% endif %}
-                          <button class="btn mini" type="button" data-action="annot-copy">Copy</button>
+                            <button class="btn mini" type="button" data-action="annot-copy">Copy</button>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    {% endif %}
                   {% endfor %}
                 </div>
               </details>
@@ -1392,6 +1408,10 @@
     }
     const viewerEl = document.querySelector(`.seq-scroll.viewer-v2[data-component-id="${componentId}"]`);
     if(viewerEl) clearResidueHighlights(viewerEl);
+  }
+
+  function clearHighlightsForComponent(componentId){
+    clearHighlights(componentId);
   }
 
   function toggleResidue(viewerEl, residueIndex){
@@ -1628,6 +1648,23 @@
         e.preventDefault();
         clearHighlights(compId);
       });
+    });
+  });
+
+  document.querySelectorAll('[data-action="viewer-bulk-highlight"]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const compId = String(btn.dataset.componentId || '');
+      const viewerEl = document.querySelector(`.seq-scroll.viewer-v2[data-component-id="${compId}"]`);
+      if(!viewerEl) return;
+      highlightAllByFeatureName(viewerEl, btn.dataset.featureName || '');
+    });
+  });
+
+  document.querySelectorAll('[data-action="viewer-clear-highlights"]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      clearHighlightsForComponent(String(btn.dataset.componentId || ''));
     });
   });
 
