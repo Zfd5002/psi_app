@@ -22,10 +22,13 @@ def _load_registry_manifest() -> dict[str, Any]:
 def _current_policy_hash_rows() -> list[dict[str, str]]:
     pdir = _repo_root() / "psi" / "core" / "di" / "policies"
     rows: list[dict[str, str]] = []
-    for p in sorted(pdir.glob("*.json")):
+    for p in sorted(pdir.rglob("*.json")):
+        if not p.is_file():
+            continue
         pol = load_policy(p)
         rows.append(
             {
+                "path": str(p.relative_to(pdir.parent.parent.parent)).replace("\\", "/"),
                 "filename": p.name,
                 "policy_id": str(pol.policy_id or ""),
                 "policy_version": str(pol.version or ""),

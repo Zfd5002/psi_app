@@ -1,43 +1,85 @@
 {
   "entries": [
     {
-      "filename": "advance_to_in_vivo_v0_1.json",
+      "filename": "advance_to_in_vivo_v0_1__x17_mutated_medium.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/advance_to_in_vivo_v0_1__x17_mutated_medium.json",
       "policy_id": "policy.advance_to_in_vivo",
       "policy_package_hash": "ba362a0bba5824ef57d23e71bb8a3d35a1e79c5d8a28cff5f2acace8980e197d",
       "policy_version": "v0.1"
     },
     {
-      "filename": "advance_to_in_vivo_v0_2.json",
+      "filename": "advance_to_in_vivo_v0_2__x17_mutated_medium.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/advance_to_in_vivo_v0_2__x17_mutated_medium.json",
       "policy_id": "policy.advance_to_in_vivo",
       "policy_package_hash": "bc0cdca9fa3828e89e66b2e43926c2e9895b6ba829f7ae677f9e5bd3dad16e14",
       "policy_version": "v0.2"
     },
     {
-      "filename": "advance_to_in_vivo_v0_3.json",
+      "filename": "advance_to_in_vivo_v0_3__x17_mutated_medium.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/advance_to_in_vivo_v0_3__x17_mutated_medium.json",
       "policy_id": "policy.advance_to_in_vivo",
       "policy_package_hash": "78e302ff4b9203a30a1be801554cd6071dc7d20ef326cc9944122a55879b5147",
       "policy_version": "v0.3"
     },
     {
-      "filename": "advance_to_in_vivo_v0_4.json",
+      "filename": "advance_to_in_vivo_v0_4__x17_mutated_medium.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/advance_to_in_vivo_v0_4__x17_mutated_medium.json",
       "policy_id": "policy.advance_to_in_vivo",
       "policy_package_hash": "9c3408828370f826714617b822ffb958e9182070754451c4a7ce6871c0fe1492",
       "policy_version": "v0.4"
     },
     {
+      "filename": "ready_for_scaleup_screen_v0_1__x17_mutated_medium.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/ready_for_scaleup_screen_v0_1__x17_mutated_medium.json",
+      "policy_id": "policy.ready_for_scaleup_screen",
+      "policy_package_hash": "e7a59dff859a8e9f3775135cd15242336ca115980941813daeccc84d95196de2",
+      "policy_version": "v0.1"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_1.json",
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_1.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "2baac97c2f0bc4e869f7dd2f606d8a8a3868458789b77dcffbf4f0a98b215564",
+      "policy_version": "v0.1"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_2.json",
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_2.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "fc00c1627a76b8f0264cd3f67ee48d573706fde1459d35db2bdbcc7e072529fe",
+      "policy_version": "v0.2"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_3.json",
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_3.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "f14b7ac036d607499d82abe10b360aa683e89802cdb23139698397f57393386e",
+      "policy_version": "v0.3"
+    },
+    {
+      "filename": "advance_to_in_vivo_v0_4.json",
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_4.json",
+      "policy_id": "policy.advance_to_in_vivo",
+      "policy_package_hash": "dc81daf4c24cc0ba039fae1b66bde719ce2d2ab4804d3266a30ee122deca411e",
+      "policy_version": "v0.4"
+    },
+    {
       "filename": "advance_to_in_vivo_v0_5.json",
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_5.json",
       "policy_id": "policy.advance_to_in_vivo",
       "policy_package_hash": "c2f3419e26b2e73f56b81892fcf8919c8311eab133490f49e492009b420f3f4d",
       "policy_version": "v0.5"
     },
     {
       "filename": "ready_for_scaleup_screen_v0_1.json",
+      "path": "psi/core/di/policies/ready_for_scaleup_screen_v0_1.json",
       "policy_id": "policy.ready_for_scaleup_screen",
-      "policy_package_hash": "e7a59dff859a8e9f3775135cd15242336ca115980941813daeccc84d95196de2",
+      "policy_package_hash": "0fc3e725933648f832e5819ce9f635628b14958f52756b69d7a0c9d479396259",
       "policy_version": "v0.1"
     },
     {
       "filename": "ready_for_scaleup_screen_v0_2.json",
+      "path": "psi/core/di/policies/ready_for_scaleup_screen_v0_2.json",
       "policy_id": "policy.ready_for_scaleup_screen",
       "policy_package_hash": "b3af0243fdd8c0702983bae59a65213e4c1eebd8a9f33e3ef27c4286e6fb42cc",
       "policy_version": "v0.2"

@@ -38,8 +38,9 @@ from psi.services.di.integrity import (
     compute_evidence_fingerprint,
     compute_snapshot_content_hash,
 )
-from psi.services.di.util import parse_iso, stable_json_dumps, value_functions_enforcement_reason
+from psi.services.di.util import stable_json_dumps, value_functions_enforcement_reason
 from psi.services.di.soe import build_soe_v0_2_molecule, build_soe_v0_3_molecule
+from psi.services.di.shortlisting import build_ranking_payload
 from psi.version import PSI_VERSION
 
 
@@ -61,11 +62,6 @@ def _to_dict(x: Any) -> Dict[str, Any]:
     return {"value": str(x)}
 
 
-RANKING_RULE_VERSION = "v0.5.1"
-
-
-def _ranking_factor(key: str, direction: str, value: Any, weight: float) -> Dict[str, Any]:
-    return {"key": key, "direction": direction, "value": value, "weight": weight}
 
 
 def _ranking_enabled(policy_body: Dict[str, Any]) -> bool:
@@ -182,127 +178,13 @@ def _build_scope_semantics(
     }
 
 
-def _score_from_factors(factors: List[Dict[str, Any]]) -> float:
-    score = 0.0
-    for f in factors:
-        try:
-            v = float(f.get("value") or 0.0)
-            w = float(f.get("weight") or 0.0)
-        except Exception:
-            continue
-        direction = str(f.get("direction") or "pro").strip().lower()
-        if direction == "con":
-            score -= v * w
-        else:
-            score += v * w
-    return float(score)
-
-
-def _ranking_sort_key(cand: Dict[str, Any]) -> tuple:
-    score = float(cand.get("score") or 0.0)
-    tb = cand.get("tie_breaker") if isinstance(cand.get("tie_breaker"), dict) else {}
-    created_raw = tb.get("created_at")
-    dt = parse_iso(str(created_raw)) if created_raw else None
-    created_ts = dt.timestamp() if dt is not None else -1.0
-    cid = int(cand.get("candidate_id") or 0)
-    return (-score, -created_ts, -cid)
-
-
 def _build_ranking(
     *,
     di_in: DIInput,
     out: Dict[str, Any],
     selection_provenance: Dict[str, Any],
 ) -> Dict[str, Any]:
-    scope_type = str(di_in.scope_type or "batch")
-    candidates: List[Dict[str, Any]] = []
-
-    if scope_type == "batch":
-        factors: List[Dict[str, Any]] = []
-        decision_state = str(out.get("decision_state") or "")
-        if decision_state == "ready":
-            factors.append(_ranking_factor("decision_state", "pro", 1.0, 50.0))
-        elif decision_state == "not_ready":
-            factors.append(_ranking_factor("decision_state", "con", 1.0, 50.0))
-        else:
-            factors.append(_ranking_factor("decision_state", "con", 1.0, 50.0))
-
-        blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
-        factors.append(_ranking_factor("blockers_count", "con", float(len(blockers)), 5.0))
-
-        comp = out.get("comparability") if isinstance(out.get("comparability"), dict) else {}
-        summary = comp.get("summary") if isinstance(comp.get("summary"), dict) else {}
-        high_sev = float(summary.get("high_severity_count") or 0)
-        factors.append(_ranking_factor("comparability_high_severity", "con", high_sev, 3.0))
-
-        soe = out.get("state_of_evidence") if isinstance(out.get("state_of_evidence"), dict) else {}
-        soe_v0_2 = soe.get("soe_v0_2") if isinstance(soe.get("soe_v0_2"), dict) else {}
-        coverage = soe_v0_2.get("coverage") if isinstance(soe_v0_2.get("coverage"), dict) else {}
-        missing = float(len(coverage.get("metrics_missing") or []))
-        present = float(len(coverage.get("metrics_present") or []))
-        factors.append(_ranking_factor("metrics_present", "pro", present, 1.0))
-        factors.append(_ranking_factor("metrics_missing", "con", missing, 1.0))
-
-        warnings = soe.get("warnings") if isinstance(soe.get("warnings"), list) else []
-        factors.append(_ranking_factor("warnings_count", "con", float(len(warnings)), 1.0))
-
-        score = _score_from_factors(factors)
-        cand = {
-            "candidate_type": "batch",
-            "candidate_id": int(di_in.scope_id),
-            "score": score,
-            "tie_breaker": {"created_at": None, "id": int(di_in.scope_id)},
-            "factors": factors,
-        }
-        candidates.append(cand)
-    else:
-        batch_ids = selection_provenance.get("batch_ids_ordered") or selection_provenance.get("batch_ids_all") or []
-        batch_ids = [int(x) for x in batch_ids if str(x).isdigit()]
-        created_map = selection_provenance.get("batch_created_at") if isinstance(selection_provenance.get("batch_created_at"), dict) else {}
-        metric_src = selection_provenance.get("metric_source_batch_ids") if isinstance(selection_provenance.get("metric_source_batch_ids"), dict) else {}
-        batch_summaries = selection_provenance.get("batch_summaries") if isinstance(selection_provenance.get("batch_summaries"), list) else []
-        summary_map: Dict[int, Dict[str, Any]] = {int(s.get("batch_id")): s for s in batch_summaries if isinstance(s, dict) and str(s.get("batch_id") or "").isdigit()}
-
-        metrics_by_batch: Dict[int, int] = {}
-        for mk, bid in metric_src.items():
-            try:
-                bid_i = int(bid)
-            except Exception:
-                continue
-            metrics_by_batch[bid_i] = metrics_by_batch.get(bid_i, 0) + 1
-
-        for bid in batch_ids:
-            factors: List[Dict[str, Any]] = []
-            mcount = float(metrics_by_batch.get(int(bid), 0))
-            factors.append(_ranking_factor("metrics_sourced_count", "pro", mcount, 2.0))
-
-            summ = summary_map.get(int(bid)) or {}
-            used_cnt = float(summ.get("used_metric_count") or 0)
-            ignored_cnt = float(summ.get("ignored_count") or 0)
-            warn_cnt = float(summ.get("warning_count") or 0)
-
-            factors.append(_ranking_factor("used_metric_count", "pro", used_cnt, 1.0))
-            factors.append(_ranking_factor("ignored_count", "con", ignored_cnt, 0.5))
-            factors.append(_ranking_factor("warning_count", "con", warn_cnt, 1.0))
-
-            score = _score_from_factors(factors)
-            cand = {
-                "candidate_type": "batch",
-                "candidate_id": int(bid),
-                "score": score,
-                "tie_breaker": {"created_at": created_map.get(str(bid)), "id": int(bid)},
-                "factors": factors,
-            }
-            candidates.append(cand)
-
-    candidates = sorted(candidates, key=_ranking_sort_key)
-    winner_id = candidates[0]["candidate_id"] if candidates else None
-    return {
-        "scope_type": scope_type,
-        "candidates": candidates,
-        "winner_candidate_id": winner_id,
-        "ranking_rule_version": RANKING_RULE_VERSION,
-    }
+    return build_ranking_payload(di_in=di_in, out=out, selection_provenance=selection_provenance)
 
 
 

@@ -405,12 +405,31 @@ def _sorted_prerequisite_blockers_for_advisory(blockers: list[dict[str, Any]] | 
 def _build_progress_stage_advisory(*, prereq_advisories: list[dict[str, Any]] | None) -> dict[str, Any] | None:
     if not isinstance(prereq_advisories, list) or not prereq_advisories:
         return None
-    stage_adv = prereq_advisories[0]
-    if not isinstance(stage_adv, dict):
+    rows = [a for a in prereq_advisories if isinstance(a, dict)]
+    if not rows:
         return None
+    items = [
+        {
+            "milestone_key": str(a.get("milestone_key") or ""),
+            "template_key": str(a.get("template_key") or ""),
+            "blocked_by_text": str(a.get("blocked_by_text") or ""),
+        }
+        for a in rows
+    ]
+    items = sorted(
+        items,
+        key=lambda x: (
+            str(x.get("milestone_key") or ""),
+            str(x.get("template_key") or ""),
+            str(x.get("blocked_by_text") or ""),
+        ),
+    )
+    headline = items[0]
+    text_parts = [str(x.get("blocked_by_text") or "") for x in items if str(x.get("blocked_by_text") or "")]
     return {
-        "milestone_key": str(stage_adv.get("milestone_key") or ""),
-        "blocked_by_text": str(stage_adv.get("blocked_by_text") or ""),
+        "milestone_key": str(headline.get("milestone_key") or ""),
+        "blocked_by_text": " | ".join(text_parts),
+        "blocked_by_items": items,
     }
 
 
@@ -675,4 +694,3 @@ def _build_molecule_header_model(
         "latest_di_snapshot_id": (latest_di_row or {}).get("snapshot_id"),
         "latest_di_drift_type": (((latest_di_row or {}).get("_out") or {}).get("drift_type") if latest_di_row else None),
     }
-

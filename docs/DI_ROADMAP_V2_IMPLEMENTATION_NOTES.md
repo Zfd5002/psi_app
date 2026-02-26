@@ -9,6 +9,43 @@ This note summarizes the current PSI DI roadmap v2 implementation surfaces that 
 - `value_functions_enforcement_reason` semantics (governance/run-semantics field)
 - Heavy compute OFF-by-default guarantee and hash-safety boundary
 
+## Implementation Status (Shipped Through `v1.2.9w114` + `v1.2.9x08`)
+
+Completed (operator-relevant):
+
+- Scientist-first molecule header surfaces:
+  - deterministic progress ladder + hover explainability
+  - prerequisite advisory (`Blocked by prerequisites`)
+  - risk flags with policy severity tiers
+  - confidence component rendering + optional non-weighted scalar
+  - heavy compute OFF/ON indicator (UI-only)
+- Scientist/Governance toggle (UI-only) on `/di/run` with localStorage persistence
+- DI snapshot UI risk severity rendering + drift plain-English translation (deterministic, UI-only)
+- Policy-as-data risk severity tiers (copied into `policy_body` and preferred there; template-structure fallback retained)
+- Confidence policy catalog support (`confidence_policy_v0_1`, `confidence_policy_v0_2`)
+- Outcome labeling additive metadata:
+  - `OutcomeLabel.outcome_event_date`
+  - deterministic outcome dataset export includes `outcome_event_date` + `days_to_outcome`
+  - export enrichment reads stored snapshot hashes/fingerprints only (no recomputation)
+- Structural hardening (output-preserving):
+  - molecule header split (`psi/services/molecule_header.py`)
+  - molecule sequence/composition helper split (`psi/services/molecule_sequences.py`)
+  - viewer helper split (`psi/services/molecule_viewer.py`)
+  - SoE builder consolidation / DI runner integrity helper deduplication
+
+Additional optional deterministic tooling shipped:
+
+- `psi.tools.molecule_header_regression`
+- `psi.tools.molecule_viewer_regression`
+- `psi.tools.pytest_smoke`
+- `psi.tools.code_size_report`
+
+Remaining roadmap areas (high-level, unchanged intent):
+
+- Continue policy-as-data expansion where any UI derivation still relies on code defaults
+- Additional deterministic regression fixtures/locks for UI assembly hot-spots
+- CI wiring to run the canonical gate suite as a single command (tool may exist; adoption is separate)
+
 ## Progress Policy + Template Prerequisites Catalogs
 
 ### Progress policy (current)
@@ -57,18 +94,29 @@ This note summarizes the current PSI DI roadmap v2 implementation surfaces that 
 
 ### Policy metadata field
 
-- Location: `template_structure.risk_flag_severity_tiers` in packaged DI policy files
+- Preferred location: `policy_body.risk_flag_severity_tiers` in packaged DI policy files
+- Backward-compatible fallback: `template_structure.risk_flag_severity_tiers`
 - Shape: object mapping `risk_flag_key -> severity_tier`
 - Current allowed tiers:
   - `high`
-  - `moderate`
+  - `medium`
   - `low`
+  - (`moderate` accepted for backward compatibility in validators/runtime normalization)
 
 ### Semantics
 
 - Severity tiers are policy/package metadata used for deterministic risk-flag enrichment and UI display.
 - This is display semantics only (not weighted scoring and not adaptive logic).
-- Unknown risk flags fall back to conservative deterministic defaults in code (backward compatibility).
+- Unknown/unmapped risk flags fall back to `unspecified` (neutral / not assessed), not `low`.
+
+### Vocabulary compatibility + deprecation horizon
+
+- Forward vocabulary for new policy authoring is `high | medium | low`.
+- Legacy vocabulary `moderate` is accepted only for backward-compatible runtime normalization and validator acceptance.
+- Runtime normalization currently maps `moderate -> medium` deterministically before UI/confidence interpretation.
+- Planned deprecation horizon:
+  - Keep the compatibility shim while legacy snapshot replay support requires exact historical package/hash resolvability.
+  - Re-evaluate removal only after a deliberate governance decision that archived legacy snapshot replay can be retired (not scheduled in the current v2 chain).
 
 ### Operator expectations
 
@@ -183,3 +231,12 @@ Determinism guarantees:
 - Heavy compute status indicators are UI/runtime convenience only.
 - Heavy compute toggle must not affect DI snapshot hash-bearing outputs (`inputs_obj`, `outputs_obj`, integrity hashes).
 - Current UI copy explicitly states this hash-safety guarantee.
+
+## Legacy YAML Engine Deprecation Scope (Scoping Note)
+
+- PSI still contains legacy YAML-driven decision-engine/registry surfaces (for example `psi/core/decision_engine.py` and YAML-backed registry compatibility paths).
+- Roadmap v2 DI hardening patches in this chain do not change those legacy YAML runtime paths.
+- Deprecation boundary (current plan):
+  - Keep legacy YAML engine support intact for non-DI compatibility paths.
+  - Continue migrating DI/governance-critical logic to deterministic Python + versioned JSON policy/catalog data.
+  - Any future YAML deprecation/removal must be a separate explicitly approved migration with replay/compatibility impact analysis.

@@ -2,20 +2,40 @@
   "algorithm": "sha256",
   "files": [
     {
-      "path": "psi/core/di/policies/advance_to_in_vivo_v0_1.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/advance_to_in_vivo_v0_1__x17_mutated_medium.json",
       "sha256": "a697a5961c77850c0ff5758a9ff6727c9568e4eb5cfb5a2074a45f79d62cf5d5"
     },
     {
-      "path": "psi/core/di/policies/advance_to_in_vivo_v0_2.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/advance_to_in_vivo_v0_2__x17_mutated_medium.json",
       "sha256": "3bd827b62d1a010c76d6b07134bb4a142e48eedd0356709d17fe21b71b1419c8"
     },
     {
-      "path": "psi/core/di/policies/advance_to_in_vivo_v0_3.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/advance_to_in_vivo_v0_3__x17_mutated_medium.json",
       "sha256": "e30834e5cd30102023c9487a980e969aae907a76e01e0d549bf84d243932191e"
     },
     {
-      "path": "psi/core/di/policies/advance_to_in_vivo_v0_4.json",
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/advance_to_in_vivo_v0_4__x17_mutated_medium.json",
       "sha256": "7e017941a2d306b2c5882f74ac0c27ef658a1cfac8a255c2a9d111e7aa49bd3b"
+    },
+    {
+      "path": "psi/core/di/policies/_orphaned_snapshot_packages/ready_for_scaleup_screen_v0_1__x17_mutated_medium.json",
+      "sha256": "82ab854159dda5c1a8bf6199435d2dc66b26ffbd4f09f7cab8fd6855883267ff"
+    },
+    {
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_1.json",
+      "sha256": "c3d910075319151bae821e26ad59a6fdb37b8f5870f84980970482b0e49e7560"
+    },
+    {
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_2.json",
+      "sha256": "365f74da41c83682415d4a522703fb19668577a8bf181e8c6d528be914ae7d21"
+    },
+    {
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_3.json",
+      "sha256": "b4d0837c31602f3c2ffb91c41f743a2ef350852b8e400de01b4dbc3a516c653e"
+    },
+    {
+      "path": "psi/core/di/policies/advance_to_in_vivo_v0_4.json",
+      "sha256": "6e19898b67c4f7b727430a2d9e39b72e7cbadadee20e2600c4a50780c8069d73"
     },
     {
       "path": "psi/core/di/policies/advance_to_in_vivo_v0_5.json",
@@ -23,7 +43,7 @@
     },
     {
       "path": "psi/core/di/policies/ready_for_scaleup_screen_v0_1.json",
-      "sha256": "82ab854159dda5c1a8bf6199435d2dc66b26ffbd4f09f7cab8fd6855883267ff"
+      "sha256": "dbd18f8700e223d67aab41bb5f5c49ffbc6084159638ceb0be3ddcbf1831f5a9"
     },
     {
       "path": "psi/core/di/policies/ready_for_scaleup_screen_v0_2.json",

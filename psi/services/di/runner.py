@@ -18,7 +18,7 @@ from psi.core.models import DecisionSnapshot, Molecule, Program
 from psi.core.utils import now_utc, stable_json_dumps
 from psi.services.di.selection import select_batch_measurements
 from psi.services.di.compute import _compute_di_from_used_by_metric
-from psi.services.di.enrich import coverage_fingerprint_payload
+from psi.services.di.error_output import build_di_error_output_payload
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2, compute_evidence_fingerprint, compute_snapshot_content_hash
 from psi.services.di.templates.registry import resolve_template_entry
 from psi.services.di.util import value_functions_enforcement_reason
@@ -175,103 +175,28 @@ def _build_di_error_output(
     readiness_blocker_explanation: str,
     readiness_blocking_reason: str,
 ) -> Dict[str, Any]:
-    return {
-        "decision_state": "not_ready",
-        "policy": {
-            "policy_id": getattr(pol, "policy_id", ""),
-            "policy_name": getattr(pol, "name", ""),
-            "policy_version": getattr(pol, "version", ""),
-            "policy_schema_version": getattr(pol, "schema_version", ""),
-            "policy_semantics_hash": getattr(pol, "policy_semantics_hash", ""),
-            "policy_package_hash": getattr(pol, "policy_package_hash", ""),
-            "name": getattr(pol, "name", ""),
-            "version": getattr(pol, "version", ""),
-            "hash": getattr(pol, "policy_semantics_hash", ""),
-            "source": getattr(pol, "source_name", ""),
-            "changelog": getattr(pol, "changelog", []) if getattr(pol, "changelog", None) is not None else [],
-        },
-        "engine": {
-            "engine_id": ENGINE_ID,
-            "schema_version": SNAPSHOT_SCHEMA_VERSION,
-            "selector_version": SELECTOR_VERSION,
-            "evaluator_version": str(evaluator_version),
-            "evaluation_version": str(evaluator_version),
-            "code_version": PSI_VERSION,
-        },
-        "provenance": {
-            "as_of_ts": di_input.as_of_ts,
-            "qc_mode": di_input.qc_mode,
-            "selection_semantics_version": DI_SELECTION_SEMANTICS_VERSION,
-            "experiment_catalog": {"catalog_id": "", "catalog_version": "", "catalog_hash": ""},
-            "selection_provenance": {},
-            "inputs_fingerprint": {
-                "decision_key": di_input.decision_key,
-                "scope_type": di_input.scope_type,
-                "scope_id": int(di_input.scope_id),
-                "context_keys": sorted(list((di_input.context or {}).keys())),
-            },
-        },
-        "state_of_evidence": {
-            "used": {},
-            "ignored_evidence": [],
-            "warnings": [
-                {
-                    "kind": str(warning_kind),
-                    "detail": dict(warning_detail or {}),
-                }
-            ],
-        },
-        "gates": [],
-        "blockers": [
-            {
-                "blocker_key": str(blocker_key),
-                "detail": dict(blocker_detail or {}),
-            }
-        ],
-        "risk_flags": [
-            {
-                "risk_flag": str(risk_flag),
-                "detail": {"note": str(risk_note)},
-            }
-        ],
-        "risk_flags_enriched": [
-            {
-                "key": str(risk_enriched_key),
-                "category": "governance",
-                "severity": "high",
-                "related_metrics": [],
-                "explanation": str(risk_enriched_explanation),
-            }
-        ],
-        "experiment_suggestions": {},
-        "measurement_ids_used": [],
-        "gate_outcomes": {},
-        "readiness": {
-            "state": "blocked",
-            "blockers": [
-                {
-                    "key": str(readiness_blocker_key),
-                    "severity": "high",
-                    "metrics": [],
-                    "gates": [],
-                    "explanation": str(readiness_blocker_explanation),
-                }
-            ],
-            "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0},
-            "qc_confidence": {"qc_mode": str(di_input.qc_mode), "reviewed_required_present": 0, "unreviewed_required_present": 0, "notes": []},
-            "comparability": {"method_incomparable_metrics": [], "notes": []},
-            "decision_context": str(di_input.decision_key),
-            "readiness_level": "blocked",
-            "blocking_gates": [],
-            "blocking_reasons": [str(readiness_blocking_reason)],
-            "assumptions": [],
-            "required_next_steps": [],
-        },
-        "coverage_fingerprint": _sha256_of_stable_json(
-            coverage_fingerprint_payload(readiness={"blockers": [], "coverage": {"required_present": 0, "required_total": 0, "optional_present": 0, "optional_total": 0, "coverage_ratio": 0.0}, "comparability": {"method_incomparable_metrics": [], "notes": []}}, gate_outcomes={})
-        ),
-        "suggestions": [],
-    }
+    return build_di_error_output_payload(
+        di_input=di_input,
+        pol=pol,
+        evaluator_version=evaluator_version,
+        warning_kind=warning_kind,
+        warning_detail=warning_detail,
+        blocker_key=blocker_key,
+        blocker_detail=blocker_detail,
+        risk_flag=risk_flag,
+        risk_note=risk_note,
+        risk_enriched_key=risk_enriched_key,
+        risk_enriched_explanation=risk_enriched_explanation,
+        readiness_blocker_key=readiness_blocker_key,
+        readiness_blocker_explanation=readiness_blocker_explanation,
+        readiness_blocking_reason=readiness_blocking_reason,
+        engine_id=ENGINE_ID,
+        snapshot_schema_version=SNAPSHOT_SCHEMA_VERSION,
+        selector_version=SELECTOR_VERSION,
+        selection_semantics_version=DI_SELECTION_SEMANTICS_VERSION,
+        code_version=PSI_VERSION,
+        stable_hash_json_fn=_sha256_of_stable_json,
+    )
 
 
 def _complete_di_error_output_contract_parity(

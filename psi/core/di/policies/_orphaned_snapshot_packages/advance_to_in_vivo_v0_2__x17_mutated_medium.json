@@ -1,6 +1,6 @@
 {
   "policy_id": "policy.advance_to_in_vivo",
-  "policy_version": "v0.4",
+  "policy_version": "v0.2",
   "policy_name": "advance_to_in_vivo",
   "schema_version": "di.policy_package.v0_1",
   "template_key": "advance_to_in_vivo.v0_1",
@@ -33,10 +33,10 @@
       "coverage_gap": "high",
       "internalization_sensitive_binding_gap": "low",
       "interpretation_gap": "high",
-      "method_incomparable": "moderate",
+      "method_incomparable": "medium",
       "missing_required_metric": "high",
-      "outlier_present": "moderate",
-      "qc_uncertainty": "moderate",
+      "outlier_present": "medium",
+      "qc_uncertainty": "medium",
       "threshold_violation": "low"
     },
     "blocker_taxonomy": [
@@ -59,16 +59,6 @@
       "version": "v0.2",
       "date": "2026-02-23",
       "change": "Add metric value-function metadata and interpretation gap requirements."
-    },
-    {
-      "version": "v0.3",
-      "date": "2026-02-23",
-      "change": "Add controlled shortlisting guardrails and tie-break hierarchy."
-    },
-    {
-      "version": "v0.4",
-      "date": "2026-02-25",
-      "change": "Add deterministic route-based context branching for the functional gate requirement set (opt-in policy version)."
     }
   ],
   "policy_body": {
@@ -125,28 +115,6 @@
         ]
       },
       "G4_functional": {
-        "context_require_any_by_value": {
-          "route": {
-            "SC": {
-              "require_any": [
-                "percent_killing",
-                "ec50",
-                "pass_fail",
-                "internalization_t1_2_h",
-                "surface_expression_pct_24h"
-              ],
-              "explanation": "SC route branch expands functional evidence options to include internalization/surface-expression anchors."
-            },
-            "_default": {
-              "require_any": [
-                "percent_killing",
-                "ec50",
-                "pass_fail"
-              ],
-              "explanation": "Default route branch uses the baseline functional evidence set."
-            }
-          }
-        },
         "require_any": [
           "percent_killing",
           "ec50",
@@ -262,26 +230,15 @@
         "context_key": "study_intent"
       }
     },
-    "shortlisting": {
-      "allow_shortlisting": true,
-      "min_readiness_state": "ready",
-      "min_required_coverage_ratio": 1.0,
-      "required_gates": [
-        "G1_material_readiness",
-        "G2_purity_integrity",
-        "G3_endotoxin",
-        "G4_functional"
-      ]
-    },
     "risk_flag_severity_tiers": {
       "context_missing": "high",
       "coverage_gap": "high",
       "internalization_sensitive_binding_gap": "low",
       "interpretation_gap": "high",
-      "method_incomparable": "moderate",
+      "method_incomparable": "medium",
       "missing_required_metric": "high",
-      "outlier_present": "moderate",
-      "qc_uncertainty": "moderate",
+      "outlier_present": "medium",
+      "qc_uncertainty": "medium",
       "threshold_violation": "low"
     }
   }

@@ -28,10 +28,10 @@
       "coverage_gap": "high",
       "internalization_sensitive_binding_gap": "low",
       "interpretation_gap": "high",
-      "method_incomparable": "moderate",
+      "method_incomparable": "medium",
       "missing_required_metric": "high",
-      "outlier_present": "moderate",
-      "qc_uncertainty": "moderate",
+      "outlier_present": "medium",
+      "qc_uncertainty": "medium",
       "threshold_violation": "low"
     },
     "blocker_taxonomy": [
@@ -148,10 +148,10 @@
       "coverage_gap": "high",
       "internalization_sensitive_binding_gap": "low",
       "interpretation_gap": "high",
-      "method_incomparable": "moderate",
+      "method_incomparable": "medium",
       "missing_required_metric": "high",
-      "outlier_present": "moderate",
-      "qc_uncertainty": "moderate",
+      "outlier_present": "medium",
+      "qc_uncertainty": "medium",
       "threshold_violation": "low"
     }
   }

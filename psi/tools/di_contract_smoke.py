@@ -348,6 +348,17 @@ def test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically() -> 
     )
 
 
+def test_risk_flag_enrichment_unknown_key_defaults_to_unspecified_neutral() -> None:
+    out = derive_risk_flags_enriched(
+        risk_flags=[{"risk_flag": "unknown_new_flag"}],
+        used_by_metric={},
+        policy_body={"gates": {}, "risk_flag_severity_tiers": {}},
+        policy_package=None,
+    )
+    _assert(len(out) == 1, "unknown risk flag should still be emitted")
+    _assert(str((out[0] or {}).get("severity") or "") == "unspecified", "unknown risk flag severity fallback must be unspecified (neutral)")
+
+
 def test_di_snapshot_ui_risk_flag_severity_rendering_deterministic() -> None:
     ctx = {
         "snap": {"decision_key": "advance_to_in_vivo", "id": 1},
@@ -433,13 +444,22 @@ def test_policy_registry_manifest_matches_package_hashes() -> None:
     raw = json.loads(manifest_path.read_text(encoding="utf-8"))
     entries = raw.get("entries") if isinstance(raw, dict) else None
     _assert(isinstance(entries, list) and bool(entries), "policy registry manifest entries must be present")
-    filenames = [str((e or {}).get("filename") or "") for e in entries if isinstance(e, dict)]
-    _assert(filenames == sorted(filenames), "policy registry manifest entries must be filename-sorted")
+    paths = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        rel = str(e.get("path") or "").strip()
+        fn = str(e.get("filename") or "").strip()
+        paths.append(rel or f"psi/core/di/policies/{fn}")
+    _assert(paths == sorted(paths), "policy registry manifest entries must be path-sorted")
     for e in entries:
         _assert(isinstance(e, dict), "policy registry manifest entry must be object")
+        rel = str(e.get("path") or "").strip()
         fn = str(e.get("filename") or "")
         _assert(fn, "policy registry manifest filename required")
-        pol = load_policy(repo_root / "psi" / "core" / "di" / "policies" / fn)
+        pol_path = (repo_root / rel) if rel else (repo_root / "psi" / "core" / "di" / "policies" / fn)
+        _assert(pol_path.is_file(), f"policy registry manifest path missing: {pol_path}")
+        pol = load_policy(pol_path)
         _assert(str(e.get("policy_version") or "") == str(pol.version or ""), f"{fn}: policy_version mismatch in registry manifest")
         _assert(str(e.get("policy_package_hash") or "") == str(pol.policy_package_hash or ""), f"{fn}: policy_package_hash mismatch in registry manifest")
 
@@ -583,6 +603,59 @@ def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
         _assert(len(vals) == len(set(vals)), f"early milestone {mk} list must be duplicate-free")
     for mk, tv in sorted(di_m.items()):
         _assert(isinstance(tv, str) and tv, f"di milestone {mk} must map to non-empty template key")
+
+
+def test_shortlisting_policy_catalog_v0_1_weights_schema_and_values() -> None:
+    p = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "shortlisting_policy_v0_1.json"
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    _assert(str(raw.get("policy_id") or "") == "shortlisting_policy_v0_1", "shortlisting policy id mismatch")
+    _assert(str(raw.get("policy_version") or "") == "v0.1", "shortlisting policy version mismatch")
+    rw = raw.get("ranking_weights") if isinstance(raw.get("ranking_weights"), dict) else {}
+    _assert(set(rw.keys()) == {"batch_scope", "molecule_scope"}, "shortlisting policy ranking_weights scopes mismatch")
+    batch = rw.get("batch_scope") if isinstance(rw.get("batch_scope"), dict) else {}
+    mol = rw.get("molecule_scope") if isinstance(rw.get("molecule_scope"), dict) else {}
+    _assert(list(batch.keys()) == sorted(batch.keys()), "shortlisting policy batch_scope keys must be sorted")
+    _assert(list(mol.keys()) == sorted(mol.keys()), "shortlisting policy molecule_scope keys must be sorted")
+    allowed_batch = {"decision_state_pro", "decision_state_con", "blockers_count", "comparability_high_severity", "metrics_present", "metrics_missing", "warnings_count"}
+    allowed_mol = {"metrics_sourced_count", "used_metric_count", "ignored_count", "warning_count"}
+    _assert(set(batch.keys()) == allowed_batch, "shortlisting policy batch_scope allowed keys mismatch")
+    _assert(set(mol.keys()) == allowed_mol, "shortlisting policy molecule_scope allowed keys mismatch")
+    for k, v in sorted(batch.items()):
+        _assert(isinstance(v, (int, float)), f"shortlisting policy batch weight {k} must be numeric")
+    for k, v in sorted(mol.items()):
+        _assert(isinstance(v, (int, float)), f"shortlisting policy molecule weight {k} must be numeric")
+
+
+def test_progress_policy_metric_keys_are_representable_in_measurement_registry() -> None:
+    from psi.core.di.catalog import load_progress_policy_v0_1
+    from psi.core import registry as core_registry
+
+    pol = load_progress_policy_v0_1()
+    body = pol.policy if isinstance(pol.policy, dict) else {}
+    early = body.get("early_milestones") if isinstance(body.get("early_milestones"), dict) else {}
+
+    registry_field_keys: set[str] = set()
+    schemas = core_registry.DATA_SCHEMAS if isinstance(getattr(core_registry, "DATA_SCHEMAS", None), dict) else {}
+    for dt_key in sorted(schemas.keys()):
+        methods = schemas.get(dt_key) if isinstance(schemas.get(dt_key), dict) else {}
+        for method_key in sorted(methods.keys()):
+            method = methods.get(method_key) if isinstance(methods.get(method_key), dict) else {}
+            for fld_key in ("params_fields", "results_fields"):
+                fields = method.get(fld_key) if isinstance(method.get(fld_key), list) else []
+                for fld in fields:
+                    if not isinstance(fld, dict):
+                        continue
+                    k = str(fld.get("key") or "").strip()
+                    if k:
+                        registry_field_keys.add(k)
+
+    missing: list[str] = []
+    for milestone_key in sorted(early.keys()):
+        vals = early.get(milestone_key) if isinstance(early.get(milestone_key), list) else []
+        for mk in sorted(str(x) for x in vals if str(x).strip()):
+            if mk not in registry_field_keys:
+                missing.append(mk)
+    _assert(not missing, f"progress policy metric keys must be representable in measurement registry fields: {sorted(set(missing))}")
 
 
 def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
@@ -749,9 +822,12 @@ def test_progress_stage_advisory_selection_is_deterministic() -> None:
     out = _build_progress_stage_advisory(prereq_advisories=sorted(advisories, key=lambda a: str(a.get("milestone_key") or "")))
     _assert(isinstance(out, dict), "stage advisory should be emitted when prerequisite advisories exist")
     _assert(str((out or {}).get("milestone_key") or "") == "di_a", "stage advisory should select deterministic first blocked DI milestone")
+    items = (out or {}).get("blocked_by_items")
+    _assert(isinstance(items, list) and len(items) == 2, "stage advisory should carry all blocker advisories deterministically")
+    _assert([str((x or {}).get('milestone_key') or '') for x in items] == ["di_a", "di_b"], "stage advisory blocker list order mismatch")
     _assert(
-        str((out or {}).get("blocked_by_text") or "").startswith("Blocked by prerequisites: "),
-        "stage advisory should surface deterministic prerequisite blocker text",
+        " | " in str((out or {}).get("blocked_by_text") or ""),
+        "stage advisory should aggregate all blocker texts deterministically",
     )
 
 
@@ -2370,6 +2446,12 @@ def test_di_error_output_parity_extension_gating_v03_vs_v04() -> None:
         _assert(k in err_v04, f"v0.4 error parity should emit v0.4-only field: {k}")
 
 
+def test_error_output_field_surface_guard_against_happy_path_drift() -> None:
+    # Explicit alias/intent lock for x20: if happy-path adds new top-level fields,
+    # the representative parity test above should fail unless error projection is updated.
+    test_di_error_output_top_level_key_parity()
+
+
 def test_di_error_output_parity_multiple_error_factories_defaults() -> None:
     from types import SimpleNamespace
 
@@ -2507,7 +2589,10 @@ def main() -> int:
         test_policy_template_structure_present()
         test_policy_risk_flag_severity_tiers_present_and_cover_expected_flags()
         test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically()
+        test_risk_flag_enrichment_unknown_key_defaults_to_unspecified_neutral()
         test_progress_policy_catalog_v0_1_loads_and_validates()
+        test_progress_policy_metric_keys_are_representable_in_measurement_registry()
+        test_shortlisting_policy_catalog_v0_1_weights_schema_and_values()
         test_template_prerequisites_catalog_v0_1_loads_and_validates()
         test_confidence_policy_catalog_loads_and_latest_loader_is_deterministic()
         test_confidence_policy_catalog_non_weighted_language_and_keys()
@@ -2557,6 +2642,7 @@ def main() -> int:
         test_cross_version_snapshot_content_hash_stability()
         test_di_error_output_top_level_key_parity()
         test_di_error_output_parity_extension_gating_v03_vs_v04()
+        test_error_output_field_surface_guard_against_happy_path_drift()
         test_di_error_output_parity_multiple_error_factories_defaults()
         test_outcome_dataset_export_deterministic()
         test_outcome_dataset_export_hash_field_enrichment_from_stored_snapshot_fields()

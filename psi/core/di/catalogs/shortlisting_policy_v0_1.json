@@ -1,0 +1,21 @@
+{
+  "policy_id": "shortlisting_policy_v0_1",
+  "policy_version": "v0.1",
+  "ranking_weights": {
+    "batch_scope": {
+      "blockers_count": 5.0,
+      "comparability_high_severity": 3.0,
+      "decision_state_con": 50.0,
+      "decision_state_pro": 50.0,
+      "metrics_missing": 1.0,
+      "metrics_present": 1.0,
+      "warnings_count": 1.0
+    },
+    "molecule_scope": {
+      "ignored_count": 0.5,
+      "metrics_sourced_count": 2.0,
+      "used_metric_count": 1.0,
+      "warning_count": 1.0
+    }
+  }
+}

@@ -155,6 +155,7 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             ],
             "results_fields": [
                 {"key": "titer_mg_l", "label": "Titer", "type": "number", "required": False, "units": "mg/L"},
+                {"key": "expr_yield_mgL", "label": "Expression yield", "type": "number", "required": False, "units": "mg/L"},
                 {"key": "total_yield_mg", "label": "Total yield", "type": "number", "required": False, "units": "mg"},
                 {"key": "viability_percent", "label": "Viability", "type": "number", "required": False, "units": "%"},
                 {"key": "qc_notes", "label": "QC notes", "type": "textarea", "required": False},
@@ -174,6 +175,7 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             ],
             "results_fields": [
                 {"key": "titer_mg_l", "label": "Titer", "type": "number", "required": False, "units": "mg/L"},
+                {"key": "expr_yield_mgL", "label": "Expression yield", "type": "number", "required": False, "units": "mg/L"},
                 {"key": "total_yield_mg", "label": "Total yield", "type": "number", "required": False, "units": "mg"},
                 {"key": "viability_percent", "label": "Viability", "type": "number", "required": False, "units": "%"},
                 {"key": "qc_notes", "label": "QC notes", "type": "textarea", "required": False},
@@ -188,6 +190,7 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             ],
             "results_fields": [
                 {"key": "titer_mg_l", "label": "Titer", "type": "number", "required": False, "units": "mg/L"},
+                {"key": "expr_yield_mgL", "label": "Expression yield", "type": "number", "required": False, "units": "mg/L"},
                 {"key": "total_yield_mg", "label": "Total yield", "type": "number", "required": False, "units": "mg"},
                 {"key": "conclusion", "label": "Conclusion", "type": "select", "required": False, "options": ["pass", "borderline", "fail"]},
             ],
@@ -730,6 +733,7 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
                 {"key": "auc", "label": "AUC", "type": "number", "required": False},
                 {"key": "auc_units", "label": "AUC units", "type": "text", "required": False},
                 {"key": "half_life_h", "label": "Half-life", "type": "number", "required": False, "units": "h"},
+                {"key": "pk_t12_h", "label": "Half-life", "type": "number", "required": False, "units": "h"},
                 {"key": "clearance", "label": "Clearance", "type": "number", "required": False},
                 {"key": "clearance_units", "label": "Clearance units", "type": "text", "required": False},
                 {"key": "vd", "label": "Vd", "type": "number", "required": False},
@@ -758,6 +762,7 @@ DATA_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
                 {"key": "auc", "label": "AUC", "type": "number", "required": False},
                 {"key": "auc_units", "label": "AUC units", "type": "text", "required": False},
                 {"key": "half_life_h", "label": "Half-life", "type": "number", "required": False, "units": "h"},
+                {"key": "pk_t12_h", "label": "Half-life", "type": "number", "required": False, "units": "h"},
                 {"key": "clearance", "label": "Clearance", "type": "number", "required": False},
                 {"key": "clearance_units", "label": "Clearance units", "type": "text", "required": False},
                 {"key": "vd", "label": "Vd", "type": "number", "required": False},

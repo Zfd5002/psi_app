@@ -725,6 +725,28 @@ def _resolve_policy_from_repo(
                 exact_matches.sort(key=lambda t: str(t[1]))
             return exact_matches[0]
         if require_exact_hash_match:
+            # x18 governance repair: allow exact-hash lookup in archival orphaned packages
+            # for historically persisted snapshots that referenced a mutated package.
+            orphan_dir = pol_dir / "_orphaned_snapshot_packages"
+            if orphan_dir.exists():
+                archival_matches: List[Tuple[Any, Path]] = []
+                for p in sorted(orphan_dir.glob("*.json")):
+                    try:
+                        apol = load_policy(p)
+                    except Exception:
+                        continue
+                    if str(apol.policy_id) != str(policy_id) or str(apol.version) != str(policy_version):
+                        continue
+                    apol_sem = str(getattr(apol, "policy_semantics_hash", "") or "")
+                    apol_pkg = str(getattr(apol, "policy_package_hash", "") or "")
+                    if sem_h and apol_sem != sem_h:
+                        continue
+                    if pkg_h and apol_pkg != pkg_h:
+                        continue
+                    archival_matches.append((apol, p))
+                if archival_matches:
+                    archival_matches.sort(key=lambda t: str(t[1]))
+                    return archival_matches[0]
             raise ValueError(
                 f"Policy exact hash match not found in repo for policy_id={policy_id!r} "
                 f"policy_version={policy_version!r}"
