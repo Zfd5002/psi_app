@@ -42,7 +42,7 @@ from psi.core.biochem import liability_sites
 from psi.core.annotations import detect_linker_spans, detect_fc_region, dedupe_features
 from psi.core.di.catalog import load_confidence_policy_latest, load_progress_policy_v0_1, load_template_prerequisites_latest
 from psi.core.measurement_schema import measurement_cols
-from psi.services.di.util import is_heavy_compute_enabled
+from psi.services.di.util import heavy_compute_banner_text, is_heavy_compute_enabled
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
 
 
@@ -260,15 +260,77 @@ def _shortlisting_tie_break_dimensions(out_obj: dict[str, Any]) -> list[dict[str
     return []
 
 
+def _confidence_policy_ui_config() -> dict[str, Any]:
+    default_order = ["qc_quality", "reproducibility", "comparability", "interpretability"]
+    default_rules: dict[str, dict[str, Any]] = {
+        "qc_quality": {
+            "label": "QC Quality",
+            "preferred_signal_dimension": "qc_confidence",
+            "fallback_gate_keys": ["G2_purity_integrity", "G3_endotoxin"],
+            "high_severity_if_failed_gate_keys": ["G3_endotoxin"],
+        },
+        "reproducibility": {
+            "label": "Reproducibility",
+            "preferred_signal_dimension": "reproducibility",
+            "required_metrics_key": "required_metrics",
+            "positive_field": "reproducibility_positive",
+        },
+        "comparability": {
+            "label": "Comparability",
+            "source_field": "drift_type",
+            "concern_drift_types": ["INCOMPARABLE"],
+            "concern_severity": "high",
+        },
+        "interpretability": {
+            "label": "Interpretability",
+            "source_field": "risk_flags_enriched",
+            "severity_order": ["high", "medium", "low", "unspecified"],
+            "unspecified_is_neutral": True,
+        },
+    }
+    try:
+        conf_pol = load_confidence_policy_latest()
+        body = conf_pol.policy if isinstance(conf_pol.policy, dict) else {}
+        raw_order = body.get("component_order") if isinstance(body.get("component_order"), list) else []
+        order = [str(x).strip() for x in raw_order if str(x).strip() in default_rules]
+        if not order:
+            order = list(default_order)
+        raw_rules = body.get("component_rules") if isinstance(body.get("component_rules"), dict) else {}
+        merged_rules = {k: dict(v) for k, v in default_rules.items()}
+        for k in order:
+            rv = raw_rules.get(k)
+            if isinstance(rv, dict):
+                nxt = dict(merged_rules.get(k) or {})
+                nxt.update(rv)
+                merged_rules[k] = nxt
+        return {"component_order": order, "component_rules": merged_rules}
+    except Exception:
+        return {"component_order": list(default_order), "component_rules": default_rules}
+
+
 def _build_confidence_model(*, latest_di_row: dict[str, Any] | None, risk_severity_counts: dict[str, int]) -> dict[str, Any]:
+    conf_cfg = _confidence_policy_ui_config()
+    comp_order = conf_cfg.get("component_order") if isinstance(conf_cfg.get("component_order"), list) else []
+    comp_rules = conf_cfg.get("component_rules") if isinstance(conf_cfg.get("component_rules"), dict) else {}
+    label_by_key = {
+        str(k): str((v or {}).get("label") or str(k))
+        for k, v in comp_rules.items()
+        if isinstance(v, dict)
+    }
+
     if not latest_di_row or not isinstance((latest_di_row.get("_out") or {}), dict):
+        ordered_components = []
+        for ck in (comp_order or ["qc_quality", "reproducibility", "comparability", "interpretability"]):
+            ordered_components.append(
+                {
+                    "name": label_by_key.get(ck, ck.replace("_", " ").title()),
+                    "key": ck,
+                    "state": "not_assessed",
+                    "details": "No DI snapshot available yet.",
+                }
+            )
         return {
-            "components": [
-                {"name": "QC Quality", "key": "qc_quality", "state": "not_assessed", "details": "No DI snapshot available yet."},
-                {"name": "Reproducibility", "key": "reproducibility", "state": "not_assessed", "details": "No DI snapshot available yet."},
-                {"name": "Comparability", "key": "comparability", "state": "not_assessed", "details": "No DI snapshot available yet."},
-                {"name": "Interpretability", "key": "interpretability", "state": "not_assessed", "details": "No DI snapshot available yet."},
-            ],
+            "components": ordered_components,
             "scalar_state": "unknown",
             "scalar_label": "Unknown",
             "rule_text": "Confidence summary is derived from component counts only (no weights). Missing components are Not Assessed.",
@@ -280,8 +342,29 @@ def _build_confidence_model(*, latest_di_row: dict[str, Any] | None, risk_severi
 
     components: list[dict[str, Any]] = []
 
+    qc_rules = comp_rules.get("qc_quality") if isinstance(comp_rules.get("qc_quality"), dict) else {}
+    qc_label = label_by_key.get("qc_quality", "QC Quality")
+    qc_dim_key = str(qc_rules.get("preferred_signal_dimension") or "qc_confidence")
+    qc_gate_keys = [
+        str(x)
+        for x in (
+            qc_rules.get("fallback_gate_keys")
+            if isinstance(qc_rules.get("fallback_gate_keys"), list)
+            else ["G2_purity_integrity", "G3_endotoxin"]
+        )
+        if str(x)
+    ]
+    qc_high_gate_keys = {
+        str(x)
+        for x in (
+            qc_rules.get("high_severity_if_failed_gate_keys")
+            if isinstance(qc_rules.get("high_severity_if_failed_gate_keys"), list)
+            else ["G3_endotoxin"]
+        )
+        if str(x)
+    }
     # QC Quality: prefer tie-break qc_confidence signal (v0.4+), fallback to gate statuses.
-    qc_dim = dim_by_key.get("qc_confidence")
+    qc_dim = dim_by_key.get(qc_dim_key)
     if isinstance(qc_dim, dict) and str(qc_dim.get("status") or "") == "implemented" and isinstance(qc_dim.get("value"), dict):
         qcv = qc_dim.get("value") or {}
         concerns = qcv.get("concerns") if isinstance(qcv.get("concerns"), list) else []
@@ -294,7 +377,7 @@ def _build_confidence_model(*, latest_di_row: dict[str, Any] | None, risk_severi
         severity = "high" if high_ct > 0 else ("medium" if concerns else None)
         components.append(
             {
-                "name": "QC Quality",
+                "name": qc_label,
                 "key": "qc_quality",
                 "state": state,
                 "severity": severity,
@@ -308,35 +391,40 @@ def _build_confidence_model(*, latest_di_row: dict[str, Any] | None, risk_severi
             for g in gates
             if isinstance(g, dict)
         }
-        observed = [k for k in ("G2_purity_integrity", "G3_endotoxin") if k in gate_status]
+        observed = [k for k in qc_gate_keys if k in gate_status]
         if not observed:
-            components.append({"name": "QC Quality", "key": "qc_quality", "state": "not_assessed", "details": "No QC confidence signal in latest snapshot."})
+            components.append({"name": qc_label, "key": "qc_quality", "state": "not_assessed", "details": "No QC confidence signal in latest snapshot."})
         else:
             failed = [k for k in observed if gate_status.get(k) != "pass"]
             components.append(
                 {
-                    "name": "QC Quality",
+                    "name": qc_label,
                     "key": "qc_quality",
                     "state": ("concern" if failed else "good"),
-                    "severity": ("high" if "G3_endotoxin" in failed else ("medium" if failed else None)),
+                    "severity": ("high" if any(k in qc_high_gate_keys for k in failed) else ("medium" if failed else None)),
                     "details": ("Failed gates: " + ", ".join(sorted(failed))) if failed else "Purity/endotoxin gates passed.",
                 }
             )
 
     # Reproducibility: use v0.4 tie-break dimension when present.
-    rep_dim = dim_by_key.get("reproducibility")
+    rep_rules = comp_rules.get("reproducibility") if isinstance(comp_rules.get("reproducibility"), dict) else {}
+    rep_label = label_by_key.get("reproducibility", "Reproducibility")
+    rep_dim_key = str(rep_rules.get("preferred_signal_dimension") or "reproducibility")
+    rep_metrics_key = str(rep_rules.get("required_metrics_key") or "required_metrics")
+    rep_positive_field = str(rep_rules.get("positive_field") or "reproducibility_positive")
+    rep_dim = dim_by_key.get(rep_dim_key)
     if isinstance(rep_dim, dict) and str(rep_dim.get("status") or "") == "implemented" and isinstance(rep_dim.get("value"), dict):
         repv = rep_dim.get("value") or {}
-        req = repv.get("required_metrics") if isinstance(repv.get("required_metrics"), list) else []
+        req = repv.get(rep_metrics_key) if isinstance(repv.get(rep_metrics_key), list) else []
         rows = [r for r in req if isinstance(r, dict)]
         if not rows:
-            components.append({"name": "Reproducibility", "key": "reproducibility", "state": "not_assessed", "details": "No required metrics in reproducibility signal."})
+            components.append({"name": rep_label, "key": "reproducibility", "state": "not_assessed", "details": "No required metrics in reproducibility signal."})
         else:
-            positives = sum(1 for r in rows if bool(r.get("reproducibility_positive")))
+            positives = sum(1 for r in rows if bool(r.get(rep_positive_field)))
             total = len(rows)
             components.append(
                 {
-                    "name": "Reproducibility",
+                    "name": rep_label,
                     "key": "reproducibility",
                     "state": ("good" if positives == total else "concern"),
                     "severity": (None if positives == total else "medium"),
@@ -344,43 +432,68 @@ def _build_confidence_model(*, latest_di_row: dict[str, Any] | None, risk_severi
                 }
             )
     else:
-        components.append({"name": "Reproducibility", "key": "reproducibility", "state": "not_assessed", "details": "No reproducibility tie-break signal on latest snapshot."})
+        components.append({"name": rep_label, "key": "reproducibility", "state": "not_assessed", "details": "No reproducibility tie-break signal on latest snapshot."})
 
     # Comparability: interpret drift comparability state deterministically from drift_type.
-    drift_type = str(out_obj.get("drift_type") or "").strip().upper()
+    compa_rules = comp_rules.get("comparability") if isinstance(comp_rules.get("comparability"), dict) else {}
+    compa_label = label_by_key.get("comparability", "Comparability")
+    compa_source_field = str(compa_rules.get("source_field") or "drift_type")
+    compa_concern_drift_types = {
+        str(x).strip().upper()
+        for x in (
+            compa_rules.get("concern_drift_types")
+            if isinstance(compa_rules.get("concern_drift_types"), list)
+            else ["INCOMPARABLE"]
+        )
+        if str(x).strip()
+    }
+    compa_concern_sev = str(compa_rules.get("concern_severity") or "high").strip().lower() or "high"
+    drift_type = str(out_obj.get(compa_source_field) or "").strip().upper()
     if not drift_type:
-        components.append({"name": "Comparability", "key": "comparability", "state": "not_assessed", "details": "No drift comparability signal on latest snapshot."})
-    elif drift_type == "INCOMPARABLE":
-        components.append({"name": "Comparability", "key": "comparability", "state": "concern", "severity": "high", "details": "Latest snapshot is incomparable to prior baseline."})
+        components.append({"name": compa_label, "key": "comparability", "state": "not_assessed", "details": "No drift comparability signal on latest snapshot."})
+    elif drift_type in compa_concern_drift_types:
+        components.append({"name": compa_label, "key": "comparability", "state": "concern", "severity": compa_concern_sev, "details": "Latest snapshot is incomparable to prior baseline."})
     else:
-        components.append({"name": "Comparability", "key": "comparability", "state": "good", "details": f"Drift comparability available (drift_type={drift_type})."})
+        components.append({"name": compa_label, "key": "comparability", "state": "good", "details": f"Drift comparability available (drift_type={drift_type})."})
 
     # Interpretability: severity-aware, derived from risk flags only (UI/read-only).
+    interp_rules = comp_rules.get("interpretability") if isinstance(comp_rules.get("interpretability"), dict) else {}
+    interp_label = label_by_key.get("interpretability", "Interpretability")
+    interp_severity_order = [
+        str(x).strip().lower()
+        for x in (
+            interp_rules.get("severity_order")
+            if isinstance(interp_rules.get("severity_order"), list)
+            else ["high", "medium", "low", "unspecified"]
+        )
+        if str(x).strip()
+    ]
     high_n = int(risk_severity_counts.get("high") or 0)
     med_n = int(risk_severity_counts.get("medium") or 0)
     low_n = int(risk_severity_counts.get("low") or 0)
     uns_n = int(risk_severity_counts.get("unspecified") or 0)
     total_risk = high_n + med_n + low_n + uns_n
     if total_risk <= 0:
-        components.append({"name": "Interpretability", "key": "interpretability", "state": "good", "details": "No risk flags on latest snapshot."})
+        components.append({"name": interp_label, "key": "interpretability", "state": "good", "details": "No risk flags on latest snapshot."})
     else:
-        if high_n > 0:
-            sev = "high"
-        elif med_n > 0:
-            sev = "medium"
-        elif low_n > 0:
-            sev = "low"
-        else:
-            sev = "unspecified"
+        sev_counts = {"high": high_n, "medium": med_n, "low": low_n, "unspecified": uns_n}
+        sev = next((s for s in interp_severity_order if int(sev_counts.get(s) or 0) > 0), "unspecified")
         components.append(
             {
-                "name": "Interpretability",
+                "name": interp_label,
                 "key": "interpretability",
                 "state": "concern",
                 "severity": sev,
                 "details": f"Risk flags: high={high_n}, medium={med_n}, low={low_n}, unspecified={uns_n}.",
                 "detail_items": _sorted_interpretability_detail_items(risk_severity_counts=risk_severity_counts),
             }
+        )
+
+    if comp_order:
+        comp_index = {str(k): i for i, k in enumerate(comp_order)}
+        components = sorted(
+            components,
+            key=lambda c: (int(comp_index.get(str(c.get("key") or ""), 999)), str(c.get("key") or "")),
         )
 
     scalar_state, scalar_label, scalar_counts = _derive_confidence_scalar_from_components(components=components)
@@ -470,6 +583,18 @@ def _sorted_prerequisite_blockers_for_advisory(blockers: list[dict[str, Any]] | 
     )
 
 
+def _build_progress_stage_advisory(*, prereq_advisories: list[dict[str, Any]] | None) -> dict[str, Any] | None:
+    if not isinstance(prereq_advisories, list) or not prereq_advisories:
+        return None
+    stage_adv = prereq_advisories[0]
+    if not isinstance(stage_adv, dict):
+        return None
+    return {
+        "milestone_key": str(stage_adv.get("milestone_key") or ""),
+        "blocked_by_text": str(stage_adv.get("blocked_by_text") or ""),
+    }
+
+
 def _risk_item_sort_key(item: dict[str, Any]) -> tuple[int, str]:
     sev_rank = {"high": 0, "medium": 1, "moderate": 1, "low": 2, "unspecified": 3}
     sev = str(item.get("severity") or "").strip().lower()
@@ -509,6 +634,16 @@ def _build_header_risk_items(*, latest_di_row: dict[str, Any] | None) -> list[di
         )
     # Explicit deterministic ordering for the persistent scientist header.
     return sorted(items, key=_risk_item_sort_key)
+
+
+def _build_progress_hover_text(*, milestones: list[dict[str, Any]]) -> str:
+    ms = [m for m in (milestones or []) if isinstance(m, dict)]
+    sat = [str(m.get("key") or "") for m in ms if bool(m.get("satisfied")) and str(m.get("key") or "").strip()]
+    not_yet = [str(m.get("key") or "") for m in ms if not bool(m.get("satisfied")) and str(m.get("key") or "").strip()]
+    parts: list[str] = []
+    parts.append("satisfied=" + (",".join(sat) if sat else "none"))
+    parts.append("not_yet=" + (",".join(not_yet) if not_yet else "none"))
+    return "; ".join(parts)
 
 
 def _build_molecule_header_model(
@@ -625,6 +760,7 @@ def _build_molecule_header_model(
     for m in milestones:
         marker = "yes" if m.get("satisfied") else "no"
         progress_explain_parts.append(f"{m.get('key')}: {marker}")
+    progress_hover_text = _build_progress_hover_text(milestones=milestones)
 
     latest_di_row = next(
         (
@@ -693,6 +829,8 @@ def _build_molecule_header_model(
                 parts.append(f"{tk} ({status})")
         adv["blocked_by_text"] = "Blocked by prerequisites: " + (", ".join(parts) if parts else "unknown prerequisite state")
 
+    progress_stage_advisory = _build_progress_stage_advisory(prereq_advisories=prereq_advisories)
+
     heavy_compute_enabled = is_heavy_compute_enabled()
     confidence_model = _build_confidence_model(
         latest_di_row=latest_di_row,
@@ -703,15 +841,13 @@ def _build_molecule_header_model(
         "view_mode_default": "scientist",
         "progress_stage": progress_stage,
         "progress_explain": "; ".join(progress_explain_parts),
+        "progress_hover_text": progress_hover_text,
         "progress_milestones": milestones,
         "heavy_compute_enabled": bool(heavy_compute_enabled),
-        "heavy_compute_banner": (
-            "Heavy compute is ON (PSI_HEAVY_COMPUTE=1). DI hashes remain unaffected."
-            if heavy_compute_enabled
-            else "Heavy compute is OFF by default (PSI_HEAVY_COMPUTE=0). DI outputs are unaffected."
-        ),
+        "heavy_compute_banner": heavy_compute_banner_text(enabled=heavy_compute_enabled),
         "drift_summary_plain": drift_summary_plain,
         "prerequisite_advisories": prereq_advisories,
+        "progress_stage_advisory": progress_stage_advisory,
         "risk_severity_counts": risk_severity_counts,
         "risk_items": risk_items,
         "confidence_model": confidence_model,

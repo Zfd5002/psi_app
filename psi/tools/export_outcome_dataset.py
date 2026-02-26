@@ -19,6 +19,42 @@ def _json_obj(raw: str | None) -> dict[str, Any]:
     return obj if isinstance(obj, dict) else {}
 
 
+def _pick_non_empty_str(*vals: Any) -> str:
+    for v in vals:
+        s = str(v or "").strip()
+        if s:
+            return s
+    return ""
+
+
+def _extract_snapshot_hash_fields(*, inp: dict[str, Any], out: dict[str, Any]) -> dict[str, str]:
+    pol_out = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+    prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+    integ = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+    policy_ref = prov.get("policy_ref") if isinstance(prov.get("policy_ref"), dict) else {}
+    inputs_fp = prov.get("inputs_fingerprint") if isinstance(prov.get("inputs_fingerprint"), dict) else {}
+    return {
+        "policy_semantics_hash": _pick_non_empty_str(
+            inp.get("policy_semantics_hash"),
+            pol_out.get("policy_semantics_hash"),
+            policy_ref.get("policy_semantics_hash"),
+            policy_ref.get("hash"),
+            inp.get("policy_hash"),
+            pol_out.get("hash"),
+        ),
+        "policy_package_hash": _pick_non_empty_str(
+            inp.get("policy_package_hash"),
+            pol_out.get("policy_package_hash"),
+            policy_ref.get("policy_package_hash"),
+        ),
+        "evidence_fingerprint": _pick_non_empty_str(
+            integ.get("evidence_fingerprint"),
+            inputs_fp.get("evidence_fingerprint"),
+            out.get("evidence_fingerprint"),
+        ),
+    }
+
+
 def _label_row(r: OutcomeLabel) -> dict[str, Any]:
     return {
         "id": int(r.id),
@@ -65,9 +101,7 @@ def build_outcome_dataset_rows(*, db, engine_key_filter: str = "di") -> list[dic
     for s in snaps:
         inp = _json_obj(getattr(s, "inputs_json", None))
         out = _json_obj(getattr(s, "outputs_json", None))
-        pol_out = out.get("policy") if isinstance(out.get("policy"), dict) else {}
-        prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
-        integ = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+        hash_fields = _extract_snapshot_hash_fields(inp=inp, out=out)
 
         labels = list(labels_by_snapshot.get(int(s.id)) or [])
         latest_label_by_name: dict[str, dict[str, Any]] = {}
@@ -86,9 +120,9 @@ def build_outcome_dataset_rows(*, db, engine_key_filter: str = "di") -> list[dic
             "created_at": (s.created_at.isoformat() if getattr(s, "created_at", None) else None),
             "engine_key": str(getattr(s, "engine_key", "") or ""),
             "decision_key": str(getattr(s, "decision_key", "") or ""),
-            "policy_semantics_hash": str(inp.get("policy_semantics_hash") or pol_out.get("policy_semantics_hash") or ""),
-            "policy_package_hash": str(inp.get("policy_package_hash") or pol_out.get("policy_package_hash") or ""),
-            "evidence_fingerprint": str(integ.get("evidence_fingerprint") or ""),
+            "policy_semantics_hash": str(hash_fields.get("policy_semantics_hash") or ""),
+            "policy_package_hash": str(hash_fields.get("policy_package_hash") or ""),
+            "evidence_fingerprint": str(hash_fields.get("evidence_fingerprint") or ""),
             "decision_state": str(out.get("decision_state") or ""),
             "di_review_verdict": str((latest_label_by_name.get("di_review_verdict") or {}).get("value_text") or ""),
             "di_review_rationale": str((latest_label_by_name.get("di_review_rationale") or {}).get("value_text") or ""),

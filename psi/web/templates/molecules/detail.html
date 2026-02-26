@@ -65,6 +65,11 @@
       <div>
         <div class="muted mini">Scientist header (view-only; does not affect DI snapshots)</div>
         <div class="molecule-progress-title">{{ mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else 'not started' }}</div>
+        {% if mh.progress_stage_advisory is defined and mh.progress_stage_advisory and mh.progress_stage_advisory.blocked_by_text %}
+          <div class="muted mini" style="margin-top:4px;">
+            <b>Blocked by prerequisites</b>{% if mh.progress_stage_advisory.milestone_key %} ({{ mh.progress_stage_advisory.milestone_key }}){% endif %}: {{ mh.progress_stage_advisory.blocked_by_text }}
+          </div>
+        {% endif %}
       </div>
       <div class="molecule-view-toggle no-print" role="tablist" aria-label="Molecule detail view mode">
         <button type="button" class="btn mini" id="mh_view_scientist" data-view-mode="scientist">Scientist</button>
@@ -72,7 +77,7 @@
       </div>
     </div>
 
-    <div class="molecule-progress-bar" title="{{ mh.progress_explain if mh.progress_explain is defined else '' }}">
+    <div class="molecule-progress-bar" title="{{ mh.progress_hover_text if mh.progress_hover_text is defined else (mh.progress_explain if mh.progress_explain is defined else '') }}">
       {% set ms = mh.progress_milestones if mh.progress_milestones is defined and mh.progress_milestones else [] %}
       {% for m in ms %}
         <div class="molecule-progress-step {% if m.satisfied %}is-on{% else %}is-off{% endif %}">

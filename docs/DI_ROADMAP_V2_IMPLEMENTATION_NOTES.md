@@ -104,17 +104,37 @@ This note summarizes the current PSI DI roadmap v2 implementation surfaces that 
 - `OutcomeLabel.outcome_event_date` (nullable datetime) is additive metadata for post-hoc outcome timing.
 - This field is outcome-label metadata only and does not affect DI outputs or DI snapshot hashes.
 
+### Outcome labeling CLI (`psi.tools.label_outcome`)
+
+- `add` supports `--outcome-event-date` (ISO8601 date or timestamp).
+- Accepted examples:
+  - `2026-02-26`
+  - `2026-02-26T12:00:00Z`
+- Invalid formats fail with a deterministic CLI error message.
+
+Example:
+
+```bash
+python -m psi.tools.label_outcome add \
+  --snapshot-id 123 \
+  --name efficacy_outcome \
+  --text responder \
+  --outcome-event-date 2026-02-26T12:00:00Z
+```
+
 ### Deterministic export (`psi.tools.export_outcome_dataset`)
 
 Exporter now includes:
 
 - `outcome_event_date` (latest non-null event date across a snapshot's outcome labels, if present)
 - `days_to_outcome` = `outcome_event_date - snapshot.created_at` (days, rounded to 6 decimals; omitted/null when unavailable)
+- `policy_semantics_hash`, `policy_package_hash`, `evidence_fingerprint` enriched from stored snapshot fields only (inputs/output policy/provenance metadata; no recomputation)
 
 Determinism guarantees:
 
 - Rows ordered by `snapshot_id` ascending
 - Outcome labels ordered by `(snapshot_id, created_at, id)`
+- Hash/fingerprint fields are read from stored snapshot JSON via deterministic fallback precedence
 - JSONL serialized with stable key ordering
 
 ## `value_functions_enforcement_reason` Semantics

@@ -84,6 +84,9 @@
     <div>
       <div class="muted">drift_type</div>
       <div>{{ output.drift_type if output.drift_type is defined and output.drift_type else '—' }}</div>
+      {% if di_ui is defined and di_ui.drift_translation is defined and di_ui.drift_translation %}
+        <div class="muted mini" style="margin-top:4px;">{{ di_ui.drift_translation }}</div>
+      {% endif %}
       <div class="muted" style="margin-top:8px;">state_transition</div>
       {% if output.state_transition is defined and output.state_transition %}
         <pre style="white-space:pre-wrap;overflow:auto;max-height:120px;">{{ output.state_transition | tojson(indent=2) }}</pre>

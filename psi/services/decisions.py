@@ -191,7 +191,23 @@ def _di_snapshot_ui_view_model(*, output: dict, outcomes: list[OutcomeLabel]) ->
         "outcomes_ordered": outcomes_ordered,
         "ranking_candidates_ordered": ranking_candidates_ordered,
         "error_block": error_block,
+        "drift_translation": _drift_plain_english_from_output(out),
     }
+
+
+def _drift_plain_english_from_output(out: dict) -> str:
+    o = out if isinstance(out, dict) else {}
+    drift_type = str(o.get("drift_type") or "").strip().upper()
+    if not drift_type:
+        return "No drift signal available."
+    mapping = {
+        "NO_CHANGE": "No meaningful drift versus the previous comparable snapshot.",
+        "EVIDENCE_ONLY": "Evidence changed, but policy semantics did not change.",
+        "POLICY_ONLY": "Policy semantics changed, but evidence did not change.",
+        "BOTH": "Both evidence and policy semantics changed.",
+        "INCOMPARABLE": "Snapshots are not comparable under current comparability rules.",
+    }
+    return mapping.get(drift_type, f"Drift detected ({drift_type}).")
 
 
 def _reconcile_single_active_snapshot_for_scope(

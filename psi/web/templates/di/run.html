@@ -2,9 +2,20 @@
 
 {% block content %}
   <h1>Run DI</h1>
+  <div class="molecule-view-toggle no-print" role="tablist" aria-label="DI run page view mode" style="margin-top:8px;">
+    <button type="button" class="btn mini" id="di_view_scientist" data-view-mode="scientist">Scientist</button>
+    <button type="button" class="btn mini" id="di_view_governance" data-view-mode="governance">Governance</button>
+  </div>
   <div class="muted">Creates a DI snapshot for a batch or molecule scope. This does not use the legacy YAML engine.</div>
   <div class="card" style="margin-top:10px;padding:10px;border-left:4px solid {% if heavy_compute_enabled %}#2d6a4f{% else %}#8a6d3b{% endif %};">
     {{ heavy_compute_banner if heavy_compute_banner is defined else 'Heavy Compute: OFF (default). Does not affect DI snapshot hashes.' }}
+  </div>
+  <div class="card" data-di-panel="scientist" style="margin-top:10px;padding:10px;">
+    <div class="muted">Scientist-first view emphasizes execution inputs and interpretability. Toggle is UI-only.</div>
+  </div>
+  <div class="card" data-di-panel="governance" style="margin-top:10px;padding:10px;display:none;">
+    <div class="muted mini">Governance notes (UI-only)</div>
+    <div class="muted">View-mode preference is stored locally and does not change DI inputs, outputs, or snapshot hashes.</div>
   </div>
 
   {% if error %}
@@ -101,6 +112,26 @@
 
   <script>
     (function () {
+      var btnSci = document.getElementById("di_view_scientist");
+      var btnGov = document.getElementById("di_view_governance");
+      var panels = Array.prototype.slice.call(document.querySelectorAll("[data-di-panel]"));
+      var modeStorageKey = "psi.di.run.view_mode";
+      function setMode(mode) {
+        var m = (mode === "governance") ? "governance" : "scientist";
+        if (btnSci) btnSci.classList.toggle("primary", m === "scientist");
+        if (btnGov) btnGov.classList.toggle("primary", m === "governance");
+        panels.forEach(function (el) {
+          var show = (el.getAttribute("data-di-panel") || "scientist") === m;
+          el.style.display = show ? "" : "none";
+        });
+        try { localStorage.setItem(modeStorageKey, m); } catch (e) {}
+      }
+      if (btnSci) btnSci.addEventListener("click", function () { setMode("scientist"); });
+      if (btnGov) btnGov.addEventListener("click", function () { setMode("governance"); });
+      var initialMode = "scientist";
+      try { initialMode = localStorage.getItem(modeStorageKey) || "scientist"; } catch (e) {}
+      setMode(initialMode);
+
       var scope = document.getElementById("di_scope_type");
       var batchWrap = document.getElementById("di_scope_batch_field");
       var molWrap = document.getElementById("di_scope_molecule_field");

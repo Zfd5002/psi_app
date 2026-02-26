@@ -17,6 +17,8 @@ import sys
 import os
 import tempfile
 import shutil
+import io
+from contextlib import redirect_stderr
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -73,6 +75,14 @@ def _render_di_snapshot_template_smoke(ctx: dict) -> str:
     tpl_dir = repo_root / "psi" / "web" / "templates"
     env = Environment(loader=FileSystemLoader(str(tpl_dir)))
     tmpl = env.get_template("decisions/_di_snapshot.html")
+    return tmpl.render(**(ctx or {}))
+
+
+def _render_di_run_template_smoke(ctx: dict) -> str:
+    repo_root = Path(__file__).resolve().parents[2]
+    tpl_dir = repo_root / "psi" / "web" / "templates"
+    env = Environment(loader=FileSystemLoader(str(tpl_dir)))
+    tmpl = env.get_template("di/run.html")
     return tmpl.render(**(ctx or {}))
 
 
@@ -344,6 +354,47 @@ def test_di_snapshot_ui_risk_flag_severity_rendering_deterministic() -> None:
     _assert("severity=moderate" in html1 and "severity=high" in html1, "DI snapshot UI should render risk severity tiers distinctly")
 
 
+def test_di_run_view_toggle_ui_is_localstorage_only() -> None:
+    ctx = {
+        "error": None,
+        "heavy_compute_enabled": False,
+        "heavy_compute_banner": "Heavy Compute: OFF (default). Does not affect DI snapshot hashes.",
+        "selected_scope_type": "batch",
+        "decision_keys": ["advance_to_in_vivo"],
+        "selected_decision_key": "advance_to_in_vivo",
+        "policies": [{"path": "/tmp/policy.json", "decision_key": "advance_to_in_vivo", "policy_version": "v0.3", "policy_name": "advance_to_in_vivo"}],
+        "selected_policy_path": "/tmp/policy.json",
+        "batches": [],
+        "molecules": [],
+        "selected_batch_id": None,
+        "selected_molecule_id": None,
+    }
+    html = _render_di_run_template_smoke(ctx)
+    _assert("psi.di.run.view_mode" in html, "DI run page should persist view toggle in localStorage")
+    _assert("name=\"decision_key\"" in html and "name=\"policy_path\"" in html and "name=\"qc_mode\"" in html, "DI run toggle UI must not remove DI form inputs")
+    _assert("does not change DI inputs, outputs, or snapshot hashes" in html, "DI run governance note should state hash/input isolation")
+    _assert("Heavy Compute: OFF (default). Does not affect DI snapshot hashes." in html, "heavy compute banner should render deterministically on DI run page")
+    _assert(html.count("data-di-panel=\"scientist\"") == 1 and html.count("data-di-panel=\"governance\"") == 1, "view panels should remain deterministic and separate from shared heavy compute banner")
+
+
+def test_heavy_compute_banner_text_shared_helper_deterministic() -> None:
+    from psi.services.di.util import heavy_compute_banner_text
+
+    off = heavy_compute_banner_text(enabled=False)
+    on = heavy_compute_banner_text(enabled=True)
+    _assert(off == "Heavy Compute: OFF (default, PSI_HEAVY_COMPUTE=0). Does not affect DI snapshot hashes.", "heavy compute OFF banner text mismatch")
+    _assert(on == "Heavy Compute: ON (PSI_HEAVY_COMPUTE=1). Does not affect DI snapshot hashes.", "heavy compute ON banner text mismatch")
+
+
+def test_drift_plain_english_translation_deterministic() -> None:
+    from psi.services.decisions import _drift_plain_english_from_output
+
+    out = {"drift_type": "EVIDENCE_ONLY"}
+    t1 = _drift_plain_english_from_output(out)
+    t2 = _drift_plain_english_from_output({"drift_type": "EVIDENCE_ONLY"})
+    _assert(t1 == t2 == "Evidence changed, but policy semantics did not change.", "drift translation must be deterministic and stable")
+
+
 def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
     from psi.core.di.catalog import load_progress_policy_v0_1
 
@@ -409,22 +460,38 @@ def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
         _assert(latest_1.source_name == "template_prerequisites_v0_2.json", "latest loader must prefer highest template prerequisites catalog version")
 
 
-def test_confidence_policy_catalog_v0_1_loads_and_latest_loader_is_deterministic() -> None:
-    from psi.core.di.catalog import load_confidence_policy_latest, load_confidence_policy_v0_1
+def test_confidence_policy_catalog_loads_and_latest_loader_is_deterministic() -> None:
+    from psi.core.di.catalog import load_confidence_policy_latest, load_confidence_policy_v0_1, load_confidence_policy_v0_2
 
-    pol = load_confidence_policy_v0_1()
-    body = pol.policy if isinstance(pol.policy, dict) else {}
-    _assert(str(body.get("policy_id") or "") == "confidence_policy_v0_1", "confidence policy id mismatch")
-    comp_order = body.get("component_order") if isinstance(body.get("component_order"), list) else []
-    scalar_rules = body.get("scalar_rules") if isinstance(body.get("scalar_rules"), dict) else {}
+    pol_v1 = load_confidence_policy_v0_1()
+    body_v1 = pol_v1.policy if isinstance(pol_v1.policy, dict) else {}
+    _assert(str(body_v1.get("policy_id") or "") == "confidence_policy_v0_1", "confidence policy v0_1 id mismatch")
+
+    pol_v2 = load_confidence_policy_v0_2()
+    body_v2 = pol_v2.policy if isinstance(pol_v2.policy, dict) else {}
+    _assert(str(body_v2.get("policy_id") or "") == "confidence_policy_v0_2", "confidence policy v0_2 id mismatch")
+    comp_order = body_v2.get("component_order") if isinstance(body_v2.get("component_order"), list) else []
+    scalar_rules = body_v2.get("scalar_rules") if isinstance(body_v2.get("scalar_rules"), dict) else {}
+    component_rules = body_v2.get("component_rules") if isinstance(body_v2.get("component_rules"), dict) else {}
     _assert(comp_order == ["qc_quality", "reproducibility", "comparability", "interpretability"], "confidence policy component_order mismatch")
     for k in ("high_concern_escalates_to", "medium_concerns_amber_min", "unknown_when_assessed_count_is_zero"):
         _assert(k in scalar_rules, f"confidence policy scalar_rules missing key: {k}")
+    for ck in comp_order:
+        rv = component_rules.get(ck) if isinstance(component_rules.get(ck), dict) else {}
+        _assert(bool(str(rv.get("label") or "")), f"confidence policy component_rules.{ck}.label must be present")
 
     l1 = load_confidence_policy_latest()
     l2 = load_confidence_policy_latest()
-    _assert(l1.source_name == l2.source_name, "confidence policy latest loader must be deterministic")
+    _assert(l1.source_name == l2.source_name == "confidence_policy_v0_2.json", "confidence policy latest loader must deterministically select v0_2")
     _assert(l1.policy_hash == l2.policy_hash, "confidence policy latest loader hash must be deterministic")
+
+
+def test_confidence_policy_catalog_non_weighted_language_and_keys() -> None:
+    p = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "confidence_policy_v0_2.json"
+    txt = p.read_text(encoding="utf-8").lower()
+    _assert("weight" not in txt, "confidence policy catalog must not introduce weighted scoring fields")
+    _assert("average" not in txt, "confidence policy catalog must not introduce averaging fields")
+    _assert("\"component_rules\"" in txt and "\"scalar_rules\"" in txt, "confidence policy catalog must include component_rules and scalar_rules")
 
 
 def test_molecule_header_confidence_model_non_weighted_neutral_missing() -> None:
@@ -499,6 +566,36 @@ def test_molecule_header_risk_items_deterministic_and_neutral_unknown() -> None:
     _assert(str((by_key.get("m_flag") or {}).get("severity") or "") == "medium", "moderate severity should normalize to medium for header display")
     _assert(str((by_key.get("u_flag") or {}).get("severity") or "") == "unspecified", "unknown severity should render as neutral unspecified")
     _assert(bool((by_key.get("u_flag") or {}).get("severity_neutral")) is True, "unknown severity must be neutral in header display")
+
+
+def test_progress_stage_advisory_selection_is_deterministic() -> None:
+    from psi.services.molecules import _build_progress_stage_advisory
+
+    advisories = [
+        {"milestone_key": "di_b", "blocked_by_text": "Blocked by prerequisites: z.template (missing)"},
+        {"milestone_key": "di_a", "blocked_by_text": "Blocked by prerequisites: a.template (failed, latest snapshot #7)"},
+    ]
+    out = _build_progress_stage_advisory(prereq_advisories=sorted(advisories, key=lambda a: str(a.get("milestone_key") or "")))
+    _assert(isinstance(out, dict), "stage advisory should be emitted when prerequisite advisories exist")
+    _assert(str((out or {}).get("milestone_key") or "") == "di_a", "stage advisory should select deterministic first blocked DI milestone")
+    _assert(
+        str((out or {}).get("blocked_by_text") or "").startswith("Blocked by prerequisites: "),
+        "stage advisory should surface deterministic prerequisite blocker text",
+    )
+
+
+def test_progress_hover_text_policy_key_ordering_and_explainability() -> None:
+    from psi.services.molecules import _build_progress_hover_text
+
+    txt = _build_progress_hover_text(
+        milestones=[
+            {"key": "b_key", "satisfied": False},
+            {"key": "a_key", "satisfied": True},
+            {"key": "c_key", "satisfied": True},
+        ]
+    )
+    _assert("satisfied=a_key,c_key" in txt, "progress hover text must include satisfied milestone keys in stable milestone order")
+    _assert("not_yet=b_key" in txt, "progress hover text must include missing milestone keys")
 
 
 def test_molecule_header_confidence_scaffold_no_snapshot_all_neutral() -> None:
@@ -893,6 +990,29 @@ def test_shared_sub_assessments_pure_helpers() -> None:
     mat1 = material_readiness_rationale(status="pass", use_thresholds=True)
     mat2 = material_readiness_rationale(status="pass", use_thresholds=True)
     _assert(mat1 == mat2, "material readiness helper must be deterministic")
+
+
+def test_sub_assessment_reproducibility_helper_key_shape_stable() -> None:
+    rep = reproducibility_signal_from_soe(
+        required_metric_keys=["m2", "m1"],
+        evidence_summary=[
+            {"metric_key": "m1", "total_count": 2, "usable_count": 2},
+            {"metric_key": "m2", "total_count": 1, "usable_count": 1},
+        ],
+    )
+    _assert(isinstance(rep, dict), "reproducibility sub-assessment helper must return dict")
+    _assert(
+        list(rep.keys()) == [
+            "status",
+            "required_metric_count",
+            "positive_required_metric_count",
+            "all_required_metrics_positive",
+            "metrics",
+        ],
+        f"reproducibility helper key order/shape changed unexpectedly: {list(rep.keys())}",
+    )
+    rows = rep.get("metrics") if isinstance(rep.get("metrics"), list) else []
+    _assert([str((r or {}).get("metric_key") or "") for r in rows] == ["m1", "m2"], "reproducibility helper metrics must remain stably sorted")
     _assert(
         material_readiness_rationale(status="fail", use_thresholds=False) == "Missing or out-of-range material readiness metrics.",
         "material readiness helper should return stable failure rationale",
@@ -2079,6 +2199,63 @@ def test_di_error_output_parity_extension_gating_v03_vs_v04() -> None:
         _assert(k in err_v04, f"v0.4 error parity should emit v0.4-only field: {k}")
 
 
+def test_di_error_output_parity_multiple_error_factories_defaults() -> None:
+    from types import SimpleNamespace
+
+    from psi.core.di.schema import DIInput
+    from psi.services.di.runner import (
+        _complete_di_error_output_contract_parity,
+        _policy_schema_mismatch_output,
+        _unsupported_template_output,
+    )
+
+    di_input = DIInput(
+        decision_key="advance_to_in_vivo",
+        scope_type="batch",
+        scope_id=1,
+        as_of_ts=None,
+        qc_mode="model_safe",
+        context={},
+    )
+    pol = SimpleNamespace(
+        policy_id="stub.policy",
+        name="stub",
+        version="v0.4",
+        schema_version="di.policy_package.v0_1",
+        policy_semantics_hash="0" * 64,
+        policy_package_hash="1" * 64,
+        source_name="stub.json",
+        changelog=[],
+        template_key="advance_to_in_vivo.v0_1",
+    )
+    inputs_obj = {
+        "output_extensions": ["value_functions_enforced_v0_1", "error_output_parity_v2_0a"],
+        "evaluator_version": "di.template.stub.v0",
+    }
+    err_schema = _complete_di_error_output_contract_parity(
+        out=_policy_schema_mismatch_output(di_input=di_input, pol=pol, mismatch="unknown_policy_schema_version", evaluator_version="di.template.stub.v0"),
+        di_input=di_input,
+        pol=pol,
+        inputs_obj=dict(inputs_obj),
+    )
+    err_template = _complete_di_error_output_contract_parity(
+        out=_unsupported_template_output(di_input=di_input, pol=pol, reason="unknown_template", evaluator_version="di.template.stub.v0"),
+        di_input=di_input,
+        pol=pol,
+        inputs_obj=dict(inputs_obj),
+    )
+    for tag, err in (("policy_schema_mismatch", err_schema), ("unsupported_template", err_template)):
+        _assert(isinstance(err.get("metric_evaluations"), dict), f"{tag}: metric_evaluations parity default must be dict")
+        _assert(isinstance(err.get("recommended_experiments"), list), f"{tag}: recommended_experiments parity default must be list")
+        _assert(err.get("shortlisting") is None, f"{tag}: shortlisting parity default must be null")
+        _assert(err.get("scope_semantics") is None, f"{tag}: scope_semantics parity default must be null")
+        _assert(str(err.get("drift_type") or "") == "NO_CHANGE", f"{tag}: drift_type parity default mismatch")
+        _assert(
+            str(err.get("value_functions_enforcement_reason") or "") in {"active", "policy_flag_off", "evaluator_version_mismatch", "not_applicable"},
+            f"{tag}: value_functions_enforcement_reason must be valid enum",
+        )
+
+
 def test_outcome_dataset_export_deterministic() -> None:
     from psi.core.db import get_db
     from psi.tools.export_outcome_dataset import build_outcome_dataset_rows, write_outcome_dataset_jsonl
@@ -2097,6 +2274,43 @@ def test_outcome_dataset_export_deterministic() -> None:
         shutil.rmtree(str(p1.parent), ignore_errors=True)
         shutil.rmtree(str(p2.parent), ignore_errors=True)
 
+
+def test_outcome_dataset_export_hash_field_enrichment_from_stored_snapshot_fields() -> None:
+    from psi.tools.export_outcome_dataset import _extract_snapshot_hash_fields
+
+    out = {
+        "policy": {"hash": "sem_from_policy_hash", "policy_package_hash": "pkg_from_policy"},
+        "provenance": {
+            "policy_ref": {"policy_semantics_hash": "sem_from_policy_ref", "policy_package_hash": "pkg_from_policy_ref"},
+            "integrity": {"evidence_fingerprint": "ev_from_integrity"},
+            "inputs_fingerprint": {"evidence_fingerprint": "ev_from_inputs_fp"},
+        },
+    }
+    inp = {"policy_hash": "sem_from_input_legacy"}
+    fields = _extract_snapshot_hash_fields(inp=inp, out=out)
+    _assert(str(fields.get("policy_semantics_hash") or "") == "sem_from_policy_ref", "export enrichment should prefer stored provenance.policy_ref semantics hash before legacy policy.hash")
+    _assert(str(fields.get("policy_package_hash") or "") == "pkg_from_policy", "export enrichment should use stored package hash deterministically")
+    _assert(str(fields.get("evidence_fingerprint") or "") == "ev_from_integrity", "export enrichment should prefer stored provenance.integrity evidence fingerprint")
+
+
+def test_label_outcome_cli_outcome_event_date_parser_deterministic() -> None:
+    from psi.tools import label_outcome as label_outcome_cli
+
+    dt = label_outcome_cli._parse_outcome_event_date("2026-02-26T12:34:56Z")
+    _assert(getattr(dt, "isoformat", lambda: "")() == "2026-02-26T12:34:56", "outcome_event_date parser should normalize Z timestamps to naive UTC deterministically")
+
+    err = io.StringIO()
+    try:
+        with redirect_stderr(err):
+            label_outcome_cli._parse_outcome_event_date("not-a-date")
+        _assert(False, "invalid outcome_event_date should raise SystemExit")
+    except SystemExit as exc:
+        _assert(int(getattr(exc, "code", 0) or 0) == 1, "invalid outcome_event_date should exit with code 1")
+    _assert(
+        err.getvalue().strip() == "--outcome-event-date must be ISO8601 (e.g. 2026-02-26 or 2026-02-26T12:00:00Z)",
+        "invalid outcome_event_date message must remain deterministic",
+    )
+
 def main() -> int:
     try:
         global _SMOKE_SET_BASELINE_CUTOFF
@@ -2113,10 +2327,12 @@ def main() -> int:
         test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically()
         test_progress_policy_catalog_v0_1_loads_and_validates()
         test_template_prerequisites_catalog_v0_1_loads_and_validates()
-        test_confidence_policy_catalog_v0_1_loads_and_latest_loader_is_deterministic()
+        test_confidence_policy_catalog_loads_and_latest_loader_is_deterministic()
+        test_confidence_policy_catalog_non_weighted_language_and_keys()
         test_molecule_header_confidence_model_non_weighted_neutral_missing()
         test_molecule_header_prerequisite_blocker_sorting_deterministic()
         test_molecule_header_risk_items_deterministic_and_neutral_unknown()
+        test_progress_hover_text_policy_key_ordering_and_explainability()
         test_molecule_header_confidence_scaffold_no_snapshot_all_neutral()
         test_confidence_component_derivation_missing_evidence_neutral()
         test_confidence_component_derivation_deterministic_from_existing_artifacts()
@@ -2131,11 +2347,14 @@ def main() -> int:
         test_scope_semantics_v04_deterministic()
         test_template_registry_and_dependency_graph_deterministic()
         test_shared_sub_assessments_pure_helpers()
+        test_sub_assessment_reproducibility_helper_key_shape_stable()
         test_outcome_label_validation_helpers_deterministic()
         test_shortlisting_reproducibility_from_soe_evidence_summary()
         test_policy_blocker_taxonomy_and_experiment_suggestions()
         test_nbe_uses_catalog_risk_mapping_only()
         test_di_snapshot_ui_risk_flag_severity_rendering_deterministic()
+        test_di_run_view_toggle_ui_is_localstorage_only()
+        test_drift_plain_english_translation_deterministic()
         test_ignore_reason_keys_allowed_set()
         test_stable_json_dumps()
         test_normalize_ignored_schema_compat()
@@ -2145,7 +2364,10 @@ def main() -> int:
         test_cross_version_snapshot_content_hash_stability()
         test_di_error_output_top_level_key_parity()
         test_di_error_output_parity_extension_gating_v03_vs_v04()
+        test_di_error_output_parity_multiple_error_factories_defaults()
         test_outcome_dataset_export_deterministic()
+        test_outcome_dataset_export_hash_field_enrichment_from_stored_snapshot_fields()
+        test_label_outcome_cli_outcome_event_date_parser_deterministic()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")
         return 1

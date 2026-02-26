@@ -69,3 +69,9 @@ def value_functions_enforcement_reason(
 def is_heavy_compute_enabled() -> bool:
     """Global heavy-compute toggle (UI/runtime convenience only; default OFF)."""
     return str(os.getenv("PSI_HEAVY_COMPUTE", "0") or "0").strip() == "1"
+
+
+def heavy_compute_banner_text(*, enabled: bool) -> str:
+    if bool(enabled):
+        return "Heavy Compute: ON (PSI_HEAVY_COMPUTE=1). Does not affect DI snapshot hashes."
+    return "Heavy Compute: OFF (default, PSI_HEAVY_COMPUTE=0). Does not affect DI snapshot hashes."

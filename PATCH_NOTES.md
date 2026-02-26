@@ -1850,6 +1850,264 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-26 — v1.2.9w104
+What changed:
+- Hardened `psi.tools.export_outcome_dataset` hash/fingerprint field extraction with deterministic stored-field fallback precedence (inputs/output policy/provenance metadata only; no recomputation).
+- Export rows now reliably fill `policy_semantics_hash`, `policy_package_hash`, and `evidence_fingerprint` from stored snapshot fields when one source path is absent.
+- Extended contract smoke to lock export hash-field enrichment precedence and updated operator notes to document the deterministic fallback behavior.
+
+Why:
+- Complete v2.1 outcome dataset export enrichment while preserving read-only deterministic behavior.
+
+Determinism/Replay note:
+- Export tool remains read-only and ordered by `snapshot_id ASC`; no DI compute or hash-bearing output changes.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/export_outcome_dataset.py`
+- `psi/tools/di_contract_smoke.py`
+- `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w103
+What changed:
+- Confirmed `psi.tools.label_outcome add` already supports explicit `--outcome-event-date` (shipped earlier) and documented the operator-facing usage/examples.
+- Added deterministic contract smoke coverage for `label_outcome` outcome-event-date parsing:
+  - accepts valid ISO8601 and normalizes UTC `Z`
+  - rejects invalid input with a stable CLI error message
+
+Why:
+- Close the operator/docs + parser-regression gap for outcome labeling date input in the v2.1 workflow.
+
+Determinism/Replay note:
+- No DI functional changes; CLI parser/docs + smoke only.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w102
+What changed:
+- Audited DI runner error-output paths and confirmed shared error-output construction/parity completion is already in use.
+- Extended contract smoke with multi-error-factory parity assertions (`policy_schema_mismatch` and `unsupported_template`) to lock default types/nulls and enum validity.
+
+Why:
+- Finish error-output parity hardening with stronger regression coverage while preserving replay behavior.
+
+Determinism/Replay note:
+- No DI functional changes in this patch; smoke coverage only.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w101
+What changed:
+- Performed a docs-first sub-assessment library audit (`docs/CODE_REVIEW_w101.md`) and confirmed reproducibility/comparability paths already use shared deterministic helpers in `psi/services/di/sub_assessments.py`.
+- Added a contract smoke lock for reproducibility sub-assessment helper key-shape/order stability (`reproducibility_signal_from_soe`).
+
+Why:
+- Tighten sub-assessment library guarantees without introducing replay risk from unnecessary refactors.
+
+Determinism/Replay note:
+- No DI functional code changes in this patch.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/CODE_REVIEW_w101.md`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w100
+What changed:
+- Added `psi/core/di/catalogs/confidence_policy_v0_2.json` with explicit component derivation mappings (QC/Reproducibility/Comparability/Interpretability) and unchanged count-only scalar rules.
+- Extended confidence policy validation/loading (`psi/core/di/catalog.py`) to validate optional `component_rules` and added `load_confidence_policy_v0_2()`.
+- Updated molecule-header confidence derivation to read policy-visible component labels/order/signal mappings deterministically (behavior-preserving defaults retained).
+- Extended contract smoke to validate `confidence_policy_v0_2` latest-loader selection, required component-rule keys, and absence of weighted/average catalog fields.
+
+Why:
+- Expand policy-as-data coverage for confidence component derivation while preserving non-weighted deterministic behavior.
+
+Determinism/Replay note:
+- Component derivation remains deterministic and count/categorical-only; missing evidence stays neutral via existing rules.
+- Replay regression passed with no skips (UI/view-model policy mapping only; DI snapshot hashes unchanged).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalog.py`
+- `psi/core/di/catalogs/confidence_policy_v0_2.json`
+- `psi/services/molecules.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w99
+What changed:
+- Added shared deterministic heavy-compute banner text helper in `psi/services/di/util.py` and reused it in molecule header + `/di/run`.
+- Moved `/di/run` heavy-compute banner outside the Scientist/Governance toggle panels so it stays visible in both modes.
+- Extended contract smoke to lock shared heavy-compute banner text and deterministic DI run template panel structure.
+
+Why:
+- Keep the heavy-compute OFF/ON indicator consistently visible across scientist/governance views without affecting DI hashes.
+
+Determinism/Replay note:
+- UI/helper-only change using the existing `is_heavy_compute_enabled()` global toggle; no DI compute/output/hash changes.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/util.py`
+- `psi/services/di/web.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/di/run.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w98
+What changed:
+- Added deterministic stage-level progress advisory selection in the molecule header view-model using the first sorted blocked DI milestone.
+- Rendered a stage-level `Blocked by prerequisites` notice next to the molecule progress stage title.
+- Extended contract smoke to lock deterministic stage-advisory milestone selection and plain-English blocker text prefix.
+
+Why:
+- Surface prerequisite blocking directly at the progress stage level without changing DI logic or snapshot outputs.
+
+Determinism/Replay note:
+- UI/view-model interpretation only; prerequisite advisories remain explicitly sorted and DI hashes are unchanged.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w97
+What changed:
+- Added explicit deterministic progress hover-text builder for the molecule header (`satisfied=` / `not_yet=` milestone keys).
+- Switched the progress bar tooltip/title to prefer the new policy-key explainability text.
+- Extended contract smoke to lock progress hover-text ordering and policy-key presence.
+
+Why:
+- Make progress-ladder explainability explicitly policy-key-driven and stable while keeping progress logic unchanged.
+
+Determinism/Replay note:
+- UI/view-model explainability only; no DI compute/output/hash changes.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w96
+What changed:
+- Added deterministic drift plain-English translation helper in `psi/services/decisions.py` for DI snapshot UI rendering.
+- Rendered drift translation in the DI snapshot “Run semantics” section beneath `drift_type`.
+- Extended contract smoke with a deterministic drift translation fixture assertion.
+
+Why:
+- Improve scientist-first readability of drift semantics using deterministic translation (no ML / no hidden logic).
+
+Determinism/Replay note:
+- UI-only helper/rendering change; no DI compute/output/hash changes.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/decisions.py`
+- `psi/web/templates/decisions/_di_snapshot.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w95
+What changed:
+- Added Scientist/Governance view toggle to `/di/run` with localStorage persistence (`psi.di.run.view_mode`), matching the molecule-page scientist-first toggle pattern.
+- Kept toggle behavior UI-only (panel visibility + button state) with explicit governance note that inputs/outputs/hashes are unaffected.
+- Extended contract smoke to render `/di/run` and assert localStorage toggle presence while preserving DI form fields.
+
+Why:
+- Continue the scientist-first default view rollout while keeping governance details accessible and non-obstructive.
+
+Determinism/Replay note:
+- UI-only JS/template change; no DI compute/output/hash changes.
+- Replay regression passed with no skips.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/di/run.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
 ## 2026-02-26 — v1.2.9w94
 What changed:
 - Updated `psi/tools/export_outcome_dataset.py` to export top-level `outcome_event_date` and deterministic `days_to_outcome` (days from snapshot `created_at`, rounded to 6 decimals).

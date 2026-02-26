@@ -253,6 +253,7 @@ def _validate_confidence_policy(raw: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("confidence policy JSON must be an object")
     comp_order = raw.get("component_order")
+    component_rules = raw.get("component_rules")
     scalar_rules = raw.get("scalar_rules")
     if not isinstance(comp_order, list) or not comp_order:
         raise ValueError("confidence policy component_order must be a non-empty list")
@@ -261,6 +262,20 @@ def _validate_confidence_policy(raw: Dict[str, Any]) -> Dict[str, Any]:
     comps = [str(x).strip() for x in comp_order if str(x).strip()]
     if len(comps) != len(set(comps)):
         raise ValueError("confidence policy component_order contains duplicates")
+    norm_component_rules: Dict[str, Any] = {}
+    if component_rules is not None:
+        if not isinstance(component_rules, dict):
+            raise ValueError("confidence policy component_rules must be an object when present")
+        for ck in comps:
+            rv = component_rules.get(ck)
+            if not isinstance(rv, dict):
+                raise ValueError(f"confidence policy component_rules.{ck} must be an object")
+            label = str(rv.get("label") or "").strip()
+            if not label:
+                raise ValueError(f"confidence policy component_rules.{ck}.label must be non-empty")
+            norm_rv = dict(rv)
+            norm_rv["label"] = label
+            norm_component_rules[ck] = norm_rv
     out_rules = dict(scalar_rules)
     if int(out_rules.get("medium_concerns_amber_min") or 0) <= 0:
         raise ValueError("confidence policy scalar_rules.medium_concerns_amber_min must be > 0")
@@ -272,6 +287,8 @@ def _validate_confidence_policy(raw: Dict[str, Any]) -> Dict[str, Any]:
     out_rules["unknown_when_assessed_count_is_zero"] = bool(out_rules.get("unknown_when_assessed_count_is_zero"))
     out = dict(raw)
     out["component_order"] = comps
+    if component_rules is not None:
+        out["component_rules"] = norm_component_rules
     out["scalar_rules"] = out_rules
     return out
 
@@ -286,6 +303,11 @@ def load_confidence_policy(path: Path) -> LoadedConfidencePolicy:
 
 def load_confidence_policy_v0_1() -> LoadedConfidencePolicy:
     pol_path = Path(__file__).resolve().parent / "catalogs" / "confidence_policy_v0_1.json"
+    return load_confidence_policy(pol_path)
+
+
+def load_confidence_policy_v0_2() -> LoadedConfidencePolicy:
+    pol_path = Path(__file__).resolve().parent / "catalogs" / "confidence_policy_v0_2.json"
     return load_confidence_policy(pol_path)
 
 

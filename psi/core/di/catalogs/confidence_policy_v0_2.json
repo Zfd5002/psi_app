@@ -1,0 +1,54 @@
+{
+  "policy_id": "confidence_policy_v0_2",
+  "policy_version": "v0.2",
+  "schema_version": "di.confidence_policy.v0_2",
+  "component_order": [
+    "qc_quality",
+    "reproducibility",
+    "comparability",
+    "interpretability"
+  ],
+  "component_rules": {
+    "qc_quality": {
+      "label": "QC Quality",
+      "preferred_signal_dimension": "qc_confidence",
+      "fallback_gate_keys": [
+        "G2_purity_integrity",
+        "G3_endotoxin"
+      ],
+      "high_severity_if_failed_gate_keys": [
+        "G3_endotoxin"
+      ]
+    },
+    "reproducibility": {
+      "label": "Reproducibility",
+      "preferred_signal_dimension": "reproducibility",
+      "required_metrics_key": "required_metrics",
+      "positive_field": "reproducibility_positive"
+    },
+    "comparability": {
+      "label": "Comparability",
+      "source_field": "drift_type",
+      "concern_drift_types": [
+        "INCOMPARABLE"
+      ],
+      "concern_severity": "high"
+    },
+    "interpretability": {
+      "label": "Interpretability",
+      "source_field": "risk_flags_enriched",
+      "severity_order": [
+        "high",
+        "medium",
+        "low",
+        "unspecified"
+      ],
+      "unspecified_is_neutral": true
+    }
+  },
+  "scalar_rules": {
+    "high_concern_escalates_to": "amber",
+    "medium_concerns_amber_min": 2,
+    "unknown_when_assessed_count_is_zero": true
+  }
+}
