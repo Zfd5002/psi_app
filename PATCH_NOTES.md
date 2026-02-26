@@ -10,6 +10,23 @@ What changed:
 What did NOT change:
 - No DI scoring/selection logic changes. No schema changes. No layout overhaul.
 
+## 2026-02-26 — v1.2.9x28
+What changed:
+- Molecules overview (`/molecules`) now shows per-molecule progress and confidence bars using the existing deterministic molecule header model (read-only DI history + measurements; no DI logic changes).
+- Molecule detail annotations panel adds bulk highlight controls for `oxidation_susceptible` and `deamidation`, plus clear highlights and click-to-deselect for highlighted residues.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/routers/molecules.py`
+- `psi/web/templates/molecules/list.html`
+- `psi/web/templates/molecules/detail.html`
+
+Determinism/Replay note:
+- Presentation-layer only patch; DI engine, policies, registry semantics, and snapshot hash-bearing outputs are unchanged.
+- Molecule list header bars reuse existing deterministic header model builders with explicit ordering preserved.
+
 ## v1.2.9w45
 
 Why:

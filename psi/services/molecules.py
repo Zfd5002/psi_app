@@ -99,6 +99,51 @@ def list_molecules(db: Session) -> tuple[list[Molecule], list[Program]]:
     return molecules, programs
 
 
+def build_list_molecule_header_models(db: Session, *, molecule_ids: list[int]) -> dict[int, dict[str, Any]]:
+    ids = sorted({int(x) for x in (molecule_ids or []) if x is not None})
+    if not ids:
+        return {}
+
+    snaps = (
+        db.query(DecisionSnapshot)
+        .filter(DecisionSnapshot.molecule_id.in_(ids))
+        .order_by(DecisionSnapshot.molecule_id.asc(), DecisionSnapshot.created_at.asc(), DecisionSnapshot.id.asc())
+        .all()
+    )
+
+    rows_by_molecule_id: dict[int, list[dict[str, Any]]] = {mid: [] for mid in ids}
+    for s in snaps:
+        mid = int(s.molecule_id or 0)
+        if mid not in rows_by_molecule_id:
+            continue
+        try:
+            out = json.loads(s.outputs_json or "{}")
+        except Exception:
+            out = {}
+        try:
+            inn = json.loads(s.inputs_json or "{}")
+        except Exception:
+            inn = {}
+        rows_by_molecule_id[mid].append(
+            {
+                "snapshot_id": int(s.id),
+                "created_at": s.created_at,
+                "decision_key": s.decision_key,
+                "_in": inn if isinstance(inn, dict) else {},
+                "_out": out if isinstance(out, dict) else {},
+            }
+        )
+
+    out_map: dict[int, dict[str, Any]] = {}
+    for mid in ids:
+        out_map[mid] = _build_molecule_header_model(
+            db,
+            molecule_id=mid,
+            di_rows_chrono=rows_by_molecule_id.get(mid) or [],
+        )
+    return out_map
+
+
 def get_molecule(db: Session, molecule_id: int) -> Molecule | None:
     return db.get(Molecule, molecule_id)
 

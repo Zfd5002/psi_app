@@ -1146,7 +1146,12 @@
           <div class="annot-comp" data-component-id="{{ t.component_id }}" style="margin-top:12px;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
               <strong>{{ t.role }}</strong>
-              <span class="muted mini">len={{ t.length }}</span>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <button class="btn mini" type="button" data-action="annot-bulk-highlight" data-feature-name="oxidation_susceptible">Highlight oxidation susceptible</button>
+                <button class="btn mini" type="button" data-action="annot-bulk-highlight" data-feature-name="deamidation">Highlight deamidation</button>
+                <button class="btn mini" type="button" data-action="annot-clear-highlights">Clear highlights</button>
+                <span class="muted mini">len={{ t.length }}</span>
+              </div>
             </div>
 
             {% for g in t.annotations_groups %}
@@ -1162,7 +1167,9 @@
                           <div class="muted mini">[{{ sp.start }}, {{ sp.end }}) · {{ (f.confidence*100) | round(1) }}%</div>
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;">
-                          <button class="btn mini" type="button" data-action="annot-highlight">Highlight</button>
+                          {% if f.name != 'oxidation_susceptible' and f.name != 'deamidation' %}
+                            <button class="btn mini" type="button" data-action="annot-highlight">Highlight</button>
+                          {% endif %}
                           <button class="btn mini" type="button" data-action="annot-copy">Copy</button>
                         </div>
                       </div>
@@ -1300,23 +1307,102 @@
 {% block scripts %}
 <script>
 (function(){
-  function clearResidueHighlights(viewerEl){
-    viewerEl.querySelectorAll('.residue.selected').forEach(el => el.classList.remove('selected'));
+  const highlightSelections = new Map();
+
+  function viewerSelectionKey(viewerEl){
+    return String(viewerEl && viewerEl.dataset && viewerEl.dataset.componentId ? viewerEl.dataset.componentId : "");
   }
 
-  function highlightRange(viewerEl, startIdx, endIdx){
-    const residues = viewerEl.querySelectorAll('.residue');
-    const s = Math.max(0, parseInt(startIdx||0));
-    const e = Math.max(s, parseInt(endIdx||0));
-    clearResidueHighlights(viewerEl);
-    for(let i=s; i<e && i<residues.length; i++) residues[i].classList.add('selected');
-
-    // Let other widgets (e.g., Numbering map) reflect the current selection.
+  function dispatchViewerSelection(viewerEl, s, e){
     try{
       const moleculeId = viewerEl.dataset.moleculeId;
       const componentId = viewerEl.dataset.componentId;
       window.dispatchEvent(new CustomEvent('psi:viewer-selection', {detail:{moleculeId, componentId, start_idx:s, end_idx:e}}));
     }catch(e){}
+  }
+
+  function getHighlightedResiduesSet(viewerEl, create){
+    const key = viewerSelectionKey(viewerEl);
+    if(!key) return null;
+    let set = highlightSelections.get(key);
+    if(!set && create){
+      set = new Set();
+      highlightSelections.set(key, set);
+    }
+    return set || null;
+  }
+
+  function renderResidueHighlights(viewerEl){
+    const residues = viewerEl.querySelectorAll('.residue');
+    const set = getHighlightedResiduesSet(viewerEl, false);
+    residues.forEach((el) => {
+      const idx = parseInt(el.dataset.pos || '-1');
+      const on = !!(set && Number.isFinite(idx) && set.has(idx));
+      el.classList.toggle('selected', on);
+    });
+  }
+
+  function clearResidueHighlights(viewerEl){
+    const set = getHighlightedResiduesSet(viewerEl, false);
+    if(set) set.clear();
+    renderResidueHighlights(viewerEl);
+  }
+
+  function highlightRange(viewerEl, startIdx, endIdx){
+    const set = getHighlightedResiduesSet(viewerEl, true);
+    if(!set) return;
+    const s = Math.max(0, parseInt(startIdx||0));
+    const e = Math.max(s, parseInt(endIdx||0));
+    set.clear();
+    for(let i=s; i<e; i++) set.add(i);
+    renderResidueHighlights(viewerEl);
+    dispatchViewerSelection(viewerEl, s, e);
+  }
+
+  function highlightAllByFeatureName(viewerEl, featureName){
+    const compId = String(viewerEl.dataset.componentId || '');
+    const fname = String(featureName || '').trim();
+    if(!compId || !fname) return;
+    const set = getHighlightedResiduesSet(viewerEl, true);
+    if(!set) return;
+    let minStart = null;
+    let maxEnd = null;
+    document.querySelectorAll(`.annot-item[data-component-id="${compId}"]`).forEach((row) => {
+      let feat = {};
+      try{ feat = JSON.parse(row.dataset.feature || '{}'); }catch(e){ feat = {}; }
+      if(String(feat.name || '') !== fname) return;
+      const spans = Array.isArray(feat.spans) ? feat.spans : [];
+      spans.forEach((sp) => {
+        const s = Math.max(0, parseInt((sp && sp.start) || 0));
+        const e = Math.max(s, parseInt((sp && sp.end) || 0));
+        if(e <= s) return;
+        if(minStart === null || s < minStart) minStart = s;
+        if(maxEnd === null || e > maxEnd) maxEnd = e;
+        for(let i=s; i<e; i++) set.add(i);
+      });
+    });
+    renderResidueHighlights(viewerEl);
+    if(minStart !== null && maxEnd !== null) dispatchViewerSelection(viewerEl, minStart, maxEnd);
+  }
+
+  function clearHighlights(componentId){
+    if(componentId === undefined || componentId === null || componentId === ''){
+      document.querySelectorAll('.seq-scroll.viewer-v2').forEach((viewerEl) => clearResidueHighlights(viewerEl));
+      return;
+    }
+    const viewerEl = document.querySelector(`.seq-scroll.viewer-v2[data-component-id="${componentId}"]`);
+    if(viewerEl) clearResidueHighlights(viewerEl);
+  }
+
+  function toggleResidue(viewerEl, residueIndex){
+    const idx = parseInt(residueIndex || '-1');
+    if(!Number.isFinite(idx) || idx < 0) return;
+    const set = getHighlightedResiduesSet(viewerEl, true);
+    if(!set) return;
+    if(set.has(idx)) set.delete(idx);
+    else set.add(idx);
+    renderResidueHighlights(viewerEl);
+    dispatchViewerSelection(viewerEl, idx, idx + 1);
   }
 
   function charWidthPx(el){
@@ -1456,6 +1542,19 @@
       highlightRange(viewerEl, start, end);
     });
 
+    viewerEl.addEventListener('click', (ev) => {
+      const target = ev.target;
+      if(!(target instanceof HTMLElement)) return;
+      if(!target.classList.contains('residue')) return;
+      // Avoid toggling off immediately after drag-selection text highlight.
+      try{
+        const sel = window.getSelection();
+        if(sel && String(sel.toString() || '').length > 0) return;
+      }catch(e){}
+      if(!target.classList.contains('selected')) return;
+      toggleResidue(viewerEl, target.dataset.pos);
+    });
+
     // CRITICAL: copy sanitization (viewer-local).
     viewerEl.addEventListener('copy', (ev) => {
       const range = selectionInside(viewerEl);
@@ -1509,6 +1608,25 @@
         out = out.toUpperCase().replace(/[^A-Z\*\-]/g, '');
         await copyText(out);
         doHighlight();
+      });
+    });
+  });
+
+  document.querySelectorAll('.annot-comp').forEach((compEl) => {
+    const compId = String(compEl.dataset.componentId || '');
+    if(!compId) return;
+    const viewerEl = document.querySelector(`.seq-scroll.viewer-v2[data-component-id="${compId}"]`);
+    if(!viewerEl) return;
+    compEl.querySelectorAll('[data-action="annot-bulk-highlight"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        highlightAllByFeatureName(viewerEl, btn.dataset.featureName || '');
+      });
+    });
+    compEl.querySelectorAll('[data-action="annot-clear-highlights"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        clearHighlights(compId);
       });
     });
   });

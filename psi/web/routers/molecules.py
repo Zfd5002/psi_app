@@ -125,7 +125,19 @@ async def create_domain_label(molecule_id: int, request: Request, db: Session = 
 def list_molecules(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
     molecules, programs = svc.list_molecules(db)
-    return templates.TemplateResponse("molecules/list.html", {"request": request, "molecules": molecules, "programs": programs})
+    header_by_molecule_id = svc.build_list_molecule_header_models(
+        db,
+        molecule_ids=[int(m.id) for m in molecules],
+    )
+    return templates.TemplateResponse(
+        "molecules/list.html",
+        {
+            "request": request,
+            "molecules": molecules,
+            "programs": programs,
+            "header_by_molecule_id": header_by_molecule_id,
+        },
+    )
 
 
 @router.get("/molecules/new", response_class=HTMLResponse)
