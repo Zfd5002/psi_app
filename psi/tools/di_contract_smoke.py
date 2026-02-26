@@ -34,6 +34,8 @@ from psi.services.di.sub_assessments import (
     baseline_risk_flags_from_used,
     comparability_qc_coherence_summary,
     decision_state_from_gate_statuses,
+    material_readiness_rationale,
+    mechanism_readiness_rationale,
     reproducibility_signal_from_soe,
 )
 from psi.services.di.templates.registry import list_template_keys_sorted, template_dependency_graph
@@ -573,6 +575,21 @@ def test_shared_sub_assessments_pure_helpers() -> None:
         ],
     )
     _assert(stable_json_dumps(rep1) == stable_json_dumps(rep2), "reproducibility sub-assessment helper must be deterministic")
+    mat1 = material_readiness_rationale(status="pass", use_thresholds=True)
+    mat2 = material_readiness_rationale(status="pass", use_thresholds=True)
+    _assert(mat1 == mat2, "material readiness helper must be deterministic")
+    _assert(
+        material_readiness_rationale(status="fail", use_thresholds=False) == "Missing or out-of-range material readiness metrics.",
+        "material readiness helper should return stable failure rationale",
+    )
+    mech1 = mechanism_readiness_rationale(gate_key="G4_functional", status="pass", use_thresholds=False)
+    mech2 = mechanism_readiness_rationale(gate_key="G4_functional", status="pass", use_thresholds=False)
+    _assert(mech1 == mech2, "mechanism readiness helper must be deterministic")
+    _assert(
+        mechanism_readiness_rationale(gate_key="G5_internalization_if_kd_present", status="fail", use_thresholds=False)
+        == "kd_nM present but internalization evidence missing.",
+        "mechanism readiness helper should return stable internalization rationale",
+    )
 
 
 def test_outcome_label_validation_helpers_deterministic() -> None:

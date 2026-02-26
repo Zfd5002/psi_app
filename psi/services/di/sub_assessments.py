@@ -30,6 +30,33 @@ def decision_state_from_gate_statuses(
     return decision_state, {"required_gate_keys": req, "required_pass": bool(required_pass)}
 
 
+def material_readiness_rationale(*, status: str, use_thresholds: bool) -> str:
+    """Deterministic rationale text for material readiness gates."""
+    st = str(status or "")
+    if st == "pass" and use_thresholds:
+        return "At least one material readiness metric present and within policy limits."
+    if st == "pass":
+        return "At least one material readiness metric present."
+    return "Missing or out-of-range material readiness metrics."
+
+
+def mechanism_readiness_rationale(*, gate_key: str, status: str, use_thresholds: bool) -> str:
+    """Deterministic rationale text for mechanism readiness gates."""
+    gk = str(gate_key or "")
+    st = str(status or "")
+    if gk == "G4_functional":
+        if st == "pass" and use_thresholds:
+            return "Functional evidence present and within policy limits."
+        if st == "pass":
+            return "Functional evidence present."
+        return "Missing or out-of-range functional evidence."
+    if gk == "G5_internalization_if_kd_present":
+        if st == "pass":
+            return "Internalization/surface expression present when kd_nM present."
+        return "kd_nM present but internalization evidence missing."
+    return "Gate evaluated from policy."
+
+
 def comparability_qc_coherence_summary(*, comparability: Dict[str, Any] | None) -> Dict[str, int]:
     """Pure deterministic extraction of comparability QC coherence summary counts."""
     comp = comparability if isinstance(comparability, dict) else {}

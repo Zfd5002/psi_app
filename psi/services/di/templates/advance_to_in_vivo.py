@@ -4,7 +4,12 @@ from typing import Any, Dict, List
 
 from psi.core.di.schema import EvidenceRef, GateResult
 from psi.services.di.gates import evaluate_gates
-from psi.services.di.sub_assessments import baseline_risk_flags_from_used, decision_state_from_gate_statuses
+from psi.services.di.sub_assessments import (
+    baseline_risk_flags_from_used,
+    decision_state_from_gate_statuses,
+    material_readiness_rationale,
+    mechanism_readiness_rationale,
+)
 
 
 def _metric_status(metric_evaluations: Dict[str, Any], metric_key: str) -> str:
@@ -55,11 +60,7 @@ def evaluate(
         failed = gr.get("failed_metrics") or []
 
         if gk == "G1_material_readiness":
-            rationale = (
-                "At least one material readiness metric present and within policy limits."
-                if status == "pass" and use_thresholds
-                else ("At least one material readiness metric present." if status == "pass" else "Missing or out-of-range material readiness metrics.")
-            )
+            rationale = material_readiness_rationale(status=status, use_thresholds=use_thresholds)
         elif gk == "G2_purity_integrity":
             rationale = (
                 "Purity/integrity metrics present and within policy limits."
@@ -72,17 +73,11 @@ def evaluate(
                 if status == "pass" and use_thresholds
                 else ("Endotoxin value and limit present." if status == "pass" else f"Missing or out-of-range: {', '.join(list(missing) + list(failed))}")
             )
-        elif gk == "G4_functional":
-            rationale = (
-                "Functional evidence present and within policy limits."
-                if status == "pass" and use_thresholds
-                else ("Functional evidence present." if status == "pass" else "Missing or out-of-range functional evidence.")
-            )
-        elif gk == "G5_internalization_if_kd_present":
-            rationale = (
-                "Internalization/surface expression present when kd_nM present."
-                if status == "pass"
-                else "kd_nM present but internalization evidence missing."
+        elif gk in ("G4_functional", "G5_internalization_if_kd_present"):
+            rationale = mechanism_readiness_rationale(
+                gate_key=gk,
+                status=status,
+                use_thresholds=use_thresholds,
             )
         else:
             rationale = "Gate evaluated from policy."

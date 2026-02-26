@@ -1850,6 +1850,32 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-26 — v1.2.9w74
+What changed:
+- Extracted deterministic material readiness and mechanism readiness rationale helpers into shared sub-assessment utilities.
+- Updated the advance-to-in-vivo template to call the new helpers without changing rationale text.
+- Extended contract smoke coverage with minimal deterministic checks for the new helpers.
+
+Why:
+- Refactor for reuse across upcoming templates while preserving existing gate rationale behavior.
+
+Determinism/Replay note:
+- Refactor-only patch: no intended behavior or schema changes.
+- Replay regression remains the proof target for unchanged hash-bearing outputs.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/sub_assessments.py`
+- `psi/services/di/templates/advance_to_in_vivo.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall psi`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+- `python -m psi.tools.db_schema_sanity`
+- `./compress.sh`
 ## 2026-02-25 — v1.2.9w59
 What changed:
 - Expanded the existing additive `ensure_schema()` DI snapshot metadata backfill so it sets `decision_snapshots.engine_key='di'` for legacy DI rows where `engine_key` is `NULL` or empty and `schema_version LIKE 'di.%'`.
