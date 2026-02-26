@@ -480,6 +480,7 @@ def add_outcome_label(
     value_text: Optional[str] = None,
     value_num: Optional[float] = None,
     value_bool: Optional[bool] = None,
+    outcome_event_date: Optional[datetime.datetime] = None,
     version: str = "v1",
 ) -> OutcomeLabel:
     """Attach an outcome/label to a DecisionSnapshot."""
@@ -489,6 +490,7 @@ def add_outcome_label(
         value_text=(value_text.strip() if isinstance(value_text, str) else value_text),
         value_num=value_num,
         value_bool=(1 if value_bool is True else 0 if value_bool is False else None),
+        outcome_event_date=outcome_event_date,
         version=version,
         created_at=now_utc(),
     )
@@ -662,6 +664,7 @@ def get_snapshot_export_payload(db: Session, snap_id: int) -> dict:
                 "value_text": o.value_text,
                 "value_num": o.value_num,
                 "value_bool": o.value_bool,
+                "outcome_event_date": getattr(o, "outcome_event_date", None),
                 "version": o.version,
                 "created_at": o.created_at,
             }

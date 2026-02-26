@@ -1,0 +1,16 @@
+{
+  "policy_id": "confidence_policy_v0_1",
+  "policy_version": "v0.1",
+  "schema_version": "di.confidence_policy.v0_1",
+  "component_order": [
+    "qc_quality",
+    "reproducibility",
+    "comparability",
+    "interpretability"
+  ],
+  "scalar_rules": {
+    "high_concern_escalates_to": "amber",
+    "medium_concerns_amber_min": 2,
+    "unknown_when_assessed_count_is_zero": true
+  }
+}

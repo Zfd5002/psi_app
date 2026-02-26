@@ -40,7 +40,7 @@ from psi.core.reference_features import detect_pdl1_features
 from psi.core.deps import heavy_compute_available_for_molecule
 from psi.core.biochem import liability_sites
 from psi.core.annotations import detect_linker_spans, detect_fc_region, dedupe_features
-from psi.core.di.catalog import load_progress_policy_v0_1, load_template_prerequisites_latest
+from psi.core.di.catalog import load_confidence_policy_latest, load_progress_policy_v0_1, load_template_prerequisites_latest
 from psi.core.measurement_schema import measurement_cols
 from psi.services.di.util import is_heavy_compute_enabled
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
@@ -379,36 +379,82 @@ def _build_confidence_model(*, latest_di_row: dict[str, Any] | None, risk_severi
                 "state": "concern",
                 "severity": sev,
                 "details": f"Risk flags: high={high_n}, medium={med_n}, low={low_n}, unspecified={uns_n}.",
+                "detail_items": _sorted_interpretability_detail_items(risk_severity_counts=risk_severity_counts),
             }
         )
 
+    scalar_state, scalar_label, scalar_counts = _derive_confidence_scalar_from_components(components=components)
+
+    return {
+        "components": components,
+        "scalar_state": scalar_state,
+        "scalar_label": scalar_label,
+        "scalar_optional": True,
+        "scalar_rule_id": "molecule_header_confidence_scalar.v0_1",
+        "scalar_counts": scalar_counts,
+        "rule_text": (
+            "Summary uses counts only (no weights): any high-severity concern => amber; "
+            "two or more medium concerns => amber; "
+            "otherwise green. Missing components are Not Assessed."
+        ),
+    }
+
+
+def _derive_confidence_components(*, latest_di_row: dict[str, Any] | None, risk_severity_counts: dict[str, int]) -> list[dict[str, Any]]:
+    """Component-only confidence derivation surface (deterministic, UI-only)."""
+    cm = _build_confidence_model(
+        latest_di_row=latest_di_row,
+        risk_severity_counts=risk_severity_counts,
+    )
+    comps = cm.get("components") if isinstance(cm, dict) else []
+    return [c for c in comps if isinstance(c, dict)]
+
+
+def _derive_confidence_scalar_from_components(*, components: list[dict[str, Any]]) -> tuple[str, str, dict[str, Any]]:
     concern_components = [c for c in components if str(c.get("state") or "") == "concern"]
     concern_sev = [str(c.get("severity") or "") for c in concern_components]
     medium_concerns = sum(1 for s in concern_sev if s == "medium")
     high_concerns = sum(1 for s in concern_sev if s == "high")
     assessed_count = sum(1 for c in components if str(c.get("state") or "") != "not_assessed")
 
-    if assessed_count == 0:
+    high_escalate = "amber"
+    medium_amber_min = 2
+    unknown_when_zero = True
+    try:
+        conf_pol = load_confidence_policy_latest()
+        conf_body = conf_pol.policy if isinstance(conf_pol.policy, dict) else {}
+        sr = conf_body.get("scalar_rules") if isinstance(conf_body.get("scalar_rules"), dict) else {}
+        high_escalate = str(sr.get("high_concern_escalates_to") or high_escalate).strip().lower() or high_escalate
+        medium_amber_min = int(sr.get("medium_concerns_amber_min") or medium_amber_min)
+        unknown_when_zero = bool(sr.get("unknown_when_assessed_count_is_zero")) if "unknown_when_assessed_count_is_zero" in sr else unknown_when_zero
+    except Exception:
+        pass
+
+    if assessed_count == 0 and unknown_when_zero:
         scalar_state, scalar_label = "unknown", "Unknown"
     elif high_concerns >= 1:
-        scalar_state, scalar_label = "red", "Concern (High)"
-    elif medium_concerns >= 2:
+        scalar_state = high_escalate if high_escalate in {"amber", "green", "unknown"} else "amber"
+        scalar_label = "Caution (High Concern)" if scalar_state == "amber" else ("Unknown" if scalar_state == "unknown" else "No Concerns")
+    elif medium_concerns >= int(medium_amber_min):
         scalar_state, scalar_label = "amber", "Caution (Multiple Medium)"
-    elif concern_components:
-        scalar_state, scalar_label = "amber", "Caution"
     else:
-        scalar_state, scalar_label = "green", "Good"
-
-    return {
-        "components": components,
-        "scalar_state": scalar_state,
-        "scalar_label": scalar_label,
-        "rule_text": (
-            "Summary uses counts only (no weights): any high-severity concern => red; "
-            "two or more medium concerns => amber; any remaining concern => amber; "
-            "otherwise green. Missing components are Not Assessed."
-        ),
+        scalar_state, scalar_label = "green", "No Concerns"
+    return scalar_state, scalar_label, {
+        "assessed_count": assessed_count,
+        "concern_count": len(concern_components),
+        "high_concerns": high_concerns,
+        "medium_concerns": medium_concerns,
     }
+
+
+def _sorted_interpretability_detail_items(*, risk_severity_counts: dict[str, int]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for sev in ("high", "medium", "low", "unspecified"):
+        ct = int((risk_severity_counts or {}).get(sev) or 0)
+        if ct <= 0:
+            continue
+        items.append({"severity": sev, "count": ct, "severity_neutral": bool(sev == "unspecified")})
+    return items
 
 
 def _sorted_prerequisite_blockers_for_advisory(blockers: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -422,6 +468,47 @@ def _sorted_prerequisite_blockers_for_advisory(blockers: list[dict[str, Any]] | 
             int(b.get("latest_snapshot_id") or 0),
         ),
     )
+
+
+def _risk_item_sort_key(item: dict[str, Any]) -> tuple[int, str]:
+    sev_rank = {"high": 0, "medium": 1, "moderate": 1, "low": 2, "unspecified": 3}
+    sev = str(item.get("severity") or "").strip().lower()
+    key = str(item.get("key") or "").strip()
+    return (sev_rank.get(sev, 3), key)
+
+
+def _build_header_risk_items(*, latest_di_row: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not latest_di_row or not isinstance((latest_di_row.get("_out") or {}), dict):
+        return []
+    out_obj = latest_di_row.get("_out") or {}
+    raw = out_obj.get("risk_flags_enriched")
+    if not isinstance(raw, list):
+        raw = out_obj.get("risk_flags")
+    if not isinstance(raw, list):
+        return []
+    items: list[dict[str, Any]] = []
+    for r in raw:
+        if not isinstance(r, dict):
+            continue
+        key = str(r.get("key") or r.get("risk_flag") or "").strip()
+        if not key:
+            continue
+        sev_raw = str(r.get("severity") or "").strip().lower()
+        if sev_raw == "moderate":
+            sev_norm = "medium"
+        elif sev_raw in ("high", "medium", "low"):
+            sev_norm = sev_raw
+        else:
+            sev_norm = "unspecified"
+        items.append(
+            {
+                "key": key,
+                "severity": sev_norm,
+                "severity_neutral": bool(sev_norm == "unspecified"),
+            }
+        )
+    # Explicit deterministic ordering for the persistent scientist header.
+    return sorted(items, key=_risk_item_sort_key)
 
 
 def _build_molecule_header_model(
@@ -611,6 +698,7 @@ def _build_molecule_header_model(
         latest_di_row=latest_di_row,
         risk_severity_counts=risk_severity_counts,
     )
+    risk_items = _build_header_risk_items(latest_di_row=latest_di_row)
     return {
         "view_mode_default": "scientist",
         "progress_stage": progress_stage,
@@ -625,6 +713,7 @@ def _build_molecule_header_model(
         "drift_summary_plain": drift_summary_plain,
         "prerequisite_advisories": prereq_advisories,
         "risk_severity_counts": risk_severity_counts,
+        "risk_items": risk_items,
         "confidence_model": confidence_model,
         "latest_di_snapshot_id": (latest_di_row or {}).get("snapshot_id"),
         "latest_di_drift_type": (((latest_di_row or {}).get("_out") or {}).get("drift_type") if latest_di_row else None),

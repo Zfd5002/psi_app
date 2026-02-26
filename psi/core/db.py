@@ -378,6 +378,17 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "notes": "TEXT",
             "created_at": "TEXT",
         },
+        "outcome_labels": {
+            "id": "INTEGER",
+            "snapshot_id": "INTEGER",
+            "name": "TEXT",
+            "value_text": "TEXT",
+            "value_num": "REAL",
+            "value_bool": "INTEGER",
+            "outcome_event_date": "TEXT",
+            "version": "TEXT",
+            "created_at": "TEXT",
+        },
     }
 
     # Additive column evolution: only ALTER tables that actually exist.

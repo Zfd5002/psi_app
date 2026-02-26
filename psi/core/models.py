@@ -504,6 +504,7 @@ class OutcomeLabel(Base):
     value_text = Column(Text, nullable=True)
     value_num = Column(Float, nullable=True)
     value_bool = Column(Integer, nullable=True)
+    outcome_event_date = Column(DateTime, nullable=True)
 
     version = Column(Text, default="v1", nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)

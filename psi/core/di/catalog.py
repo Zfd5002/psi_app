@@ -53,6 +53,14 @@ class LoadedTemplatePrerequisites:
     source_name: str
 
 
+@dataclass(frozen=True)
+class LoadedConfidencePolicy:
+    policy: Dict[str, Any]
+    policy_hash: str
+    canonical_json: str
+    source_name: str
+
+
 def load_catalog(path: Path) -> LoadedCatalog:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -239,3 +247,58 @@ def load_template_prerequisites_latest() -> LoadedTemplatePrerequisites:
         raise FileNotFoundError("No template_prerequisites_v*_*.json files found")
     _, _, latest_path = sorted(candidates, key=lambda t: (t[0], t[1], t[2].name))[-1]
     return load_template_prerequisites(latest_path)
+
+
+def _validate_confidence_policy(raw: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError("confidence policy JSON must be an object")
+    comp_order = raw.get("component_order")
+    scalar_rules = raw.get("scalar_rules")
+    if not isinstance(comp_order, list) or not comp_order:
+        raise ValueError("confidence policy component_order must be a non-empty list")
+    if not isinstance(scalar_rules, dict):
+        raise ValueError("confidence policy scalar_rules must be an object")
+    comps = [str(x).strip() for x in comp_order if str(x).strip()]
+    if len(comps) != len(set(comps)):
+        raise ValueError("confidence policy component_order contains duplicates")
+    out_rules = dict(scalar_rules)
+    if int(out_rules.get("medium_concerns_amber_min") or 0) <= 0:
+        raise ValueError("confidence policy scalar_rules.medium_concerns_amber_min must be > 0")
+    hc = str(out_rules.get("high_concern_escalates_to") or "").strip().lower()
+    if hc not in {"amber", "green", "unknown"}:
+        raise ValueError("confidence policy scalar_rules.high_concern_escalates_to must be amber|green|unknown")
+    out_rules["high_concern_escalates_to"] = hc
+    out_rules["medium_concerns_amber_min"] = int(out_rules.get("medium_concerns_amber_min"))
+    out_rules["unknown_when_assessed_count_is_zero"] = bool(out_rules.get("unknown_when_assessed_count_is_zero"))
+    out = dict(raw)
+    out["component_order"] = comps
+    out["scalar_rules"] = out_rules
+    return out
+
+
+def load_confidence_policy(path: Path) -> LoadedConfidencePolicy:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    validated = _validate_confidence_policy(raw)
+    canon = canonical_package_json(validated)
+    h = sha256_hex_of_canonical_json(validated)
+    return LoadedConfidencePolicy(policy=validated, policy_hash=h, canonical_json=canon, source_name=path.name)
+
+
+def load_confidence_policy_v0_1() -> LoadedConfidencePolicy:
+    pol_path = Path(__file__).resolve().parent / "catalogs" / "confidence_policy_v0_1.json"
+    return load_confidence_policy(pol_path)
+
+
+def load_confidence_policy_latest() -> LoadedConfidencePolicy:
+    cat_dir = Path(__file__).resolve().parent / "catalogs"
+    patt = re.compile(r"^confidence_policy_v(\d+)_(\d+)\.json$")
+    candidates: list[tuple[int, int, Path]] = []
+    for p in sorted(cat_dir.glob("confidence_policy_v*_*.json")):
+        m = patt.match(p.name)
+        if not m:
+            continue
+        candidates.append((int(m.group(1)), int(m.group(2)), p))
+    if not candidates:
+        raise FileNotFoundError("No confidence_policy_v*_*.json files found")
+    _, _, latest_path = sorted(candidates, key=lambda t: (t[0], t[1], t[2].name))[-1]
+    return load_confidence_policy(latest_path)

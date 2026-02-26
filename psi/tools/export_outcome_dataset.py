@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +26,88 @@ def _label_row(r: OutcomeLabel) -> dict[str, Any]:
         "value_text": r.value_text,
         "value_num": r.value_num,
         "value_bool": (bool(r.value_bool) if r.value_bool is not None else None),
+        "outcome_event_date": (r.outcome_event_date.isoformat() if getattr(r, "outcome_event_date", None) else None),
         "version": str(r.version or ""),
         "created_at": (r.created_at.isoformat() if getattr(r, "created_at", None) else None),
     }
+
+
+def _days_between(snapshot_created_at: datetime | None, outcome_event_date_iso: str | None) -> float | None:
+    if snapshot_created_at is None or not outcome_event_date_iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(outcome_event_date_iso))
+    except Exception:
+        return None
+    # DB timestamps are stored/used as naive UTC in PSI; preserve that convention here.
+    delta = dt - snapshot_created_at
+    return round(delta.total_seconds() / 86400.0, 6)
+
+
+def build_outcome_dataset_rows(*, db, engine_key_filter: str = "di") -> list[dict[str, Any]]:
+    q = db.query(DecisionSnapshot)
+    if str(engine_key_filter or "") != "":
+        q = q.filter(DecisionSnapshot.engine_key == str(engine_key_filter))
+    snaps = q.order_by(DecisionSnapshot.id.asc()).all()
+    snap_ids = [int(s.id) for s in snaps]
+
+    labels_by_snapshot: dict[int, list[dict[str, Any]]] = {}
+    if snap_ids:
+        for r in (
+            db.query(OutcomeLabel)
+            .filter(OutcomeLabel.snapshot_id.in_(snap_ids))
+            .order_by(OutcomeLabel.snapshot_id.asc(), OutcomeLabel.created_at.asc(), OutcomeLabel.id.asc())
+            .all()
+        ):
+            labels_by_snapshot.setdefault(int(r.snapshot_id), []).append(_label_row(r))
+
+    rows: list[dict[str, Any]] = []
+    for s in snaps:
+        inp = _json_obj(getattr(s, "inputs_json", None))
+        out = _json_obj(getattr(s, "outputs_json", None))
+        pol_out = out.get("policy") if isinstance(out.get("policy"), dict) else {}
+        prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
+        integ = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
+
+        labels = list(labels_by_snapshot.get(int(s.id)) or [])
+        latest_label_by_name: dict[str, dict[str, Any]] = {}
+        for lab in labels:
+            nm = str(lab.get("name") or "").strip()
+            if not nm:
+                continue
+            latest_label_by_name[nm] = lab
+        latest_outcome_event_date = next(
+            (str(lab.get("outcome_event_date") or "") for lab in reversed(labels) if str(lab.get("outcome_event_date") or "")),
+            "",
+        )
+
+        row = {
+            "snapshot_id": int(s.id),
+            "created_at": (s.created_at.isoformat() if getattr(s, "created_at", None) else None),
+            "engine_key": str(getattr(s, "engine_key", "") or ""),
+            "decision_key": str(getattr(s, "decision_key", "") or ""),
+            "policy_semantics_hash": str(inp.get("policy_semantics_hash") or pol_out.get("policy_semantics_hash") or ""),
+            "policy_package_hash": str(inp.get("policy_package_hash") or pol_out.get("policy_package_hash") or ""),
+            "evidence_fingerprint": str(integ.get("evidence_fingerprint") or ""),
+            "decision_state": str(out.get("decision_state") or ""),
+            "di_review_verdict": str((latest_label_by_name.get("di_review_verdict") or {}).get("value_text") or ""),
+            "di_review_rationale": str((latest_label_by_name.get("di_review_rationale") or {}).get("value_text") or ""),
+            "outcome_event_date": (latest_outcome_event_date or None),
+            "days_to_outcome": _days_between(getattr(s, "created_at", None), latest_outcome_event_date or None),
+            "outcome_labels": labels,
+        }
+        rows.append(row)
+    return rows
+
+
+def write_outcome_dataset_jsonl(*, rows: list[dict[str, Any]], out_path: Path) -> int:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    rows_written = 0
+    with out_path.open("w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(stable_json_dumps(row) + "\n")
+            rows_written += 1
+    return rows_written
 
 
 def main() -> int:
@@ -41,57 +121,9 @@ def main() -> int:
     args = ap.parse_args()
 
     out_path = Path(str(args.output or "outcome_dataset.jsonl")).expanduser().resolve()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
     with get_db(args.db or None, ensure=False) as db:
-        q = db.query(DecisionSnapshot)
-        if str(args.engine_key or "") != "":
-            q = q.filter(DecisionSnapshot.engine_key == str(args.engine_key))
-        snaps = q.order_by(DecisionSnapshot.id.asc()).all()
-        snap_ids = [int(s.id) for s in snaps]
-
-        labels_by_snapshot: dict[int, list[dict[str, Any]]] = {}
-        if snap_ids:
-            for r in (
-                db.query(OutcomeLabel)
-                .filter(OutcomeLabel.snapshot_id.in_(snap_ids))
-                .order_by(OutcomeLabel.snapshot_id.asc(), OutcomeLabel.created_at.asc(), OutcomeLabel.id.asc())
-                .all()
-            ):
-                labels_by_snapshot.setdefault(int(r.snapshot_id), []).append(_label_row(r))
-
-        rows_written = 0
-        with out_path.open("w", encoding="utf-8") as fh:
-            for s in snaps:
-                inp = _json_obj(getattr(s, "inputs_json", None))
-                out = _json_obj(getattr(s, "outputs_json", None))
-                pol_out = out.get("policy") if isinstance(out.get("policy"), dict) else {}
-                prov = out.get("provenance") if isinstance(out.get("provenance"), dict) else {}
-                integ = prov.get("integrity") if isinstance(prov.get("integrity"), dict) else {}
-
-                labels = list(labels_by_snapshot.get(int(s.id)) or [])
-                latest_label_by_name: dict[str, dict[str, Any]] = {}
-                for lab in labels:
-                    nm = str(lab.get("name") or "").strip()
-                    if not nm:
-                        continue
-                    latest_label_by_name[nm] = lab
-
-                row = {
-                    "snapshot_id": int(s.id),
-                    "created_at": (s.created_at.isoformat() if getattr(s, "created_at", None) else None),
-                    "engine_key": str(getattr(s, "engine_key", "") or ""),
-                    "decision_key": str(getattr(s, "decision_key", "") or ""),
-                    "policy_semantics_hash": str(inp.get("policy_semantics_hash") or pol_out.get("policy_semantics_hash") or ""),
-                    "policy_package_hash": str(inp.get("policy_package_hash") or pol_out.get("policy_package_hash") or ""),
-                    "evidence_fingerprint": str(integ.get("evidence_fingerprint") or ""),
-                    "decision_state": str(out.get("decision_state") or ""),
-                    "di_review_verdict": str((latest_label_by_name.get("di_review_verdict") or {}).get("value_text") or ""),
-                    "di_review_rationale": str((latest_label_by_name.get("di_review_rationale") or {}).get("value_text") or ""),
-                    "outcome_labels": labels,
-                }
-                fh.write(stable_json_dumps(row) + "\n")
-                rows_written += 1
+        rows = build_outcome_dataset_rows(db=db, engine_key_filter=str(args.engine_key or ""))
+        rows_written = write_outcome_dataset_jsonl(rows=rows, out_path=out_path)
 
     print(
         stable_json_dumps(

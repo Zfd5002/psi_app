@@ -115,9 +115,12 @@
           {% set cm = mh.confidence_model %}
           <div class="molecule-confidence" style="margin-top:10px;">
             <div class="muted mini">Confidence bar (UI-only; derived from latest DI snapshot and risk flags)</div>
-            <div class="molecule-confidence-summary state-{{ cm.scalar_state if cm.scalar_state is defined else 'unknown' }}" title="{{ cm.rule_text if cm.rule_text is defined else '' }}">
-              {{ cm.scalar_label if cm.scalar_label is defined else 'Unknown' }}
-            </div>
+            <div class="muted mini">Components: Good / Concern / Not Assessed (neutral)</div>
+            {% if cm.scalar_optional is not defined or cm.scalar_optional %}
+              <div class="molecule-confidence-summary state-{{ cm.scalar_state if cm.scalar_state is defined else 'unknown' }}" title="{{ cm.rule_text if cm.rule_text is defined else '' }}">
+                {{ cm.scalar_label if cm.scalar_label is defined else 'Unknown' }}
+              </div>
+            {% endif %}
             {% if cm.components is defined and cm.components %}
               <div class="molecule-confidence-grid">
                 {% for c in cm.components %}
@@ -129,6 +132,15 @@
                     </div>
                     {% if c.details is defined and c.details %}
                       <div class="muted mini">{{ c.details }}</div>
+                    {% endif %}
+                    {% if c.detail_items is defined and c.detail_items %}
+                      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+                        {% for d in c.detail_items %}
+                          <span class="chip" title="{% if d.severity_neutral is defined and d.severity_neutral %}Neutral / unspecified severity{% else %}Categorical severity tier{% endif %}">
+                            {{ d.severity if d.severity is defined else 'unspecified' }}={{ d.count if d.count is defined else 0 }}
+                          </span>
+                        {% endfor %}
+                      </div>
                     {% endif %}
                   </div>
                 {% endfor %}
@@ -175,6 +187,16 @@
             <span class="chip">medium: {{ mh.risk_severity_counts.medium if mh.risk_severity_counts.medium is defined else 0 }}</span>
             <span class="chip">low: {{ mh.risk_severity_counts.low if mh.risk_severity_counts.low is defined else 0 }}</span>
             <span class="chip">unspecified: {{ mh.risk_severity_counts.unspecified if mh.risk_severity_counts.unspecified is defined else 0 }}</span>
+          </div>
+        {% endif %}
+        {% if mh.risk_items is defined and mh.risk_items %}
+          <div class="muted mini" style="margin-top:8px;">Risk items (deterministic order; UI-only)</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+            {% for ri in mh.risk_items %}
+              <span class="chip" title="{% if ri.severity_neutral is defined and ri.severity_neutral %}Neutral / not assessed severity{% else %}Policy-defined severity tier{% endif %}">
+                {{ ri.key }} · {{ ri.severity if ri.severity is defined else 'unspecified' }}
+              </span>
+            {% endfor %}
           </div>
         {% endif %}
         {% if mh.confidence_model is defined and mh.confidence_model and mh.confidence_model.rule_text is defined %}

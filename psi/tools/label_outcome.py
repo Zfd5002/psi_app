@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 
 from psi.core.db import get_db
 from psi.core.models import DecisionSnapshot, OutcomeLabel
@@ -25,6 +26,23 @@ def _parse_bool(val: str | None) -> bool | None:
     return None
 
 
+def _parse_outcome_event_date(val: str | None):
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except Exception:
+        _exit("--outcome-event-date must be ISO8601 (e.g. 2026-02-26 or 2026-02-26T12:00:00Z)")
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 def _snapshot_or_exit(db, snapshot_id: int) -> DecisionSnapshot:
     snap = db.get(DecisionSnapshot, int(snapshot_id))
     if not snap:
@@ -39,6 +57,7 @@ def cmd_add(args: argparse.Namespace) -> None:
         if args.bool is not None and value_bool is None:
             _exit("--bool must be true|false")
         value_num = float(args.num) if args.num is not None else None
+        outcome_event_date = _parse_outcome_event_date(args.outcome_event_date)
         lab = svc.add_outcome_label(
             db,
             snapshot_id=int(args.snapshot_id),
@@ -46,6 +65,7 @@ def cmd_add(args: argparse.Namespace) -> None:
             value_text=(str(args.text) if args.text is not None else None),
             value_num=value_num,
             value_bool=value_bool,
+            outcome_event_date=outcome_event_date,
             version=str(args.version or "v1"),
         )
         print(f"OK outcome_label_id={lab.id}")
@@ -70,6 +90,7 @@ def cmd_list(args: argparse.Namespace) -> None:
                     "value_text": r.value_text,
                     "value_num": r.value_num,
                     "value_bool": bool(r.value_bool) if r.value_bool is not None else None,
+                    "outcome_event_date": r.outcome_event_date.isoformat() if getattr(r, "outcome_event_date", None) else None,
                     "version": r.version,
                     "created_at": r.created_at.isoformat() if getattr(r, "created_at", None) else None,
                 }
@@ -118,6 +139,7 @@ def main() -> None:
     ap_add.add_argument("--text", default=None)
     ap_add.add_argument("--num", default=None)
     ap_add.add_argument("--bool", default=None)
+    ap_add.add_argument("--outcome-event-date", default=None, help="Optional outcome event timestamp/date (ISO8601)")
     ap_add.add_argument("--version", default="v1")
     ap_add.set_defaults(func=cmd_add)
 

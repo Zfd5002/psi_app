@@ -409,6 +409,24 @@ def test_template_prerequisites_catalog_v0_1_loads_and_validates() -> None:
         _assert(latest_1.source_name == "template_prerequisites_v0_2.json", "latest loader must prefer highest template prerequisites catalog version")
 
 
+def test_confidence_policy_catalog_v0_1_loads_and_latest_loader_is_deterministic() -> None:
+    from psi.core.di.catalog import load_confidence_policy_latest, load_confidence_policy_v0_1
+
+    pol = load_confidence_policy_v0_1()
+    body = pol.policy if isinstance(pol.policy, dict) else {}
+    _assert(str(body.get("policy_id") or "") == "confidence_policy_v0_1", "confidence policy id mismatch")
+    comp_order = body.get("component_order") if isinstance(body.get("component_order"), list) else []
+    scalar_rules = body.get("scalar_rules") if isinstance(body.get("scalar_rules"), dict) else {}
+    _assert(comp_order == ["qc_quality", "reproducibility", "comparability", "interpretability"], "confidence policy component_order mismatch")
+    for k in ("high_concern_escalates_to", "medium_concerns_amber_min", "unknown_when_assessed_count_is_zero"):
+        _assert(k in scalar_rules, f"confidence policy scalar_rules missing key: {k}")
+
+    l1 = load_confidence_policy_latest()
+    l2 = load_confidence_policy_latest()
+    _assert(l1.source_name == l2.source_name, "confidence policy latest loader must be deterministic")
+    _assert(l1.policy_hash == l2.policy_hash, "confidence policy latest loader hash must be deterministic")
+
+
 def test_molecule_header_confidence_model_non_weighted_neutral_missing() -> None:
     from psi.services.molecules import _build_confidence_model
 
@@ -455,6 +473,140 @@ def test_molecule_header_prerequisite_blocker_sorting_deterministic() -> None:
     ]
     _assert(keys1 == keys2, "prerequisite blocker sorting must be deterministic irrespective of input order")
     _assert(keys1 == [("a.template", "failed", 42), ("a.template", "missing", 0), ("z.template", "missing", 0)], f"unexpected blocker sort order: {keys1}")
+
+
+def test_molecule_header_risk_items_deterministic_and_neutral_unknown() -> None:
+    from psi.services.molecules import _build_header_risk_items
+
+    row = {
+        "_out": {
+            "risk_flags_enriched": [
+                {"key": "z_flag", "severity": "low"},
+                {"key": "a_flag", "severity": "high"},
+                {"key": "m_flag", "severity": "moderate"},
+                {"key": "u_flag", "severity": "mystery"},
+            ]
+        }
+    }
+    items1 = _build_header_risk_items(latest_di_row=row)
+    items2 = _build_header_risk_items(
+        latest_di_row={"_out": {"risk_flags_enriched": list(reversed((row.get("_out") or {}).get("risk_flags_enriched") or []))}}
+    )
+    _assert(stable_json_dumps(items1) == stable_json_dumps(items2), "molecule header risk items must be deterministic irrespective of input order")
+    keys = [str((x or {}).get("key") or "") for x in items1 if isinstance(x, dict)]
+    _assert(keys == ["a_flag", "m_flag", "z_flag", "u_flag"], f"unexpected header risk item order: {keys}")
+    by_key = {str((x or {}).get("key") or ""): (x or {}) for x in items1 if isinstance(x, dict)}
+    _assert(str((by_key.get("m_flag") or {}).get("severity") or "") == "medium", "moderate severity should normalize to medium for header display")
+    _assert(str((by_key.get("u_flag") or {}).get("severity") or "") == "unspecified", "unknown severity should render as neutral unspecified")
+    _assert(bool((by_key.get("u_flag") or {}).get("severity_neutral")) is True, "unknown severity must be neutral in header display")
+
+
+def test_molecule_header_confidence_scaffold_no_snapshot_all_neutral() -> None:
+    from psi.services.molecules import _build_confidence_model
+
+    cm = _build_confidence_model(latest_di_row=None, risk_severity_counts={"high": 0, "medium": 0, "low": 0, "unspecified": 0})
+    comps = cm.get("components") if isinstance(cm, dict) else []
+    _assert(isinstance(comps, list) and len(comps) == 4, "confidence scaffold must include 4 components")
+    states = [str((c or {}).get("state") or "") for c in comps if isinstance(c, dict)]
+    _assert(states == ["not_assessed", "not_assessed", "not_assessed", "not_assessed"], f"no-snapshot scaffold must be neutral not_assessed; got {states}")
+    labels = [str((c or {}).get("name") or "") for c in comps if isinstance(c, dict)]
+    _assert(labels == ["QC Quality", "Reproducibility", "Comparability", "Interpretability"], f"unexpected scaffold labels: {labels}")
+
+
+def test_confidence_component_derivation_missing_evidence_neutral() -> None:
+    from psi.services.molecules import _derive_confidence_components
+
+    comps = _derive_confidence_components(
+        latest_di_row={"_out": {"gates": []}},
+        risk_severity_counts={"high": 0, "medium": 0, "low": 0, "unspecified": 0},
+    )
+    by_key = {str((c or {}).get("key") or ""): (c or {}) for c in comps if isinstance(c, dict)}
+    _assert(str((by_key.get("qc_quality") or {}).get("state") or "") == "not_assessed", "missing QC evidence should be neutral")
+    _assert(str((by_key.get("reproducibility") or {}).get("state") or "") == "not_assessed", "missing reproducibility evidence should be neutral")
+    _assert(str((by_key.get("comparability") or {}).get("state") or "") == "not_assessed", "missing comparability evidence should be neutral")
+    _assert(str((by_key.get("interpretability") or {}).get("state") or "") == "good", "no risk flags should yield good interpretability (not a penalty)")
+
+
+def test_confidence_component_derivation_deterministic_from_existing_artifacts() -> None:
+    from psi.services.molecules import _derive_confidence_components
+
+    row1 = {
+        "_out": {
+            "gates": [
+                {"gate_key": "G3_endotoxin", "status": "pass"},
+                {"gate_key": "G2_purity_integrity", "status": "pass"},
+            ],
+            "drift_type": "INCOMPARABLE",
+        }
+    }
+    row2 = {
+        "_out": {
+            "gates": list(reversed((row1.get("_out") or {}).get("gates") or [])),
+            "drift_type": "INCOMPARABLE",
+        }
+    }
+    risk_counts = {"high": 1, "medium": 0, "low": 0, "unspecified": 0}
+    c1 = _derive_confidence_components(latest_di_row=row1, risk_severity_counts=risk_counts)
+    c2 = _derive_confidence_components(latest_di_row=row2, risk_severity_counts=risk_counts)
+    _assert(stable_json_dumps(c1) == stable_json_dumps(c2), "confidence component derivation must be deterministic")
+
+
+def test_interpretability_detail_items_ordering_deterministic() -> None:
+    from psi.services.molecules import _build_confidence_model
+
+    cm = _build_confidence_model(
+        latest_di_row={"_out": {"gates": []}},
+        risk_severity_counts={"low": 2, "high": 1, "unspecified": 3, "medium": 4},
+    )
+    comps = cm.get("components") if isinstance(cm, dict) else []
+    interp = next((c for c in comps if isinstance(c, dict) and str(c.get("key") or "") == "interpretability"), {})
+    items = interp.get("detail_items") if isinstance(interp, dict) else []
+    seq = [
+        (str((x or {}).get("severity") or ""), int((x or {}).get("count") or 0))
+        for x in (items or [])
+        if isinstance(x, dict)
+    ]
+    _assert(seq == [("high", 1), ("medium", 4), ("low", 2), ("unspecified", 3)], f"interpretability detail items must use deterministic tier ordering; got {seq}")
+
+
+def test_confidence_scalar_non_weighted_counting_rules() -> None:
+    from psi.services.molecules import _derive_confidence_scalar_from_components
+
+    s1 = _derive_confidence_scalar_from_components(
+        components=[
+            {"key": "interpretability", "state": "concern", "severity": "high"},
+            {"key": "qc_quality", "state": "good"},
+        ]
+    )
+    _assert(s1[0] == "amber", "any high-severity concern should produce amber under v0.1 scalar rule")
+
+    s2 = _derive_confidence_scalar_from_components(
+        components=[
+            {"key": "interpretability", "state": "concern", "severity": "medium"},
+            {"key": "comparability", "state": "concern", "severity": "medium"},
+            {"key": "qc_quality", "state": "good"},
+        ]
+    )
+    _assert(s2[0] == "amber", "two medium concerns should produce amber under v0.1 scalar rule")
+
+    s3 = _derive_confidence_scalar_from_components(
+        components=[
+            {"key": "interpretability", "state": "concern", "severity": "low"},
+            {"key": "comparability", "state": "not_assessed"},
+            {"key": "qc_quality", "state": "good"},
+        ]
+    )
+    _assert(s3[0] == "green", "low-severity concerns alone should not escalate beyond green in count-only rule")
+
+
+def test_confidence_scalar_surface_rejects_weighting_language() -> None:
+    from psi.services.molecules import _build_confidence_model
+
+    cm = _build_confidence_model(latest_di_row={"_out": {}}, risk_severity_counts={"high": 0, "medium": 0, "low": 0, "unspecified": 0})
+    txt = str(cm.get("rule_text") or "").lower()
+    _assert("weight" in txt, "rule text must explicitly state no weights")
+    _assert("average" not in txt, "rule text must not mention averaging")
+    _assert("score" not in txt, "rule text must not imply hidden scoring")
 
 
 def test_selection_semantics_version_constant() -> None:
@@ -1851,6 +2003,100 @@ def test_di_error_output_top_level_key_parity() -> None:
     finally:
         db.close()
 
+
+def test_di_error_output_parity_extension_gating_v03_vs_v04() -> None:
+    from types import SimpleNamespace
+
+    from psi.core.di.schema import DIInput
+    from psi.services.di.runner import _build_di_error_output, _complete_di_error_output_contract_parity
+
+    di_input = DIInput(
+        decision_key="advance_to_in_vivo",
+        scope_type="batch",
+        scope_id=1,
+        as_of_ts=None,
+        qc_mode="model_safe",
+        context={},
+    )
+
+    def _mk_pol(version: str) -> Any:
+        return SimpleNamespace(
+            policy_id="stub.policy",
+            name="stub",
+            version=version,
+            schema_version="di.policy_package.v0_1",
+            policy_semantics_hash="0" * 64,
+            policy_package_hash="1" * 64,
+            source_name="stub.json",
+            changelog=[],
+            template_key="advance_to_in_vivo.v0_1",
+        )
+
+    def _mk_err(version: str) -> dict[str, Any]:
+        err = _build_di_error_output(
+            di_input=di_input,
+            pol=_mk_pol(version),
+            evaluator_version="di.template.stub.v0",
+            warning_kind="contract_smoke",
+            warning_detail={"reason": "parity_gating"},
+            blocker_key="contract_smoke",
+            blocker_detail={"reason": "parity_gating"},
+            risk_flag="contract_smoke",
+            risk_note="contract smoke parity gating",
+            risk_enriched_key="contract_smoke",
+            risk_enriched_explanation="contract smoke parity gating",
+            readiness_blocker_key="contract_smoke",
+            readiness_blocker_explanation="contract smoke parity gating",
+            readiness_blocking_reason="contract smoke parity gating",
+        )
+        return _complete_di_error_output_contract_parity(
+            out=err,
+            di_input=di_input,
+            pol=_mk_pol(version),
+            # omit evaluator_version intentionally to exercise fallback behavior (w75 hardening)
+            inputs_obj={"output_extensions": ["value_functions_enforced_v0_1", "error_output_parity_v2_0a"]},
+        )
+
+    err_v03 = _mk_err("v0.3")
+    err_v04 = _mk_err("v0.4")
+
+    for k in (
+        "metric_evaluations",
+        "recommended_experiments",
+        "comparability",
+        "confidence_degradation",
+        "why_evidence",
+        "drift_type",
+        "state_transition",
+        "shortlisting",
+        "value_functions_enforced",
+        "value_functions_enforcement_reason",
+    ):
+        _assert(k in err_v03 and k in err_v04, f"error parity common field missing: {k}")
+
+    for k in ("scope_semantics", "context_evaluation", "template_dependency_graph"):
+        _assert(k not in err_v03, f"v0.3 error parity should not emit v0.4-only field: {k}")
+        _assert(k in err_v04, f"v0.4 error parity should emit v0.4-only field: {k}")
+
+
+def test_outcome_dataset_export_deterministic() -> None:
+    from psi.core.db import get_db
+    from psi.tools.export_outcome_dataset import build_outcome_dataset_rows, write_outcome_dataset_jsonl
+
+    p1 = Path(tempfile.mkdtemp(prefix="psi_outcome_export1_", dir=tempfile.gettempdir())) / "outcome.jsonl"
+    p2 = Path(tempfile.mkdtemp(prefix="psi_outcome_export2_", dir=tempfile.gettempdir())) / "outcome.jsonl"
+    try:
+        with get_db(None, ensure=False) as db:
+            rows1 = build_outcome_dataset_rows(db=db, engine_key_filter="di")
+            rows2 = build_outcome_dataset_rows(db=db, engine_key_filter="di")
+        _assert(stable_json_dumps(rows1) == stable_json_dumps(rows2), "outcome dataset rows must be deterministic for fixed DB")
+        write_outcome_dataset_jsonl(rows=rows1, out_path=p1)
+        write_outcome_dataset_jsonl(rows=rows2, out_path=p2)
+        _assert(p1.read_text(encoding="utf-8") == p2.read_text(encoding="utf-8"), "outcome dataset JSONL output must be deterministic")
+    finally:
+        shutil.rmtree(str(p1.parent), ignore_errors=True)
+        shutil.rmtree(str(p2.parent), ignore_errors=True)
+
 def main() -> int:
     try:
         global _SMOKE_SET_BASELINE_CUTOFF
@@ -1867,8 +2113,16 @@ def main() -> int:
         test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically()
         test_progress_policy_catalog_v0_1_loads_and_validates()
         test_template_prerequisites_catalog_v0_1_loads_and_validates()
+        test_confidence_policy_catalog_v0_1_loads_and_latest_loader_is_deterministic()
         test_molecule_header_confidence_model_non_weighted_neutral_missing()
         test_molecule_header_prerequisite_blocker_sorting_deterministic()
+        test_molecule_header_risk_items_deterministic_and_neutral_unknown()
+        test_molecule_header_confidence_scaffold_no_snapshot_all_neutral()
+        test_confidence_component_derivation_missing_evidence_neutral()
+        test_confidence_component_derivation_deterministic_from_existing_artifacts()
+        test_interpretability_detail_items_ordering_deterministic()
+        test_confidence_scalar_non_weighted_counting_rules()
+        test_confidence_scalar_surface_rejects_weighting_language()
         test_selection_semantics_version_constant()
         test_policy_authoritative_required_gate_keys()
         test_context_knob_branching_gate_outcomes_deterministic()
@@ -1890,6 +2144,8 @@ def main() -> int:
         test_baseline_cutoff_prevents_walk()
         test_cross_version_snapshot_content_hash_stability()
         test_di_error_output_top_level_key_parity()
+        test_di_error_output_parity_extension_gating_v03_vs_v04()
+        test_outcome_dataset_export_deterministic()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")
         return 1

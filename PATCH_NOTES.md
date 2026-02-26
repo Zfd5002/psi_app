@@ -1850,6 +1850,266 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-26 — v1.2.9w94
+What changed:
+- Updated `psi/tools/export_outcome_dataset.py` to export top-level `outcome_event_date` and deterministic `days_to_outcome` (days from snapshot `created_at`, rounded to 6 decimals).
+- Refactored the exporter into deterministic row-building / JSONL-writing helpers for easier smoke verification (read-only behavior preserved).
+- Added contract smoke proof that outcome dataset row generation and JSONL output are deterministic for a fixed DB.
+- Updated operator notes to document the v2.1 outcome dataset additions.
+
+Why:
+- Complete the v2.1 outcome dataset block by surfacing outcome timing metadata and derived timing deltas without affecting DI hashes.
+
+Determinism/Replay note:
+- Export tool remains read-only and deterministic (explicit ordering + stable JSONL).
+- DI outputs and DI snapshot hashes remain unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/export_outcome_dataset.py`
+- `psi/tools/di_contract_smoke.py`
+- `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w93
+What changed:
+- Added additive outcome metadata field `OutcomeLabel.outcome_event_date` (nullable) to the ORM model.
+- Updated `ensure_schema()` additive column evolution to add `outcome_labels.outcome_event_date` on existing DBs without destructive migration.
+- Updated `psi/services/decisions.add_outcome_label()` to accept/store `outcome_event_date` metadata.
+- Updated `psi/tools/label_outcome.py` to accept optional `--outcome-event-date` (ISO8601) and display the field in `list` output.
+- Included `outcome_event_date` in snapshot-detail outcome label serialization (metadata only).
+
+Why:
+- Provide the additive v2.1 outcome-event timestamp metadata needed for downstream deterministic outcome-dataset exports (`days_to_outcome` in w94).
+
+Determinism/Replay note:
+- Outcome label metadata only; DI outputs and DI snapshot hashes remain unchanged.
+- Additive-only schema evolution; no destructive migration.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `psi/services/decisions.py`
+- `psi/tools/label_outcome.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w92
+What changed:
+- Extended DI contract smoke error-output parity coverage to explicitly lock v0.3 vs v0.4 parity-extension gating behavior.
+- Added assertions that common happy-path top-level parity fields remain present on parity-completed error outputs and that v0.4-only fields are emitted only for v0.4 policies.
+- Included a fallback-path exercise (missing `inputs_obj.evaluator_version`) in the parity gating smoke to preserve the w75 error-parity hardening guarantee.
+
+Why:
+- Finish the remaining error-output parity hardening work as a low-risk smoke/coverage patch since the shared error-output helper/consolidation is already in place.
+
+Determinism/Replay note:
+- Test-only patch; no DI compute/schema/output/hash changes.
+- Replay and hash-bearing DI outputs unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w91
+What changed:
+- No functional SoE consolidation changes were required.
+- Added `docs/CODE_REVIEW_w91.md` documenting the SoE duplication audit and why current shared-helper coverage is already sufficient.
+
+Why:
+- Patch goal was conditional; current `psi/services/di/soe.py` already centralizes core SoE logic behind shared internal builders, so a refactor would add risk without benefit.
+
+Determinism/Replay note:
+- Docs-only patch; no DI compute/schema/output changes.
+- Replay and hash-bearing DI outputs unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/CODE_REVIEW_w91.md`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w90
+What changed:
+- Added versioned UI-only confidence policy catalog `psi/core/di/catalogs/confidence_policy_v0_1.json`.
+- Added deterministic confidence policy loaders/validation in `psi/core/di/catalog.py` (including `load_confidence_policy_latest()`).
+- Wired molecule-header confidence scalar derivation to read scalar thresholds deterministically from the confidence policy catalog with safe fallback defaults.
+- Extended contract smoke to validate confidence policy catalog presence, required keys, and latest-loader determinism.
+- Updated operator notes to document the new confidence policy catalog.
+
+Why:
+- Make confidence scalar/component display rules policy-visible and versioned without changing DI outputs or hashes.
+
+Determinism/Replay note:
+- UI-only catalog consumption; no DI snapshot/hash-bearing output changes.
+- Catalog latest selection is explicit and deterministic.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalog.py`
+- `psi/core/di/catalogs/confidence_policy_v0_1.json`
+- `psi/services/molecules.py`
+- `psi/tools/di_contract_smoke.py`
+- `docs/DI_ROADMAP_V2_IMPLEMENTATION_NOTES.md`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w89
+What changed:
+- Extracted count-only confidence scalar derivation into `_derive_confidence_scalar_from_components` (UI-only helper).
+- Marked the molecule-header confidence scalar as optional (`scalar_optional`) and surfaced `scalar_rule_id` / `scalar_counts` for transparent UI-side rule inspection.
+- Kept scalar rule deterministic and non-weighted: high concern => amber, >=2 medium concerns => amber, otherwise green/unknown.
+- Added contract smoke locks for scalar rule outcomes and rejection of weighting/averaging language in the confidence surface.
+
+Why:
+- Make the confidence scalar explicitly reproducible by visible component counts and easier to audit before policy-as-data grounding.
+
+Determinism/Replay note:
+- UI/view-model helper + smoke only; no DI snapshot/hash-bearing output changes.
+- No weighted scoring or averaging introduced.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w88
+What changed:
+- Added deterministic interpretability `detail_items` (severity tier counts ordered `high -> medium -> low -> unspecified`) to the molecule-header confidence component.
+- Updated molecule header confidence UI to render interpretability severity tiers distinctly as categorical chips (display-only).
+- Extended contract smoke to lock deterministic interpretability tier ordering.
+
+Why:
+- Make interpretability severity tiers visible and auditable in the confidence bar without introducing any weighting or scoring changes.
+
+Determinism/Replay note:
+- UI/view-model only change; no DI snapshot/hash-bearing output changes.
+- Interpretability tier ordering is explicit and smoke-locked.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w87
+What changed:
+- Added a component-only confidence derivation helper (`_derive_confidence_components`) for deterministic UI-side component state checks.
+- Extended contract smoke to lock component derivation determinism and neutrality for missing evidence (no penalty for absent QC/repro/comparability signals).
+
+Why:
+- Make the confidence component derivation surface explicit and testable before subsequent interpretability/scalar refinements.
+
+Determinism/Replay note:
+- UI helper + smoke only; no DI compute/output/hash changes.
+- Existing scalar remains unchanged in this patch.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w86
+What changed:
+- Added an explicit molecule-header confidence scaffold legend clarifying `Good / Concern / Not Assessed (neutral)`.
+- Added contract smoke coverage that locks the no-snapshot confidence scaffold to 4 deterministic components, all `not_assessed`.
+
+Why:
+- Make the confidence bar scaffold semantics explicit to operators/users before further component derivation refinements.
+
+Determinism/Replay note:
+- UI text + smoke only; no DI output/hash changes.
+- No weighting introduced; missing evidence remains neutral.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
+## 2026-02-26 — v1.2.9w85
+What changed:
+- Surfaced latest DI risk items (key + severity tier) in the molecule scientist header, in addition to the existing severity counts.
+- Added deterministic header risk-item ordering with explicit severity/key sort and neutral handling for unknown severities (`unspecified`).
+- Extended contract smoke to lock molecule-header risk item ordering and neutrality semantics.
+
+Why:
+- Complete the next roadmap v2 step for scientist-first severity visibility without introducing scoring or affecting DI outputs.
+
+Determinism/Replay note:
+- UI/view-model only change; no DI snapshot/hash-bearing output changes.
+- Header risk items use explicit deterministic ordering and neutral treatment for unknown severities.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run:
+- `python -m compileall -q psi`
+- `python -m psi.tools.db_schema_sanity`
+- `python -m psi.tools.di_contract_smoke`
+- `python -m psi.tools.di_replay_regression --limit 5`
+
 ## 2026-02-26 — v1.2.9w84
 What changed:
 - Added policy-as-data risk severity tiers under `template_structure.risk_flag_severity_tiers` across packaged DI policy files.

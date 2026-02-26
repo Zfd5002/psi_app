@@ -75,6 +75,48 @@ This note summarizes the current PSI DI roadmap v2 implementation surfaces that 
 - Severity tier changes should be made in policy files (policy-as-data), not by editing Python severity mappings.
 - DI snapshot UI may render severity badges/text distinctly, but this does not change DI snapshot hashing rules.
 
+## Confidence Policy Catalog (UI-Only Transparency)
+
+### Catalog
+
+- File: `psi/core/di/catalogs/confidence_policy_v0_1.json`
+- Loaders:
+  - `load_confidence_policy_v0_1()`
+  - `load_confidence_policy_latest()` (deterministic highest-version selection)
+
+### Current scope
+
+- `component_order` (UI transparency; deterministic display order target)
+- `scalar_rules` for the molecule-header optional confidence scalar, including:
+  - `high_concern_escalates_to`
+  - `medium_concerns_amber_min`
+  - `unknown_when_assessed_count_is_zero`
+
+### Important boundary
+
+- This catalog drives UI-only confidence display logic.
+- It must not alter DI snapshot outputs or snapshot hash computation.
+
+## Outcome Dataset v2.1 Additions
+
+### Outcome label metadata (additive)
+
+- `OutcomeLabel.outcome_event_date` (nullable datetime) is additive metadata for post-hoc outcome timing.
+- This field is outcome-label metadata only and does not affect DI outputs or DI snapshot hashes.
+
+### Deterministic export (`psi.tools.export_outcome_dataset`)
+
+Exporter now includes:
+
+- `outcome_event_date` (latest non-null event date across a snapshot's outcome labels, if present)
+- `days_to_outcome` = `outcome_event_date - snapshot.created_at` (days, rounded to 6 decimals; omitted/null when unavailable)
+
+Determinism guarantees:
+
+- Rows ordered by `snapshot_id` ascending
+- Outcome labels ordered by `(snapshot_id, created_at, id)`
+- JSONL serialized with stable key ordering
+
 ## `value_functions_enforcement_reason` Semantics
 
 ### Field
