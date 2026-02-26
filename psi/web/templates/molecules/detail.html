@@ -1100,24 +1100,6 @@
             <div class="no-print muted mini">Tip: click-drag to select; ⌘/Ctrl+C copies a clean AA sequence.</div>
           </div>
 
-          <div class="card" style="margin-top:8px;padding:8px 10px;">
-            <div class="muted mini" style="margin-bottom:6px;"><strong>Full sequence</strong></div>
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
-              <div>Oxidation susceptible</div>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="oxidation_susceptible">Highlight</button>
-                <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
-              </div>
-            </div>
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;">
-              <div>Deamidation susceptible</div>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="deamidation">Highlight</button>
-                <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
-              </div>
-            </div>
-          </div>
-
           <div class="seq-scroll viewer-v2" data-component-id="{{ t.component_id }}" data-molecule-id="{{ molecule.id }}" style="--len: {{ t.length }};" data-seq="{{ t.sequence }}">
             <div class=\"lane\">
               <div class=\"lane-label muted\">Sequence</div>
@@ -1161,7 +1143,7 @@
         <div class="muted mini" style="margin-top:-6px;">Click to highlight. Use “Copy” to copy only raw amino acids for the selected span(s).</div>
 
         {% for t in viewer_v2_components %}
-            <div class="annot-comp" data-component-id="{{ t.component_id }}" style="margin-top:12px;">
+          <div class="annot-comp" data-component-id="{{ t.component_id }}" data-annotations-groups='{{ t.annotations_groups | tojson }}' style="margin-top:12px;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
               <strong>{{ t.role }}</strong>
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
@@ -1174,8 +1156,32 @@
               <details class="annot-group" {% if loop.index0 < 2 %}open{% endif %} style="margin-top:8px;">
                 <summary class="muted" style="cursor:pointer;"><strong>{{ g.group }}</strong> <span class="muted mini">({{ g["items"]|length }})</span></summary>
                 <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+                  {% set _gname = (g.group | lower) %}
+                  {% if 'motif' in _gname or 'liabil' in _gname %}
+                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+                      <div>N_glycosylation</div>
+                      <div style="display:flex;gap:8px;align-items:center;">
+                        <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="N_glycosylation">Highlight</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+                      <div>Oxidation susceptible</div>
+                      <div style="display:flex;gap:8px;align-items:center;">
+                        <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="oxidation_susceptible">Highlight</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+                      <div>Deamidation susceptible</div>
+                      <div style="display:flex;gap:8px;align-items:center;">
+                        <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="deamidation">Highlight</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
+                      </div>
+                    </div>
+                  {% endif %}
                   {% for f in g["items"] %}
-                    {% if f.name != 'oxidation_susceptible' and f.name != 'deamidation' %}
+                    {% if f.name != 'oxidation_susceptible' and f.name != 'deamidation' and f.name != 'N_glycosylation' %}
                       {% set sp = (f.spans[0] if f.spans and (f.spans|length)>0 else {'start':0,'end':0}) %}
                       <div class="annot-item" data-component-id="{{ t.component_id }}" data-feature='{{ f | tojson }}'>
                         <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
@@ -1375,6 +1381,19 @@
     dispatchViewerSelection(viewerEl, s, e);
   }
 
+  function getComponentAnnotationGroups(compId){
+    const compEl = document.querySelector(`.annot-comp[data-component-id="${compId}"]`);
+    if(!compEl) return [];
+    if(Array.isArray(compEl._psiAnnotationGroups)) return compEl._psiAnnotationGroups;
+    let groups = [];
+    try{
+      const parsed = JSON.parse(compEl.dataset.annotationsGroups || '[]');
+      if(Array.isArray(parsed)) groups = parsed;
+    }catch(e){}
+    compEl._psiAnnotationGroups = groups;
+    return groups;
+  }
+
   function highlightAllByFeatureName(viewerEl, featureName){
     const compId = String(viewerEl.dataset.componentId || '');
     const fname = String(featureName || '').trim();
@@ -1383,18 +1402,20 @@
     if(!set) return;
     let minStart = null;
     let maxEnd = null;
-    document.querySelectorAll(`.annot-item[data-component-id="${compId}"]`).forEach((row) => {
-      let feat = {};
-      try{ feat = JSON.parse(row.dataset.feature || '{}'); }catch(e){ feat = {}; }
-      if(String(feat.name || '') !== fname) return;
-      const spans = Array.isArray(feat.spans) ? feat.spans : [];
-      spans.forEach((sp) => {
-        const s = Math.max(0, parseInt((sp && sp.start) || 0));
-        const e = Math.max(s, parseInt((sp && sp.end) || 0));
-        if(e <= s) return;
-        if(minStart === null || s < minStart) minStart = s;
-        if(maxEnd === null || e > maxEnd) maxEnd = e;
-        for(let i=s; i<e; i++) set.add(i);
+    const groups = getComponentAnnotationGroups(compId);
+    groups.forEach((g) => {
+      const items = Array.isArray(g && g.items) ? g.items : [];
+      items.forEach((feat) => {
+        if(String((feat && feat.name) || '') !== fname) return;
+        const spans = Array.isArray(feat && feat.spans) ? feat.spans : [];
+        spans.forEach((sp) => {
+          const s = Math.max(0, parseInt((sp && sp.start) || 0));
+          const e = Math.max(s, parseInt((sp && sp.end) || 0));
+          if(e <= s) return;
+          if(minStart === null || s < minStart) minStart = s;
+          if(maxEnd === null || e > maxEnd) maxEnd = e;
+          for(let i=s; i<e; i++) set.add(i);
+        });
       });
     });
     renderResidueHighlights(viewerEl);

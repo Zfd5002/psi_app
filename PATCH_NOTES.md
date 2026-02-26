@@ -42,6 +42,22 @@ Determinism/Replay note:
 - UI-only template/JS behavior change; no DI, policy, registry, or schema changes.
 - Replay surfaces and snapshot hashes remain unchanged.
 
+## 2026-02-26 — v1.2.9x30
+What changed:
+- Motifs/Liabilities section now renders summary rows with `Highlight` + `Deselect` (no Copy) for `N_glycosylation`, `Oxidation susceptible`, and `Deamidation susceptible`.
+- Removed the x29 oxidation/deamidation summary-row placement under the Full sequence viewer block.
+- Per-site annotation rows remain removed for oxidation/deamidation, and `N_glycosylation` now uses the summary-row pattern instead of per-item Highlight+Copy.
+- Copy buttons elsewhere remain unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+
+Determinism/Replay note:
+- UI-only template/JS change; no DI outputs, policy semantics, registry semantics, or schema behavior changed.
+- Highlight union logic uses deterministic component annotation data already present in the page model.
+
 ## v1.2.9w45
 
 Why:
