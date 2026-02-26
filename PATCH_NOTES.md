@@ -58,6 +58,21 @@ Determinism/Replay note:
 - UI-only template/JS change; no DI outputs, policy semantics, registry semantics, or schema behavior changed.
 - Highlight union logic uses deterministic component annotation data already present in the page model.
 
+## 2026-02-26 — v1.2.9x31
+What changed:
+- Motifs/Liabilities row-level `Deselect` now clears highlights only for that specific motif/liability row (`N_glycosylation`, `oxidation_susceptible`, or `deamidation`) instead of clearing the entire component.
+- Multi-row motif/liability highlights can now coexist, and the viewer renders the union deterministically.
+- Click-to-deselect on highlighted residues now removes the residue from active highlight sets covering that residue without clearing unrelated motif highlights.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+
+Determinism/Replay note:
+- UI-only template/JS refinement; no DI/policy/registry/schema changes.
+- Highlight state remains deterministic and component/feature-scoped in the browser only (no snapshot impact).
+
 ## v1.2.9w45
 
 Why:

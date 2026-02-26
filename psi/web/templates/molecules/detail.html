@@ -1162,21 +1162,21 @@
                       <div>N_glycosylation</div>
                       <div style="display:flex;gap:8px;align-items:center;">
                         <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="N_glycosylation">Highlight</button>
-                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}" data-feature-name="N_glycosylation">Deselect</button>
                       </div>
                     </div>
                     <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
                       <div>Oxidation susceptible</div>
                       <div style="display:flex;gap:8px;align-items:center;">
                         <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="oxidation_susceptible">Highlight</button>
-                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}" data-feature-name="oxidation_susceptible">Deselect</button>
                       </div>
                     </div>
                     <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
                       <div>Deamidation susceptible</div>
                       <div style="display:flex;gap:8px;align-items:center;">
                         <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="deamidation">Highlight</button>
-                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}">Deselect</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}" data-feature-name="deamidation">Deselect</button>
                       </div>
                     </div>
                   {% endif %}
@@ -1330,6 +1330,7 @@
 <script>
 (function(){
   const highlightSelections = new Map();
+  const MANUAL_HIGHLIGHT_KEY = "__manual__";
 
   function viewerSelectionKey(viewerEl){
     return String(viewerEl && viewerEl.dataset && viewerEl.dataset.componentId ? viewerEl.dataset.componentId : "");
@@ -1343,35 +1344,59 @@
     }catch(e){}
   }
 
-  function getHighlightedResiduesSet(viewerEl, create){
+  function getComponentHighlightBuckets(viewerEl, create){
     const key = viewerSelectionKey(viewerEl);
     if(!key) return null;
-    let set = highlightSelections.get(key);
+    let buckets = highlightSelections.get(key);
+    if(!buckets && create){
+      buckets = new Map();
+      highlightSelections.set(key, buckets);
+    }
+    return buckets || null;
+  }
+
+  function getHighlightedResiduesSet(viewerEl, featureKey, create){
+    const buckets = getComponentHighlightBuckets(viewerEl, create);
+    if(!buckets) return null;
+    const fk = String(featureKey || MANUAL_HIGHLIGHT_KEY);
+    let set = buckets.get(fk);
     if(!set && create){
       set = new Set();
-      highlightSelections.set(key, set);
+      buckets.set(fk, set);
     }
     return set || null;
   }
 
+  function residueHighlightedInAnyBucket(viewerEl, residueIndex){
+    const buckets = getComponentHighlightBuckets(viewerEl, false);
+    if(!buckets) return false;
+    for(const set of buckets.values()){
+      if(set && set.has(residueIndex)) return true;
+    }
+    return false;
+  }
+
   function renderResidueHighlights(viewerEl){
     const residues = viewerEl.querySelectorAll('.residue');
-    const set = getHighlightedResiduesSet(viewerEl, false);
     residues.forEach((el) => {
       const idx = parseInt(el.dataset.pos || '-1');
-      const on = !!(set && Number.isFinite(idx) && set.has(idx));
+      const on = !!(Number.isFinite(idx) && residueHighlightedInAnyBucket(viewerEl, idx));
       el.classList.toggle('selected', on);
     });
   }
 
   function clearResidueHighlights(viewerEl){
-    const set = getHighlightedResiduesSet(viewerEl, false);
-    if(set) set.clear();
+    const buckets = getComponentHighlightBuckets(viewerEl, false);
+    if(buckets){
+      for(const set of buckets.values()){
+        if(set) set.clear();
+      }
+    }
     renderResidueHighlights(viewerEl);
   }
 
   function highlightRange(viewerEl, startIdx, endIdx){
-    const set = getHighlightedResiduesSet(viewerEl, true);
+    const set = getHighlightedResiduesSet(viewerEl, MANUAL_HIGHLIGHT_KEY, true);
     if(!set) return;
     const s = Math.max(0, parseInt(startIdx||0));
     const e = Math.max(s, parseInt(endIdx||0));
@@ -1398,8 +1423,9 @@
     const compId = String(viewerEl.dataset.componentId || '');
     const fname = String(featureName || '').trim();
     if(!compId || !fname) return;
-    const set = getHighlightedResiduesSet(viewerEl, true);
+    const set = getHighlightedResiduesSet(viewerEl, fname, true);
     if(!set) return;
+    set.clear();
     let minStart = null;
     let maxEnd = null;
     const groups = getComponentAnnotationGroups(compId);
@@ -1435,13 +1461,30 @@
     clearHighlights(componentId);
   }
 
+  function clearHighlightsForComponentFeature(componentId, featureName){
+    const compId = String(componentId || '');
+    const fname = String(featureName || '').trim();
+    if(!compId || !fname) return;
+    const viewerEl = document.querySelector(`.seq-scroll.viewer-v2[data-component-id="${compId}"]`);
+    if(!viewerEl) return;
+    const set = getHighlightedResiduesSet(viewerEl, fname, false);
+    if(set) set.clear();
+    renderResidueHighlights(viewerEl);
+  }
+
   function toggleResidue(viewerEl, residueIndex){
     const idx = parseInt(residueIndex || '-1');
     if(!Number.isFinite(idx) || idx < 0) return;
-    const set = getHighlightedResiduesSet(viewerEl, true);
-    if(!set) return;
-    if(set.has(idx)) set.delete(idx);
-    else set.add(idx);
+    const buckets = getComponentHighlightBuckets(viewerEl, false);
+    if(!buckets) return;
+    let removed = false;
+    for(const set of buckets.values()){
+      if(set && set.has(idx)){
+        set.delete(idx);
+        removed = true;
+      }
+    }
+    if(!removed) return;
     renderResidueHighlights(viewerEl);
     dispatchViewerSelection(viewerEl, idx, idx + 1);
   }
@@ -1685,7 +1728,10 @@
   document.querySelectorAll('[data-action="viewer-clear-highlights"]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
-      clearHighlightsForComponent(String(btn.dataset.componentId || ''));
+      const compId = String(btn.dataset.componentId || '');
+      const fname = String(btn.dataset.featureName || '').trim();
+      if(fname) clearHighlightsForComponentFeature(compId, fname);
+      else clearHighlightsForComponent(compId);
     });
   });
 
