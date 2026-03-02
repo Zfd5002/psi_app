@@ -3,26 +3,67 @@
 {% block content %}
 <div class="card">
   <h1>Portfolio Lineage #{{ portfolio_id }} — {{ portfolio_name }}</h1>
-  <h2>Executive Summary</h2>
-  <div class="mini muted">Portfolio lineage packet rendered in deterministic section order.</div>
+  <div class="mini muted">Executive-first lineage packet with deterministic ordering.</div>
 
-  <h2>Determinations</h2>
-  <h3>Policy Upgrade Warnings</h3>
-  <pre style="white-space:pre-wrap;">{{ (policy_upgrade_warnings if policy_upgrade_warnings is defined else []) | tojson(indent=2) }}</pre>
+  <div class="tabs no-print" role="tablist" aria-label="Portfolio lineage view mode">
+    <button type="button" class="btn mini" data-lineage-portfolio-tab="board" aria-selected="true" aria-controls="lineage-portfolio-board-panel">Board View</button>
+    <button type="button" class="btn mini" data-lineage-portfolio-tab="technical" aria-selected="false" aria-controls="lineage-portfolio-technical-panel">Technical View</button>
+  </div>
 
-  <h2>Evidence</h2>
-  <h3>Child Program Lineage Summary</h3>
-  <pre style="white-space:pre-wrap;">{{ child_program_lineage_summary | tojson(indent=2) }}</pre>
+  <section id="lineage-portfolio-board-panel" data-lineage-portfolio-panel="board">
+    <h2>Executive Summary</h2>
+    <table>
+      <tbody>
+        <tr><th>Portfolio ID</th><td>{{ portfolio_id }}</td></tr>
+        <tr><th>Portfolio name</th><td>{{ portfolio_name }}</td></tr>
+        <tr><th>Program summaries</th><td>{{ (child_program_lineage_summary|length if child_program_lineage_summary is defined and child_program_lineage_summary is iterable else 0) }}</td></tr>
+      </tbody>
+    </table>
 
-  <h2>Rules & Policy</h2>
-  <h3>Governance Changes (Attribution)</h3>
-  <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
+    <h2>Key changes / lineage events</h2>
+    <ul>
+      {% if child_program_lineage_summary is defined and child_program_lineage_summary is iterable and child_program_lineage_summary|length %}
+      <li>Child program lineage summaries recorded: {{ child_program_lineage_summary|length }}</li>
+      {% else %}
+      <li>No child program lineage events captured yet.</li>
+      {% endif %}
+    </ul>
+  </section>
 
-  <h2>Reproducibility & Fingerprints</h2>
-  <details>
-    <summary>Show raw</summary>
-    <h3>Membership State</h3>
-    <pre style="white-space:pre-wrap;">{{ membership_state | tojson(indent=2) }}</pre>
-  </details>
+  <section id="lineage-portfolio-technical-panel" class="technical-panel" data-lineage-portfolio-panel="technical">
+    <h2>Technical Audit</h2>
+    <details>
+      <summary>Show raw</summary>
+      <h3>Policy Upgrade Warnings</h3>
+      <pre style="white-space:pre-wrap;">{{ (policy_upgrade_warnings if policy_upgrade_warnings is defined else []) | tojson(indent=2) }}</pre>
+      <h3>Child Program Lineage Summary</h3>
+      <pre style="white-space:pre-wrap;">{{ child_program_lineage_summary | tojson(indent=2) }}</pre>
+      <h3>Governance Changes</h3>
+      <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
+      <h3>Membership State</h3>
+      <pre style="white-space:pre-wrap;">{{ membership_state | tojson(indent=2) }}</pre>
+    </details>
+  </section>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const tabs = document.querySelectorAll("[data-lineage-portfolio-tab]");
+  const board = document.querySelector("[data-lineage-portfolio-panel='board']");
+  const tech = document.querySelector("[data-lineage-portfolio-panel='technical']");
+  if (!tabs.length || !board || !tech) return;
+  const apply = (mode) => {
+    const isBoard = mode === "board";
+    board.style.display = isBoard ? "block" : "none";
+    tech.style.display = isBoard ? "none" : "block";
+    tabs.forEach((btn) => {
+      const active = btn.getAttribute("data-lineage-portfolio-tab") === mode;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  };
+  tabs.forEach((btn) => btn.addEventListener("click", () => apply(btn.getAttribute("data-lineage-portfolio-tab"))));
+  apply("board");
+})();
+</script>
 {% endblock %}

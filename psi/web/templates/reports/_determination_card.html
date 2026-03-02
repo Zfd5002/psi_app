@@ -1,0 +1,52 @@
+{% macro render_determination_card(title, outcome_label, rule_id, snapshot_ids, measurement_keys, rationale, missing_inputs, extra_note="") -%}
+{% set raw_outcome = (outcome_label or "not_assessed") %}
+{% set display_outcome = {
+  "not_comparable": "Not comparable",
+  "not_assessed": "Not assessed yet",
+  "policy_disabled": "Not enabled",
+  "policy_incomplete": "Not enabled",
+  "comparable_full": "Comparable (full)",
+  "comparable_partial": "Comparable (partial)"
+}.get(raw_outcome, (raw_outcome|string).replace("_", " ").title()) %}
+<div class="card determination-card">
+  <div class="row" style="justify-content:space-between;">
+    <h3 style="margin:0;">{{ title }}</h3>
+    <span class="badge {% if raw_outcome in ['on_track','comparable_full','comparable_partial','enabled'] %}good{% elif raw_outcome in ['policy_disabled','policy_incomplete','not_assessed'] %}warn{% else %}bad{% endif %}">
+      {{ display_outcome }}
+    </span>
+  </div>
+  <div class="kv" style="margin-top:8px;">
+    <div class="k">Policy rule</div><div><code>{{ rule_id if rule_id else "missing" }}</code></div>
+    <div class="k">Cited snapshots</div>
+    <div>
+      {% if snapshot_ids and snapshot_ids|length %}
+        <code>{{ snapshot_ids|join(", ") }}</code>
+      {% elif missing_inputs is mapping and missing_inputs %}
+        No snapshots captured yet
+      {% else %}
+        None
+      {% endif %}
+    </div>
+    <div class="k">Cited measurements</div>
+    <div>
+      {% if measurement_keys and measurement_keys|length %}
+        {% for mk in measurement_keys %}
+        <span class="chip">{{ mk }}</span>
+        {% endfor %}
+      {% else %}
+        None
+      {% endif %}
+    </div>
+    <div class="k">Rationale</div><div>{{ rationale if rationale else "Not available" }}</div>
+  </div>
+  {% if extra_note %}
+    <div class="notice" style="margin-top:10px;">{{ extra_note }}</div>
+  {% endif %}
+  {% if missing_inputs is mapping and missing_inputs %}
+    <div class="notice" style="margin-top:10px;">
+      <strong>Missing inputs</strong><br/>
+      This determination is not assessed until these inputs exist: {{ missing_inputs | tojson(indent=2) }}
+    </div>
+  {% endif %}
+</div>
+{%- endmacro %}

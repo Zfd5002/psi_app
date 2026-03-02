@@ -1,0 +1,44 @@
+{% set sections = (payload.sections if payload is defined and payload.sections is defined else {}) %}
+{% set metadata = (payload.metadata if payload is defined and payload.metadata is defined else {}) %}
+{% set identity = (sections.identity_context if sections is mapping and sections.identity_context is defined else {}) %}
+
+<h2>Technical Audit</h2>
+<div class="card">
+  <h3 style="margin-top:0;">Reproducibility & Fingerprints</h3>
+  <pre style="white-space:pre-wrap;">{{ metadata | tojson(indent=2) }}</pre>
+
+  <h3>Governance Warnings</h3>
+  <pre style="white-space:pre-wrap;">{{ (governance_warnings if governance_warnings is defined else []) | tojson(indent=2) }}</pre>
+
+  <h3>Policy Versions</h3>
+  <pre style="white-space:pre-wrap;">{{ (policy_pin_summary if policy_pin_summary is defined else []) | tojson(indent=2) }}</pre>
+
+  <h3>Rule IDs</h3>
+  <pre style="white-space:pre-wrap;">{{ (rule_ids if rule_ids is defined else []) | tojson(indent=2) }}</pre>
+
+  <h3>Measurement Key Citations</h3>
+  <pre style="white-space:pre-wrap;">{{ (measurement_key_citations if measurement_key_citations is defined else []) | tojson(indent=2) }}</pre>
+
+  <h3>Evidence Snapshot References</h3>
+  <pre style="white-space:pre-wrap;">{{ (evidence_snapshot_refs if evidence_snapshot_refs is defined else []) | tojson(indent=2) }}</pre>
+
+  <h3>Structured Report Payload</h3>
+  <pre style="white-space:pre-wrap;">{
+  "identity_context": {{ ((payload.sections.identity_context if payload is defined and payload.sections is defined and payload.sections.identity_context is defined else "missing") | tojson(indent=2)) }},
+  "molecule_report": {{ ((payload.metadata.report_type if payload is defined and payload.metadata is defined and payload.metadata.report_type is defined else "missing") | tojson(indent=2)) }},
+  "policy_summary": {{ ((policy_pin_summary if policy_pin_summary is defined and policy_pin_summary else "missing") | tojson(indent=2)) }},
+  "rule_summary": {{ ((rule_ids if rule_ids is defined and rule_ids else "missing") | tojson(indent=2)) }},
+  "measurement_summary": {{ ((measurement_key_citations if measurement_key_citations is defined and measurement_key_citations else "missing") | tojson(indent=2)) }},
+  "evidence_summary": {{ ((evidence_snapshot_refs if evidence_snapshot_refs is defined and evidence_snapshot_refs else "missing") | tojson(indent=2)) }}
+}</pre>
+
+  <details>
+    <summary>Show raw sections</summary>
+    {% for section_name, section_value in (sections or {}).items() %}
+      <h4><code>{{ section_name }}</code></h4>
+      <pre style="white-space:pre-wrap;">{{ section_value | tojson(indent=2) }}</pre>
+    {% else %}
+      <p class="muted">No sections.</p>
+    {% endfor %}
+  </details>
+</div>

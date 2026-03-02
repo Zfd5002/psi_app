@@ -1,3 +1,249 @@
+## 2026-03-02 — v1.3.0a80
+Why:
+- Final board-readability consistency and accessibility pass across report/lineage toggles and section framing.
+
+What:
+- Added minimal presentational accessibility improvements:
+  - active button visual state (`.btn.active`)
+  - consistent technical-panel separator styling (`.technical-panel`)
+- Updated Board/Technical toggle controls across report and lineage templates to include `aria-controls` and stable panel IDs.
+- Ensured non-JS fallback remains readable: Board and Technical sections are both visible and clearly separated.
+- Kept headings and panel framing consistent across:
+  - `reports/detail.html`
+  - `reports/board_upgrade_delta_v3.html`
+  - `reports/board_template_ladder_v3.html`
+  - `lineage/program_detail.html`
+  - `lineage/portfolio_detail.html`
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/board_upgrade_delta_v3.html`
+- `psi/web/templates/reports/board_template_ladder_v3.html`
+- `psi/web/templates/lineage/program_detail.html`
+- `psi/web/templates/lineage/portfolio_detail.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a80_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a79
+Why:
+- Reduce hash/canonical-noise in board-facing sections so executive readers see status and actions, while hashes remain available only in technical/audit views.
+
+What:
+- Updated `reports/detail.html` board header to remove direct fingerprint display from Board View.
+- Updated `reports/board_upgrade_delta_v3.html`:
+  - Board View now shows only `changed_key_count` from header.
+  - Full header (including hash fields) moved to Technical View.
+- Updated lineage board sections to avoid raw event-object dumping and show compact deterministic count bullets instead.
+- Added regression coverage in `tests/test_v3_narrative_rendering.py` to assert board narrative outputs do not contain 64-hex hash tokens.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/board_upgrade_delta_v3.html`
+- `psi/web/templates/lineage/program_detail.html`
+- `psi/web/templates/lineage/portfolio_detail.html`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a79_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a78
+Why:
+- Make determination cards board-readable with consistent human wording and deterministic missing-inputs language.
+
+What:
+- Updated shared determination card macro in `reports/_determination_card.html`:
+  - Outcome labels now render in human-readable form (for example `not_assessed` -> `Not assessed yet`, `policy_disabled` -> `Not enabled`).
+  - `Rule ID` label changed to `Policy rule` while preserving the same underlying value.
+  - Snapshot section now shows `No snapshots captured yet` when `missing_inputs` exists and no snapshot IDs are cited.
+  - Measurement keys now render as compact chips instead of JSON-like lists.
+  - Missing inputs language standardized to:
+    `This determination is not assessed until these inputs exist: ...`
+- Presentation-only changes; determination payload semantics unchanged.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/_determination_card.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a78_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a77
+Why:
+- Move lineage program/portfolio pages to executive-first board mode while preserving full raw audit visibility in a secondary technical view.
+
+What:
+- Updated `lineage/program_detail.html`:
+  - Added Board/Technical toggle (Board default).
+  - Board section now shows compact executive summary counts and key lineage events.
+  - Technical section collapses raw warnings/changes/rollups/history/membership JSON under `Show raw`.
+- Updated `lineage/portfolio_detail.html`:
+  - Added Board/Technical toggle (Board default).
+  - Board section shows portfolio summary and key child-program lineage events.
+  - Technical section collapses raw warnings/summaries/governance/membership JSON.
+- Presentation-only changes; lineage semantics/data untouched.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/lineage/program_detail.html`
+- `psi/web/templates/lineage/portfolio_detail.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a77_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a76
+Why:
+- Make upgrade delta and template ladder pages executive-first by default while preserving full technical audit surfaces behind an explicit toggle.
+
+What:
+- Updated `reports/board_upgrade_delta_v3.html`:
+  - Added Board/Technical view toggle (Board default).
+  - Board section now emphasizes `Executive Summary`, `What changed`, and `What’s required next`.
+  - Technical section contains raw appendix JSON and reproducibility footer.
+  - Preserved legacy literals required by tests: `Upgrade Delta Header`, `Change Table`.
+- Updated `reports/board_template_ladder_v3.html`:
+  - Added Board/Technical view toggle (Board default).
+  - Board section emphasizes stage table and next actions.
+  - Technical section contains raw missing prerequisite JSON and reproducibility footer.
+  - Preserved legacy literals required by tests: `Template Ladder Header`, `Stage Table`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/board_upgrade_delta_v3.html`
+- `psi/web/templates/reports/board_template_ladder_v3.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a76_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a75
+Why:
+- Complete deterministic narrative mapping coverage for all four report types with board-friendly subject labeling and clean empty-state phrasing.
+
+What:
+- Refined comparison narrative rendering in `psi/services/v3_narrative.py`:
+  - Uses `II_general_profile.columns` to display board-friendly subjects (for example `M1 (Mol One)`).
+  - Uses deterministic empty phrasing (`Not yet captured`, `None`) instead of array literals.
+- Added tests in `tests/test_v3_narrative_rendering.py` to assert:
+  - deterministic behavior across all report types,
+  - friendly comparison labels,
+  - no array-literal leakage in board narrative output.
+- Existing report-type router mapping from `a74` continues to cover:
+  - `molecule_report`
+  - `program_report`
+  - `molecule_comparative_report` / `molecule_comparison_report`
+  - `program_comparative_report` / `program_comparison_report`
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_narrative.py`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a75_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a74
+Why:
+- Make board narrative the default report detail experience while preserving technical audit visibility and deterministic structured markers.
+
+What:
+- Updated `reports/detail.html` to default to Board View and provide a client-side Board/Technical toggle.
+- Added `reports/_board_narrative.html` for executive-first narrative rendering (headline, status, determinations, evidence, next steps).
+- Added `reports/_technical_audit.html` for secondary technical/audit content (pins, fingerprint metadata, warnings, raw payload).
+- Wired router context to provide `board_narrative` using deterministic narrative renderers in `psi/services/v3_narrative.py`.
+- Preserved required structured marker keys in rendered HTML:
+  - `identity_context`, `molecule_report`, `policy_summary`, `rule_summary`, `measurement_summary`, `evidence_summary`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/reports.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/_board_narrative.html`
+- `psi/web/templates/reports/_technical_audit.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a74_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a73
+Why:
+- Add a deterministic board narrative rendering layer that translates existing report payloads into executive-readable text without changing semantics or persisted JSON.
+
+What:
+- Added `psi/services/v3_narrative.py` with pure deterministic renderers:
+  - `render_molecule_narrative`
+  - `render_program_narrative`
+  - `render_molecule_comparison_narrative`
+  - `render_program_comparison_narrative`
+- Narrative model includes stable keys/order: headline, status rows, what-this-means, evidence status, determinations, next steps, technical notes.
+- Added sanitization to prevent hash-like 64-hex tokens in board narrative strings.
+- Added deterministic tests in `tests/test_v3_narrative_rendering.py`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_narrative.py`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a73_<timestamp>/ ~/psi_repo/`
+
 ## 2026-03-02 — v1.3.0a72
 Why:
 - Normalize board packet page framing for upgrade delta, ladder, and lineage surfaces with consistent section titles and compact reproducibility footer style.

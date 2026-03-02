@@ -1,53 +1,68 @@
 {% extends "base.html" %}
 {% block title %}Report #{{ report_run.id }} | PSI{% endblock %}
 {% block content %}
+{% set payload_meta = (payload.metadata if payload is defined and payload.metadata is defined else {}) %}
+{% set payload_sections = (payload.sections if payload is defined and payload.sections is defined else {}) %}
+{% set identity = (payload_sections.identity_context if payload_sections is mapping and payload_sections.identity_context is defined else {}) %}
 <div class="card">
   <h1>Report #{{ report_run.id }}</h1>
-  <div class="card" style="margin-top:8px;">
-    <h2 style="margin-top:0;">Policy Versions</h2>
-    <pre style="white-space:pre-wrap;">{{ (policy_pin_summary if policy_pin_summary is defined else []) | tojson(indent=2) }}</pre>
-    <h2>Rule IDs</h2>
-    <pre style="white-space:pre-wrap;">{{ (rule_ids if rule_ids is defined else []) | tojson(indent=2) }}</pre>
-    <h2>Measurement Key Citations</h2>
-    <pre style="white-space:pre-wrap;">{{ (measurement_key_citations if measurement_key_citations is defined else []) | tojson(indent=2) }}</pre>
-    <h2>Evidence Snapshot References</h2>
-    <pre style="white-space:pre-wrap;">{{ (evidence_snapshot_refs if evidence_snapshot_refs is defined else []) | tojson(indent=2) }}</pre>
-  </div>
-  <div class="grid cols-2">
-    <div>
-      <div><strong>Type:</strong> <code>{{ report_run.report_type }}</code></div>
-      <div><strong>As Of:</strong> {{ report_run.as_of }}</div>
-      <div><strong>Created:</strong> {{ report_run.created_at }}</div>
+  <div class="card executive-header" style="margin-top:8px;">
+    <h2 style="margin-top:0;">Executive Header</h2>
+    <div class="grid cols-2">
+      <div>
+        <div><strong>Identity:</strong> <code>{{ identity if identity else "missing" }}</code></div>
+        <div><strong>Type:</strong> <code>{{ report_run.report_type }}</code></div>
+        <div><strong>Subjects:</strong> <code>{{ subject_ids }}</code></div>
+      </div>
+      <div>
+        <div><strong>As Of:</strong> {{ report_run.as_of }}</div>
+        <div><strong>Created:</strong> {{ report_run.created_at }}</div>
+        <div><strong>Snapshot Coverage:</strong> <code>{{ snapshot_coverage }}</code></div>
+      </div>
     </div>
-    <div>
-      <div><strong>Subjects:</strong> <code>{{ subject_ids }}</code></div>
-      <div><strong>Policy Pins:</strong> <code>{{ policy_pins }}</code></div>
-      <div><strong>Snapshot Coverage:</strong> <code>{{ snapshot_coverage }}</code></div>
+    <div class="mini muted" style="margin-top:10px;">
+      schema:
+      <code>{{ (payload.schema_id if payload is defined and payload.schema_id is defined else "missing") }}</code>
+      · report_type:
+      <code>{{ (payload_meta.report_type if payload_meta is mapping and payload_meta.report_type is defined else "missing") }}</code>
     </div>
   </div>
 
-  <h2>Metadata</h2>
-  <pre style="white-space:pre-wrap;">{{ payload.metadata | tojson(indent=2) }}</pre>
+  <div class="tabs no-print" role="tablist" aria-label="Report view mode" style="margin-top:12px;">
+    <button type="button" class="btn mini" data-view-tab="board" aria-selected="true" aria-controls="report-board-panel">Board View</button>
+    <button type="button" class="btn mini" data-view-tab="technical" aria-selected="false" aria-controls="report-technical-panel">Technical View</button>
+  </div>
 
-  <h2>Governance Warnings</h2>
-  <pre style="white-space:pre-wrap;">{{ (governance_warnings if governance_warnings is defined else []) | tojson(indent=2) }}</pre>
+  <section id="report-board-panel" data-view-panel="board">
+    {% include "reports/_board_narrative.html" %}
+  </section>
 
-  <h2>Structured Report Payload</h2>
-  <pre style="white-space:pre-wrap;">{
-  "identity_context": {{ ((payload.sections.identity_context if payload is defined and payload.sections is defined and payload.sections.identity_context is defined else "missing") | tojson(indent=2)) }},
-  "molecule_report": {{ ((payload.metadata.report_type if payload is defined and payload.metadata is defined and payload.metadata.report_type is defined else "missing") | tojson(indent=2)) }},
-  "policy_summary": {{ ((policy_pin_summary if policy_pin_summary is defined and policy_pin_summary else "missing") | tojson(indent=2)) }},
-  "rule_summary": {{ ((rule_ids if rule_ids is defined and rule_ids else "missing") | tojson(indent=2)) }},
-  "measurement_summary": {{ ((measurement_key_citations if measurement_key_citations is defined and measurement_key_citations else "missing") | tojson(indent=2)) }},
-  "evidence_summary": {{ ((evidence_snapshot_refs if evidence_snapshot_refs is defined and evidence_snapshot_refs else "missing") | tojson(indent=2)) }}
-}</pre>
-
-  <h2>Sections</h2>
-  {% for section_name, section_value in (payload.sections or {}).items() %}
-    <h3><code>{{ section_name }}</code></h3>
-    <pre style="white-space:pre-wrap;">{{ section_value | tojson(indent=2) }}</pre>
-  {% else %}
-    <p class="muted">No sections.</p>
-  {% endfor %}
+  <section id="report-technical-panel" class="technical-panel" data-view-panel="technical">
+    {% include "reports/_technical_audit.html" %}
+  </section>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const tabs = document.querySelectorAll("[data-view-tab]");
+  const boardPanel = document.querySelector("[data-view-panel='board']");
+  const techPanel = document.querySelector("[data-view-panel='technical']");
+  if (!tabs.length || !boardPanel || !techPanel) return;
+  const apply = (mode) => {
+    const board = mode === "board";
+    boardPanel.style.display = board ? "block" : "none";
+    techPanel.style.display = board ? "none" : "block";
+    tabs.forEach((btn) => {
+      const active = btn.getAttribute("data-view-tab") === mode;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+      btn.classList.toggle("active", active);
+    });
+  };
+  tabs.forEach((btn) => {
+    btn.addEventListener("click", () => apply(btn.getAttribute("data-view-tab")));
+  });
+  apply("board");
+})();
+</script>
 {% endblock %}

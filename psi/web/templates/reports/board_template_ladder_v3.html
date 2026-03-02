@@ -1,40 +1,71 @@
-<h2>Executive Summary</h2>
-<div class="mini muted">Template Ladder Header</div>
-<table>
-  <tbody>
-    {% for k, v in report.header.items() %}
-    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<h2>Determinations</h2>
-<h3>Stage Table</h3>
-<table>
-  <thead><tr><th>Stage Key</th><th>Current Version</th></tr></thead>
-  <tbody>
-    {% for row in report.stage_table.stages %}
-    <tr><td>{{ row.stage_key }}</td><td>{{ row.current_version }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-<div>Current Stage: {{ report.stage_table.current_stage }}</div>
-
-<h2>Evidence</h2>
-<details>
-  <summary>Show raw</summary>
-  <pre>{{ report.missing_prerequisites_table | tojson(indent=2) }}</pre>
-</details>
-
-<h2>Rules & Policy</h2>
-<ul>
-  {% for item in report.next_actions_bullets %}
-  <li>{{ item }}</li>
-  {% endfor %}
-</ul>
-
-<h2>Reproducibility & Fingerprints</h2>
-<div class="mini muted">
-  schema: <code>{{ report.schema_id if report.schema_id is defined else "missing" }}</code>
-  · version: <code>{{ report.schema_version if report.schema_version is defined else "missing" }}</code>
+<div class="tabs no-print" role="tablist" aria-label="Template ladder view mode">
+  <button type="button" class="btn mini" data-ladder-tab="board" aria-selected="true" aria-controls="ladder-board-panel">Board View</button>
+  <button type="button" class="btn mini" data-ladder-tab="technical" aria-selected="false" aria-controls="ladder-technical-panel">Technical View</button>
 </div>
+
+<section id="ladder-board-panel" data-ladder-panel="board">
+  <h2>Executive Summary</h2>
+  <div class="mini muted">Template Ladder Header</div>
+  <table>
+    <tbody>
+      {% for k, v in report.header.items() %}
+      <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Determinations</h2>
+  <h3>Stage Table</h3>
+  <table>
+    <thead><tr><th>Stage Key</th><th>Current Version</th></tr></thead>
+    <tbody>
+      {% for row in report.stage_table.stages %}
+      <tr><td>{{ row.stage_key }}</td><td>{{ row.current_version }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div>Current Stage: {{ report.stage_table.current_stage }}</div>
+
+  <h2>What’s required next</h2>
+  <ul>
+    {% for item in report.next_actions_bullets %}
+    <li>{{ item }}</li>
+    {% else %}
+    <li>No next actions available.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section id="ladder-technical-panel" class="technical-panel" data-ladder-panel="technical">
+  <h2>Technical Audit</h2>
+  <details>
+    <summary>Show raw</summary>
+    <pre>{{ report.missing_prerequisites_table | tojson(indent=2) }}</pre>
+  </details>
+
+  <h2>Reproducibility & Fingerprints</h2>
+  <div class="mini muted">
+    schema: <code>{{ report.schema_id if report.schema_id is defined else "missing" }}</code>
+    · version: <code>{{ report.schema_version if report.schema_version is defined else "missing" }}</code>
+  </div>
+</section>
+
+<script>
+(() => {
+  const tabs = document.querySelectorAll("[data-ladder-tab]");
+  const board = document.querySelector("[data-ladder-panel='board']");
+  const tech = document.querySelector("[data-ladder-panel='technical']");
+  if (!tabs.length || !board || !tech) return;
+  const apply = (mode) => {
+    const isBoard = mode === "board";
+    board.style.display = isBoard ? "block" : "none";
+    tech.style.display = isBoard ? "none" : "block";
+    tabs.forEach((btn) => {
+      const active = btn.getAttribute("data-ladder-tab") === mode;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  };
+  tabs.forEach((btn) => btn.addEventListener("click", () => apply(btn.getAttribute("data-ladder-tab"))));
+  apply("board");
+})();
+</script>

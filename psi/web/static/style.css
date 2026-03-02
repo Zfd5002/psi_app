@@ -45,9 +45,11 @@ textarea{min-height:110px;resize:vertical}
 .btn.primary{background:linear-gradient(135deg,rgba(0,76,151,.85),rgba(51,184,255,.55));border-color:rgba(51,184,255,.25)}
 .btn.danger{background:rgba(255,102,102,.14);border-color:rgba(255,102,102,.35)}
 .btn:hover{filter:brightness(1.07)}
+.btn.active{background:rgba(51,184,255,.12);border-color:rgba(51,184,255,.25)}
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
 .tab{padding:8px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
 .tab.active{background:rgba(51,184,255,.12);border-color:rgba(51,184,255,.25);color:var(--text)}
+.technical-panel{margin-top:14px;padding-top:10px;border-top:1px dashed rgba(36,50,74,.6)}
 .kv{display:grid;grid-template-columns:160px 1fr;gap:10px}
 .kv div{padding:6px 0;border-bottom:1px dashed rgba(36,50,74,.5)}
 .kv .k{color:var(--muted)}

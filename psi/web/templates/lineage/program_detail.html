@@ -3,32 +3,77 @@
 {% block content %}
 <div class="card">
   <h1>Program Lineage #{{ program_id }}</h1>
-  <h2>Executive Summary</h2>
-  <div class="mini muted">Program lineage packet rendered in deterministic section order.</div>
+  <div class="mini muted">Executive-first lineage packet with deterministic ordering.</div>
 
-  <h2>Determinations</h2>
-  <h3>Policy Upgrade Warnings</h3>
-  <pre style="white-space:pre-wrap;">{{ (policy_upgrade_warnings if policy_upgrade_warnings is defined else []) | tojson(indent=2) }}</pre>
+  <div class="tabs no-print" role="tablist" aria-label="Program lineage view mode">
+    <button type="button" class="btn mini" data-lineage-program-tab="board" aria-selected="true" aria-controls="lineage-program-board-panel">Board View</button>
+    <button type="button" class="btn mini" data-lineage-program-tab="technical" aria-selected="false" aria-controls="lineage-program-technical-panel">Technical View</button>
+  </div>
 
-  <h2>Evidence</h2>
-  <h3>Evidence Changes</h3>
-  <pre style="white-space:pre-wrap;">{{ evidence_changes | tojson(indent=2) }}</pre>
+  <section id="lineage-program-board-panel" data-lineage-program-panel="board">
+    <h2>Executive Summary</h2>
+    <table>
+      <tbody>
+        <tr><th>Program ID</th><td>{{ program_id }}</td></tr>
+        <tr><th>Policy warnings</th><td>{{ (policy_upgrade_warnings|length if policy_upgrade_warnings is defined and policy_upgrade_warnings is iterable else 0) }}</td></tr>
+        <tr><th>Evidence change rows</th><td>{{ (evidence_changes|length if evidence_changes is defined and evidence_changes is iterable else 0) }}</td></tr>
+      </tbody>
+    </table>
 
-  <h2>Rules & Policy</h2>
-  <h3>Policy Changes</h3>
-  <pre style="white-space:pre-wrap;">{{ policy_changes | tojson(indent=2) }}</pre>
-  <h3>Governance Changes (Attribution)</h3>
-  <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
+    <h2>Key changes / lineage events</h2>
+    <ul>
+      {% if evidence_changes is defined and evidence_changes is iterable and evidence_changes|length %}
+      <li>Evidence change events recorded: {{ evidence_changes|length }}</li>
+      {% endif %}
+      {% if governance_changes is defined and governance_changes is iterable and governance_changes|length %}
+      <li>Governance change events recorded: {{ governance_changes|length }}</li>
+      {% endif %}
+      {% if (evidence_changes is not defined or not (evidence_changes is iterable and evidence_changes|length)) and (governance_changes is not defined or not (governance_changes is iterable and governance_changes|length)) %}
+      <li>No lineage events captured yet.</li>
+      {% endif %}
+    </ul>
+  </section>
 
-  <h2>Reproducibility & Fingerprints</h2>
-  <details>
-    <summary>Show raw</summary>
-    <h3>Rollups</h3>
-    <pre style="white-space:pre-wrap;">{{ rollups | tojson(indent=2) }}</pre>
-    <h3>Report History</h3>
-    <pre style="white-space:pre-wrap;">{{ report_history | tojson(indent=2) }}</pre>
-    <h3>Membership State</h3>
-    <pre style="white-space:pre-wrap;">{{ membership_state | tojson(indent=2) }}</pre>
-  </details>
+  <section id="lineage-program-technical-panel" class="technical-panel" data-lineage-program-panel="technical">
+    <h2>Technical Audit</h2>
+    <details>
+      <summary>Show raw</summary>
+      <h3>Policy Upgrade Warnings</h3>
+      <pre style="white-space:pre-wrap;">{{ (policy_upgrade_warnings if policy_upgrade_warnings is defined else []) | tojson(indent=2) }}</pre>
+      <h3>Evidence Changes</h3>
+      <pre style="white-space:pre-wrap;">{{ evidence_changes | tojson(indent=2) }}</pre>
+      <h3>Policy Changes</h3>
+      <pre style="white-space:pre-wrap;">{{ policy_changes | tojson(indent=2) }}</pre>
+      <h3>Governance Changes</h3>
+      <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
+      <h3>Rollups</h3>
+      <pre style="white-space:pre-wrap;">{{ rollups | tojson(indent=2) }}</pre>
+      <h3>Report History</h3>
+      <pre style="white-space:pre-wrap;">{{ report_history | tojson(indent=2) }}</pre>
+      <h3>Membership State</h3>
+      <pre style="white-space:pre-wrap;">{{ membership_state | tojson(indent=2) }}</pre>
+    </details>
+  </section>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const tabs = document.querySelectorAll("[data-lineage-program-tab]");
+  const board = document.querySelector("[data-lineage-program-panel='board']");
+  const tech = document.querySelector("[data-lineage-program-panel='technical']");
+  if (!tabs.length || !board || !tech) return;
+  const apply = (mode) => {
+    const isBoard = mode === "board";
+    board.style.display = isBoard ? "block" : "none";
+    tech.style.display = isBoard ? "none" : "block";
+    tabs.forEach((btn) => {
+      const active = btn.getAttribute("data-lineage-program-tab") === mode;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  };
+  tabs.forEach((btn) => btn.addEventListener("click", () => apply(btn.getAttribute("data-lineage-program-tab"))));
+  apply("board");
+})();
+</script>
 {% endblock %}

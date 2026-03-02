@@ -1,0 +1,81 @@
+{% import "reports/_determination_card.html" as cards %}
+{% set n = (board_narrative if board_narrative is defined and board_narrative is mapping else {}) %}
+{% set status_rows = (n.status_rows if n.status_rows is defined and n.status_rows is iterable else []) %}
+{% set meaning_rows = (n.what_this_means if n.what_this_means is defined and n.what_this_means is iterable else []) %}
+{% set evidence_rows = (n.evidence_status if n.evidence_status is defined and n.evidence_status is iterable else []) %}
+{% set det_rows = (n.determinations if n.determinations is defined and n.determinations is iterable else []) %}
+{% set next_steps = (n.next_steps if n.next_steps is defined and n.next_steps is iterable else []) %}
+
+<h2>Executive Summary</h2>
+<div class="card">
+  <h3 style="margin-top:0;">{{ n.headline if n.headline is defined else "Not available" }}</h3>
+  <div class="grid cols-2">
+    <div>
+      <h4>Status</h4>
+      <table>
+        <tbody>
+          {% for row in status_rows %}
+          <tr><th>{{ row.label if row is mapping and row.label is defined else "Label" }}</th><td>{{ row.value if row is mapping and row.value is defined else "Not available" }}</td></tr>
+          {% else %}
+          <tr><th>Status</th><td>Not available</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h4>What this means</h4>
+      <ul>
+        {% for item in meaning_rows %}
+        <li>{{ item }}</li>
+        {% else %}
+        <li>Not assessed yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<h2>Determinations</h2>
+<div class="grid cols-2">
+  {% for det in det_rows %}
+  {{ cards.render_determination_card(
+    (det.title if det is mapping and det.title is defined else "Determination"),
+    (det.outcome if det is mapping and det.outcome is defined else "not_assessed"),
+    ("not_available"),
+    [],
+    [],
+    (
+      (det.details|join(" · "))
+      if det is mapping and det.details is defined and det.details is iterable
+      else "Not available"
+    ),
+    {}
+  ) }}
+  {% else %}
+  <div class="card">No determinations available.</div>
+  {% endfor %}
+</div>
+
+<h2>Evidence</h2>
+<div class="card">
+  <table>
+    <tbody>
+      {% for row in evidence_rows %}
+      <tr><th>{{ row.label if row is mapping and row.label is defined else "Label" }}</th><td>{{ row.value if row is mapping and row.value is defined else "Not available" }}</td></tr>
+      {% else %}
+      <tr><th>Evidence</th><td>Not yet captured.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Next steps</h2>
+<div class="card">
+  <ul>
+    {% for item in next_steps %}
+    <li>{{ item }}</li>
+    {% else %}
+    <li>None.</li>
+    {% endfor %}
+  </ul>
+</div>

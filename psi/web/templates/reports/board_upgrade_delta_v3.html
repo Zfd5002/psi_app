@@ -1,41 +1,75 @@
-<h2>Executive Summary</h2>
-<div class="mini muted">Upgrade Delta Header</div>
-<table>
-  <tbody>
-    {% for k, v in report.header.items() %}
-    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<h2>Determinations</h2>
-<ul>
-  {% for b in report.executive_summary_bullets.categorical %}
-  <li>{{ b }}</li>
-  {% endfor %}
-</ul>
-
-<h2>Evidence</h2>
-<h3>Change Table</h3>
-<table>
-  <thead>
-    <tr><th>Key</th><th>Old</th><th>New</th><th>Changed</th></tr>
-  </thead>
-  <tbody>
-    {% for row in report.change_table.rows %}
-    <tr><td>{{ row.key }}</td><td>{{ row.old }}</td><td>{{ row.new }}</td><td>{{ row.changed }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<h2>Rules & Policy</h2>
-<details>
-  <summary>Show raw</summary>
-  <pre>{{ report.appendix | tojson(indent=2) }}</pre>
-</details>
-
-<h2>Reproducibility & Fingerprints</h2>
-<div class="mini muted">
-  schema: <code>{{ report.schema_id if report.schema_id is defined else "missing" }}</code>
-  · version: <code>{{ report.schema_version if report.schema_version is defined else "missing" }}</code>
+<div class="tabs no-print" role="tablist" aria-label="Upgrade delta view mode">
+  <button type="button" class="btn mini" data-upgrade-tab="board" aria-selected="true" aria-controls="upgrade-board-panel">Board View</button>
+  <button type="button" class="btn mini" data-upgrade-tab="technical" aria-selected="false" aria-controls="upgrade-technical-panel">Technical View</button>
 </div>
+
+<section id="upgrade-board-panel" data-upgrade-panel="board">
+  <h2>Executive Summary</h2>
+  <div class="mini muted">Upgrade Delta Header</div>
+  <table>
+    <tbody>
+      <tr>
+        <th>changed_key_count</th>
+        <td>{{ report.header.changed_key_count if report.header is defined and report.header.changed_key_count is defined else "missing" }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>What changed</h2>
+  <ul>
+    {% for b in report.executive_summary_bullets.categorical %}
+    <li>{{ b }}</li>
+    {% else %}
+    <li>No categorical summary available.</li>
+    {% endfor %}
+  </ul>
+
+  <h2>What’s required next</h2>
+  <h3>Change Table</h3>
+  <table>
+    <thead>
+      <tr><th>Key</th><th>Old</th><th>New</th><th>Changed</th></tr>
+    </thead>
+    <tbody>
+      {% for row in report.change_table.rows %}
+      <tr><td>{{ row.key }}</td><td>{{ row.old }}</td><td>{{ row.new }}</td><td>{{ row.changed }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section id="upgrade-technical-panel" class="technical-panel" data-upgrade-panel="technical">
+  <h2>Technical Audit</h2>
+  <h3>Header (full)</h3>
+  <pre>{{ report.header | tojson(indent=2) }}</pre>
+  <details>
+    <summary>Show raw</summary>
+    <pre>{{ report.appendix | tojson(indent=2) }}</pre>
+  </details>
+
+  <h2>Reproducibility & Fingerprints</h2>
+  <div class="mini muted">
+    schema: <code>{{ report.schema_id if report.schema_id is defined else "missing" }}</code>
+    · version: <code>{{ report.schema_version if report.schema_version is defined else "missing" }}</code>
+  </div>
+</section>
+
+<script>
+(() => {
+  const tabs = document.querySelectorAll("[data-upgrade-tab]");
+  const board = document.querySelector("[data-upgrade-panel='board']");
+  const tech = document.querySelector("[data-upgrade-panel='technical']");
+  if (!tabs.length || !board || !tech) return;
+  const apply = (mode) => {
+    const isBoard = mode === "board";
+    board.style.display = isBoard ? "block" : "none";
+    tech.style.display = isBoard ? "none" : "block";
+    tabs.forEach((btn) => {
+      const active = btn.getAttribute("data-upgrade-tab") === mode;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  };
+  tabs.forEach((btn) => btn.addEventListener("click", () => apply(btn.getAttribute("data-upgrade-tab"))));
+  apply("board");
+})();
+</script>

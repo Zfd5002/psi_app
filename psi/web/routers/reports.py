@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from psi.services import reports_v3 as svc
+from psi.services import v3_narrative as narrative_svc
 from psi.web.deps import get_db, get_templates
 
 router = APIRouter()
@@ -43,5 +44,17 @@ def report_detail(report_run_id: int, request: Request, db: Session = Depends(ge
         ctx = svc.get_report_run_detail(db, report_run_id)
     except KeyError:
         raise HTTPException(404)
+    payload = ctx.get("payload") if isinstance(ctx.get("payload"), dict) else {}
+    report_type = str((ctx.get("report_run").report_type if ctx.get("report_run") is not None else "") or "")
+    renderers = {
+        "molecule_report": narrative_svc.render_molecule_narrative,
+        "program_report": narrative_svc.render_program_narrative,
+        "molecule_comparative_report": narrative_svc.render_molecule_comparison_narrative,
+        "molecule_comparison_report": narrative_svc.render_molecule_comparison_narrative,
+        "program_comparative_report": narrative_svc.render_program_comparison_narrative,
+        "program_comparison_report": narrative_svc.render_program_comparison_narrative,
+    }
+    renderer = renderers.get(report_type, narrative_svc.render_molecule_narrative)
+    ctx["board_narrative"] = renderer(payload)
     ctx["request"] = request
     return templates.TemplateResponse("reports/detail.html", ctx)
