@@ -1,4 +1,5 @@
-<h2>Upgrade Delta Header</h2>
+<h2>Executive Summary</h2>
+<div class="mini muted">Upgrade Delta Header</div>
 <table>
   <tbody>
     {% for k, v in report.header.items() %}
@@ -7,14 +8,15 @@
   </tbody>
 </table>
 
-<h2>Executive Summary</h2>
+<h2>Determinations</h2>
 <ul>
   {% for b in report.executive_summary_bullets.categorical %}
   <li>{{ b }}</li>
   {% endfor %}
 </ul>
 
-<h2>Change Table</h2>
+<h2>Evidence</h2>
+<h3>Change Table</h3>
 <table>
   <thead>
     <tr><th>Key</th><th>Old</th><th>New</th><th>Changed</th></tr>
@@ -26,5 +28,14 @@
   </tbody>
 </table>
 
-<h2>Appendix</h2>
-<pre>{{ report.appendix | tojson(indent=2) }}</pre>
+<h2>Rules & Policy</h2>
+<details>
+  <summary>Show raw</summary>
+  <pre>{{ report.appendix | tojson(indent=2) }}</pre>
+</details>
+
+<h2>Reproducibility & Fingerprints</h2>
+<div class="mini muted">
+  schema: <code>{{ report.schema_id if report.schema_id is defined else "missing" }}</code>
+  · version: <code>{{ report.schema_version if report.schema_version is defined else "missing" }}</code>
+</div>

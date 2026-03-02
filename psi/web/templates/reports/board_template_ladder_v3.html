@@ -1,4 +1,5 @@
-<h2>Template Ladder Header</h2>
+<h2>Executive Summary</h2>
+<div class="mini muted">Template Ladder Header</div>
 <table>
   <tbody>
     {% for k, v in report.header.items() %}
@@ -7,7 +8,8 @@
   </tbody>
 </table>
 
-<h2>Stage Table</h2>
+<h2>Determinations</h2>
+<h3>Stage Table</h3>
 <table>
   <thead><tr><th>Stage Key</th><th>Current Version</th></tr></thead>
   <tbody>
@@ -18,12 +20,21 @@
 </table>
 <div>Current Stage: {{ report.stage_table.current_stage }}</div>
 
-<h2>Missing Prerequisites</h2>
-<pre>{{ report.missing_prerequisites_table | tojson(indent=2) }}</pre>
+<h2>Evidence</h2>
+<details>
+  <summary>Show raw</summary>
+  <pre>{{ report.missing_prerequisites_table | tojson(indent=2) }}</pre>
+</details>
 
-<h2>Next Actions</h2>
+<h2>Rules & Policy</h2>
 <ul>
   {% for item in report.next_actions_bullets %}
   <li>{{ item }}</li>
   {% endfor %}
 </ul>
+
+<h2>Reproducibility & Fingerprints</h2>
+<div class="mini muted">
+  schema: <code>{{ report.schema_id if report.schema_id is defined else "missing" }}</code>
+  · version: <code>{{ report.schema_version if report.schema_version is defined else "missing" }}</code>
+</div>

@@ -3,13 +3,26 @@
 {% block content %}
 <div class="card">
   <h1>Portfolio Lineage #{{ portfolio_id }} — {{ portfolio_name }}</h1>
-  <h2>Membership State</h2>
-  <pre style="white-space:pre-wrap;">{{ membership_state | tojson(indent=2) }}</pre>
-  <h2>Governance Changes (Attribution)</h2>
-  <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
-  <h2>Policy Upgrade Warnings</h2>
+  <h2>Executive Summary</h2>
+  <div class="mini muted">Portfolio lineage packet rendered in deterministic section order.</div>
+
+  <h2>Determinations</h2>
+  <h3>Policy Upgrade Warnings</h3>
   <pre style="white-space:pre-wrap;">{{ (policy_upgrade_warnings if policy_upgrade_warnings is defined else []) | tojson(indent=2) }}</pre>
-  <h2>Child Program Lineage Summary</h2>
+
+  <h2>Evidence</h2>
+  <h3>Child Program Lineage Summary</h3>
   <pre style="white-space:pre-wrap;">{{ child_program_lineage_summary | tojson(indent=2) }}</pre>
+
+  <h2>Rules & Policy</h2>
+  <h3>Governance Changes (Attribution)</h3>
+  <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
+
+  <h2>Reproducibility & Fingerprints</h2>
+  <details>
+    <summary>Show raw</summary>
+    <h3>Membership State</h3>
+    <pre style="white-space:pre-wrap;">{{ membership_state | tojson(indent=2) }}</pre>
+  </details>
 </div>
 {% endblock %}

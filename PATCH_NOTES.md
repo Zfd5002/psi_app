@@ -1,3 +1,144 @@
+## 2026-03-02 — v1.3.0a72
+Why:
+- Normalize board packet page framing for upgrade delta, ladder, and lineage surfaces with consistent section titles and compact reproducibility footer style.
+
+What:
+- Updated templates for visual consistency and deterministic reading order:
+  - `reports/board_upgrade_delta_v3.html`
+  - `reports/board_template_ladder_v3.html`
+  - `lineage/program_detail.html`
+  - `lineage/portfolio_detail.html`
+- Added “Show raw” collapsible blocks for long JSON sections (client-side `<details>` only).
+- Added consistent “Reproducibility & Fingerprints” footer sections.
+- Presentation-only changes; report payloads and semantics unchanged.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/board_upgrade_delta_v3.html`
+- `psi/web/templates/reports/board_template_ladder_v3.html`
+- `psi/web/templates/lineage/program_detail.html`
+- `psi/web/templates/lineage/portfolio_detail.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a72_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a71
+Why:
+- Make comparison report pages board-readable with consistent framing and explicit neutral handling when ranking is policy-disabled/incomplete.
+
+What:
+- Updated comparative report presentation in `reports/detail.html`:
+  - Executive header now includes selected entity list for comparative reports
+  - Added Comparison Highlights section
+  - Determinations section now renders ranking as neutral `not_enabled` when policy is disabled/incomplete
+  - Added required one-line governance note for disabled ranking:
+    “Governance note: ranking is policy-controlled and currently disabled.”
+- Presentation-only; no JSON/report semantics changed.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a71_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a70
+Why:
+- Improve program report readability by making posture interpretation and citations immediately visible to board readers.
+
+What:
+- Updated `reports/detail.html` for program reports:
+  - Program posture determination card is now prominent directly under the executive header
+  - Added static one-line “What this means” explanatory text under posture outcome
+  - Added compact citation rendering for snapshot/template/decision references from rollup citations
+- Presentation-only update; no report semantics changed.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a70_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a69
+Why:
+- Improve molecule report board readability with a clearer top-down flow and compact executive bullet framing.
+
+What:
+- Updated `reports/detail.html` presentation order for molecule reports:
+  - Executive Summary bullets
+  - Determinations
+  - Evidence
+  - Measurements
+  - Rules & Policy
+  - Reproducibility & Fingerprints
+- Added client-side “Show all / Show less” toggle for executive bullets (first 5 shown by default).
+- Label/heading wording adjusted for board-friendly readability only; underlying payload unchanged.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a69_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a68
+Why:
+- Improve board readability on report detail pages with a clear executive hierarchy and deterministic determination cards, without changing any report semantics.
+
+What:
+- Added reusable determination card macro partial:
+  - `psi/web/templates/reports/_determination_card.html`
+- Refactored `reports/detail.html` presentation:
+  - Executive Header block at top
+  - Determinations section with cards for comparability, program posture, and ranking status
+  - standardized Rules & Policy / Evidence / Measurements / Reproducibility sections
+  - preserved required structured markers (`identity_context`, `molecule_report`, `policy_summary`, `rule_summary`, `measurement_summary`, `evidence_summary`)
+- No JSON/report payload logic changed; rendering only.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/_determination_card.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a68_<timestamp>/ ~/psi_repo/`
+
 ## 2026-03-02 — v1.3.0a67
 Why:
 - Harden upgrade semantic-ack enforcement so semantic actions cannot bypass acknowledgment checks.
