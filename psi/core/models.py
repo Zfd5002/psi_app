@@ -25,6 +25,8 @@ class Program(Base):
     data_records = relationship("DataRecord", back_populates="program", cascade="all, delete-orphan")
     evidence = relationship("Evidence", back_populates="program", cascade="all, delete-orphan")
     decisions = relationship("DecisionSnapshot", back_populates="program", cascade="all, delete-orphan")
+    memberships = relationship("ProgramMembership", back_populates="program", cascade="all, delete-orphan")
+    portfolio_memberships = relationship("PortfolioMembership", back_populates="program", cascade="all, delete-orphan")
 
 
 class Molecule(Base):
@@ -60,6 +62,53 @@ class Molecule(Base):
 
     components = relationship("MoleculeComponent", back_populates="molecule", cascade="all, delete-orphan")
     property_runs = relationship("PropertyRun", back_populates="molecule", cascade="all, delete-orphan")
+    program_memberships = relationship("ProgramMembership", back_populates="molecule", cascade="all, delete-orphan")
+
+
+class Portfolio(Base):
+    __tablename__ = "portfolios"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    memberships = relationship("PortfolioMembership", back_populates="portfolio", cascade="all, delete-orphan")
+
+
+class ProgramMembership(Base):
+    __tablename__ = "program_membership"
+    __table_args__ = (
+        UniqueConstraint("program_id", "molecule_id", name="uq_program_membership_program_molecule"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    program_id = Column(Integer, ForeignKey("programs.id"), nullable=False)
+    molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=False)
+    sort_index = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    program = relationship("Program", back_populates="memberships")
+    molecule = relationship("Molecule", back_populates="program_memberships")
+
+
+class PortfolioMembership(Base):
+    __tablename__ = "portfolio_membership"
+    __table_args__ = (
+        UniqueConstraint("portfolio_id", "program_id", name="uq_portfolio_membership_portfolio_program"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False)
+    program_id = Column(Integer, ForeignKey("programs.id"), nullable=False)
+    sort_index = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    portfolio = relationship("Portfolio", back_populates="memberships")
+    program = relationship("Program", back_populates="portfolio_memberships")
 
 
 class MoleculeComponent(Base):
@@ -458,6 +507,88 @@ class AuditEvent(Base):
     after_json = Column(Text, nullable=True)
     diff_json = Column(Text, nullable=True)
     reason = Column(Text, nullable=True)
+
+
+class Actor(Base):
+    __tablename__ = "actors"
+
+    id = Column(Integer, primary_key=True)
+    display_name = Column(Text, nullable=False)
+    handle = Column(Text, nullable=False, unique=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+
+class AttributionEvent(Base):
+    __tablename__ = "attribution_events"
+
+    id = Column(Integer, primary_key=True)
+    actor_id = Column(Integer, ForeignKey("actors.id"), nullable=False)
+    event_type = Column(Text, nullable=False)
+    entity_type = Column(Text, nullable=False)
+    entity_id = Column(Integer, nullable=False)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    actor_rel = relationship("Actor")
+
+
+class ProgramRollup(Base):
+    __tablename__ = "program_rollups"
+
+    id = Column(Integer, primary_key=True)
+    program_id = Column(Integer, ForeignKey("programs.id"), nullable=False)
+    as_of = Column(DateTime, nullable=False)
+    policy_pin = Column(Text, nullable=False)
+    policy_package_hash = Column(Text, nullable=True)
+    snapshot_ids_json = Column(Text, nullable=False)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    program = relationship("Program")
+
+
+class ComparabilityAssessment(Base):
+    __tablename__ = "comparability_assessments"
+
+    id = Column(Integer, primary_key=True)
+    left_scope_type = Column(Text, nullable=False)   # molecule|program
+    left_scope_id = Column(Integer, nullable=False)
+    right_scope_type = Column(Text, nullable=False)  # molecule|program
+    right_scope_id = Column(Integer, nullable=False)
+    status = Column(Text, nullable=False)  # comparable|conditionally_comparable|not_comparable
+    rule_id = Column(Text, nullable=False)
+    cited_measurement_keys_json = Column(Text, nullable=False)
+    cited_snapshot_ids_json = Column(Text, nullable=False)
+    as_of = Column(DateTime, nullable=False)
+    policy_id = Column(Text, nullable=False)
+    policy_version = Column(Text, nullable=False)
+    policy_package_hash = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+
+class ReportRun(Base):
+    __tablename__ = "report_runs"
+
+    id = Column(Integer, primary_key=True)
+    report_type = Column(Text, nullable=False)
+    subject_ids_json = Column(Text, nullable=False)
+    as_of = Column(DateTime, nullable=False)
+    policy_pins_json = Column(Text, nullable=False)
+    snapshot_coverage_json = Column(Text, nullable=False)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+
+class PolicyUpgradeSession(Base):
+    __tablename__ = "policy_upgrade_sessions"
+
+    id = Column(Integer, primary_key=True)
+    old_policy_pins_json = Column(Text, nullable=False)
+    new_policy_pins_json = Column(Text, nullable=False)
+    delta_payload_json = Column(Text, nullable=False)
+    operator_acknowledged = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    acknowledged_at = Column(DateTime, nullable=True)
 
 
 class DecisionSnapshot(Base):

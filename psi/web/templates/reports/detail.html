@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Report #{{ report_run.id }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Report #{{ report_run.id }}</h1>
+  <div class="grid cols-2">
+    <div>
+      <div><strong>Type:</strong> <code>{{ report_run.report_type }}</code></div>
+      <div><strong>As Of:</strong> {{ report_run.as_of }}</div>
+      <div><strong>Created:</strong> {{ report_run.created_at }}</div>
+    </div>
+    <div>
+      <div><strong>Subjects:</strong> <code>{{ subject_ids }}</code></div>
+      <div><strong>Policy Pins:</strong> <code>{{ policy_pins }}</code></div>
+      <div><strong>Snapshot Coverage:</strong> <code>{{ snapshot_coverage }}</code></div>
+    </div>
+  </div>
+
+  <h2>Metadata</h2>
+  <pre style="white-space:pre-wrap;">{{ payload.metadata | tojson(indent=2) }}</pre>
+
+  <h2>Sections</h2>
+  {% for section_name, section_value in (payload.sections or {}).items() %}
+    <h3><code>{{ section_name }}</code></h3>
+    <pre style="white-space:pre-wrap;">{{ section_value | tojson(indent=2) }}</pre>
+  {% else %}
+    <p class="muted">No sections.</p>
+  {% endfor %}
+</div>
+{% endblock %}

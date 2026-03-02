@@ -1,0 +1,19 @@
+{
+  "policy_id": "comparability_policy_v0_1",
+  "policy_version": "v0.1",
+  "allowed_statuses": [
+    "comparable",
+    "conditionally_comparable",
+    "not_comparable"
+  ],
+  "rule_registry": [
+    {
+      "rule_id": "placeholder_not_assessed",
+      "scope_pairs": [
+        "molecule:molecule",
+        "program:program"
+      ],
+      "description": "Placeholder categorical comparability scaffold; deterministic policy-defined rule registry only."
+    }
+  ]
+}

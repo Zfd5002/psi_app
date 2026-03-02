@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ portfolio.name }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1>{{ portfolio.name }}</h1>
+      <p class="muted">{{ portfolio.description or '' }}</p>
+    </div>
+    <div class="no-print" style="display:flex;gap:8px;">
+      <a class="btn" href="/portfolios/{{ portfolio.id }}/edit">Edit</a>
+    </div>
+  </div>
+
+  <h2>Portfolio membership (programs)</h2>
+  <div class="muted">Deterministic order: <code>(sort_index, membership_id)</code>.</div>
+  <table class="table" style="margin-top:8px;">
+    <thead>
+      <tr><th>sort_index</th><th>Program</th><th>Description</th><th class="no-print">Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for row in portfolio_memberships %}
+      <tr>
+        <td class="muted">{{ row.sort_index }}</td>
+        <td><a href="/programs/{{ row.program_id }}">{{ row.program_name }}</a></td>
+        <td class="muted">{{ row.program_description or '' }}</td>
+        <td class="no-print">
+          <form method="post" action="/portfolios/{{ portfolio.id }}/memberships/{{ row.membership_id }}/sort" style="display:inline-flex;gap:6px;align-items:center;margin-right:8px;">
+            <input name="sort_index" type="number" value="{{ row.sort_index }}" style="width:90px;" />
+            <button class="btn" type="submit">Update sort</button>
+          </form>
+          <form method="post" action="/portfolios/{{ portfolio.id }}/memberships/{{ row.membership_id }}/remove" style="display:inline;">
+            <button class="btn" type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No program memberships yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Add program membership</h3>
+  <form method="post" action="/portfolios/{{ portfolio.id }}/memberships/add" class="no-print" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+    <label>
+      <div class="muted">Program</div>
+      <select name="program_id">
+        {% for p in all_programs_for_membership %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <div class="muted">sort_index</div>
+      <input name="sort_index" type="number" value="0" style="width:90px;" />
+    </label>
+    <button class="btn primary" type="submit">Add membership</button>
+  </form>
+</div>
+{% endblock %}

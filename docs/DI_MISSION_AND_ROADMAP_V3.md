@@ -8,6 +8,10 @@ Effective Starting Version: 1.3.0
 V3 Line Range: 1.3.0 → 1.3.9z###
 Supersedes: DI_MISSION_AND_ROADMAP_v2.md
 
+Implementation status note (as-of v1.3.0a15 closeout target):
+- Implemented scaffolds/surfaces include: Programs/Portfolios + memberships, attribution tables, program rollups, comparability objects (categorical-only), ranking policy scaffold (disabled by default), report engine skeleton + all 4 fixed-structure report generators, minimal report UI, lineage dashboards, template catalog scaffold, and policy upgrade session scaffold.
+- Several V3 surfaces are intentionally placeholder/policy-scaffolded (`not_assessed`) pending future policy content; this preserves deterministic structure without inventing semantics.
+
 1. Purpose of V3
 
 V3 expands PSI from a molecule-level deterministic decision engine into a structured, governance-grade, portfolio-operating system while preserving all invariants established in V1 and V2.

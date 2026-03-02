@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Program Lineage {{ program_id }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Program Lineage #{{ program_id }}</h1>
+  <h2>Evidence Changes</h2>
+  <pre style="white-space:pre-wrap;">{{ evidence_changes | tojson(indent=2) }}</pre>
+  <h2>Policy Changes</h2>
+  <pre style="white-space:pre-wrap;">{{ policy_changes | tojson(indent=2) }}</pre>
+  <h2>Governance Changes (Attribution)</h2>
+  <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
+  <h2>Rollups</h2>
+  <pre style="white-space:pre-wrap;">{{ rollups | tojson(indent=2) }}</pre>
+  <h2>Report History</h2>
+  <pre style="white-space:pre-wrap;">{{ report_history | tojson(indent=2) }}</pre>
+  <h2>Membership State</h2>
+  <pre style="white-space:pre-wrap;">{{ membership_state | tojson(indent=2) }}</pre>
+</div>
+{% endblock %}

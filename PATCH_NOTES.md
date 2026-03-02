@@ -4129,3 +4129,254 @@ Gates run:
 - `python -m psi.tools.di_replay_regression --limit 5`
 - `python -m psi.tools.db_schema_sanity`
 - `./compress.sh`
+## 2026-02-26 — v1.3.0a1
+What changed:
+- V3 additive governance foundation: added `portfolios`, `program_membership`, and `portfolio_membership` tables with explicit `sort_index` ordering.
+- Added minimal deterministic portfolio CRUD services/routes/templates and portfolio detail membership management surface.
+- Extended existing Program detail page with a V3 governance membership table (molecule memberships) and minimal add/sort/remove controls.
+- Ordering is explicit and stable everywhere memberships are listed: `(sort_index, id)`.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `psi/services/programs.py`
+- `psi/services/portfolios.py`
+- `psi/web/app.py`
+- `psi/web/routers/programs.py`
+- `psi/web/routers/portfolios.py`
+- `psi/web/templates/base.html`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/portfolios/list.html`
+- `psi/web/templates/portfolios/form.html`
+- `psi/web/templates/portfolios/detail.html`
+
+Determinism/Replay note:
+- Additive schema + UI/service surfaces only; no DI engine or snapshot semantics changes.
+- Membership ordering is explicit (`sort_index`, then row id), and DI replay outputs remain the proof target via strict gates.
+## 2026-02-26 — v1.3.0a2
+What changed:
+- Added additive provenance tables: `actors` and `attribution_events` (single-machine actor model, deterministic local-first attribution).
+- Added `psi/services/attribution.py` helper to record attribution events without DI coupling.
+- Wired provenance recording for Program/Portfolio create/update and program/portfolio membership add/update/remove operations.
+- Attribution remains governance-only metadata and is not used by DI computations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `psi/services/attribution.py`
+- `psi/services/programs.py`
+- `psi/services/portfolios.py`
+
+Determinism/Replay note:
+- Additive governance metadata only; no DI output/snapshot semantics changes.
+- Replay remains strict and is the acceptance proof.
+## 2026-02-26 — v1.3.0a3
+What changed:
+- Added additive `program_rollups` governance table for deterministic persisted program rollup artifacts.
+- Implemented `psi/services/program_rollups.py` with explicit `as_of` rollup builder/persistence helper using deterministic molecule enumeration and latest DI snapshot selection as-of.
+- Rollup payload captures included snapshot IDs and observed policy versions/package hashes without introducing new scoring.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `psi/services/program_rollups.py`
+
+Determinism/Replay note:
+- Rollups are governance artifacts derived from existing snapshots with explicit `as_of`; DI engine and snapshot semantics remain unchanged.
+## 2026-02-26 — v1.3.0a4
+What changed:
+- Added additive `comparability_assessments` governance table (categorical-only statuses with cited keys/snapshots and policy pins).
+- Added `psi/services/comparability.py` scaffold service with deterministic sorting/deduping of cited measurement keys and snapshot IDs.
+- Added `psi/core/di/catalogs/comparability_policy_v0_1.json` policy-as-data scaffold with categorical status registry and placeholder rule registry.
+- Extended DI contract smoke to validate comparability policy scaffold schema and deterministic cited-item ordering behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `psi/services/comparability.py`
+- `psi/core/di/catalogs/comparability_policy_v0_1.json`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Categorical-only comparability scaffolding; no DI scoring or snapshot semantics changes.
+## 2026-02-26 — v1.3.0a5
+What changed:
+- Added policy-defined deterministic ranking surface scaffold (`ranking_policy_v0_1.json`) with explicit `enabled=false` default and deterministic tie-break keys.
+- Added `psi/services/v3_ranking.py` to build an explainable ranking surface only when policy enables it; disabled path returns reason trail metadata without ranking.
+- Extended DI contract smoke to validate the ranking policy scaffold and deterministic disabled-by-default surface behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/ranking_policy_v0_1.json`
+- `psi/services/v3_ranking.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Ranking surface is V3 governance scaffolding, disabled by default, and does not alter existing DI shortlisting/ranking outputs.
+## 2026-02-26 — v1.3.0a6
+What changed:
+- Added additive `report_runs` storage table for deterministic, policy-pinned report artifacts.
+- Implemented `psi/services/report_engine.py` skeleton with exactly four report types, explicit `as_of`, policy pins, snapshot coverage, fixed-section payload schemas, and deterministic validators.
+- Extended DI contract smoke to lock fixed-schema deterministic payload generation for all four report types.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Report engine is a V3 governance storage/validation scaffold only; no DI computation or snapshot semantics changes.
+## 2026-02-26 — v1.3.0a7
+What changed:
+- Implemented deterministic Molecule Report v0 generator in `psi/services/report_engine.py` using existing molecule DI snapshot outputs only (no interpretive prose, no new scoring).
+- Populates fixed Molecule Report sections (identity/context, stage, confidence, mechanism, risk, gaps, drift/history, reproducibility appendix) from latest DI snapshot as-of or deterministic placeholders.
+- Extended DI contract smoke with an in-memory fixture proving fixed structure and snapshot citation behavior for the molecule report generator.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Report generation reads existing snapshots only and stores deterministic report artifacts; DI engine/snapshot semantics unchanged.
+## 2026-02-26 — v1.3.0a8
+What changed:
+- Implemented deterministic Program Report v0 generator in `psi/services/report_engine.py` with fixed sections and explicit metadata/snapshot coverage.
+- Program Report reuses `a3` program rollup for molecule overview/stage surfaces and emits deterministic “not_assessed” comparability placeholders when no program comparability assessments exist.
+- Extended DI contract smoke with an in-memory fixture proving rollup-backed Program Report structure, deterministic molecule ordering, and comparability placeholder behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Program Report v0 is read-only over existing snapshots/rollups and stores deterministic artifacts; DI outputs remain unchanged.
+## 2026-02-26 — v1.3.0a9
+What changed:
+- Implemented Molecule Comparative Report v0 (2–5 molecules) in `psi/services/report_engine.py` with deterministic molecule ordering and fixed report structure.
+- Added comparability citations when available, otherwise deterministic `not_assessed` placeholders.
+- Integrated V3 ranking surface only through the policy-defined scaffold (disabled by default); surfaced as deterministic metadata in the report.
+- Extended DI contract smoke with an in-memory fixture proving deterministic row ordering and disabled ranking surface behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Comparative report generation is read-only and policy-surfaced; no DI engine behavior changes.
+## 2026-02-26 — v1.3.0a10
+What changed:
+- Implemented Program Comparative Report v0 (2–5 programs) in `psi/services/report_engine.py` with deterministic ordering and fixed charter-aligned section structure.
+- Added ranking surface integration via the policy-defined scaffold (disabled by default) and policy-derived-only resource implications placeholder surface.
+- Extended DI contract smoke with an in-memory fixture proving deterministic program ordering and resource placeholder invariants.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Comparative report generation is deterministic and read-only over existing rollup/snapshot surfaces; DI outputs unchanged.
+## 2026-02-26 — v1.3.0a11
+What changed:
+- Added minimal deterministic V3 report UI surfaces: `/reports`, `/reports/new`, `/reports/{id}` to request and view report runs without narrative summarization.
+- Added `psi/services/reports_v3.py` form/request plumbing and read-only report detail context assembly.
+- Added report templates that render metadata, policy pins, snapshot coverage, and structured sections verbatim.
+- Extended DI contract smoke with a deterministic template render check for the report detail surface.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/app.py`
+- `psi/web/routers/reports.py`
+- `psi/web/templates/base.html`
+- `psi/web/templates/reports/list.html`
+- `psi/web/templates/reports/new.html`
+- `psi/web/templates/reports/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- UI/report request surfaces are deterministic wrappers over persisted report artifacts and generators; no DI snapshot semantics changes.
+## 2026-02-26 — v1.3.0a12
+What changed:
+- Added minimal deterministic lineage dashboards/services for Program and Portfolio lineage (`psi/services/lineage.py` + `/lineage/...` routes/templates).
+- Lineage surfaces explicitly separate evidence changes (snapshot coverage deltas), policy changes (policy pin deltas), and governance changes (attribution events).
+- Added DI contract smoke coverage for deterministic lineage service categorization output on an in-memory fixture.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/lineage.py`
+- `psi/web/app.py`
+- `psi/web/routers/lineage.py`
+- `psi/web/templates/base.html`
+- `psi/web/templates/lineage/program_detail.html`
+- `psi/web/templates/lineage/portfolio_detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Lineage dashboards are read-only governance surfaces over existing DB artifacts and attribution metadata; no DI semantics changes.
+## 2026-02-26 — v1.3.0a13
+What changed:
+- Added `template_catalog_v0_1.json` scaffold for template ladder expansion governance (explicit current version + immutable version list per template).
+- Added contract smoke checks for template catalog schema, deterministic ordering, and immutability guardrails against actual policy files.
+- No changes to existing template semantics or DI policy resolution.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/template_catalog_v0_1.json`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Template catalog is governance metadata only; replay semantics are unchanged and remain enforced by replay regression.
+## 2026-02-26 — v1.3.0a14
+What changed:
+- Added additive `policy_upgrade_sessions` governance table and `psi/services/policy_upgrade.py` scaffold for deterministic policy upgrade sessions.
+- Sessions record old/new policy pins, deterministic delta placeholder surfaces (ranking/comparability/report sections), and an explicit persisted operator acknowledgment flag.
+- Extended DI contract smoke with in-memory coverage proving deterministic delta payloads and explicit ack persistence semantics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `psi/services/policy_upgrade.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism/Replay note:
+- Upgrade-session scaffolding is governance-only and does not alter active policy selection or DI snapshot semantics.
+## 2026-02-26 — v1.3.0a15
+What changed:
+- Expanded V3 contract coverage in `di_contract_smoke` for comparability categorical-only enforcement and attribution non-interference on report payload generation.
+- Added pytest coverage for deterministic fixed-schema report engine payload generation across all 4 V3 report types (`tests/test_v3_report_engine_contracts.py`).
+- Updated `docs/DI_MISSION_AND_ROADMAP_V3.md` implementation-status note to reflect the actual V3 scaffolds/surfaces shipped through `a15`, including placeholder/non-assessed policy-scaffolded surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_v3_report_engine_contracts.py`
+- `docs/DI_MISSION_AND_ROADMAP_V3.md`
+
+Determinism/Replay note:
+- Contract/docs closeout only; no DI semantics or snapshot semantics changes.

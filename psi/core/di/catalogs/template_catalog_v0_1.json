@@ -1,0 +1,26 @@
+{
+  "catalog_id": "template_catalog_v0_1",
+  "catalog_version": "v0.1",
+  "immutability_notice": "Template catalog entries are immutable once snapshot-referenced. Add new versions only.",
+  "templates": [
+    {
+      "template_key": "advance_to_in_vivo",
+      "current_version": "v0.5",
+      "immutable_versions": [
+        "v0.1",
+        "v0.2",
+        "v0.3",
+        "v0.4",
+        "v0.5"
+      ]
+    },
+    {
+      "template_key": "ready_for_scaleup_screen",
+      "current_version": "v0.2",
+      "immutable_versions": [
+        "v0.1",
+        "v0.2"
+      ]
+    }
+  ]
+}

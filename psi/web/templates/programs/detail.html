@@ -19,6 +19,49 @@
   </div>
 
   <h2 id="overview">Program dashboard</h2>
+  <h3>V3 Governance Membership (molecules)</h3>
+  <div class="muted">Deterministic order: <code>(sort_index, membership_id)</code>. This is additive governance membership and does not change DI snapshot semantics.</div>
+  <table class="table mini" style="margin-top:8px;">
+    <thead>
+      <tr><th>sort_index</th><th>molecule</th><th>owner program</th><th class="no-print">Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for row in program_memberships_v3 %}
+      <tr>
+        <td class="muted">{{ row.sort_index }}</td>
+        <td><a href="/molecules/{{ row.molecule_id }}">{{ row.primary_id }}</a> <span class="muted">{{ row.title or '' }}</span></td>
+        <td class="muted">{{ row.owner_program_id if row.owner_program_id is not none else '—' }}</td>
+        <td class="no-print">
+          <form method="post" action="/programs/{{ program.id }}/memberships/{{ row.membership_id }}/sort" style="display:inline-flex;gap:6px;align-items:center;margin-right:8px;">
+            <input name="sort_index" type="number" value="{{ row.sort_index }}" style="width:90px;" />
+            <button class="btn" type="submit">Update sort</button>
+          </form>
+          <form method="post" action="/programs/{{ program.id }}/memberships/{{ row.membership_id }}/remove" style="display:inline;">
+            <button class="btn" type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No V3 program memberships yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/programs/{{ program.id }}/memberships/add" class="no-print" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;">
+    <label>
+      <div class="muted">Molecule</div>
+      <select name="molecule_id">
+        {% for m in all_molecules_for_membership %}
+          <option value="{{ m.id }}">{{ m.primary_id }}{% if m.title %} — {{ m.title }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <div class="muted">sort_index</div>
+      <input name="sort_index" type="number" value="0" style="width:90px;" />
+    </label>
+    <button class="btn primary" type="submit">Add membership</button>
+  </form>
+
   <div class="grid cols-2">
     <div>
       <h3>Molecules</h3>

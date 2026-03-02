@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{% if portfolio %}Edit Portfolio{% else %}New Portfolio{% endif %} | PSI{% endblock %}
+{% block content %}
+<div class="card" style="max-width:760px;">
+  <h1>{% if portfolio %}Edit Portfolio{% else %}New Portfolio{% endif %}</h1>
+  <form method="post" action="{% if portfolio %}/portfolios/{{ portfolio.id }}/edit{% else %}/portfolios/new{% endif %}">
+    <label>Name</label>
+    <input name="name" value="{{ portfolio.name if portfolio else '' }}" required />
+    <label>Description</label>
+    <textarea name="description" rows="4">{{ portfolio.description if portfolio else '' }}</textarea>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <button class="btn primary" type="submit">Save</button>
+      <a class="btn" href="{% if portfolio %}/portfolios/{{ portfolio.id }}{% else %}/portfolios{% endif %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

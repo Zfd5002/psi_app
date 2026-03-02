@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Reports | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <h1>Report Runs</h1>
+    <a class="btn primary" href="/reports/new">Generate Report</a>
+  </div>
+  <table class="table">
+    <thead><tr><th>ID</th><th>Type</th><th>As Of</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for r in report_runs %}
+      <tr>
+        <td><a href="/reports/{{ r.id }}">#{{ r.id }}</a></td>
+        <td>{{ r.report_type }}</td>
+        <td class="muted">{{ r.as_of }}</td>
+        <td class="muted">{{ r.created_at }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No report runs yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

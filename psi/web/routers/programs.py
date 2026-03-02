@@ -72,3 +72,44 @@ def update_program(
     except KeyError:
         raise HTTPException(404)
     return RedirectResponse(url=f"/programs/{p.id}", status_code=303)
+
+
+@router.post("/programs/{program_id}/memberships/add")
+def add_program_membership(
+    program_id: int,
+    molecule_id: int = Form(...),
+    sort_index: int = Form(0),
+    db: Session = Depends(get_db),
+):
+    try:
+        svc.add_program_membership(db, program_id=program_id, molecule_id=molecule_id, sort_index=sort_index)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return RedirectResponse(url=f"/programs/{program_id}", status_code=303)
+
+
+@router.post("/programs/{program_id}/memberships/{membership_id}/sort")
+def update_program_membership_sort(
+    program_id: int,
+    membership_id: int,
+    sort_index: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    try:
+        svc.update_program_membership(db, membership_id=membership_id, sort_index=sort_index)
+    except KeyError:
+        raise HTTPException(404)
+    return RedirectResponse(url=f"/programs/{program_id}", status_code=303)
+
+
+@router.post("/programs/{program_id}/memberships/{membership_id}/remove")
+def remove_program_membership(
+    program_id: int,
+    membership_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        svc.remove_program_membership(db, membership_id=membership_id)
+    except KeyError:
+        raise HTTPException(404)
+    return RedirectResponse(url=f"/programs/{program_id}", status_code=303)

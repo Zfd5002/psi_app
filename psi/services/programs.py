@@ -3,17 +3,19 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
-from psi.core.models import AuditEvent, Batch, DataRecord, DecisionSnapshot, Evidence, Molecule, Program
+from psi.core.models import AuditEvent, Batch, DataRecord, DecisionSnapshot, Evidence, Molecule, Program, ProgramMembership
 from psi.core.utils import model_to_dict, now_utc
+from psi.services.attribution import record_attribution_event
 from psi.services.di.snapshot_diff import compute_snapshot_diff_struct
 from psi.services.di.verify import verify_snapshot
 
 
 def list_programs(db: Session) -> list[Program]:
-    return db.query(Program).order_by(Program.created_at.desc()).all()
+    return db.query(Program).order_by(Program.name.asc(), Program.id.asc()).all()
 
 
 def get_program(db: Session, program_id: int) -> Program | None:
@@ -32,6 +34,18 @@ def get_program_detail(
         raise KeyError("Program not found")
 
     molecules = db.query(Molecule).filter(Molecule.program_id == program_id).order_by(Molecule.created_at.desc()).all()
+    program_memberships = (
+        db.query(ProgramMembership, Molecule)
+        .join(Molecule, Molecule.id == ProgramMembership.molecule_id)
+        .filter(ProgramMembership.program_id == program_id)
+        .order_by(ProgramMembership.sort_index.asc(), ProgramMembership.id.asc())
+        .all()
+    )
+    all_molecules = (
+        db.query(Molecule)
+        .order_by(Molecule.primary_id.asc(), Molecule.id.asc())
+        .all()
+    )
     recent_batches = (
         db.query(Batch)
         .join(Molecule)
@@ -354,13 +368,34 @@ def get_program_detail(
     return {
         "program": p,
         "molecules": molecules,
+        "program_memberships_v3": [
+            {
+                "membership_id": int(pm.id),
+                "program_id": int(pm.program_id),
+                "molecule_id": int(m.id),
+                "sort_index": int(pm.sort_index or 0),
+                "primary_id": str(m.primary_id or ""),
+                "title": str(m.title or ""),
+                "owner_program_id": int(m.program_id) if m.program_id is not None else None,
+            }
+            for pm, m in program_memberships
+        ],
+        "all_molecules_for_membership": [
+            {
+                "id": int(m.id),
+                "primary_id": str(m.primary_id or ""),
+                "title": str(m.title or ""),
+                "owner_program_id": int(m.program_id) if m.program_id is not None else None,
+            }
+            for m in all_molecules
+        ],
         "recent_batches": recent_batches,
         "recent_data": recent_data,
         "recent_evidence": recent_evidence,
         "recent_decisions": recent_decisions,
         "di_dashboard": di_dashboard,
         "audits": audits,
-    }
+}
 
 
 def create_program(db: Session, *, name: str, description: str = "") -> Program:
@@ -373,6 +408,13 @@ def create_program(db: Session, *, name: str, description: str = "") -> Program:
     db.add(p)
     db.commit()
     db.refresh(p)
+    record_attribution_event(
+        db,
+        event_type="program.create",
+        entity_type="Program",
+        entity_id=int(p.id),
+        metadata={"name": p.name},
+    )
     record_audit(db, entity_type="Program", entity_id=p.id, action="create", before=None, after=model_to_dict(p))
     db.commit()
     return p
@@ -388,6 +430,13 @@ def update_program(db: Session, *, program_id: int, name: str, description: str 
     p.updated_at = now_utc()
     db.add(p)
     db.commit()
+    record_attribution_event(
+        db,
+        event_type="program.update",
+        entity_type="Program",
+        entity_id=int(p.id),
+        metadata={"reason": reason or "", "name": p.name},
+    )
     record_audit(
         db,
         entity_type="Program",
@@ -399,3 +448,87 @@ def update_program(db: Session, *, program_id: int, name: str, description: str 
     )
     db.commit()
     return p
+
+
+def list_program_memberships(db: Session, *, program_id: int) -> list[ProgramMembership]:
+    return (
+        db.query(ProgramMembership)
+        .filter(ProgramMembership.program_id == program_id)
+        .order_by(ProgramMembership.sort_index.asc(), ProgramMembership.id.asc())
+        .all()
+    )
+
+
+def add_program_membership(
+    db: Session,
+    *,
+    program_id: int,
+    molecule_id: int,
+    sort_index: int = 0,
+) -> ProgramMembership:
+    pm = ProgramMembership(
+        program_id=int(program_id),
+        molecule_id=int(molecule_id),
+        sort_index=int(sort_index),
+        created_at=now_utc(),
+        updated_at=now_utc(),
+    )
+    db.add(pm)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("Program membership already exists or references invalid entities") from exc
+    db.refresh(pm)
+    record_attribution_event(
+        db,
+        event_type="program_membership.add",
+        entity_type="ProgramMembership",
+        entity_id=int(pm.id),
+        metadata={"program_id": int(pm.program_id), "molecule_id": int(pm.molecule_id), "sort_index": int(pm.sort_index or 0)},
+    )
+    db.commit()
+    return pm
+
+
+def update_program_membership(
+    db: Session,
+    *,
+    membership_id: int,
+    sort_index: int,
+) -> ProgramMembership:
+    pm = db.get(ProgramMembership, membership_id)
+    if not pm:
+        raise KeyError("Program membership not found")
+    pm.sort_index = int(sort_index)
+    pm.updated_at = now_utc()
+    db.add(pm)
+    db.commit()
+    db.refresh(pm)
+    record_attribution_event(
+        db,
+        event_type="program_membership.update",
+        entity_type="ProgramMembership",
+        entity_id=int(pm.id),
+        metadata={"sort_index": int(pm.sort_index or 0)},
+    )
+    db.commit()
+    return pm
+
+
+def remove_program_membership(db: Session, *, membership_id: int) -> None:
+    pm = db.get(ProgramMembership, membership_id)
+    if not pm:
+        raise KeyError("Program membership not found")
+    pm_id = int(pm.id)
+    meta = {"program_id": int(pm.program_id), "molecule_id": int(pm.molecule_id), "sort_index": int(pm.sort_index or 0)}
+    db.delete(pm)
+    db.commit()
+    record_attribution_event(
+        db,
+        event_type="program_membership.remove",
+        entity_type="ProgramMembership",
+        entity_id=pm_id,
+        metadata=meta,
+    )
+    db.commit()

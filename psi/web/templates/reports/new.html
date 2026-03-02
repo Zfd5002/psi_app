@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Generate Report | PSI{% endblock %}
+{% block content %}
+<div class="card" style="max-width:900px;">
+  <h1>Generate Report</h1>
+  <p class="muted">Deterministic V3 report request surface. Provide subject ids as comma-separated integers and explicit <code>as_of</code> when needed.</p>
+  <form method="post" action="/reports/new">
+    <label>Report type</label>
+    <select name="report_type">
+      <option value="molecule_report">molecule_report</option>
+      <option value="program_report">program_report</option>
+      <option value="molecule_comparative_report">molecule_comparative_report</option>
+      <option value="program_comparative_report">program_comparative_report</option>
+    </select>
+    <label>Subject IDs (comma-separated)</label>
+    <input name="subject_ids" value="" placeholder="e.g. 1 or 2,3" required />
+    <label>As Of (optional ISO8601; blank = now)</label>
+    <input name="as_of" value="" placeholder="2026-02-26T12:00:00Z" />
+    <div style="margin-top:12px;">
+      <button class="btn primary" type="submit">Generate</button>
+      <a class="btn" href="/reports">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
