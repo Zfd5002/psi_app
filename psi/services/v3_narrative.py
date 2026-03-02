@@ -123,6 +123,27 @@ def _molecule_next_steps(sections: dict[str, Any]) -> list[str]:
     return [_clean_text("No experimental gaps listed yet.")]
 
 
+def _program_next_steps(sections: dict[str, Any]) -> list[str]:
+    nbe = _as_dict(sections.get("next_best_experiments"))
+    items = _as_list(nbe.get("items"))
+    out: list[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            label = str(item.get("label") or "").strip()
+            skey = str(item.get("suggestion_key") or "").strip()
+            if label:
+                out.append(_clean_text(label))
+            elif skey:
+                out.append(_clean_text(skey))
+            else:
+                out.append(_clean_text(_stringify_item(item)))
+        else:
+            out.append(_clean_text(_stringify_item(item)))
+    if out:
+        return out
+    return [_clean_text("No next steps recorded yet.")]
+
+
 def render_molecule_narrative(report_payload: dict) -> dict:
     sections, metadata = _collect_sections(_as_dict(report_payload))
     ident = _as_dict(sections.get("identity_context"))
@@ -173,13 +194,17 @@ def render_molecule_narrative(report_payload: dict) -> dict:
 def render_program_narrative(report_payload: dict) -> dict:
     sections, metadata = _collect_sections(_as_dict(report_payload))
     ident = _as_dict(sections.get("identity_context"))
+    section_meta = _as_dict(sections.get("metadata"))
     posture = _posture_det(sections)
     snapshots = _snapshot_count(sections)
-    headline = f"Program report for {ident.get('program_name') or ident.get('program_id') or 'unidentified program'}"
+    program_name = str(ident.get("program_name") or section_meta.get("program_name") or "").strip()
+    program_id = str(ident.get("program_id") or section_meta.get("program_id") or "").strip()
+    headline_subject = program_name or (f"program_id={program_id}" if program_id else "unidentified program")
+    headline = f"Program report for {headline_subject}"
     out = _base_narrative(headline)
     out["status_rows"] = [
         {"label": "Report type", "value": _clean_text(metadata.get("report_type") or "program_report")},
-        {"label": "Program", "value": _clean_text(ident.get("program_name") or "Not available")},
+        {"label": "Program", "value": _clean_text(program_name or (f"program_id={program_id}" if program_id else "Not available"))},
         {"label": "Posture", "value": _clean_text(posture.get("posture_state") or "Not assessed yet")},
     ]
     out["what_this_means"] = [
@@ -209,8 +234,7 @@ def render_program_narrative(report_payload: dict) -> dict:
             ],
         )
     ]
-    gaps = _as_str_list(sections.get("experimental_gaps"))
-    out["next_steps"] = [_clean_text(x) for x in gaps] if gaps else [_clean_text("No next steps recorded yet.")]
+    out["next_steps"] = _program_next_steps(sections)
     out["technical_notes"] = [_clean_text("Use Technical View for policy pins and report fingerprint.")]
     return out
 

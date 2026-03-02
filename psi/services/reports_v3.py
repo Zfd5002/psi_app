@@ -17,6 +17,7 @@ from psi.services.report_engine import (
     load_report_run_payload,
 )
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings, run_semantic_action_with_ack_guard
+from psi.services.comparability import load_comparability_policy_latest
 
 _HEX64_RE = re.compile(r"\b[a-f0-9]{64}\b", flags=re.IGNORECASE)
 
@@ -161,7 +162,7 @@ def build_report_identity_summary(
 def get_v3_report_policy_pins(report_type: str) -> dict:
     base = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs"
     template_cat = _load_json(base / "template_catalog_v0_1.json")
-    comparability_pol = _load_json(base / "comparability_policy_v0_1.json")
+    comparability_pol = load_comparability_policy_latest()
     ranking_pol = _load_json(base / "ranking_policy_v0_2.json")
     pins = {
         "report_type": str(report_type),

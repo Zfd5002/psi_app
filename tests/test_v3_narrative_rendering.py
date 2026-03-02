@@ -132,3 +132,34 @@ def test_program_comparison_narrative_uses_program_set_rows() -> None:
     out = render_program_comparison_narrative(payload)
     status_row = next((x for x in out["status_rows"] if x.get("label") == "Subjects"), {})
     assert status_row.get("value") == "program_id=2 (molecules=5), program_id=7 (molecules=1)"
+
+
+def test_program_narrative_headline_uses_metadata_program_identity() -> None:
+    payload = {
+        "metadata": {"report_type": "program_report"},
+        "sections": {
+            "metadata": {"program_id": 42},
+            "next_best_experiments": {"items": []},
+        },
+    }
+    out = render_program_narrative(payload)
+    assert out["headline"] == "Program report for program_id=42"
+    program_row = next((x for x in out["status_rows"] if x.get("label") == "Program"), {})
+    assert program_row.get("value") == "program_id=42"
+
+
+def test_program_narrative_next_steps_uses_next_best_experiments_items() -> None:
+    payload = {
+        "metadata": {"report_type": "program_report"},
+        "sections": {
+            "metadata": {"program_id": 99},
+            "next_best_experiments": {
+                "items": [
+                    {"suggestion_key": "run_pk_panel", "label": "Run PK panel"},
+                    {"suggestion_key": "extend_ada"},
+                ]
+            },
+        },
+    }
+    out = render_program_narrative(payload)
+    assert out["next_steps"] == ["Run PK panel", "extend_ada"]

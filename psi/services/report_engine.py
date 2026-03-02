@@ -534,6 +534,7 @@ def generate_molecule_report_v0(
         "policy_pins": _sorted_dict(dict(policy_pins or {})),
         "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.2"), "ranking_policy": "v0.2"},
         "cited_snapshot_ids": ([int(snap.id)] if snap is not None else []),
+        "measurement_keys": sorted(str(k) for k in used_by_metric.keys() if str(k).strip()),
         "inputs_summary": {"entity_ids": [int(mol.id)], "as_of": as_of.isoformat(), "snapshot_count": (1 if snap is not None else 0)},
         "state_of_evidence": soe,
         "snapshot_provenance": out.get("di_snapshot_provenance") if isinstance(out.get("di_snapshot_provenance"), dict) else {},
@@ -589,9 +590,23 @@ def generate_program_report_v0(
             if str(sid).isdigit()
         }
     )
+    molecule_measurement_keys: set[str] = set()
+    for m in molecules:
+        if not isinstance(m, dict):
+            continue
+        mid = m.get("molecule_id")
+        if mid is None:
+            continue
+        _snap, _out, _inn = _latest_di_snapshot_for_molecule_as_of(db, molecule_id=int(mid), as_of=as_of)
+        used_by_metric = _out.get("used_by_metric") if isinstance(_out.get("used_by_metric"), dict) else {}
+        for k in used_by_metric.keys():
+            sk = str(k).strip()
+            if sk:
+                molecule_measurement_keys.add(sk)
+    all_measurement_keys = sorted(set(comp_measurement_keys) | molecule_measurement_keys)
     program_comp_determination = derive_comparability_determination(
         statuses=(comp_statuses if comp_statuses else ["not_assessed"]),
-        measurement_keys=comp_measurement_keys,
+        measurement_keys=all_measurement_keys,
         snapshot_ids=comp_snapshot_ids,
         missing_data=(len(comp_rows) == 0),
     )
@@ -651,6 +666,7 @@ def generate_program_report_v0(
         "policy_pins": _sorted_dict(dict(policy_pins or {})),
         "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.2"), "ranking_policy": "v0.2"},
         "cited_snapshot_ids": snapshot_cov,
+        "measurement_keys": all_measurement_keys,
         "inputs_summary": {"entity_ids": [int(program_id)], "as_of": as_of.isoformat(), "snapshot_count": len(snapshot_cov)},
         "rollup": rollup,
         "comparability_determination": program_comp_determination,
@@ -813,16 +829,3 @@ def generate_program_comparative_report_v0(
     sections["reproducibility_appendix"]["governance_red_flags"] = _derive_governance_red_flags(db, req=req, sections=sections)
     validate_report_payload(report_type=REPORT_TYPE_PROGRAM_COMPARATIVE, payload=payload)
     return persist_report_run(db, req=req, payload=payload)
-    comp_status_candidates: list[str] = []
-    if isinstance(comparability.get("summary"), dict):
-        high_sev = int((comparability.get("summary") or {}).get("high_severity_count") or 0)
-        comp_status_candidates.append("not_comparable" if high_sev > 0 else "comparable_partial")
-    else:
-        comp_status_candidates.append("not_assessed")
-    used_by_metric = out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {}
-    determination = derive_comparability_determination(
-        statuses=comp_status_candidates,
-        measurement_keys=sorted(str(k) for k in used_by_metric.keys() if str(k).strip()),
-        snapshot_ids=([int(snap.id)] if snap is not None else []),
-        missing_data=(snap is None),
-    )

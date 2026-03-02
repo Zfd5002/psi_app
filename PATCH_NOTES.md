@@ -1,3 +1,180 @@
+## 2026-03-02 — v1.3.0a88
+Why:
+- Resolve maintenance ambiguity from parallel “board report” code paths by quarantining the orphan path that is not router-wired in V3 runtime surfaces.
+
+What:
+- Quarantined legacy board report implementation under:
+  - `psi/services/_deprecated/v3_board_reports.py`
+  - `psi/services/_deprecated/__init__.py`
+- Added compatibility shim at `psi/services/v3_board_reports.py` with explicit deprecation header; no live router wiring added/changed.
+- Retired orphan-only pytest modules by replacing them with explicit deterministic skips:
+  - `tests/test_v3_board_report_determinism.py`
+  - `tests/test_v3_board_report_rendering.py`
+  - `tests/test_v3_molecule_report_schema.py`
+  - `tests/test_v3_comparison_report_schema.py`
+  - `tests/test_v3_executive_summary_bullets.py`
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_board_reports.py`
+- `psi/services/_deprecated/__init__.py`
+- `psi/services/_deprecated/v3_board_reports.py`
+- `tests/test_v3_board_report_determinism.py`
+- `tests/test_v3_board_report_rendering.py`
+- `tests/test_v3_molecule_report_schema.py`
+- `tests/test_v3_comparison_report_schema.py`
+- `tests/test_v3_executive_summary_bullets.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DI semantic changes.
+- No DB schema/migration changes.
+- Live routes unchanged.
+- Replay invariance preserved.
+
+## 2026-03-02 — v1.3.0a87
+Why:
+- Report policy pin bundle referenced comparability catalog `v0.1` while report generators already use `load_comparability_policy_latest()` (currently `v0.2`), causing audit-surface mismatch.
+
+What:
+- Updated `get_v3_report_policy_pins()` in `psi/services/reports_v3.py` to source comparability pins from `load_comparability_policy_latest()`.
+- Added deterministic test in `tests/test_v3_report_engine_contracts.py` asserting pinned comparability `policy_id` and `policy_version` match the latest loaded policy.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `tests/test_v3_report_engine_contracts.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DI semantic changes.
+- No DB schema/migration changes.
+- Replay invariance preserved.
+
+## 2026-03-02 — v1.3.0a86
+Why:
+- Program narrative next-steps wiring incorrectly read `experimental_gaps` instead of program report `next_best_experiments.items`.
+
+What:
+- Updated `render_program_narrative()` in `psi/services/v3_narrative.py` to derive next steps from `sections.next_best_experiments.items`.
+- Added deterministic rendering fallback order per item:
+  - `label`
+  - `suggestion_key`
+  - stable stringified fallback.
+- Added unit test in `tests/test_v3_narrative_rendering.py` asserting stable, non-empty next-step extraction from `next_best_experiments.items`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_narrative.py`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DI semantic changes.
+- No DB schema/migration changes.
+- Replay invariance preserved.
+
+## 2026-03-02 — v1.3.0a85
+Why:
+- Remove unreachable/dead code in program comparative report generator to reduce maintenance ambiguity and prevent accidental future misuse.
+
+What:
+- Deleted dead block after `return persist_report_run(...)` in `generate_program_comparative_report_v0()` within `psi/services/report_engine.py`.
+- No behavioral changes; function return path and payload logic remain identical.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DI semantic changes.
+- No DB schema/migration changes.
+- Replay invariance preserved.
+
+## 2026-03-02 — v1.3.0a84
+Why:
+- Program narrative headline/program label could fall back to `unidentified program` because program reports typically store identity under `sections.metadata`, not `identity_context`.
+
+What:
+- Updated `render_program_narrative()` in `psi/services/v3_narrative.py` to use deterministic fallback order:
+  - `sections.identity_context.program_name`
+  - `sections.metadata.program_name`
+  - `sections.identity_context.program_id`
+  - `sections.metadata.program_id`
+  - `unidentified program`
+- Program status row now emits `program_id=<id>` when name is unavailable.
+- Added deterministic unit test in `tests/test_v3_narrative_rendering.py` for metadata-based program identity fallback.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_narrative.py`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DI semantic changes.
+- No DB schema/migration changes.
+- Replay invariance preserved.
+
+## 2026-03-02 — v1.3.0a83
+Why:
+- Ensure board/narrative measurement summaries reflect present `used_by_metric` evidence instead of appearing empty.
+
+What:
+- Added deterministic `measurement_keys` wiring to molecule report reproducibility appendix from `used_by_metric` keys (sorted).
+- Added deterministic program report `measurement_keys` wiring as sorted union of:
+  - measurement keys from latest included molecule snapshots (`used_by_metric`)
+  - comparability cited measurement keys already present in program comparability rows.
+- Added deterministic contract assertions in `tests/test_v3_report_contracts.py` for molecule/program reproducibility `measurement_keys`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_contracts.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DI semantic changes.
+- No DB schema/migration changes.
+- Replay invariance preserved.
+
 ## 2026-03-02 — v1.3.0a82
 Why:
 - Fix brittle comparative report identity rendering by moving board-facing identity derivation into deterministic Python context assembly.
