@@ -4,12 +4,15 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from psi.core.models import DecisionSnapshot, Molecule, ReportRun
 from psi.core.utils import now_utc, stable_json_dumps
+from psi.services.attribution import record_attribution_event
 from psi.services.comparability import list_comparability_assessments
+from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 from psi.services.program_rollups import build_program_rollup
 from psi.services.v3_ranking import build_ranking_surface, load_ranking_policy_v0_1
 
@@ -24,6 +27,157 @@ REPORT_TYPES = (
     REPORT_TYPE_PROGRAM_COMPARATIVE,
     REPORT_TYPE_MOLECULE_COMPARATIVE,
 )
+
+_V3_SUGGESTIONS_CACHE: dict[str, Any] | None = None
+
+
+def _load_v3_suggestions_catalog() -> dict[str, Any]:
+    global _V3_SUGGESTIONS_CACHE
+    if isinstance(_V3_SUGGESTIONS_CACHE, dict):
+        return _V3_SUGGESTIONS_CACHE
+    p = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs" / "v3_experiment_suggestions_v0_1.json"
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    _V3_SUGGESTIONS_CACHE = raw if isinstance(raw, dict) else {}
+    return _V3_SUGGESTIONS_CACHE
+
+
+def _priority_rank(priority: str, priority_order: list[str]) -> int:
+    norm = str(priority or "").strip().lower()
+    try:
+        return [str(x).strip().lower() for x in priority_order].index(norm)
+    except ValueError:
+        return len(priority_order) + 1
+
+
+def _derive_v3_next_best_experiments(*, report_type: str, decision_state: str | None = None, stage_counts: dict[str, Any] | None = None) -> dict[str, Any]:
+    cat = _load_v3_suggestions_catalog()
+    rules = cat.get("rules") if isinstance(cat.get("rules"), list) else []
+    order = cat.get("priority_order") if isinstance(cat.get("priority_order"), list) else ["high", "medium", "low"]
+    state = str(decision_state or "").strip().lower()
+    sc = {str(k): int(v) for k, v in (stage_counts or {}).items() if str(k)}
+    items: list[dict[str, Any]] = []
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        if str(rule.get("report_type") or "") != str(report_type):
+            continue
+        include = False
+        reason_trail: list[str] = []
+        if report_type == REPORT_TYPE_MOLECULE:
+            states = [str(x).strip().lower() for x in (rule.get("decision_states") or []) if str(x).strip()]
+            include = bool(states) and (state in states)
+            if include:
+                reason_trail = [f"decision_state={state}", str(rule.get("reason") or "")]
+        elif report_type == REPORT_TYPE_PROGRAM:
+            stage_keys = [str(x).strip().lower() for x in (rule.get("stage_keys") or []) if str(x).strip()]
+            hit_keys = sorted([k for k in stage_keys if int(sc.get(k, 0)) > 0])
+            include = bool(hit_keys)
+            if include:
+                reason_trail = [f"stage_keys_hit={','.join(hit_keys)}", str(rule.get("reason") or "")]
+        if include:
+            items.append(
+                {
+                    "suggestion_key": str(rule.get("suggestion_key") or ""),
+                    "label": str(rule.get("label") or ""),
+                    "priority": str(rule.get("priority") or "low"),
+                    "reason_trail": [x for x in reason_trail if str(x)],
+                }
+            )
+    items = sorted(
+        items,
+        key=lambda i: (
+            _priority_rank(str(i.get("priority") or "low"), [str(x) for x in order]),
+            str(i.get("suggestion_key") or ""),
+            str(i.get("label") or ""),
+        ),
+    )
+    return {
+        "status": ("assessed" if items else "not_assessed"),
+        "catalog_id": str(cat.get("catalog_id") or "v3_experiment_suggestions_v0_1"),
+        "catalog_version": str(cat.get("catalog_version") or "v0.1"),
+        "items": items,
+    }
+
+
+def _derive_governance_red_flags(db: Session, *, req: ReportRequest, sections: dict[str, Any]) -> list[dict[str, Any]]:
+    flags: list[dict[str, Any]] = []
+
+    pins = req.policy_pins if isinstance(req.policy_pins, dict) else {}
+    missing_pin_hashes: list[str] = []
+    if not pins:
+        missing_pin_hashes.append("all")
+    else:
+        for k in sorted(pins.keys(), key=lambda x: str(x)):
+            v = pins.get(k)
+            if isinstance(v, dict):
+                hash_keys = [hk for hk in ("policy_hash", "catalog_hash") if str(v.get(hk) or "").strip()]
+                if not hash_keys:
+                    missing_pin_hashes.append(str(k))
+    if missing_pin_hashes:
+        flags.append(
+            {
+                "flag_code": "missing_policy_pins_or_hashes",
+                "message": "report policy pins are missing required hash fields",
+                "details": {"missing": missing_pin_hashes},
+            }
+        )
+
+    up_warnings = get_unacknowledged_upgrade_warnings(db, current_policy_pins=pins)
+    if up_warnings:
+        flags.append(
+            {
+                "flag_code": "unacknowledged_policy_upgrade_affecting_pins",
+                "message": "an unacknowledged policy upgrade may affect current policy pins",
+                "details": {"session_ids": [int(w.get("session_id") or 0) for w in up_warnings]},
+            }
+        )
+
+    comp_rows: list[dict[str, Any]] = []
+    if isinstance(sections.get("comparability_surface"), dict):
+        comp_rows = [x for x in (sections.get("comparability_surface") or {}).get("assessments", []) if isinstance(x, dict)]
+    elif isinstance(sections.get("cross_molecule_comparability"), dict):
+        comp_rows = [x for x in (sections.get("cross_molecule_comparability") or {}).get("assessments", []) if isinstance(x, dict)]
+    if comp_rows:
+        seen: dict[tuple[str, str, str, str, str], int] = {}
+        for row in comp_rows:
+            key = (
+                str(row.get("left_scope_type") or ""),
+                str(row.get("left_scope_id") or ""),
+                str(row.get("right_scope_type") or ""),
+                str(row.get("right_scope_id") or ""),
+                str(row.get("rule_id") or ""),
+            )
+            seen[key] = seen.get(key, 0) + 1
+        ambiguous = [k for k, c in sorted(seen.items()) if c > 1]
+        if ambiguous:
+            flags.append(
+                {
+                    "flag_code": "comparability_ambiguous_multiple_effective_candidates",
+                    "message": "comparability surface includes duplicate pair/rule candidates",
+                    "details": {"duplicate_pair_rule_keys": [":".join(k) for k in ambiguous]},
+                }
+            )
+
+    if req.report_type in {REPORT_TYPE_PROGRAM_COMPARATIVE, REPORT_TYPE_MOLECULE_COMPARATIVE}:
+        ranking = sections.get("ranking_surface") if isinstance(sections.get("ranking_surface"), dict) else {}
+        if bool(ranking.get("enabled")) is False:
+            flags.append(
+                {
+                    "flag_code": "ranking_disabled_or_policy_incomplete",
+                    "message": "ranking is disabled by policy or ranking policy is incomplete",
+                    "details": {"enabled": False, "status": str(ranking.get("status") or "")},
+                }
+            )
+        elif str(ranking.get("status") or "") == "policy_incomplete":
+            flags.append(
+                {
+                    "flag_code": "ranking_disabled_or_policy_incomplete",
+                    "message": "ranking is disabled by policy or ranking policy is incomplete",
+                    "details": {"enabled": bool(ranking.get("enabled")), "status": "policy_incomplete"},
+                }
+            )
+
+    return sorted(flags, key=lambda x: str(x.get("flag_code") or ""))
 
 
 @dataclass(frozen=True)
@@ -57,6 +211,12 @@ def _sorted_dict(obj: dict[str, Any]) -> dict[str, Any]:
 
 
 def _empty_sections_for_type(report_type: str) -> dict[str, Any]:
+    repro_base = {
+        "policy_pins": {},
+        "catalog_versions": {},
+        "cited_snapshot_ids": [],
+        "inputs_summary": {},
+    }
     if report_type == REPORT_TYPE_MOLECULE:
         return {
             "identity_context": {},
@@ -66,7 +226,7 @@ def _empty_sections_for_type(report_type: str) -> dict[str, Any]:
             "risk_profile": {},
             "experimental_gaps": {},
             "drift_history": {},
-            "reproducibility_appendix": {},
+            "reproducibility_appendix": dict(repro_base),
         }
     if report_type == REPORT_TYPE_PROGRAM:
         return {
@@ -77,7 +237,7 @@ def _empty_sections_for_type(report_type: str) -> dict[str, Any]:
             "risk_landscape": {},
             "decision_lineage": {},
             "next_best_experiments": {},
-            "reproducibility_appendix": {},
+            "reproducibility_appendix": dict(repro_base),
         }
     if report_type == REPORT_TYPE_MOLECULE_COMPARATIVE:
         return {
@@ -88,7 +248,7 @@ def _empty_sections_for_type(report_type: str) -> dict[str, Any]:
             "comparability_surface": {},
             "drift_comparison": {},
             "ranking_surface": {},
-            "reproducibility_appendix": {},
+            "reproducibility_appendix": dict(repro_base),
         }
     if report_type == REPORT_TYPE_PROGRAM_COMPARATIVE:
         return {
@@ -99,7 +259,7 @@ def _empty_sections_for_type(report_type: str) -> dict[str, Any]:
             "comparability_surface": {},
             "ranking_surface": {},
             "resource_implications": {},
-            "reproducibility_appendix": {},
+            "reproducibility_appendix": dict(repro_base),
         }
     raise ValueError(f"Unsupported report_type: {report_type}")
 
@@ -175,6 +335,19 @@ def persist_report_run(db: Session, *, req: ReportRequest, payload: dict[str, An
     db.add(row)
     db.commit()
     db.refresh(row)
+    record_attribution_event(
+        db,
+        event_type="report_run.create",
+        entity_type="ReportRun",
+        entity_id=int(row.id),
+        metadata={
+            "report_type": str(row.report_type),
+            "as_of": row.as_of.isoformat(),
+            "subject_ids": list(req.subject_ids),
+            "snapshot_count": len(req.snapshot_coverage),
+        },
+    )
+    db.commit()
     return row
 
 
@@ -279,9 +452,20 @@ def generate_molecule_report_v0(
         "comparability_summary": comparability.get("summary") if isinstance(comparability.get("summary"), dict) else {},
     }
     sections["reproducibility_appendix"] = {
+        "policy_pins": _sorted_dict(dict(policy_pins or {})),
+        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": "v0.1", "ranking_policy": "v0.2"},
+        "cited_snapshot_ids": ([int(snap.id)] if snap is not None else []),
+        "inputs_summary": {"entity_ids": [int(mol.id)], "as_of": as_of.isoformat(), "snapshot_count": (1 if snap is not None else 0)},
         "state_of_evidence": soe,
         "snapshot_provenance": out.get("di_snapshot_provenance") if isinstance(out.get("di_snapshot_provenance"), dict) else {},
     }
+    suggestions = _derive_v3_next_best_experiments(
+        report_type=REPORT_TYPE_MOLECULE,
+        decision_state=str(out.get("decision_state") or ""),
+    )
+    if suggestions.get("status") == "assessed":
+        sections["experimental_gaps"]["next_best_experiments"] = suggestions.get("items") if isinstance(suggestions.get("items"), list) else []
+    sections["reproducibility_appendix"]["governance_red_flags"] = _derive_governance_red_flags(db, req=req, sections=sections)
     validate_report_payload(report_type=REPORT_TYPE_MOLECULE, payload=payload)
     return persist_report_run(db, req=req, payload=payload)
 
@@ -348,8 +532,18 @@ def generate_program_report_v0(
     # Deterministic placeholders for remaining fixed sections.
     sections["risk_landscape"] = {"source": "program_rollup", "molecule_count": len(sections["molecule_overview_table"]["rows"])}
     sections["decision_lineage"] = {"snapshot_ids": snapshot_cov}
-    sections["next_best_experiments"] = {"status": "not_assessed", "items": []}
-    sections["reproducibility_appendix"] = {"rollup": rollup}
+    sections["next_best_experiments"] = _derive_v3_next_best_experiments(
+        report_type=REPORT_TYPE_PROGRAM,
+        stage_counts={str(k): int(stage_counts[k]) for k in stage_counts},
+    )
+    sections["reproducibility_appendix"] = {
+        "policy_pins": _sorted_dict(dict(policy_pins or {})),
+        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": "v0.1", "ranking_policy": "v0.2"},
+        "cited_snapshot_ids": snapshot_cov,
+        "inputs_summary": {"entity_ids": [int(program_id)], "as_of": as_of.isoformat(), "snapshot_count": len(snapshot_cov)},
+        "rollup": rollup,
+    }
+    sections["reproducibility_appendix"]["governance_red_flags"] = _derive_governance_red_flags(db, req=req, sections=sections)
     validate_report_payload(report_type=REPORT_TYPE_PROGRAM, payload=payload)
     return persist_report_run(db, req=req, payload=payload)
 
@@ -426,7 +620,14 @@ def generate_molecule_comparative_report_v0(
         for r in rows
     ]
     sections["ranking_surface"] = build_ranking_surface(entities=rank_entities, policy=ranking_policy)
-    sections["reproducibility_appendix"] = {"rows": [{"molecule_id": r["molecule_id"], "snapshot_id": r["snapshot_id"]} for r in rows]}
+    sections["reproducibility_appendix"] = {
+        "policy_pins": _sorted_dict(dict(policy_pins or {})),
+        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": "v0.1", "ranking_policy": "v0.2"},
+        "cited_snapshot_ids": sorted(set(snapshot_cov)),
+        "inputs_summary": {"entity_ids": mids, "as_of": as_of.isoformat(), "snapshot_count": len(sorted(set(snapshot_cov)))},
+        "rows": [{"molecule_id": r["molecule_id"], "snapshot_id": r["snapshot_id"]} for r in rows],
+    }
+    sections["reproducibility_appendix"]["governance_red_flags"] = _derive_governance_red_flags(db, req=req, sections=sections)
     validate_report_payload(report_type=REPORT_TYPE_MOLECULE_COMPARATIVE, payload=payload)
     return persist_report_run(db, req=req, payload=payload)
 
@@ -490,6 +691,13 @@ def generate_program_comparative_report_v0(
     ]
     sections["ranking_surface"] = build_ranking_surface(entities=rank_entities, policy=ranking_policy)
     sections["resource_implications"] = {"status": "not_assessed", "policy_derived_fields_only": True, "rows": []}
-    sections["reproducibility_appendix"] = {"rows": [{"program_id": r["program_id"], "molecule_count": r["molecule_count"]} for r in rows]}
+    sections["reproducibility_appendix"] = {
+        "policy_pins": _sorted_dict(dict(policy_pins or {})),
+        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": "v0.1", "ranking_policy": "v0.2"},
+        "cited_snapshot_ids": sorted(set(snapshot_cov)),
+        "inputs_summary": {"entity_ids": pids, "as_of": as_of.isoformat(), "snapshot_count": len(sorted(set(snapshot_cov)))},
+        "rows": [{"program_id": r["program_id"], "molecule_count": r["molecule_count"]} for r in rows],
+    }
+    sections["reproducibility_appendix"]["governance_red_flags"] = _derive_governance_red_flags(db, req=req, sections=sections)
     validate_report_payload(report_type=REPORT_TYPE_PROGRAM_COMPARATIVE, payload=payload)
     return persist_report_run(db, req=req, payload=payload)

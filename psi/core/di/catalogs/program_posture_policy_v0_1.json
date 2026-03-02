@@ -1,0 +1,20 @@
+{
+  "policy_id": "program_posture_policy_v0_1",
+  "policy_version": "v0.1",
+  "posture_labels": [
+    "at_risk",
+    "blocked",
+    "on_track"
+  ],
+  "deterministic_rules": {
+    "blocked_when": [
+      "total_molecules==0",
+      "not_assessed_count==total_molecules",
+      "blocked_or_failed_count>0"
+    ],
+    "on_track_when": [
+      "ready_count==total_molecules"
+    ],
+    "otherwise": "at_risk"
+  }
+}

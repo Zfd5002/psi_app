@@ -4380,3 +4380,351 @@ Changed files:
 
 Determinism/Replay note:
 - Contract/docs closeout only; no DI semantics or snapshot semantics changes.
+## 2026-02-26 — v1.3.0a16
+Intent:
+- Canonicalize comparability entity pairs deterministically and add write-time governance guardrails for duplicate/conflicting pair+rule+as_of submissions.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/comparability.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Pair ordering is canonicalized lexicographically by `(entity_type, entity_id)` before persistence, so `(A,B)` and `(B,A)` resolve identically.
+- Cited keys/snapshot ids are stored as stable/sorted JSON arrays.
+- Duplicate/conflict handling emits deterministic error codes:
+  - `comparability_duplicate_same_pair_rule_asof`
+  - `comparability_conflict_same_pair_rule_asof`
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a31
+Intent:
+- Add deterministic governance red-flag surfaces to report reproducibility appendices.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Red flags are emitted as a stable, sorted list (`flag_code` ordered) inside existing `reproducibility_appendix` sections.
+- Flags cover:
+  - missing policy pins/hashes
+  - comparability ambiguity (duplicate pair/rule candidates)
+  - unacknowledged policy upgrade affecting current pins
+  - ranking disabled/policy incomplete on comparative reports
+- No report top-level schema keys changed.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a30
+Intent:
+- Add deterministic, catalog-driven Next-Best-Experiments suggestions into existing V3 report sections.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/v3_experiment_suggestions_v0_1.json`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Suggestions are sourced from versioned catalog rules with explicit `priority_order` and deterministic sort `(priority, suggestion_key, label)`.
+- Suggestions include categorical priority (`high|medium|low`) and explicit reason trails only; no numeric scoring.
+- Program/molecule report schemas are unchanged; suggestions are injected within existing section keys.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a29
+Intent:
+- Add V3 catalog immutability contract tests and additive version-surface checks.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_catalog_immutability.py`
+
+Determinism notes:
+- Locked immutable byte-level hashes for foundational V3 catalogs:
+  - `template_catalog_v0_1.json`
+  - `ranking_policy_v0_1.json`
+  - `comparability_policy_v0_1.json`
+- Added deterministic additive-version checks for ranking/comparability/template catalog file surfaces.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a28
+Intent:
+- Tighten lineage query scope for report and membership attribution retrieval while preserving deterministic ordering.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/lineage.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Program lineage now scopes report-run retrieval to `program_report` rows with exact serialized subject IDs.
+- Program/portfolio membership attribution queries now scope to the relevant membership IDs only.
+- Added smoke coverage to assert unrelated membership attribution events are excluded deterministically.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a27
+Intent:
+- Expand program rollup citation linkage with deterministic template/policy/snapshot coverage references.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/program_rollups.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Rollups now emit sorted citation arrays for `template_keys` and `decision_keys` in addition to snapshot/policy citations.
+- Added stable `snapshot_coverage_summary` with deterministic counts.
+- Contract smoke locks the citation key surface order.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a26
+Intent:
+- Introduce policy-driven categorical program posture derivation for rollups (no scoring) with deterministic citations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/program_rollups.py`
+- `psi/core/di/catalogs/program_posture_policy_v0_1.json`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Program posture is derived by fixed categorical rules from deterministic stage counts and molecule totals.
+- Added structured rollup citations with stable key ordering (`snapshot_ids`, policy refs, molecule ids).
+- Program posture policy catalog is versioned JSON and validated by contract smoke.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a25
+Intent:
+- Add deterministic warning surfaces for unacknowledged policy upgrades in report and lineage views.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `psi/services/reports_v3.py`
+- `psi/services/lineage.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/lineage/program_detail.html`
+- `psi/web/templates/lineage/portfolio_detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Added `get_unacknowledged_upgrade_warnings()` with explicit ordering `(created_at DESC, id DESC)` and stable warning payload keys.
+- Report detail and lineage contexts now expose deterministic governance warnings without changing report/DI semantics.
+- Contract smoke validates warning presence for unacknowledged sessions and absence after explicit acknowledgement.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a24
+Intent:
+- Replace policy-upgrade placeholder deltas with deterministic changed-key classification and categorical impact flags.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Policy upgrade delta payload now emits stable top-level keys:
+  - `changed_policy_keys`
+  - `classification`
+  - `downstream_impact_flags`
+- Classification and impact flags are computed from explicit sorted changed-key sets; no probabilistic or weighted logic.
+- Contract smoke locks stable key ordering and expected categorical flags.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a23
+Intent:
+- Stabilize attribution metadata JSON serialization and expand attribution coverage for key V3 governance actions.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/attribution.py`
+- `psi/services/comparability.py`
+- `psi/services/policy_upgrade.py`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Attribution metadata now normalizes recursively with sorted dict keys and ISO-8601 datetime/date conversion before serialization.
+- New attribution events are emitted for `report_run.create`, `policy_upgrade.session.create`, `policy_upgrade.session.acknowledge`, and `comparability.assessment.create`.
+- Event payload structures are stable-key dictionaries without time-based nondeterministic fields beyond explicit timestamps.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a17
+Intent:
+- Make comparability policy JSON authoritative for statuses/rules and scope applicability; remove hardcoded status semantics from Python.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `psi/services/comparability.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Comparability validation now loads a cached deterministic policy object from `comparability_policy_v0_1.json`.
+- `rule_id` and `status` are validated from policy data, and scope applicability uses deterministic canonical pair type ordering.
+- Policy load failures and validation failures return explicit deterministic error codes.
+
+Schema changes:
+- Additive field: `comparability_assessments.policy_semantics_hash`.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a18
+Intent:
+- Add deterministic “effective comparability” resolution and governance warning surfaces over historical assessments without deleting history.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/comparability.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Effective comparability selection uses explicit `(as_of DESC, id DESC)` ordering on canonical pair and optional `rule_id`.
+- History summary is deterministic (status-count map sorted by status key).
+- Governance warnings are deterministic objects and ordered by stable warning key derivation.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a19
+Intent:
+- Introduce `ranking_policy_v0_2` with explicit lexicographic ladder semantics (policy-defined, non-weighted) while keeping ranking disabled by default.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/ranking_policy_v0_2.json`
+- `psi/services/v3_ranking.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Ranking method now reads policy-defined `criteria_order`, `outcome_precedence`, and tie-break keys.
+- Enabled ranking path is lexicographic only; no hit-count heuristic and no numeric weights.
+- If policy is enabled but incomplete, surface returns deterministic `policy_incomplete` with empty ranking entities.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a20
+Intent:
+- Harden ranking surface explainability and contract visibility (policy hashes, criterion-ordered reason trails, stable tie-break explanation), fully policy-driven.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_ranking.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Ranking output now includes deterministic policy hashes and tie-break explanation fields.
+- Per-entity reason trails are emitted in policy criteria order.
+- Contract checks assert no weight fields in ranking output and policy-order alignment.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a21
+Intent:
+- Remove hardcoded report policy pins and derive deterministic pin bundles from V3 catalogs.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_v3_report_engine_contracts.py`
+
+Determinism notes:
+- Added deterministic `get_v3_report_policy_pins(report_type)` to derive template/comparability/ranking versions and hashes from catalog files.
+- Pin objects are stable-key bundles and are now used by report generation form path.
+- Contract and pytest tests lock pin bundle stability for report types.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a22
+Intent:
+- Deepen report reproducibility appendix content under existing schema keys with deterministic governance metadata.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_v3_report_engine_contracts.py`
+
+Determinism notes:
+- Reproducibility appendix now always includes stable keys:
+  - `policy_pins`
+  - `catalog_versions`
+  - `cited_snapshot_ids`
+  - `inputs_summary`
+- Keys are present across all 4 report types without changing top-level report schema keys.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS

@@ -2769,6 +2769,46 @@ def test_v3_ranking_policy_scaffold_disabled_by_default_and_surface_deterministi
     _assert(bool(s1.get("enabled")) is False and str(s1.get("reason") or "") == "policy_disabled", "ranking surface must remain disabled by default")
 
 
+def test_v3_ranking_policy_v0_2_lexicographic_ladder_deterministic_and_non_weighted() -> None:
+    from psi.services.v3_ranking import build_ranking_surface, load_ranking_policy_v0_2
+    p = load_ranking_policy_v0_2()
+    m = p.get("method") if isinstance(p.get("method"), dict) else {}
+    _assert(bool(p.get("enabled")) is False, "ranking policy v0_2 must default disabled")
+    _assert(str(m.get("type") or "") == "lexicographic_ladder", "ranking policy v0_2 method type mismatch")
+    _assert((m.get("criteria_order") or []) == ["high_severity_risk_present", "stage_ready"], "ranking policy v0_2 criteria_order mismatch")
+    _assert((m.get("outcome_precedence") or []) == ["PASS", "FAIL", "NA"], "ranking policy v0_2 outcome_precedence mismatch")
+
+    txt = (Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "ranking_policy_v0_2.json").read_text(encoding="utf-8").lower()
+    _assert("weight" not in txt, "ranking policy v0_2 must not contain weighted fields")
+
+    enabled_pol = dict(p)
+    enabled_pol["enabled"] = True
+    s1 = build_ranking_surface(
+        entities=[
+            {"entity_type": "program", "entity_id": 2, "stable_sort_key": "B", "criterion_outcomes": {"high_severity_risk_present": "FAIL", "stage_ready": "PASS"}},
+            {"entity_type": "program", "entity_id": 1, "stable_sort_key": "A", "criterion_outcomes": {"high_severity_risk_present": "PASS", "stage_ready": "NA"}},
+        ],
+        policy=enabled_pol,
+    )
+    s2 = build_ranking_surface(
+        entities=list(reversed([
+            {"entity_type": "program", "entity_id": 2, "stable_sort_key": "B", "criterion_outcomes": {"high_severity_risk_present": "FAIL", "stage_ready": "PASS"}},
+            {"entity_type": "program", "entity_id": 1, "stable_sort_key": "A", "criterion_outcomes": {"high_severity_risk_present": "PASS", "stage_ready": "NA"}},
+        ])),
+        policy=enabled_pol,
+    )
+    _assert(stable_json_dumps(s1) == stable_json_dumps(s2), "ranking v0_2 lexicographic output must be deterministic")
+    ents = s1.get("entities") if isinstance(s1.get("entities"), list) else []
+    _assert(int((ents[0] or {}).get("entity_id") or 0) == 1, "ranking v0_2 should rank PASS ahead of FAIL on first criterion")
+    _assert(all("outcome" in (rt or {}) for rt in ((ents[0] or {}).get("reason_trail") or [])), "ranking v0_2 reason_trail must surface criterion outcomes")
+    _assert(bool(str(s1.get("policy_semantics_hash") or "")) and bool(str(s1.get("policy_package_hash") or "")), "ranking surface must include policy hashes")
+    _assert("weight" not in stable_json_dumps(s1).lower(), "ranking surface output must not include weight fields")
+    rt = (ents[0] or {}).get("reason_trail") if isinstance((ents[0] or {}).get("reason_trail"), list) else []
+    _assert([str((x or {}).get("criterion_id") or "") for x in rt] == ["high_severity_risk_present", "stage_ready"], "ranking reason trail order must match policy criteria order")
+    tb = (ents[0] or {}).get("tie_break_explanation") if isinstance((ents[0] or {}).get("tie_break_explanation"), dict) else {}
+    _assert((tb.get("keys") or []) == ["stable_sort_key", "entity_id"], "ranking tie-break explanation must reflect policy tie-break keys")
+
+
 def test_report_engine_v3_skeleton_fixed_schema_for_all_four_types() -> None:
     from psi.services.report_engine import (
         REPORT_TYPES,
@@ -2792,6 +2832,9 @@ def test_report_engine_v3_skeleton_fixed_schema_for_all_four_types() -> None:
         meta = payload1.get("metadata") if isinstance(payload1.get("metadata"), dict) else {}
         _assert(meta.get("subject_ids") == list(req.subject_ids), f"{rt}: metadata.subject_ids mismatch")
         _assert(meta.get("snapshot_coverage") == [8, 9], f"{rt}: snapshot_coverage should be sorted/deduped")
+        repro = ((payload1.get("sections") or {}).get("reproducibility_appendix")) if isinstance((payload1.get("sections") or {}).get("reproducibility_appendix"), dict) else {}
+        for k in ("policy_pins", "catalog_versions", "cited_snapshot_ids", "inputs_summary"):
+            _assert(k in repro, f"{rt}: reproducibility_appendix missing key {k}")
 
 
 def test_molecule_report_v0_generator_fixed_structure_from_snapshot() -> None:
@@ -2906,6 +2949,67 @@ def test_program_report_v0_generator_fixed_structure_uses_rollup_and_placeholder
     _assert(str(cms.get("status") or "") == "not_assessed", "program report should emit deterministic comparability placeholder when none exist")
 
 
+def test_v3_next_best_experiments_catalog_driven_deterministic_suggestions() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from psi.core.models import Base, DecisionSnapshot, Molecule, Program
+    from psi.core.utils import stable_json_dumps
+    from psi.services.report_engine import generate_program_report_v0, load_report_run_payload
+
+    root = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "v3_experiment_suggestions_v0_1.json"
+    cat = json.loads(root.read_text(encoding="utf-8"))
+    _assert(str(cat.get("catalog_id") or "") == "v3_experiment_suggestions_v0_1", "v3 suggestion catalog id mismatch")
+    _assert(str(cat.get("catalog_version") or "") == "v0.1", "v3 suggestion catalog version mismatch")
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            p = Program(name="P", description="", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="M-1", title="A", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(m)
+            db.commit()
+            db.refresh(m)
+            db.add(
+                DecisionSnapshot(
+                    program_id=int(p.id),
+                    molecule_id=int(m.id),
+                    batch_id=None,
+                    decision_key="advance_to_in_vivo",
+                    rules_version="vX",
+                    engine_key="di",
+                    schema_version="di.snapshot.v0_4",
+                    inputs_json=stable_json_dumps({"engine_key": "di"}),
+                    outputs_json=stable_json_dumps({"decision_state": "not_assessed", "gates": []}),
+                    evidence_ids_json="[]",
+                    created_at=datetime(2026, 2, 26, 1, 0, 0),
+                )
+            )
+            db.commit()
+            rr = generate_program_report_v0(db, program_id=int(p.id), as_of=datetime(2026, 2, 26, 2, 0, 0), policy_pins={"report_policy": "v0"})
+            payload = load_report_run_payload(rr)
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+    nbe = (((payload.get("sections") or {}).get("next_best_experiments")) if isinstance((payload.get("sections") or {}).get("next_best_experiments"), dict) else {})
+    _assert(str(nbe.get("status") or "") == "assessed", "program report next_best_experiments should be assessed when catalog rules match")
+    _assert(str(nbe.get("catalog_id") or "") == "v3_experiment_suggestions_v0_1", "next_best_experiments must cite deterministic catalog id")
+    items = nbe.get("items") if isinstance(nbe.get("items"), list) else []
+    _assert(bool(items), "next_best_experiments must include deterministic items")
+    _assert(
+        items == sorted(items, key=lambda x: ({"high": 0, "medium": 1, "low": 2}.get(str((x or {}).get("priority") or "low"), 9), str((x or {}).get("suggestion_key") or ""))),
+        "next_best_experiments items must be deterministically ordered by priority and suggestion key",
+    )
+    _assert(all(isinstance((it or {}).get("reason_trail"), list) for it in items), "next_best_experiments items must carry deterministic reason_trail lists")
+
+
 def test_molecule_comparative_report_v0_ordering_and_disabled_ranking_surface() -> None:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -2997,6 +3101,61 @@ def test_program_comparative_report_v0_ordering_and_resource_placeholder() -> No
     _assert(bool(res.get("policy_derived_fields_only")) is True, "resource implications surface must remain policy-derived placeholder only")
 
 
+def test_report_governance_red_flags_surface_deterministically() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from psi.core.models import Base, DecisionSnapshot, Molecule, Program
+    from psi.core.utils import stable_json_dumps
+    from psi.services.report_engine import generate_program_comparative_report_v0, load_report_run_payload
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            p1 = Program(name="P1", description="", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            p2 = Program(name="P2", description="", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add_all([p1, p2]); db.commit(); db.refresh(p1); db.refresh(p2)
+            for p in (p1, p2):
+                m = Molecule(program_id=int(p.id), primary_id=f"M-{int(p.id)}", title="M", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+                db.add(m); db.commit(); db.refresh(m)
+                db.add(
+                    DecisionSnapshot(
+                        program_id=int(p.id),
+                        molecule_id=int(m.id),
+                        batch_id=None,
+                        decision_key="advance_to_in_vivo",
+                        rules_version="vX",
+                        engine_key="di",
+                        schema_version="di.snapshot.v0_4",
+                        inputs_json=stable_json_dumps({"engine_key": "di"}),
+                        outputs_json=stable_json_dumps({"decision_state": "ready", "gates": []}),
+                        evidence_ids_json="[]",
+                        created_at=datetime(2026, 2, 26, 1, 0, 0),
+                    )
+                )
+                db.commit()
+            rr = generate_program_comparative_report_v0(
+                db,
+                program_ids=[int(p2.id), int(p1.id)],
+                as_of=datetime(2026, 2, 26, 2, 0, 0),
+                policy_pins={},
+            )
+            payload = load_report_run_payload(rr)
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+    repro = (((payload.get("sections") or {}).get("reproducibility_appendix")) if isinstance((payload.get("sections") or {}).get("reproducibility_appendix"), dict) else {})
+    flags = repro.get("governance_red_flags") if isinstance(repro.get("governance_red_flags"), list) else []
+    codes = [str((f or {}).get("flag_code") or "") for f in flags]
+    _assert(codes == sorted(codes), "governance red flag codes must be deterministically ordered")
+    _assert("missing_policy_pins_or_hashes" in codes, "governance red flags must include missing pin/hash warning when pins are empty")
+    _assert("ranking_disabled_or_policy_incomplete" in codes, "governance red flags must include ranking disabled/incomplete warning for comparative report")
+
+
 def test_reports_ui_templates_render_deterministic_structured_payload_surface() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     tpl_dir = repo_root / "psi" / "web" / "templates"
@@ -3013,6 +3172,16 @@ def test_reports_ui_templates_render_deterministic_structured_payload_surface() 
     h2 = tmpl.render(request=None, **ctx)
     _assert(h1 == h2, "reports/detail template must render deterministically for fixed payload")
     _assert("identity_context" in h1 and "molecule_report" in h1, "reports/detail template must show structured metadata/sections verbatim")
+
+
+def test_reports_v3_policy_pin_bundle_deterministic_and_catalog_derived() -> None:
+    from psi.services.reports_v3 import get_v3_report_policy_pins
+    p1 = get_v3_report_policy_pins("molecule_report")
+    p2 = get_v3_report_policy_pins("molecule_report")
+    _assert(stable_json_dumps(p1) == stable_json_dumps(p2), "report policy pin bundle must be deterministic")
+    _assert(str(((p1.get("template_catalog") or {}).get("catalog_id") or "")) == "template_catalog_v0_1", "report pins must derive template catalog id from catalog data")
+    _assert(bool(str(((p1.get("comparability_policy") or {}).get("policy_hash") or ""))), "report pins must include comparability policy hash")
+    _assert(bool(str(((p1.get("ranking_policy") or {}).get("policy_hash") or ""))), "report pins must include ranking policy hash")
 
 
 def test_lineage_service_separates_evidence_policy_governance_changes_deterministically() -> None:
@@ -3046,6 +3215,126 @@ def test_lineage_service_separates_evidence_policy_governance_changes_determinis
         eng.dispose()
     _assert(stable_json_dumps(out1) == stable_json_dumps(out2), "program lineage service must be deterministic")
     _assert("evidence_changes" in out1 and "policy_changes" in out1 and "governance_changes" in out1, "lineage service must separate change categories")
+
+
+def test_lineage_service_membership_attribution_scoped_to_subject() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from psi.core.models import Actor, AttributionEvent, Base, Molecule, Program, ProgramMembership
+    from psi.services.lineage import get_program_lineage
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            p1 = Program(name="P1", description="", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            p2 = Program(name="P2", description="", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(p1); db.add(p2); db.commit(); db.refresh(p1); db.refresh(p2)
+            m1 = Molecule(program_id=int(p1.id), primary_id="M-1", title="Mol1", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            m2 = Molecule(program_id=int(p2.id), primary_id="M-2", title="Mol2", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(m1); db.add(m2); db.commit(); db.refresh(m1); db.refresh(m2)
+            pm1 = ProgramMembership(program_id=int(p1.id), molecule_id=int(m1.id), sort_index=1, created_at=datetime(2026, 2, 26))
+            pm2 = ProgramMembership(program_id=int(p2.id), molecule_id=int(m2.id), sort_index=1, created_at=datetime(2026, 2, 26))
+            db.add(pm1); db.add(pm2); db.commit(); db.refresh(pm1); db.refresh(pm2)
+            db.add(Actor(display_name="Local User", handle="local-user", created_at=datetime(2026, 2, 26)))
+            db.commit()
+            db.add(AttributionEvent(actor_id=1, event_type="program.membership.add", entity_type="ProgramMembership", entity_id=int(pm1.id), metadata_json="{}", created_at=datetime(2026, 2, 26, 1, 0, 0)))
+            db.add(AttributionEvent(actor_id=1, event_type="program.membership.add", entity_type="ProgramMembership", entity_id=int(pm2.id), metadata_json="{}", created_at=datetime(2026, 2, 26, 1, 1, 0)))
+            db.commit()
+            pm1_id = int(pm1.id)
+            pm2_id = int(pm2.id)
+            out = get_program_lineage(db, program_id=int(p1.id))
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+    ids = [int(x.get("entity_id") or 0) for x in (out.get("governance_changes") or []) if str(x.get("entity_type") or "") == "ProgramMembership"]
+    _assert(pm1_id in ids, "lineage must include attribution for subject program memberships")
+    _assert(pm2_id not in ids, "lineage must exclude attribution for unrelated program memberships")
+
+
+def test_program_rollup_posture_policy_v0_1_validation_and_determinism() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from psi.core.models import Base, DecisionSnapshot, Molecule, Program, ProgramMembership
+    from psi.services.program_rollups import build_program_rollup
+
+    root = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "program_posture_policy_v0_1.json"
+    pol = json.loads(root.read_text(encoding="utf-8"))
+    _assert(str(pol.get("policy_id") or "") == "program_posture_policy_v0_1", "program posture policy id mismatch")
+    _assert(str(pol.get("policy_version") or "") == "v0.1", "program posture policy version mismatch")
+    labels = pol.get("posture_labels") if isinstance(pol.get("posture_labels"), list) else []
+    _assert(labels == sorted(labels), "program posture labels must be sorted deterministically")
+    _assert(set(labels) == {"at_risk", "blocked", "on_track"}, "program posture labels set must be categorical and fixed")
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            p = Program(name="P", description="", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            m1 = Molecule(program_id=int(p.id), primary_id="M-1", title="Mol1", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            m2 = Molecule(program_id=int(p.id), primary_id="M-2", title="Mol2", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(m1)
+            db.add(m2)
+            db.commit()
+            db.refresh(m1)
+            db.refresh(m2)
+            db.add(ProgramMembership(program_id=int(p.id), molecule_id=int(m1.id), sort_index=1, created_at=datetime(2026, 2, 26)))
+            db.add(ProgramMembership(program_id=int(p.id), molecule_id=int(m2.id), sort_index=2, created_at=datetime(2026, 2, 26)))
+            db.add(
+                DecisionSnapshot(
+                    program_id=int(p.id),
+                    molecule_id=int(m1.id),
+                    batch_id=None,
+                    decision_key="advance_to_in_vivo",
+                    rules_version="vX",
+                    engine_key="di",
+                    schema_version="di.snapshot.v0_4",
+                    inputs_json=stable_json_dumps({"engine_key": "di"}),
+                    outputs_json=stable_json_dumps({"decision_state": "ready", "gates": []}),
+                    evidence_ids_json="[]",
+                    created_at=datetime(2026, 2, 26, 1, 0, 0),
+                )
+            )
+            db.add(
+                DecisionSnapshot(
+                    program_id=int(p.id),
+                    molecule_id=int(m2.id),
+                    batch_id=None,
+                    decision_key="advance_to_in_vivo",
+                    rules_version="vX",
+                    engine_key="di",
+                    schema_version="di.snapshot.v0_4",
+                    inputs_json=stable_json_dumps({"engine_key": "di"}),
+                    outputs_json=stable_json_dumps({"decision_state": "not_assessed", "gates": []}),
+                    evidence_ids_json="[]",
+                    created_at=datetime(2026, 2, 26, 1, 0, 0),
+                )
+            )
+            db.commit()
+            r1 = build_program_rollup(db, program_id=int(p.id), as_of=datetime(2026, 2, 26, 2, 0, 0))
+            r2 = build_program_rollup(db, program_id=int(p.id), as_of=datetime(2026, 2, 26, 2, 0, 0))
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+    _assert(stable_json_dumps(r1) == stable_json_dumps(r2), "program rollup posture output must be deterministic")
+    posture = r1.get("program_posture") if isinstance(r1.get("program_posture"), dict) else {}
+    _assert(str(posture.get("posture") or "") == "at_risk", "program posture must be deterministic categorical state for mixed readiness")
+    citations = r1.get("rollup_citations") if isinstance(r1.get("rollup_citations"), dict) else {}
+    _assert(
+        list(citations.keys()) == ["snapshot_ids", "policy_versions", "policy_package_hashes", "template_keys", "decision_keys", "molecule_ids", "snapshot_coverage_summary"],
+        "rollup citations keys must be stable",
+    )
 
 
 def test_template_catalog_v0_1_schema_and_immutability_guardrails() -> None:
@@ -3103,6 +3392,25 @@ def test_policy_upgrade_session_scaffold_requires_explicit_ack_and_deterministic
             )
             _assert(int(s1.operator_acknowledged or 0) == 0, "policy upgrade session must default to unacknowledged")
             _assert(str(s1.delta_payload_json or "") == str(s2.delta_payload_json or ""), "policy upgrade delta payload must be deterministic")
+            delta = json.loads(s1.delta_payload_json or "{}")
+            _assert(
+                list(delta.keys()) == ["changed_policy_keys", "classification", "downstream_impact_flags"],
+                "policy upgrade delta payload must expose deterministic top-level keys",
+            )
+            cls = delta.get("classification") if isinstance(delta.get("classification"), dict) else {}
+            _assert(
+                list(cls.keys()) == ["catalog_changes", "comparability_policy_changes", "ranking_policy_changes", "template_changes"],
+                "policy upgrade delta classification keys must be deterministic",
+            )
+            flags = delta.get("downstream_impact_flags") if isinstance(delta.get("downstream_impact_flags"), dict) else {}
+            _assert(
+                list(flags.keys()) == ["comparability_semantics_changed", "ranking_semantics_changed", "reports_may_change"],
+                "policy upgrade downstream impact keys must be deterministic",
+            )
+            _assert(
+                flags.get("ranking_semantics_changed") == "yes" and flags.get("reports_may_change") == "yes",
+                "policy upgrade delta flags should reflect ranking pin change deterministically",
+            )
             s1 = acknowledge_policy_upgrade_session(db, session_id=int(s1.id), acknowledged=True)
         finally:
             db.close()
@@ -3110,6 +3418,155 @@ def test_policy_upgrade_session_scaffold_requires_explicit_ack_and_deterministic
         eng.dispose()
     _assert(int(s1.operator_acknowledged or 0) == 1, "policy upgrade session acknowledge flag must persist explicitly")
     _assert(s1.acknowledged_at is not None, "policy upgrade session acknowledged_at must be set on explicit ack")
+
+
+def test_policy_upgrade_unacknowledged_warning_surface_present_then_absent_after_ack() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from psi.core.models import Base
+    from psi.services.policy_upgrade import (
+        acknowledge_policy_upgrade_session,
+        create_policy_upgrade_session,
+        get_unacknowledged_upgrade_warnings,
+    )
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            sess = create_policy_upgrade_session(
+                db,
+                old_policy_pins={"ranking_policy": "v0.1"},
+                new_policy_pins={"ranking_policy": "v0.2"},
+            )
+            warnings_before = get_unacknowledged_upgrade_warnings(db, current_policy_pins={"ranking_policy": "v0.2"})
+            _assert(bool(warnings_before), "unacknowledged policy upgrade warning must be present")
+            _assert(str(warnings_before[0].get("warning_code") or "") == "policy_upgrade_unacknowledged", "warning code must be deterministic")
+            _ = acknowledge_policy_upgrade_session(db, session_id=int(sess.id), acknowledged=True)
+            warnings_after = get_unacknowledged_upgrade_warnings(db, current_policy_pins={"ranking_policy": "v0.2"})
+            _assert(not warnings_after, "acknowledged policy upgrade must clear warning surface")
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_attribution_metadata_json_serialization_stable_and_datetime_safe() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from psi.core.models import AttributionEvent, Base
+    from psi.services.attribution import record_attribution_event
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            ts = datetime(2026, 3, 2, 11, 0, 0)
+            a = record_attribution_event(
+                db,
+                event_type="test.event",
+                entity_type="Thing",
+                entity_id=1,
+                metadata={"z": 1, "when": ts, "nest": {"b": 2, "a": 1}},
+            )
+            b = record_attribution_event(
+                db,
+                event_type="test.event",
+                entity_type="Thing",
+                entity_id=2,
+                metadata={"nest": {"a": 1, "b": 2}, "when": ts, "z": 1},
+            )
+            db.commit()
+            db.refresh(a)
+            db.refresh(b)
+            am = json.loads(a.metadata_json or "{}")
+            bm = json.loads(b.metadata_json or "{}")
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+    _assert(am == bm, "attribution metadata JSON must be stable under dict insertion-order differences")
+    _assert(str(am.get("when") or "") == "2026-03-02T11:00:00", "attribution metadata datetime values must be ISO strings")
+
+
+def test_attribution_coverage_for_report_policy_upgrade_and_comparability_creation() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from psi.core.models import AttributionEvent, Base, DecisionSnapshot, Molecule, Program
+    from psi.services.comparability import create_comparability_assessment
+    from psi.services.policy_upgrade import acknowledge_policy_upgrade_session, create_policy_upgrade_session
+    from psi.services.report_engine import generate_molecule_report_v0
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            p = Program(name="P", description="", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            m1 = Molecule(program_id=int(p.id), primary_id="M-1", title="Mol1", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            m2 = Molecule(program_id=int(p.id), primary_id="M-2", title="Mol2", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(m1)
+            db.add(m2)
+            db.commit()
+            db.refresh(m1)
+            db.refresh(m2)
+            db.add(
+                DecisionSnapshot(
+                    program_id=int(p.id),
+                    molecule_id=int(m1.id),
+                    batch_id=None,
+                    decision_key="advance_to_in_vivo",
+                    rules_version="vX",
+                    engine_key="di",
+                    schema_version="di.snapshot.v0_4",
+                    inputs_json=stable_json_dumps({"engine_key": "di"}),
+                    outputs_json=stable_json_dumps({"decision_state": "ready", "readiness": {"state": "ready"}, "gates": []}),
+                    evidence_ids_json="[]",
+                    created_at=datetime(2026, 2, 26, 1, 0, 0),
+                )
+            )
+            db.commit()
+
+            rr = generate_molecule_report_v0(db, molecule_id=int(m1.id), as_of=datetime(2026, 2, 26, 2, 0, 0), policy_pins={"report_policy": "v0"})
+            pu = create_policy_upgrade_session(
+                db,
+                old_policy_pins={"ranking_policy": "v0.1"},
+                new_policy_pins={"ranking_policy": "v0.2"},
+            )
+            _ = acknowledge_policy_upgrade_session(db, session_id=int(pu.id), acknowledged=True)
+            _ = create_comparability_assessment(
+                db,
+                left_scope_type="molecule",
+                left_scope_id=int(m1.id),
+                right_scope_type="molecule",
+                right_scope_id=int(m2.id),
+                status="not_comparable",
+                rule_id="placeholder_not_assessed",
+                cited_measurement_keys=[],
+                cited_snapshot_ids=[int(rr.id)],
+                as_of=datetime(2026, 2, 26, 2, 5, 0),
+            )
+            events = db.query(AttributionEvent).order_by(AttributionEvent.id.asc()).all()
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+    etypes = [str(e.event_type or "") for e in events]
+    _assert("report_run.create" in etypes, "report run creation must emit attribution event")
+    _assert("policy_upgrade.session.create" in etypes, "policy upgrade creation must emit attribution event")
+    _assert("policy_upgrade.session.acknowledge" in etypes, "policy upgrade acknowledge must emit attribution event")
+    _assert("comparability.assessment.create" in etypes, "comparability creation must emit attribution event")
 
 
 def test_comparability_assessment_enforces_categorical_only_statuses() -> None:
@@ -3126,22 +3583,192 @@ def test_comparability_assessment_enforces_categorical_only_statuses() -> None:
         try:
             ok = create_comparability_assessment(
                 db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
-                status="not_comparable", rule_id="r", cited_measurement_keys=[], cited_snapshot_ids=[], as_of=datetime(2026,2,26)
+                status="not_comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=[], cited_snapshot_ids=[], as_of=datetime(2026,2,26)
             )
             _assert(str(ok.status) == "not_comparable", "categorical comparability status should persist")
             bad_raised = False
             try:
                 create_comparability_assessment(
                     db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
-                    status="fuzzy", rule_id="r", cited_measurement_keys=[], cited_snapshot_ids=[], as_of=datetime(2026,2,26)
+                    status="fuzzy", rule_id="placeholder_not_assessed", cited_measurement_keys=[], cited_snapshot_ids=[], as_of=datetime(2026,2,26)
                 )
-            except ValueError:
-                bad_raised = True
+            except ValueError as exc:
+                bad_raised = (str(exc) == "comparability_unknown_status")
             _assert(bad_raised, "comparability service must reject non-categorical statuses")
         finally:
             db.close()
     finally:
         eng.dispose()
+
+
+def test_comparability_pair_canonicalization_symmetry_and_duplicate_guards() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from psi.core.models import Base
+    from psi.services.comparability import create_comparability_assessment
+
+    as_of = datetime(2026, 2, 26, 0, 0, 0)
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            r1 = create_comparability_assessment(
+                db,
+                left_scope_type="molecule",
+                left_scope_id=9,
+                right_scope_type="molecule",
+                right_scope_id=1,
+                status="comparable",
+                rule_id="placeholder_not_assessed",
+                cited_measurement_keys=["b", "a"],
+                cited_snapshot_ids=[2, 1],
+                as_of=as_of,
+            )
+            _assert(
+                (str(r1.left_scope_type), int(r1.left_scope_id), str(r1.right_scope_type), int(r1.right_scope_id))
+                == ("molecule", 1, "molecule", 9),
+                "comparability pair must be stored in canonical ordered form",
+            )
+            dup_raised = False
+            try:
+                create_comparability_assessment(
+                    db,
+                    left_scope_type="molecule",
+                    left_scope_id=1,
+                    right_scope_type="molecule",
+                    right_scope_id=9,
+                    status="comparable",
+                    rule_id="placeholder_not_assessed",
+                    cited_measurement_keys=[],
+                    cited_snapshot_ids=[],
+                    as_of=as_of,
+                )
+            except ValueError as exc:
+                dup_raised = (str(exc) == "comparability_duplicate_same_pair_rule_asof")
+            _assert(dup_raised, "exact duplicate pair+rule+as_of should raise deterministic duplicate error")
+            conflict_raised = False
+            try:
+                create_comparability_assessment(
+                    db,
+                    left_scope_type="molecule",
+                    left_scope_id=1,
+                    right_scope_type="molecule",
+                    right_scope_id=9,
+                    status="not_comparable",
+                    rule_id="placeholder_not_assessed",
+                    cited_measurement_keys=[],
+                    cited_snapshot_ids=[],
+                    as_of=as_of,
+                )
+            except ValueError as exc:
+                conflict_raised = (str(exc) == "comparability_conflict_same_pair_rule_asof")
+            _assert(conflict_raised, "conflicting pair+rule+as_of should be blocked unless override is true")
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_comparability_policy_rule_and_load_errors_deterministic() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    import psi.services.comparability as cmp_svc
+    from psi.core.models import Base
+
+    as_of = datetime(2026, 2, 26, 0, 0, 0)
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            rule_err = False
+            try:
+                cmp_svc.create_comparability_assessment(
+                    db,
+                    left_scope_type="molecule",
+                    left_scope_id=1,
+                    right_scope_type="molecule",
+                    right_scope_id=2,
+                    status="comparable",
+                    rule_id="unknown_rule",
+                    cited_measurement_keys=[],
+                    cited_snapshot_ids=[],
+                    as_of=as_of,
+                )
+            except ValueError as exc:
+                rule_err = (str(exc) == "comparability_unknown_rule_id")
+            _assert(rule_err, "comparability must reject unknown rule_id deterministically")
+
+            orig_loader = cmp_svc._load_comparability_policy
+            orig_cache = cmp_svc._COMPARABILITY_POLICY_CACHE
+            try:
+                cmp_svc._COMPARABILITY_POLICY_CACHE = None
+                def _bad_loader():
+                    raise ValueError("comparability_policy_load_error")
+                cmp_svc._load_comparability_policy = _bad_loader
+                load_err = False
+                try:
+                    cmp_svc.create_comparability_assessment(
+                        db,
+                        left_scope_type="molecule",
+                        left_scope_id=1,
+                        right_scope_type="molecule",
+                        right_scope_id=2,
+                        status="comparable",
+                        rule_id="placeholder_not_assessed",
+                        cited_measurement_keys=[],
+                        cited_snapshot_ids=[],
+                        as_of=as_of,
+                    )
+                except ValueError as exc:
+                    load_err = (str(exc) == "comparability_policy_load_error")
+                _assert(load_err, "comparability policy load failures must return deterministic error")
+            finally:
+                cmp_svc._load_comparability_policy = orig_loader
+                cmp_svc._COMPARABILITY_POLICY_CACHE = orig_cache
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_comparability_effective_latest_asof_selector_and_warning_ordering() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from psi.core.models import Base
+    from psi.services.comparability import create_comparability_assessment, get_effective_comparability
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            create_comparability_assessment(
+                db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
+                status="comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=[], cited_snapshot_ids=[],
+                as_of=datetime(2026, 2, 26, 0, 0, 0),
+            )
+            create_comparability_assessment(
+                db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
+                status="not_comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=[], cited_snapshot_ids=[],
+                as_of=datetime(2026, 2, 27, 0, 0, 0), allow_conflict_override=True,
+            )
+            eff = get_effective_comparability(
+                db, left_scope_type="molecule", left_scope_id=2, right_scope_type="molecule", right_scope_id=1,
+                rule_id="placeholder_not_assessed",
+            )
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+    e = eff.get("effective") if isinstance(eff.get("effective"), dict) else {}
+    _assert(str(e.get("status") or "") == "not_comparable", "effective comparability must select latest by (as_of desc, id desc)")
+    _assert(list((eff.get("history_summary") or {}).keys()) == sorted((eff.get("history_summary") or {}).keys()), "history summary keys must be sorted deterministically")
+    _assert((eff.get("governance_warnings") or []) == sorted((eff.get("governance_warnings") or []), key=lambda w: str(w.get("warning_code") or "")), "governance warnings must be deterministically ordered")
 
 
 def test_attribution_presence_non_interference_for_report_payload_generation() -> None:
@@ -3262,16 +3889,21 @@ def main() -> int:
         test_comparability_policy_v0_1_scaffold_schema_and_ordering()
         test_comparability_assessment_cited_items_are_sorted_deterministically()
         test_v3_ranking_policy_scaffold_disabled_by_default_and_surface_deterministic()
+        test_v3_ranking_policy_v0_2_lexicographic_ladder_deterministic_and_non_weighted()
         test_report_engine_v3_skeleton_fixed_schema_for_all_four_types()
         test_molecule_report_v0_generator_fixed_structure_from_snapshot()
         test_program_report_v0_generator_fixed_structure_uses_rollup_and_placeholders()
         test_molecule_comparative_report_v0_ordering_and_disabled_ranking_surface()
         test_program_comparative_report_v0_ordering_and_resource_placeholder()
         test_reports_ui_templates_render_deterministic_structured_payload_surface()
+        test_reports_v3_policy_pin_bundle_deterministic_and_catalog_derived()
         test_lineage_service_separates_evidence_policy_governance_changes_deterministically()
         test_template_catalog_v0_1_schema_and_immutability_guardrails()
         test_policy_upgrade_session_scaffold_requires_explicit_ack_and_deterministic_delta()
         test_comparability_assessment_enforces_categorical_only_statuses()
+        test_comparability_pair_canonicalization_symmetry_and_duplicate_guards()
+        test_comparability_policy_rule_and_load_errors_deterministic()
+        test_comparability_effective_latest_asof_selector_and_warning_ordering()
         test_attribution_presence_non_interference_for_report_payload_generation()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")

@@ -19,6 +19,9 @@
   <h2>Metadata</h2>
   <pre style="white-space:pre-wrap;">{{ payload.metadata | tojson(indent=2) }}</pre>
 
+  <h2>Governance Warnings</h2>
+  <pre style="white-space:pre-wrap;">{{ (governance_warnings if governance_warnings is defined else []) | tojson(indent=2) }}</pre>
+
   <h2>Sections</h2>
   {% for section_name, section_value in (payload.sections or {}).items() %}
     <h3><code>{{ section_name }}</code></h3>

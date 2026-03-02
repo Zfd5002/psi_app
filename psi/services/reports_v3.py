@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from psi.core.models import ReportRun
+from psi.core.di.policy import sha256_hex_of_canonical_json
 from psi.services.report_engine import (
     generate_molecule_comparative_report_v0,
     generate_molecule_report_v0,
@@ -13,6 +15,7 @@ from psi.services.report_engine import (
     generate_program_report_v0,
     load_report_run_payload,
 )
+from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 
 
 def _parse_as_of(as_of_text: str | None) -> datetime:
@@ -26,6 +29,38 @@ def _parse_as_of(as_of_text: str | None) -> datetime:
     return dt
 
 
+def _load_json(path: Path) -> dict:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, dict) else {}
+
+
+def get_v3_report_policy_pins(report_type: str) -> dict:
+    base = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs"
+    template_cat = _load_json(base / "template_catalog_v0_1.json")
+    comparability_pol = _load_json(base / "comparability_policy_v0_1.json")
+    ranking_pol = _load_json(base / "ranking_policy_v0_2.json")
+    pins = {
+        "report_type": str(report_type),
+        "template_catalog": {
+            "catalog_id": str(template_cat.get("catalog_id") or ""),
+            "catalog_version": str(template_cat.get("catalog_version") or ""),
+            "catalog_hash": sha256_hex_of_canonical_json(template_cat),
+        },
+        "comparability_policy": {
+            "policy_id": str(comparability_pol.get("policy_id") or ""),
+            "policy_version": str(comparability_pol.get("policy_version") or ""),
+            "policy_hash": sha256_hex_of_canonical_json(comparability_pol),
+        },
+        "ranking_policy": {
+            "policy_id": str(ranking_pol.get("policy_id") or ""),
+            "policy_version": str(ranking_pol.get("policy_version") or ""),
+            "policy_hash": sha256_hex_of_canonical_json(ranking_pol),
+            "enabled": bool(ranking_pol.get("enabled")),
+        },
+    }
+    return {k: pins[k] for k in sorted(pins.keys())}
+
+
 def generate_report_from_form(
     db: Session,
     *,
@@ -35,7 +70,7 @@ def generate_report_from_form(
 ) -> ReportRun:
     ids = sorted({int(x.strip()) for x in str(subject_ids_text or "").split(",") if x.strip()})
     as_of = _parse_as_of(as_of_text)
-    policy_pins = {"report_engine": "v3.a11", "ranking_policy": "v0.1", "comparability_policy": "v0.1"}
+    policy_pins = get_v3_report_policy_pins(report_type)
     if report_type == "molecule_report":
         if len(ids) != 1:
             raise ValueError("molecule_report requires exactly 1 subject id")
@@ -78,4 +113,5 @@ def get_report_run_detail(db: Session, report_run_id: int) -> dict:
         "subject_ids": subject_ids,
         "policy_pins": policy_pins,
         "snapshot_coverage": snapshot_cov,
+        "governance_warnings": get_unacknowledged_upgrade_warnings(db, current_policy_pins=policy_pins),
     }

@@ -563,6 +563,7 @@ class ComparabilityAssessment(Base):
     policy_id = Column(Text, nullable=False)
     policy_version = Column(Text, nullable=False)
     policy_package_hash = Column(Text, nullable=True)
+    policy_semantics_hash = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
 

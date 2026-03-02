@@ -9,6 +9,8 @@
   <pre style="white-space:pre-wrap;">{{ policy_changes | tojson(indent=2) }}</pre>
   <h2>Governance Changes (Attribution)</h2>
   <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
+  <h2>Policy Upgrade Warnings</h2>
+  <pre style="white-space:pre-wrap;">{{ (policy_upgrade_warnings if policy_upgrade_warnings is defined else []) | tojson(indent=2) }}</pre>
   <h2>Rollups</h2>
   <pre style="white-space:pre-wrap;">{{ rollups | tojson(indent=2) }}</pre>
   <h2>Report History</h2>

@@ -1,0 +1,58 @@
+{
+  "catalog_id": "v3_experiment_suggestions_v0_1",
+  "catalog_version": "v0.1",
+  "priority_order": [
+    "high",
+    "medium",
+    "low"
+  ],
+  "rules": [
+    {
+      "rule_id": "molecule_missing_assessment",
+      "report_type": "molecule_report",
+      "decision_states": [
+        "not_assessed",
+        "blocked"
+      ],
+      "suggestion_key": "collect_missing_required_metrics",
+      "label": "Collect missing required metrics",
+      "priority": "high",
+      "reason": "decision_state indicates missing/blocked evidence"
+    },
+    {
+      "rule_id": "molecule_not_ready",
+      "report_type": "molecule_report",
+      "decision_states": [
+        "not_ready"
+      ],
+      "suggestion_key": "run_priority_gap_assays",
+      "label": "Run priority gap-closing assays",
+      "priority": "medium",
+      "reason": "decision_state not_ready indicates unresolved gates"
+    },
+    {
+      "rule_id": "program_blocked",
+      "report_type": "program_report",
+      "stage_keys": [
+        "blocked",
+        "failed",
+        "not_assessed"
+      ],
+      "suggestion_key": "program_gap_closure_plan",
+      "label": "Execute gap-closure plan for blocked/not-assessed molecules",
+      "priority": "high",
+      "reason": "stage_counts include blocked/failed/not_assessed molecules"
+    },
+    {
+      "rule_id": "program_at_risk",
+      "report_type": "program_report",
+      "stage_keys": [
+        "not_ready"
+      ],
+      "suggestion_key": "comparability_and_repro_check",
+      "label": "Run comparability and reproducibility checks",
+      "priority": "medium",
+      "reason": "stage_counts include not_ready molecules"
+    }
+  ]
+}

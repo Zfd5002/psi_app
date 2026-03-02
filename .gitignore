@@ -28,3 +28,9 @@ psi/*.sqlite
 psi/*.sqlite-wal
 psi/*.sqlite-shm
 psi/*.sqlite-journal
+
+# Overlay artifacts
+overlay_file_list.txt
+psi_overlay_*
+psi_patch_*
+psi_code_snapshot_*

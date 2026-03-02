@@ -7,6 +7,8 @@
   <pre style="white-space:pre-wrap;">{{ membership_state | tojson(indent=2) }}</pre>
   <h2>Governance Changes (Attribution)</h2>
   <pre style="white-space:pre-wrap;">{{ governance_changes | tojson(indent=2) }}</pre>
+  <h2>Policy Upgrade Warnings</h2>
+  <pre style="white-space:pre-wrap;">{{ (policy_upgrade_warnings if policy_upgrade_warnings is defined else []) | tojson(indent=2) }}</pre>
   <h2>Child Program Lineage Summary</h2>
   <pre style="white-space:pre-wrap;">{{ child_program_lineage_summary | tojson(indent=2) }}</pre>
 </div>

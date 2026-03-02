@@ -419,6 +419,7 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "policy_id": "TEXT",
             "policy_version": "TEXT",
             "policy_package_hash": "TEXT",
+            "policy_semantics_hash": "TEXT",
             "created_at": "TEXT",
         },
         "report_runs": {

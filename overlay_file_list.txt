@@ -1,7 +1,0 @@
-PATCH_NOTES.md
-overlay_file_list.txt
-psi/services/decisions.py
-psi/tools/di_contract_smoke.py
-psi/version.py
-psi/web/routers/decisions.py
-psi/web/templates/decisions/_di_snapshot.html

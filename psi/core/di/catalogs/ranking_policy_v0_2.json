@@ -1,0 +1,43 @@
+{
+  "policy_id": "ranking_policy_v0_2",
+  "policy_version": "v0.2",
+  "enabled": false,
+  "rankable_entity_types": [
+    "molecule",
+    "program"
+  ],
+  "method": {
+    "type": "lexicographic_ladder",
+    "criteria_order": [
+      "high_severity_risk_present",
+      "stage_ready"
+    ],
+    "outcome_precedence": [
+      "PASS",
+      "FAIL",
+      "NA"
+    ],
+    "tie_break_keys": [
+      "stable_sort_key",
+      "entity_id"
+    ]
+  },
+  "criteria_registry": [
+    {
+      "criterion_id": "high_severity_risk_present",
+      "entity_types": [
+        "molecule",
+        "program"
+      ],
+      "description": "Entity has at least one high-severity risk flag in cited surfaces."
+    },
+    {
+      "criterion_id": "stage_ready",
+      "entity_types": [
+        "molecule",
+        "program"
+      ],
+      "description": "Entity is in ready state according to existing DI-derived stage surfaces."
+    }
+  ]
+}

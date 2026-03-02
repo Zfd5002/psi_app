@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from psi.core.models import AttributionEvent, Portfolio, PortfolioMembership, ProgramMembership, ProgramRollup, ReportRun
+from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 
 
 def _load_json(raw: str | None, fallback: Any) -> Any:
@@ -25,37 +26,38 @@ def get_program_lineage(db: Session, *, program_id: int) -> dict[str, Any]:
     )
     report_runs = (
         db.query(ReportRun)
+        .filter(ReportRun.report_type == "program_report")
+        .filter(ReportRun.subject_ids_json == json.dumps([int(program_id)], separators=(",", ":")))
         .order_by(ReportRun.as_of.desc(), ReportRun.id.desc())
         .all()
     )
     reports_for_program: list[dict[str, Any]] = []
     for rr in report_runs:
-        subject_ids = _load_json(rr.subject_ids_json, [])
-        if rr.report_type == "program_report" and int(program_id) in [int(x) for x in subject_ids if str(x).isdigit()]:
-            payload = _load_json(rr.payload_json, {})
-            meta = (payload.get("metadata") if isinstance(payload, dict) else {}) or {}
-            reports_for_program.append(
-                {
-                    "id": int(rr.id),
-                    "report_type": str(rr.report_type),
-                    "as_of": rr.as_of,
-                    "created_at": rr.created_at,
-                    "snapshot_coverage": sorted({int(x) for x in _load_json(rr.snapshot_coverage_json, []) if str(x).isdigit()}),
-                    "policy_pins": _load_json(rr.policy_pins_json, {}),
-                    "metadata": meta,
-                }
-            )
+        payload = _load_json(rr.payload_json, {})
+        meta = (payload.get("metadata") if isinstance(payload, dict) else {}) or {}
+        reports_for_program.append(
+            {
+                "id": int(rr.id),
+                "report_type": str(rr.report_type),
+                "as_of": rr.as_of,
+                "created_at": rr.created_at,
+                "snapshot_coverage": sorted({int(x) for x in _load_json(rr.snapshot_coverage_json, []) if str(x).isdigit()}),
+                "policy_pins": _load_json(rr.policy_pins_json, {}),
+                "metadata": meta,
+            }
+        )
     memberships = (
         db.query(ProgramMembership)
         .filter(ProgramMembership.program_id == int(program_id))
         .order_by(ProgramMembership.sort_index.asc(), ProgramMembership.id.asc())
         .all()
     )
+    membership_ids = [int(m.id) for m in memberships]
     attrs = (
         db.query(AttributionEvent)
         .filter(
             (AttributionEvent.entity_type == "Program") & (AttributionEvent.entity_id == int(program_id))
-            | (AttributionEvent.entity_type == "ProgramMembership")
+            | ((AttributionEvent.entity_type == "ProgramMembership") & (AttributionEvent.entity_id.in_(membership_ids or [-1])))
         )
         .order_by(AttributionEvent.created_at.desc(), AttributionEvent.id.desc())
         .limit(200)
@@ -87,6 +89,7 @@ def get_program_lineage(db: Session, *, program_id: int) -> dict[str, Any]:
         }
         for a in attrs
     ]
+    current_policy_pins = reports_for_program[0]["policy_pins"] if reports_for_program else {}
     return {
         "program_id": int(program_id),
         "rollups": [
@@ -107,6 +110,7 @@ def get_program_lineage(db: Session, *, program_id: int) -> dict[str, Any]:
         "evidence_changes": evidence_changes,
         "policy_changes": policy_changes,
         "governance_changes": governance_changes,
+        "policy_upgrade_warnings": get_unacknowledged_upgrade_warnings(db, current_policy_pins=current_policy_pins),
     }
 
 
@@ -120,11 +124,12 @@ def get_portfolio_lineage(db: Session, *, portfolio_id: int) -> dict[str, Any]:
         .order_by(PortfolioMembership.sort_index.asc(), PortfolioMembership.id.asc())
         .all()
     )
+    membership_ids = [int(m.id) for m in memberships]
     attrs = (
         db.query(AttributionEvent)
         .filter(
             (AttributionEvent.entity_type == "Portfolio") & (AttributionEvent.entity_id == int(portfolio_id))
-            | (AttributionEvent.entity_type == "PortfolioMembership")
+            | ((AttributionEvent.entity_type == "PortfolioMembership") & (AttributionEvent.entity_id.in_(membership_ids or [-1])))
         )
         .order_by(AttributionEvent.created_at.desc(), AttributionEvent.id.desc())
         .limit(200)
@@ -149,6 +154,7 @@ def get_portfolio_lineage(db: Session, *, portfolio_id: int) -> dict[str, Any]:
             }
             for a in attrs
         ],
+        "policy_upgrade_warnings": get_unacknowledged_upgrade_warnings(db, current_policy_pins={}),
         "child_program_lineage_summary": [
             {
                 "program_id": int(pl["program_id"]),
