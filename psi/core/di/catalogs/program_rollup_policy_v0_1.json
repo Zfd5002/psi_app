@@ -1,0 +1,58 @@
+{
+  "policy_id": "program_rollup_policy_v0_1",
+  "policy_version": "v0.1",
+  "posture_states": [
+    "insufficient_evidence",
+    "blocked",
+    "at_risk",
+    "on_track"
+  ],
+  "required_template_keys": [
+    "advance_to_in_vivo.v0_5"
+  ],
+  "rule_order": [
+    {
+      "id": "rule_insufficient_evidence",
+      "posture_state": "insufficient_evidence",
+      "when": [
+        "total_molecules_zero",
+        "all_not_assessed",
+        "missing_required_templates"
+      ],
+      "rationale_fragments": [
+        "evidence_or_template_gap"
+      ]
+    },
+    {
+      "id": "rule_blocked",
+      "posture_state": "blocked",
+      "when": [
+        "blocked_or_failed_present",
+        "governance_action_required_present"
+      ],
+      "rationale_fragments": [
+        "blocking_signal_present"
+      ]
+    },
+    {
+      "id": "rule_on_track",
+      "posture_state": "on_track",
+      "when": [
+        "all_ready"
+      ],
+      "rationale_fragments": [
+        "all_entities_ready"
+      ]
+    },
+    {
+      "id": "rule_at_risk_fallback",
+      "posture_state": "at_risk",
+      "when": [
+        "otherwise"
+      ],
+      "rationale_fragments": [
+        "mixed_or_partial_readiness"
+      ]
+    }
+  ]
+}

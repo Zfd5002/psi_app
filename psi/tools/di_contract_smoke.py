@@ -3283,13 +3283,12 @@ def test_program_rollup_posture_policy_v0_1_validation_and_determinism() -> None
     from psi.core.models import Base, DecisionSnapshot, Molecule, Program, ProgramMembership
     from psi.services.program_rollups import build_program_rollup
 
-    root = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "program_posture_policy_v0_1.json"
+    root = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "program_rollup_policy_v0_1.json"
     pol = json.loads(root.read_text(encoding="utf-8"))
-    _assert(str(pol.get("policy_id") or "") == "program_posture_policy_v0_1", "program posture policy id mismatch")
-    _assert(str(pol.get("policy_version") or "") == "v0.1", "program posture policy version mismatch")
-    labels = pol.get("posture_labels") if isinstance(pol.get("posture_labels"), list) else []
-    _assert(labels == sorted(labels), "program posture labels must be sorted deterministically")
-    _assert(set(labels) == {"at_risk", "blocked", "on_track"}, "program posture labels set must be categorical and fixed")
+    _assert(str(pol.get("policy_id") or "") == "program_rollup_policy_v0_1", "program rollup policy id mismatch")
+    _assert(str(pol.get("policy_version") or "") == "v0.1", "program rollup policy version mismatch")
+    labels = pol.get("posture_states") if isinstance(pol.get("posture_states"), list) else []
+    _assert(labels == ["insufficient_evidence", "blocked", "at_risk", "on_track"], "program rollup posture states must be deterministic ordered categorical list")
 
     eng = create_engine("sqlite:///:memory:", future=True)
     try:
@@ -3349,10 +3348,14 @@ def test_program_rollup_posture_policy_v0_1_validation_and_determinism() -> None
         eng.dispose()
     _assert(stable_json_dumps(r1) == stable_json_dumps(r2), "program rollup posture output must be deterministic")
     posture = r1.get("program_posture") if isinstance(r1.get("program_posture"), dict) else {}
-    _assert(str(posture.get("posture") or "") == "at_risk", "program posture must be deterministic categorical state for mixed readiness")
+    _assert(str(posture.get("posture_state") or "") == "insufficient_evidence", "program posture must be deterministic categorical state for mixed readiness + missing required templates")
+    _assert(bool(str(posture.get("rule_id") or "")), "program posture must include deterministic rule_id")
+    _assert(isinstance(posture.get("cited_snapshot_ids"), list), "program posture must include cited_snapshot_ids list")
+    _assert(isinstance(posture.get("cited_templates"), list), "program posture must include cited_templates list")
+    _assert(isinstance(posture.get("cited_decisions"), list), "program posture must include cited_decisions list")
     citations = r1.get("rollup_citations") if isinstance(r1.get("rollup_citations"), dict) else {}
     _assert(
-        list(citations.keys()) == ["snapshot_ids", "policy_versions", "policy_package_hashes", "template_keys", "decision_keys", "molecule_ids", "snapshot_coverage_summary"],
+        list(citations.keys()) == ["snapshot_ids", "policy_versions", "policy_package_hashes", "template_keys", "decision_keys", "molecule_ids", "snapshot_coverage_summary", "governance_action_required_present"],
         "rollup citations keys must be stable",
     )
 

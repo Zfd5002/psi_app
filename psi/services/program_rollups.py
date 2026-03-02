@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from psi.core.models import DecisionSnapshot, Molecule, ProgramMembership, ProgramRollup
 from psi.core.utils import now_utc, stable_json_dumps
+from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 
 
 def _safe_json_dict(raw: str | None) -> dict[str, Any]:
@@ -26,38 +27,78 @@ def _load_program_posture_policy() -> dict[str, Any]:
     global _PROGRAM_POSTURE_POLICY_CACHE
     if isinstance(_PROGRAM_POSTURE_POLICY_CACHE, dict):
         return _PROGRAM_POSTURE_POLICY_CACHE
-    p = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs" / "program_posture_policy_v0_1.json"
+    p = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs" / "program_rollup_policy_v0_1.json"
     raw = json.loads(p.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
+        raise ValueError("program_posture_policy_load_error")
+    if not str(raw.get("policy_id") or "").strip():
+        raise ValueError("program_posture_policy_load_error")
+    if not str(raw.get("policy_version") or "").strip():
+        raise ValueError("program_posture_policy_load_error")
+    if not isinstance(raw.get("posture_states"), list):
+        raise ValueError("program_posture_policy_load_error")
+    if not isinstance(raw.get("rule_order"), list):
         raise ValueError("program_posture_policy_load_error")
     _PROGRAM_POSTURE_POLICY_CACHE = raw
     return _PROGRAM_POSTURE_POLICY_CACHE
 
 
-def _derive_program_posture(*, stage_counts: dict[str, int], total_molecules: int) -> dict[str, Any]:
+def _derive_program_posture(
+    *,
+    stage_counts: dict[str, int],
+    total_molecules: int,
+    cited_snapshot_ids: list[int],
+    cited_templates: list[str],
+    cited_decisions: list[str],
+    governance_action_required_present: bool,
+) -> dict[str, Any]:
     policy = _load_program_posture_policy()
-    labels = policy.get("posture_labels") if isinstance(policy.get("posture_labels"), list) else []
-    allowed = {str(x) for x in labels if str(x)}
+    labels = policy.get("posture_states") if isinstance(policy.get("posture_states"), list) else []
+    allowed = [str(x) for x in labels if str(x)]
     ready = int(stage_counts.get("ready", 0))
     not_assessed = int(stage_counts.get("not_assessed", 0))
     blockedish = int(stage_counts.get("blocked", 0)) + int(stage_counts.get("failed", 0))
-    posture = "at_risk"
-    if total_molecules <= 0 or not_assessed >= total_molecules:
-        posture = "blocked"
-    elif blockedish > 0:
-        posture = "blocked"
-    elif total_molecules > 0 and ready >= total_molecules:
-        posture = "on_track"
+    required_templates = [str(x) for x in (policy.get("required_template_keys") or []) if str(x)]
+    missing_required_templates = [k for k in required_templates if k not in cited_templates]
+    flags = {
+        "total_molecules_zero": total_molecules <= 0,
+        "all_not_assessed": total_molecules > 0 and not_assessed >= total_molecules,
+        "missing_required_templates": bool(missing_required_templates),
+        "blocked_or_failed_present": blockedish > 0,
+        "governance_action_required_present": bool(governance_action_required_present),
+        "all_ready": total_molecules > 0 and ready >= total_molecules,
+        "otherwise": True,
+    }
+    matched_rule = {
+        "id": "rule_at_risk_fallback",
+        "posture_state": "at_risk",
+        "rationale_fragments": ["mixed_or_partial_readiness"],
+        "when": ["otherwise"],
+    }
+    for rule in [r for r in (policy.get("rule_order") or []) if isinstance(r, dict)]:
+        checks = [str(x) for x in (rule.get("when") or []) if str(x)]
+        if not checks:
+            continue
+        if any(bool(flags.get(c, False)) for c in checks):
+            matched_rule = rule
+            break
+    posture = str(matched_rule.get("posture_state") or "at_risk")
     if posture not in allowed and allowed:
-        posture = sorted(allowed)[0]
+        posture = allowed[0]
     return {
-        "policy_id": str(policy.get("policy_id") or "program_posture_policy_v0_1"),
+        "policy_id": str(policy.get("policy_id") or "program_rollup_policy_v0_1"),
         "policy_version": str(policy.get("policy_version") or "v0.1"),
-        "posture": posture,
-        "inputs_used": {
-            "total_molecules": int(total_molecules),
-            "stage_counts": {str(k): int(stage_counts[k]) for k in sorted(stage_counts.keys())},
-        },
+        "posture_state": posture,
+        "rule_id": str(matched_rule.get("id") or "rule_at_risk_fallback"),
+        "cited_snapshot_ids": sorted({int(x) for x in cited_snapshot_ids}),
+        "cited_templates": sorted({str(x) for x in cited_templates if str(x)}),
+        "cited_decisions": sorted({str(x) for x in cited_decisions if str(x)}),
+        "rationale": "|".join([str(x) for x in (matched_rule.get("rationale_fragments") or []) if str(x)]) or "policy_rule_match",
+        "notes": (
+            ["governance_action_required_present"] if bool(governance_action_required_present) else []
+        ) + (
+            [f"missing_required_templates:{','.join(sorted(missing_required_templates))}"] if missing_required_templates else []
+        ),
     }
 
 
@@ -167,6 +208,16 @@ def build_program_rollup(db: Session, *, program_id: int, as_of: datetime) -> di
                 "policy_package_hash": pph or None,
             }
         )
+    governance_warnings = get_unacknowledged_upgrade_warnings(db, current_policy_pins={})
+    governance_action_required_present = any(bool((w or {}).get("action_required")) for w in governance_warnings if isinstance(w, dict))
+    program_posture = _derive_program_posture(
+        stage_counts=stage_counts,
+        total_molecules=len(molecules),
+        cited_snapshot_ids=sorted(snapshot_ids),
+        cited_templates=sorted(template_keys),
+        cited_decisions=sorted(decision_keys),
+        governance_action_required_present=governance_action_required_present,
+    )
     return {
         "program_id": int(program_id),
         "as_of": as_of.isoformat(),
@@ -175,7 +226,7 @@ def build_program_rollup(db: Session, *, program_id: int, as_of: datetime) -> di
         "policy_package_hashes": sorted(policy_package_hashes),
         "stage_counts": {k: stage_counts[k] for k in sorted(stage_counts)},
         "molecules": molecules,
-        "program_posture": _derive_program_posture(stage_counts=stage_counts, total_molecules=len(molecules)),
+        "program_posture": program_posture,
         "rollup_citations": {
             "snapshot_ids": sorted(snapshot_ids),
             "policy_versions": sorted(policy_versions),
@@ -187,6 +238,7 @@ def build_program_rollup(db: Session, *, program_id: int, as_of: datetime) -> di
                 "snapshot_count": len(sorted(snapshot_ids)),
                 "molecule_count": len([m for m in molecules if isinstance(m, dict)]),
             },
+            "governance_action_required_present": bool(governance_action_required_present),
         },
     }
 

@@ -26,6 +26,6 @@ def test_v3_catalog_immutability_locks_and_additive_version_surface() -> None:
     ranking_versions = sorted(p.name for p in CATALOG_DIR.glob("ranking_policy_v*.json"))
     assert ranking_versions == ["ranking_policy_v0_1.json", "ranking_policy_v0_2.json"]
     comparability_versions = sorted(p.name for p in CATALOG_DIR.glob("comparability_policy_v*.json"))
-    assert comparability_versions == ["comparability_policy_v0_1.json"]
+    assert comparability_versions == ["comparability_policy_v0_1.json", "comparability_policy_v0_2.json"]
     template_versions = sorted(p.name for p in CATALOG_DIR.glob("template_catalog_v*.json"))
     assert template_versions == ["template_catalog_v0_1.json"]

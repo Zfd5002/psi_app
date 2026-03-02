@@ -7,9 +7,11 @@ from sqlalchemy.orm import sessionmaker
 
 from psi.core.models import Base
 from psi.services.policy_upgrade import (
+    acknowledge_policy_upgrade_session,
     create_policy_upgrade_session,
     get_unacknowledged_upgrade_warnings,
     require_upgrade_acknowledged_for_semantic_actions,
+    run_semantic_action_with_ack_guard,
     verify_policy_upgrade_session,
 )
 
@@ -129,6 +131,43 @@ def test_unacknowledged_semantic_delta_requires_action():
                 raised = str(exc) == "policy_upgrade_action_required"
             assert raised
             assert int(row.operator_acknowledged or 0) == 0
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_semantic_action_guard_wrapper_blocks_then_allows_after_ack() -> None:
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            row = create_policy_upgrade_session(
+                db,
+                old_policy_pins={"ranking_policy": {"enabled": False}},
+                new_policy_pins={"ranking_policy": {"enabled": True}},
+                snapshot_ids=[1],
+                deterministic_inputs={"as_of": "2026-02-26T00:00:00"},
+            )
+            blocked = False
+            try:
+                run_semantic_action_with_ack_guard(
+                    db,
+                    current_policy_pins={"ranking_policy": {"enabled": True}},
+                    action=lambda: "ok",
+                )
+            except ValueError as exc:
+                blocked = str(exc) == "policy_upgrade_action_required"
+            assert blocked
+            acknowledge_policy_upgrade_session(db, session_id=int(row.id), acknowledged=True)
+            out = run_semantic_action_with_ack_guard(
+                db,
+                current_policy_pins={"ranking_policy": {"enabled": True}},
+                action=lambda: "ok",
+            )
+            assert out == "ok"
         finally:
             db.close()
     finally:

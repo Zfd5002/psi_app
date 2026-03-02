@@ -358,3 +358,13 @@ def require_upgrade_acknowledged_for_semantic_actions(db: Session, *, current_po
     blockers = [w for w in warnings if bool(w.get("action_required"))]
     if blockers:
         raise ValueError("policy_upgrade_action_required")
+
+
+def run_semantic_action_with_ack_guard(
+    db: Session,
+    *,
+    current_policy_pins: dict[str, Any] | None,
+    action,
+):
+    require_upgrade_acknowledged_for_semantic_actions(db, current_policy_pins=current_policy_pins)
+    return action()

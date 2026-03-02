@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from pathlib import Path
+import math
 
 from sqlalchemy.orm import Session
 
 from psi.core.models import DecisionSnapshot, Molecule, ReportRun
-from psi.core.utils import now_utc, stable_json_dumps
+from psi.core.utils import now_utc
 from psi.services.attribution import record_attribution_event
-from psi.services.comparability import list_comparability_assessments
+from psi.services.comparability import derive_comparability_determination, list_comparability_assessments, load_comparability_policy_latest
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
+from psi.services.policy_upgrade import run_semantic_action_with_ack_guard
 from psi.services.program_rollups import build_program_rollup
 from psi.services.v3_ranking import build_ranking_surface, load_ranking_policy_v0_1
 
@@ -29,6 +32,46 @@ REPORT_TYPES = (
 )
 
 _V3_SUGGESTIONS_CACHE: dict[str, Any] | None = None
+
+
+def _canonicalize_report_obj(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {str(k): _canonicalize_report_obj(obj[k]) for k in sorted(obj.keys(), key=lambda x: str(x))}
+    if isinstance(obj, list):
+        return [_canonicalize_report_obj(v) for v in obj]
+    if isinstance(obj, tuple):
+        return [_canonicalize_report_obj(v) for v in obj]
+    if isinstance(obj, set):
+        return [_canonicalize_report_obj(v) for v in sorted(obj, key=lambda x: str(x))]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        # Stabilize float formatting and avoid scientific notation drift.
+        txt = format(obj, ".15f").rstrip("0").rstrip(".")
+        if txt in {"", "-0"}:
+            txt = "0"
+        try:
+            return float(txt)
+        except Exception:
+            return obj
+    return obj
+
+
+def canonical_report_json(obj: Any) -> str:
+    return json.dumps(_canonicalize_report_obj(obj), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def canonical_report_json_bytes(obj: Any) -> bytes:
+    return canonical_report_json(obj).encode("utf-8")
+
+
+def _compute_report_fingerprint(payload: dict[str, Any]) -> str:
+    basis = _canonicalize_report_obj(payload)
+    if isinstance(basis, dict):
+        meta = basis.get("metadata")
+        if isinstance(meta, dict):
+            meta.pop("report_fingerprint", None)
+    return hashlib.sha256(canonical_report_json_bytes(basis)).hexdigest()
 
 
 def _load_v3_suggestions_catalog() -> dict[str, Any]:
@@ -180,6 +223,23 @@ def _derive_governance_red_flags(db: Session, *, req: ReportRequest, sections: d
     return sorted(flags, key=lambda x: str(x.get("flag_code") or ""))
 
 
+def _order_molecule_comparative_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # Canonical multi-entity ordering: primary_id, molecule_id, title.
+    return sorted(
+        [r for r in rows if isinstance(r, dict)],
+        key=lambda r: (
+            str(r.get("primary_id") or ""),
+            int(r.get("molecule_id") or 0),
+            str(r.get("title") or ""),
+        ),
+    )
+
+
+def _order_program_comparative_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # Canonical multi-entity ordering: program_id only (unique and deterministic).
+    return sorted([r for r in rows if isinstance(r, dict)], key=lambda r: int(r.get("program_id") or 0))
+
+
 @dataclass(frozen=True)
 class ReportRequest:
     report_type: str
@@ -321,34 +381,39 @@ def create_report_request(
 
 
 def persist_report_run(db: Session, *, req: ReportRequest, payload: dict[str, Any] | None = None) -> ReportRun:
-    out = payload if isinstance(payload, dict) else build_report_payload(req)
-    validate_report_payload(report_type=req.report_type, payload=out)
-    row = ReportRun(
-        report_type=req.report_type,
-        subject_ids_json=stable_json_dumps(list(req.subject_ids)),
-        as_of=req.as_of,
-        policy_pins_json=stable_json_dumps(req.policy_pins),
-        snapshot_coverage_json=stable_json_dumps(list(req.snapshot_coverage)),
-        payload_json=stable_json_dumps(out),
-        created_at=now_utc(),
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    record_attribution_event(
-        db,
-        event_type="report_run.create",
-        entity_type="ReportRun",
-        entity_id=int(row.id),
-        metadata={
-            "report_type": str(row.report_type),
-            "as_of": row.as_of.isoformat(),
-            "subject_ids": list(req.subject_ids),
-            "snapshot_count": len(req.snapshot_coverage),
-        },
-    )
-    db.commit()
-    return row
+    def _run() -> ReportRun:
+        out = payload if isinstance(payload, dict) else build_report_payload(req)
+        if isinstance(out.get("metadata"), dict):
+            out["metadata"]["report_fingerprint"] = _compute_report_fingerprint(out)
+        validate_report_payload(report_type=req.report_type, payload=out)
+        row = ReportRun(
+            report_type=req.report_type,
+            subject_ids_json=canonical_report_json(list(req.subject_ids)),
+            as_of=req.as_of,
+            policy_pins_json=canonical_report_json(req.policy_pins),
+            snapshot_coverage_json=canonical_report_json(list(req.snapshot_coverage)),
+            payload_json=canonical_report_json(out),
+            created_at=now_utc(),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        record_attribution_event(
+            db,
+            event_type="report_run.create",
+            entity_type="ReportRun",
+            entity_id=int(row.id),
+            metadata={
+                "report_type": str(row.report_type),
+                "as_of": row.as_of.isoformat(),
+                "subject_ids": list(req.subject_ids),
+                "snapshot_count": len(req.snapshot_coverage),
+            },
+        )
+        db.commit()
+        return row
+
+    return run_semantic_action_with_ack_guard(db, current_policy_pins=req.policy_pins, action=_run)
 
 
 def load_report_run_payload(row: ReportRun) -> dict[str, Any]:
@@ -415,6 +480,19 @@ def generate_molecule_report_v0(
     risk_flags = out.get("risk_flags_enriched") if isinstance(out.get("risk_flags_enriched"), list) else []
     drift = out.get("drift") if isinstance(out.get("drift"), dict) else {}
     blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
+    comp_status_candidates: list[str] = []
+    if isinstance(comparability.get("summary"), dict):
+        high_sev = int((comparability.get("summary") or {}).get("high_severity_count") or 0)
+        comp_status_candidates.append("not_comparable" if high_sev > 0 else "comparable_partial")
+    else:
+        comp_status_candidates.append("not_assessed")
+    used_by_metric = out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {}
+    determination = derive_comparability_determination(
+        statuses=comp_status_candidates,
+        measurement_keys=sorted(str(k) for k in used_by_metric.keys() if str(k).strip()),
+        snapshot_ids=([int(snap.id)] if snap is not None else []),
+        missing_data=(snap is None),
+    )
 
     sections["identity_context"] = {
         "molecule_id": int(mol.id),
@@ -450,14 +528,16 @@ def generate_molecule_report_v0(
     sections["drift_history"] = {
         "drift": drift,
         "comparability_summary": comparability.get("summary") if isinstance(comparability.get("summary"), dict) else {},
+        "comparability_determination": determination,
     }
     sections["reproducibility_appendix"] = {
         "policy_pins": _sorted_dict(dict(policy_pins or {})),
-        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": "v0.1", "ranking_policy": "v0.2"},
+        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.2"), "ranking_policy": "v0.2"},
         "cited_snapshot_ids": ([int(snap.id)] if snap is not None else []),
         "inputs_summary": {"entity_ids": [int(mol.id)], "as_of": as_of.isoformat(), "snapshot_count": (1 if snap is not None else 0)},
         "state_of_evidence": soe,
         "snapshot_provenance": out.get("di_snapshot_provenance") if isinstance(out.get("di_snapshot_provenance"), dict) else {},
+        "comparability_determination": determination,
     }
     suggestions = _derive_v3_next_best_experiments(
         report_type=REPORT_TYPE_MOLECULE,
@@ -490,7 +570,31 @@ def generate_program_report_v0(
     sections = payload["sections"]
     molecules = rollup.get("molecules") if isinstance(rollup.get("molecules"), list) else []
     stage_counts = rollup.get("stage_counts") if isinstance(rollup.get("stage_counts"), dict) else {}
+    posture_obj = rollup.get("program_posture") if isinstance(rollup.get("program_posture"), dict) else {}
     comp_rows = list_comparability_assessments(db, scope_type="program", scope_id=int(program_id))
+    comp_statuses = [str((r or {}).get("status") or "") for r in comp_rows if isinstance(r, dict)]
+    comp_measurement_keys = sorted(
+        {
+            str(k)
+            for r in comp_rows
+            for k in ((r.get("cited_measurement_keys") or []) if isinstance(r, dict) else [])
+            if str(k).strip()
+        }
+    )
+    comp_snapshot_ids = sorted(
+        {
+            int(sid)
+            for r in comp_rows
+            for sid in ((r.get("cited_snapshot_ids") or []) if isinstance(r, dict) else [])
+            if str(sid).isdigit()
+        }
+    )
+    program_comp_determination = derive_comparability_determination(
+        statuses=(comp_statuses if comp_statuses else ["not_assessed"]),
+        measurement_keys=comp_measurement_keys,
+        snapshot_ids=comp_snapshot_ids,
+        missing_data=(len(comp_rows) == 0),
+    )
 
     sections["metadata"] = {
         "program_id": int(program_id),
@@ -502,6 +606,7 @@ def generate_program_report_v0(
     sections["stage_determination"] = {
         "stage_counts": {str(k): int(stage_counts[k]) for k in sorted(stage_counts.keys())},
         "rollup_policy_pin": "program_rollup.v0",
+        "program_posture": posture_obj,
     }
     sections["molecule_overview_table"] = {
         "rows": [
@@ -521,16 +626,22 @@ def generate_program_report_v0(
         {
             "status": "assessed",
             "assessments": comp_rows,
+            "comparability_determination": program_comp_determination,
         }
         if comp_rows
         else {
             "status": "not_assessed",
             "assessments": [],
             "placeholder_reason": "no_program_comparability_assessments",
+            "comparability_determination": program_comp_determination,
         }
     )
     # Deterministic placeholders for remaining fixed sections.
-    sections["risk_landscape"] = {"source": "program_rollup", "molecule_count": len(sections["molecule_overview_table"]["rows"])}
+    sections["risk_landscape"] = {
+        "source": "program_rollup",
+        "molecule_count": len(sections["molecule_overview_table"]["rows"]),
+        "program_posture": posture_obj,
+    }
     sections["decision_lineage"] = {"snapshot_ids": snapshot_cov}
     sections["next_best_experiments"] = _derive_v3_next_best_experiments(
         report_type=REPORT_TYPE_PROGRAM,
@@ -538,10 +649,11 @@ def generate_program_report_v0(
     )
     sections["reproducibility_appendix"] = {
         "policy_pins": _sorted_dict(dict(policy_pins or {})),
-        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": "v0.1", "ranking_policy": "v0.2"},
+        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.2"), "ranking_policy": "v0.2"},
         "cited_snapshot_ids": snapshot_cov,
         "inputs_summary": {"entity_ids": [int(program_id)], "as_of": as_of.isoformat(), "snapshot_count": len(snapshot_cov)},
         "rollup": rollup,
+        "comparability_determination": program_comp_determination,
     }
     sections["reproducibility_appendix"]["governance_red_flags"] = _derive_governance_red_flags(db, req=req, sections=sections)
     validate_report_payload(report_type=REPORT_TYPE_PROGRAM, payload=payload)
@@ -579,7 +691,7 @@ def generate_molecule_comparative_report_v0(
                 "confidence": out.get("confidence") if isinstance(out.get("confidence"), dict) else {},
             }
         )
-    rows = sorted(rows, key=lambda r: (str(r.get("primary_id") or ""), int(r.get("molecule_id") or 0)))
+    rows = _order_molecule_comparative_rows(rows)
     req = create_report_request(
         report_type=REPORT_TYPE_MOLECULE_COMPARATIVE,
         subject_ids=mids,
@@ -655,7 +767,7 @@ def generate_program_comparative_report_v0(
             }
         )
         snapshot_cov.extend([int(x) for x in (rollup.get("snapshot_ids") or []) if isinstance(x, int)])
-    rows = sorted(rows, key=lambda r: int(r.get("program_id") or 0))
+    rows = _order_program_comparative_rows(rows)
     req = create_report_request(
         report_type=REPORT_TYPE_PROGRAM_COMPARATIVE,
         subject_ids=pids,
@@ -701,3 +813,16 @@ def generate_program_comparative_report_v0(
     sections["reproducibility_appendix"]["governance_red_flags"] = _derive_governance_red_flags(db, req=req, sections=sections)
     validate_report_payload(report_type=REPORT_TYPE_PROGRAM_COMPARATIVE, payload=payload)
     return persist_report_run(db, req=req, payload=payload)
+    comp_status_candidates: list[str] = []
+    if isinstance(comparability.get("summary"), dict):
+        high_sev = int((comparability.get("summary") or {}).get("high_severity_count") or 0)
+        comp_status_candidates.append("not_comparable" if high_sev > 0 else "comparable_partial")
+    else:
+        comp_status_candidates.append("not_assessed")
+    used_by_metric = out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {}
+    determination = derive_comparability_determination(
+        statuses=comp_status_candidates,
+        measurement_keys=sorted(str(k) for k in used_by_metric.keys() if str(k).strip()),
+        snapshot_ids=([int(snap.id)] if snap is not None else []),
+        missing_data=(snap is None),
+    )

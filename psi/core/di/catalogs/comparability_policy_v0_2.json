@@ -1,0 +1,69 @@
+{
+  "policy_id": "comparability_policy_v0_2",
+  "policy_version": "v0.2",
+  "allowed_statuses": [
+    "comparable_full",
+    "comparable_partial",
+    "not_comparable",
+    "not_assessed"
+  ],
+  "rule_registry": [
+    {
+      "id": "rule_comparable_full",
+      "description": "All required comparability inputs are present and support full comparability.",
+      "match_statuses": [
+        "comparable_full"
+      ],
+      "required_measurement_keys": [
+        "kd",
+        "ec50"
+      ],
+      "required_snapshot_roles": [
+        "primary"
+      ],
+      "rationale_fragments": [
+        "policy_order_match",
+        "full_inputs_present"
+      ]
+    },
+    {
+      "id": "rule_comparable_partial",
+      "description": "Comparability indicates positive signal with partial evidence.",
+      "match_statuses": [
+        "comparable_partial",
+        "comparable"
+      ],
+      "required_measurement_keys": [],
+      "required_snapshot_roles": [],
+      "rationale_fragments": [
+        "policy_order_match",
+        "partial_inputs_allowed"
+      ]
+    },
+    {
+      "id": "rule_not_comparable",
+      "description": "Comparability indicates non-comparable state.",
+      "match_statuses": [
+        "not_comparable"
+      ],
+      "required_measurement_keys": [],
+      "required_snapshot_roles": [],
+      "rationale_fragments": [
+        "policy_order_match",
+        "non_comparable_signal"
+      ]
+    },
+    {
+      "id": "rule_not_assessed_default",
+      "description": "Fallback when no explicit rule can be satisfied.",
+      "match_statuses": [
+        "not_assessed"
+      ],
+      "required_measurement_keys": [],
+      "required_snapshot_roles": [],
+      "rationale_fragments": [
+        "fallback"
+      ]
+    }
+  ]
+}

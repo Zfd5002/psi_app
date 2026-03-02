@@ -31,6 +31,40 @@ def _load_comparability_policy() -> dict[str, Any]:
     return _COMPARABILITY_POLICY_CACHE
 
 
+def _validate_comparability_policy(policy: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(policy, dict):
+        raise ValueError("comparability_policy_load_error")
+    if not str(policy.get("policy_id") or "").strip():
+        raise ValueError("comparability_policy_load_error")
+    if not str(policy.get("policy_version") or "").strip():
+        raise ValueError("comparability_policy_load_error")
+    allowed = policy.get("allowed_statuses")
+    if not isinstance(allowed, list) or not all(str(x).strip() for x in allowed):
+        raise ValueError("comparability_policy_load_error")
+    rules = policy.get("rule_registry")
+    if not isinstance(rules, list) or not rules:
+        raise ValueError("comparability_policy_load_error")
+    for r in rules:
+        if not isinstance(r, dict):
+            raise ValueError("comparability_policy_load_error")
+        for key in ("id", "description"):
+            if not str(r.get(key) or "").strip():
+                raise ValueError("comparability_policy_load_error")
+        for key in ("match_statuses", "required_measurement_keys", "required_snapshot_roles", "rationale_fragments"):
+            val = r.get(key)
+            if not isinstance(val, list):
+                raise ValueError("comparability_policy_load_error")
+            if key in {"match_statuses", "rationale_fragments"} and not all(str(x).strip() for x in val):
+                raise ValueError("comparability_policy_load_error")
+    return policy
+
+
+def load_comparability_policy_latest() -> dict[str, Any]:
+    p = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs" / "comparability_policy_v0_2.json"
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    return _validate_comparability_policy(raw if isinstance(raw, dict) else {})
+
+
 def _canonical_pair(
     *,
     left_scope_type: str,
@@ -87,6 +121,95 @@ def resolve_comparability_category(
         "ordered_candidates": valid,
         "allowed_statuses": allowed,
     }
+
+
+def _normalize_str_list(values: list[str] | tuple[str, ...] | None) -> list[str]:
+    out: list[str] = []
+    seen: dict[str, bool] = {}
+    for v in values or []:
+        s = str(v).strip()
+        if not s:
+            continue
+        if s not in seen:
+            seen[s] = True
+            out.append(s)
+    return out
+
+
+def validate_comparability_determination(det: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(det, dict):
+        raise ValueError("comparability_determination_invalid")
+    if not isinstance(det.get("category"), str):
+        raise ValueError("comparability_determination_invalid")
+    if not isinstance(det.get("rule_id"), str):
+        raise ValueError("comparability_determination_invalid")
+    if not isinstance(det.get("measurement_keys"), list):
+        raise ValueError("comparability_determination_invalid")
+    if not isinstance(det.get("snapshot_ids"), list):
+        raise ValueError("comparability_determination_invalid")
+    return det
+
+
+def derive_comparability_determination(
+    *,
+    statuses: list[str] | tuple[str, ...],
+    measurement_keys: list[str] | tuple[str, ...],
+    snapshot_ids: list[int] | tuple[int, ...],
+    missing_data: bool = False,
+    policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    pol = _validate_comparability_policy(policy if isinstance(policy, dict) else load_comparability_policy_latest())
+    allowed = [str(x).strip().lower() for x in (pol.get("allowed_statuses") or []) if str(x).strip()]
+    category_resolution = resolve_comparability_category(statuses=statuses, allowed_statuses=allowed, missing_data=bool(missing_data))
+    chosen = str(category_resolution.get("resolved_status") or "not_assessed").strip().lower()
+    mk = sorted(_normalize_str_list(list(measurement_keys or [])))
+    sid = sorted({int(x) for x in (snapshot_ids or []) if str(x).isdigit()})
+    rules = [r for r in (pol.get("rule_registry") or []) if isinstance(r, dict)]
+    selected_rule: dict[str, Any] | None = None
+    for r in rules:
+        match = [str(x).strip().lower() for x in (r.get("match_statuses") or []) if str(x).strip()]
+        if chosen in match:
+            selected_rule = r
+            break
+    if selected_rule is None:
+        selected_rule = {
+            "id": "policy_no_match",
+            "required_measurement_keys": [],
+            "required_snapshot_roles": [],
+            "rationale_fragments": ["policy_no_match"],
+        }
+
+    req_mk = [str(x).strip() for x in (selected_rule.get("required_measurement_keys") or []) if str(x).strip()]
+    req_snap_roles = [str(x).strip() for x in (selected_rule.get("required_snapshot_roles") or []) if str(x).strip()]
+    missing_inputs = {
+        "required_measurement_keys_missing": [k for k in req_mk if k not in mk],
+        "required_snapshot_roles_missing": (sorted(req_snap_roles) if req_snap_roles and not sid else []),
+    }
+    has_missing = bool(missing_inputs["required_measurement_keys_missing"] or missing_inputs["required_snapshot_roles_missing"])
+    if has_missing:
+        out = {
+            "category": "not_assessed",
+            "rule_id": "policy_inputs_missing",
+            "measurement_keys": mk,
+            "snapshot_ids": sid,
+            "rationale": "policy_inputs_missing",
+            "notes": ["deterministic_downgrade_due_to_missing_inputs"],
+            "missing_inputs": {
+                "required_measurement_keys_missing": sorted(missing_inputs["required_measurement_keys_missing"]),
+                "required_snapshot_roles_missing": sorted(missing_inputs["required_snapshot_roles_missing"]),
+            },
+        }
+        return validate_comparability_determination(out)
+    rationale_parts = [str(x).strip() for x in (selected_rule.get("rationale_fragments") or []) if str(x).strip()]
+    out = {
+        "category": chosen,
+        "rule_id": str(selected_rule.get("id") or "policy_no_match"),
+        "measurement_keys": mk,
+        "snapshot_ids": sid,
+        "rationale": "|".join(rationale_parts) if rationale_parts else "policy_precedence",
+        "notes": sorted(set([str(category_resolution.get("resolution_reason") or "policy_precedence")])),
+    }
+    return validate_comparability_determination(out)
 
 
 def create_comparability_assessment(

@@ -1,3 +1,122 @@
+## 2026-03-02 — v1.3.0a67
+Why:
+- Harden upgrade semantic-ack enforcement so semantic actions cannot bypass acknowledgment checks.
+
+What:
+- Added a single guard wrapper in `psi/services/policy_upgrade.py`:
+  - `run_semantic_action_with_ack_guard(...)`
+- Refactored semantic report entry points to route through the guard wrapper:
+  - `psi/services/reports_v3.py::generate_report_from_form(...)`
+  - `psi/services/report_engine.py::persist_report_run(...)`
+- Added tests validating deterministic block/allow behavior:
+  - unacknowledged semantic warning => raises `policy_upgrade_action_required`
+  - acknowledged session => semantic action proceeds deterministically.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `psi/services/reports_v3.py`
+- `psi/services/report_engine.py`
+- `tests/test_policy_upgrade_diff_artifact.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a67_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a66
+Why:
+- Remove governance ambiguity around hardcoded ordering by making internal deterministic tie-break behavior explicit, locked, and documented as a narrow non-heuristic exemption.
+
+What:
+- Added explicit shortlisting internal tie-break constant:
+  - `SHORTLISTING_INTERNAL_TIEBREAK_KEYS`
+- Refactored shortlisting sort tuple assembly to consume the explicit constant list.
+- Added governance note doc:
+  - `docs/DI_V3_GOVERNANCE_NOTES.md`
+- Added lock tests asserting exact tie-break key literal list and no weighted token reintroduction.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/shortlisting.py`
+- `docs/DI_V3_GOVERNANCE_NOTES.md`
+- `tests/test_shortlisting_tiebreak_governance.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a66_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a65
+Why:
+- Enrich program rollup posture semantics with explicit policy-order rules and citations, without introducing any numeric scoring or weighted heuristics.
+
+What:
+- Added additive `program_rollup_policy_v0_1.json` with ordered posture states and ordered rule precedence.
+- Refactored rollup posture derivation in `psi/services/program_rollups.py` to policy-order evaluation with explicit citations:
+  - `posture_state`, `rule_id`, `cited_snapshot_ids`, `cited_templates`, `cited_decisions`, `rationale`, `notes`
+- Wired posture object into program report sections and lineage summary surfaces.
+- Added deterministic tests for policy loading/ordering and posture payload constraints, including banned-key assertions (`score`, `weight`, `points`, `ranking_score`, `numeric_total` absent).
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/program_rollup_policy_v0_1.json`
+- `psi/services/program_rollups.py`
+- `psi/services/report_engine.py`
+- `psi/services/lineage.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_program_rollup_posture_policy.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a65_<timestamp>/ ~/psi_repo/`
+
+## 2026-03-02 — v1.3.0a64
+Why:
+- Elevate comparability semantics to governance-grade deterministic determination objects with explicit rule/citation surfaces and policy-order precedence.
+
+What:
+- Added additive `comparability_policy_v0_2.json` with ordered categorical rules and deterministic rationale fragments.
+- Implemented validated comparability policy latest-loader and full determination builder in `psi/services/comparability.py`:
+  - always returns `category`, `rule_id`, `measurement_keys`, `snapshot_ids`, `rationale`, `notes`
+  - deterministic downgrade to `category=not_assessed` + `rule_id=policy_inputs_missing` with `missing_inputs` when required citations are missing
+- Wired comparability determination objects into molecule/program report payload surfaces.
+- Added deterministic tests for policy loading, precedence, completeness, downgrade behavior, and repeatability.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/comparability_policy_v0_2.json`
+- `psi/services/comparability.py`
+- `psi/services/report_engine.py`
+- `tests/test_comparability_resolution.py`
+- `tests/test_v3_catalog_immutability.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -c "import psi; from psi.services import reports_v3; print('import-ok')"` — PASS
+
+Rsync overlay instructions:
+- `rsync -av --delete ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a64_<timestamp>/ ~/psi_repo/`
+
 ## 2026-03-02 — v1.3.0a63
 Summary:
 - Fix comparability category resolution precedence to enforce:

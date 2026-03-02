@@ -111,6 +111,11 @@ def get_program_lineage(db: Session, *, program_id: int) -> dict[str, Any]:
         "policy_changes": policy_changes,
         "governance_changes": governance_changes,
         "policy_upgrade_warnings": get_unacknowledged_upgrade_warnings(db, current_policy_pins=current_policy_pins),
+        "latest_program_posture": (
+            ((_load_json(rollups[0].payload_json, {}) if rollups else {}).get("program_posture") if rollups else {})
+            if isinstance((_load_json(rollups[0].payload_json, {}) if rollups else {}), dict)
+            else {}
+        ),
     }
 
 
@@ -162,6 +167,7 @@ def get_portfolio_lineage(db: Session, *, portfolio_id: int) -> dict[str, Any]:
                 "rollup_count": len(pl.get("rollups") or []),
                 "evidence_change_events": sum(1 for e in (pl.get("evidence_changes") or []) if bool(e.get("evidence_changed"))),
                 "policy_change_events": sum(1 for e in (pl.get("policy_changes") or []) if bool(e.get("policy_changed"))),
+                "latest_program_posture_state": str(((pl.get("latest_program_posture") or {}).get("posture_state") or "")),
             }
             for pl in sorted(child_program_lineage, key=lambda x: int(x.get("program_id") or 0))
         ],

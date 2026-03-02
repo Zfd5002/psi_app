@@ -7,6 +7,18 @@ from psi.services.di.util import parse_iso
 
 
 RANKING_RULE_VERSION = "v0.5.2"
+SHORTLISTING_INTERNAL_TIEBREAK_KEYS = [
+    "decision_ready_desc",
+    "blockers_count_asc",
+    "comparability_high_severity_asc",
+    "metrics_present_desc",
+    "metrics_missing_asc",
+    "warnings_count_asc",
+    "metrics_sourced_count_desc",
+    "used_metric_count_desc",
+    "ignored_count_asc",
+    "warning_count_asc",
+]
 
 
 def _ranking_factor(key: str, direction: str, value: Any) -> Dict[str, Any]:
@@ -16,18 +28,19 @@ def _ranking_factor(key: str, direction: str, value: Any) -> Dict[str, Any]:
 def _candidate_sort_tuple(cand: Dict[str, Any]) -> tuple:
     # Deterministic lexicographic ranking only; no weighted aggregates.
     values = cand.get("sort_values") if isinstance(cand.get("sort_values"), dict) else {}
-    return (
-        -float(values.get("decision_ready") or 0.0),
-        float(values.get("blockers_count") or 0.0),
-        float(values.get("comparability_high_severity") or 0.0),
-        -float(values.get("metrics_present") or 0.0),
-        float(values.get("metrics_missing") or 0.0),
-        float(values.get("warnings_count") or 0.0),
-        -float(values.get("metrics_sourced_count") or 0.0),
-        -float(values.get("used_metric_count") or 0.0),
-        float(values.get("ignored_count") or 0.0),
-        float(values.get("warning_count") or 0.0),
-    )
+    ordered_parts = {
+        "decision_ready_desc": -float(values.get("decision_ready") or 0.0),
+        "blockers_count_asc": float(values.get("blockers_count") or 0.0),
+        "comparability_high_severity_asc": float(values.get("comparability_high_severity") or 0.0),
+        "metrics_present_desc": -float(values.get("metrics_present") or 0.0),
+        "metrics_missing_asc": float(values.get("metrics_missing") or 0.0),
+        "warnings_count_asc": float(values.get("warnings_count") or 0.0),
+        "metrics_sourced_count_desc": -float(values.get("metrics_sourced_count") or 0.0),
+        "used_metric_count_desc": -float(values.get("used_metric_count") or 0.0),
+        "ignored_count_asc": float(values.get("ignored_count") or 0.0),
+        "warning_count_asc": float(values.get("warning_count") or 0.0),
+    }
+    return tuple(ordered_parts[k] for k in SHORTLISTING_INTERNAL_TIEBREAK_KEYS)
 
 
 def _ranking_sort_key(cand: Dict[str, Any]) -> tuple:

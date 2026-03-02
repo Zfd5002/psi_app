@@ -15,7 +15,7 @@ from psi.services.report_engine import (
     generate_program_report_v0,
     load_report_run_payload,
 )
-from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings, require_upgrade_acknowledged_for_semantic_actions
+from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings, run_semantic_action_with_ack_guard
 
 
 def _parse_as_of(as_of_text: str | None) -> datetime:
@@ -76,20 +76,23 @@ def generate_report_from_form(
     ids = sorted({int(x.strip()) for x in str(subject_ids_text or "").split(",") if x.strip()})
     as_of = _parse_as_of(as_of_text)
     policy_pins = get_v3_report_policy_pins(report_type)
-    require_upgrade_acknowledged_for_semantic_actions(db, current_policy_pins=policy_pins)
-    if report_type == "molecule_report":
-        if len(ids) != 1:
-            raise ValueError("molecule_report requires exactly 1 subject id")
-        return generate_molecule_report_v0(db, molecule_id=ids[0], as_of=as_of, policy_pins=policy_pins)
-    if report_type == "program_report":
-        if len(ids) != 1:
-            raise ValueError("program_report requires exactly 1 subject id")
-        return generate_program_report_v0(db, program_id=ids[0], as_of=as_of, policy_pins=policy_pins)
-    if report_type == "molecule_comparative_report":
-        return generate_molecule_comparative_report_v0(db, molecule_ids=ids, as_of=as_of, policy_pins=policy_pins)
-    if report_type == "program_comparative_report":
-        return generate_program_comparative_report_v0(db, program_ids=ids, as_of=as_of, policy_pins=policy_pins)
-    raise ValueError("Unsupported report_type")
+
+    def _run() -> ReportRun:
+        if report_type == "molecule_report":
+            if len(ids) != 1:
+                raise ValueError("molecule_report requires exactly 1 subject id")
+            return generate_molecule_report_v0(db, molecule_id=ids[0], as_of=as_of, policy_pins=policy_pins)
+        if report_type == "program_report":
+            if len(ids) != 1:
+                raise ValueError("program_report requires exactly 1 subject id")
+            return generate_program_report_v0(db, program_id=ids[0], as_of=as_of, policy_pins=policy_pins)
+        if report_type == "molecule_comparative_report":
+            return generate_molecule_comparative_report_v0(db, molecule_ids=ids, as_of=as_of, policy_pins=policy_pins)
+        if report_type == "program_comparative_report":
+            return generate_program_comparative_report_v0(db, program_ids=ids, as_of=as_of, policy_pins=policy_pins)
+        raise ValueError("Unsupported report_type")
+
+    return run_semantic_action_with_ack_guard(db, current_policy_pins=policy_pins, action=_run)
 
 
 def list_report_runs(db: Session) -> list[ReportRun]:
