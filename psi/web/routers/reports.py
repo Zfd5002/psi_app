@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,16 @@ def new_report(request: Request):
     return templates.TemplateResponse("reports/new.html", {"request": request})
 
 
+@router.get("/reports/options/programs")
+def report_options_programs(db: Session = Depends(get_db)):
+    return svc.list_report_program_options(db)
+
+
+@router.get("/reports/options/molecules")
+def report_options_molecules(program_id: int = Query(...), db: Session = Depends(get_db)):
+    return svc.list_report_molecule_options(db, program_id=int(program_id))
+
+
 @router.post("/reports/new")
 def create_report(
     report_type: str = Form(...),
@@ -38,7 +48,7 @@ def create_report(
 
 
 @router.get("/reports/{report_run_id}", response_class=HTMLResponse)
-def report_detail(report_run_id: int, request: Request, db: Session = Depends(get_db)):
+def report_detail(report_run_id: int, request: Request, export: str | None = Query(None), db: Session = Depends(get_db)):
     templates = get_templates(request)
     try:
         ctx = svc.get_report_run_detail(db, report_run_id)
@@ -56,5 +66,8 @@ def report_detail(report_run_id: int, request: Request, db: Session = Depends(ge
     }
     renderer = renderers.get(report_type, narrative_svc.render_molecule_narrative)
     ctx["board_narrative"] = renderer(payload)
+    is_pdf = str(export or "").strip().lower() == "pdf"
+    ctx["is_pdf"] = is_pdf
+    ctx["body_class"] = "pdf-mode" if is_pdf else ""
     ctx["request"] = request
     return templates.TemplateResponse("reports/detail.html", ctx)

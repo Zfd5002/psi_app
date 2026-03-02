@@ -3,23 +3,226 @@
 {% block content %}
 <div class="card" style="max-width:900px;">
   <h1>Generate Report</h1>
-  <p class="muted">Deterministic V3 report request surface. Provide subject ids as comma-separated integers and explicit <code>as_of</code> when needed.</p>
-  <form method="post" action="/reports/new">
-    <label>Report type</label>
-    <select name="report_type">
-      <option value="molecule_report">molecule_report</option>
-      <option value="program_report">program_report</option>
-      <option value="molecule_comparative_report">molecule_comparative_report</option>
-      <option value="program_comparative_report">program_comparative_report</option>
-    </select>
-    <label>Subject IDs (comma-separated)</label>
-    <input name="subject_ids" value="" placeholder="e.g. 1 or 2,3" required />
-    <label>As Of (optional ISO8601; blank = now)</label>
-    <input name="as_of" value="" placeholder="2026-02-26T12:00:00Z" />
-    <div style="margin-top:12px;">
+  <p class="muted">Deterministic V3 report request surface with guided selectors. Manual IDs remain available for advanced use.</p>
+  <form method="post" action="/reports/new" class="form" id="report-form">
+    <div class="field">
+      <label for="report_type">Report type</label>
+      <select id="report_type" name="report_type">
+        <option value="molecule_report">molecule_report</option>
+        <option value="program_report">program_report</option>
+        <option value="molecule_comparative_report">molecule_comparative_report</option>
+        <option value="program_comparative_report">program_comparative_report</option>
+      </select>
+    </div>
+
+    <div class="field" id="program_field" style="display:none;">
+      <label for="program_selector">Program selection</label>
+      <select id="program_selector"></select>
+      <div class="help" id="program_help"></div>
+    </div>
+
+    <div class="field" id="molecule_field" style="display:none;">
+      <label for="molecule_selector">Molecule selection</label>
+      <select id="molecule_selector"></select>
+      <div class="help" id="molecule_help"></div>
+    </div>
+
+    <div class="field">
+      <label class="row" style="gap:8px;">
+        <input id="manual_toggle" type="checkbox" />
+        <span>Manual IDs</span>
+      </label>
+    </div>
+
+    <div class="field" id="manual_field">
+      <label for="subject_ids_visible">Subject IDs (comma-separated)</label>
+      <input id="subject_ids_visible" value="" placeholder="e.g. 1 or 2,3" />
+      <div class="help">Used when Manual IDs is enabled or JavaScript is unavailable.</div>
+    </div>
+
+    <input id="subject_ids" name="subject_ids" value="" required type="hidden" />
+
+    <div class="field">
+      <label for="as_of">As Of (optional ISO8601; blank = now)</label>
+      <input id="as_of" name="as_of" value="" placeholder="2026-02-26T12:00:00Z" />
+    </div>
+
+    <div class="notice" id="selection_error" style="display:none;"></div>
+
+    <div style="margin-top:12px;" class="row">
       <button class="btn primary" type="submit">Generate</button>
       <a class="btn" href="/reports">Cancel</a>
     </div>
   </form>
+  <noscript>
+    <div class="notice" style="margin-top:12px;">
+      JavaScript is disabled. Use Manual IDs to submit report subject IDs.
+    </div>
+  </noscript>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById("report-form");
+  if (!form) return;
+  const reportTypeEl = document.getElementById("report_type");
+  const programField = document.getElementById("program_field");
+  const programEl = document.getElementById("program_selector");
+  const programHelp = document.getElementById("program_help");
+  const moleculeField = document.getElementById("molecule_field");
+  const moleculeEl = document.getElementById("molecule_selector");
+  const moleculeHelp = document.getElementById("molecule_help");
+  const manualToggle = document.getElementById("manual_toggle");
+  const manualField = document.getElementById("manual_field");
+  const subjectVisibleEl = document.getElementById("subject_ids_visible");
+  const subjectHiddenEl = document.getElementById("subject_ids");
+  const errorEl = document.getElementById("selection_error");
+
+  let programs = [];
+
+  const clearOptions = (el) => {
+    while (el.options.length) el.remove(0);
+  };
+
+  const addOption = (el, value, label) => {
+    const opt = document.createElement("option");
+    opt.value = String(value);
+    opt.textContent = String(label);
+    el.appendChild(opt);
+  };
+
+  const showError = (msg) => {
+    if (!msg) {
+      errorEl.style.display = "none";
+      errorEl.textContent = "";
+      return;
+    }
+    errorEl.style.display = "block";
+    errorEl.textContent = msg;
+  };
+
+  const selectedValues = (el) => Array.from(el.selectedOptions).map((o) => String(o.value).trim()).filter(Boolean);
+
+  const loadPrograms = async () => {
+    const resp = await fetch("/reports/options/programs", {headers: {"Accept": "application/json"}});
+    if (!resp.ok) throw new Error("Failed to load program options");
+    programs = await resp.json();
+    clearOptions(programEl);
+    programs.forEach((p) => addOption(programEl, p.id, `${p.id}: ${p.name || "program"}`));
+  };
+
+  const loadMolecules = async (programId) => {
+    const resp = await fetch(`/reports/options/molecules?program_id=${encodeURIComponent(programId)}`, {headers: {"Accept": "application/json"}});
+    if (!resp.ok) throw new Error("Failed to load molecule options");
+    const rows = await resp.json();
+    clearOptions(moleculeEl);
+    rows.forEach((m) => {
+      const primary = (m.primary_id || "").trim();
+      const title = (m.title || "").trim();
+      const label = primary && title ? `${m.id}: ${primary} (${title})` : primary ? `${m.id}: ${primary}` : title ? `${m.id}: ${title}` : `${m.id}`;
+      addOption(moleculeEl, m.id, label);
+    });
+  };
+
+  const setMode = async () => {
+    const t = reportTypeEl.value;
+    const isProgram = t === "program_report" || t === "program_comparative_report";
+    const isMolecule = t === "molecule_report" || t === "molecule_comparative_report";
+    const isComparative = t === "program_comparative_report" || t === "molecule_comparative_report";
+
+    programField.style.display = (isProgram || isMolecule) ? "block" : "none";
+    moleculeField.style.display = isMolecule ? "block" : "none";
+
+    programEl.multiple = isProgram && isComparative;
+    moleculeEl.multiple = isMolecule && isComparative;
+
+    programHelp.textContent = isProgram && isComparative ? "Select 2-5 programs." : "Select one program.";
+    moleculeHelp.textContent = isMolecule && isComparative ? "Select 2-5 molecules within selected program." : "Select one molecule.";
+
+    if ((isProgram || isMolecule) && programs.length === 0) {
+      await loadPrograms();
+    }
+
+    if (isMolecule) {
+      const firstProgram = selectedValues(programEl)[0] || (programEl.options.length ? programEl.options[0].value : "");
+      if (firstProgram && selectedValues(programEl).length === 0) {
+        programEl.value = firstProgram;
+      }
+      if (firstProgram) {
+        await loadMolecules(firstProgram);
+      } else {
+        clearOptions(moleculeEl);
+      }
+    }
+  };
+
+  programEl.addEventListener("change", async () => {
+    const t = reportTypeEl.value;
+    if (!(t === "molecule_report" || t === "molecule_comparative_report")) return;
+    const p = selectedValues(programEl)[0] || "";
+    if (!p) {
+      clearOptions(moleculeEl);
+      return;
+    }
+    await loadMolecules(p);
+  });
+
+  reportTypeEl.addEventListener("change", async () => {
+    showError("");
+    await setMode();
+  });
+
+  manualToggle.addEventListener("change", () => {
+    manualField.style.display = manualToggle.checked ? "block" : "none";
+    showError("");
+  });
+
+  form.addEventListener("submit", (ev) => {
+    showError("");
+    const t = reportTypeEl.value;
+    const isProgram = t === "program_report" || t === "program_comparative_report";
+    const isMolecule = t === "molecule_report" || t === "molecule_comparative_report";
+    const isComparative = t === "program_comparative_report" || t === "molecule_comparative_report";
+
+    if (manualToggle.checked) {
+      const manual = (subjectVisibleEl.value || "").trim();
+      if (!manual) {
+        ev.preventDefault();
+        showError("Manual IDs are enabled; enter at least one ID.");
+        return;
+      }
+      subjectHiddenEl.value = manual;
+      return;
+    }
+
+    let ids = [];
+    if (isProgram) ids = selectedValues(programEl);
+    if (isMolecule) ids = selectedValues(moleculeEl);
+    if (!ids.length) {
+      ev.preventDefault();
+      showError("Select at least one subject.");
+      return;
+    }
+    if (isComparative && (ids.length < 2 || ids.length > 5)) {
+      ev.preventDefault();
+      showError("Comparative reports require 2-5 selections.");
+      return;
+    }
+    if (!isComparative && ids.length !== 1) {
+      ev.preventDefault();
+      showError("Single-subject reports require exactly one selection.");
+      return;
+    }
+    subjectHiddenEl.value = ids.join(",");
+  });
+
+  manualField.style.display = "none";
+  manualToggle.checked = false;
+  setMode().catch((err) => {
+    showError(err && err.message ? err.message : "Failed to initialize report selectors.");
+    manualField.style.display = "block";
+  });
+})();
+</script>
 {% endblock %}

@@ -2,85 +2,19 @@
 {% block title %}Report #{{ report_run.id }} | PSI{% endblock %}
 {% block content %}
 {% set payload_meta = (payload.metadata if payload is defined and payload.metadata is defined else {}) %}
-{% set payload_sections = (payload.sections if payload is defined and payload.sections is defined else {}) %}
-{% set identity = (payload_sections.identity_context if payload_sections is mapping and payload_sections.identity_context is defined else {}) %}
-{% set report_type = (report_run.report_type if report_run is defined and report_run.report_type is defined else "") %}
-{% set identity_summary = "missing" %}
-{% if identity is mapping and identity %}
-  {% set identity_bits = [] %}
-  {% set primary_id = (identity.primary_id if identity.primary_id is defined else "") %}
-  {% set title = (identity.title if identity.title is defined else "") %}
-  {% if primary_id and title %}
-    {% set identity_bits = identity_bits + [primary_id ~ " (" ~ title ~ ")"] %}
-  {% elif primary_id %}
-    {% set identity_bits = identity_bits + [primary_id] %}
-  {% elif identity.molecule_id is defined and identity.molecule_id %}
-    {% set identity_bits = identity_bits + ["molecule_id=" ~ identity.molecule_id] %}
-  {% endif %}
-  {% if identity.program_id is defined and identity.program_id %}
-    {% set identity_bits = identity_bits + ["program_id=" ~ identity.program_id] %}
-  {% endif %}
-  {% if identity.snapshot_id is defined and identity.snapshot_id %}
-    {% set identity_bits = identity_bits + ["snapshot_id=" ~ identity.snapshot_id] %}
-  {% endif %}
-  {% if identity_bits %}
-    {% set identity_summary = identity_bits|join(" · ") %}
-  {% endif %}
-{% elif payload_sections is mapping and payload_sections.metadata is defined and payload_sections.metadata is mapping %}
-  {% set section_meta = payload_sections.metadata %}
-  {% if report_type == "program_report" %}
-    {% set pid = (section_meta.program_id if section_meta.program_id is defined and section_meta.program_id else (subject_ids[0] if subject_ids is defined and subject_ids and subject_ids|length else "")) %}
-    {% set scount = (snapshot_coverage|length if snapshot_coverage is defined and snapshot_coverage is iterable else 0) %}
-    {% if pid %}
-      {% set identity_summary = "program_id=" ~ pid ~ " · snapshots=" ~ scount %}
-    {% else %}
-      {% set identity_summary = "snapshots=" ~ scount %}
-    {% endif %}
-  {% elif report_type == "molecule_comparative_report" %}
-    {% set rows = (payload_sections.molecule_set.rows if payload_sections.molecule_set is defined and payload_sections.molecule_set is mapping and payload_sections.molecule_set.rows is defined and payload_sections.molecule_set.rows is iterable else []) %}
-    {% set labels = [] %}
-    {% for row in rows %}
-      {% if row is mapping %}
-        {% set row_primary = (row.primary_id if row.primary_id is defined else "") %}
-        {% set row_title = (row.title if row.title is defined else "") %}
-        {% if row_primary and row_title %}
-          {% set labels = labels + [row_primary ~ " (" ~ row_title ~ ")"] %}
-        {% elif row_primary %}
-          {% set labels = labels + [row_primary] %}
-        {% elif row_title %}
-          {% set labels = labels + [row_title] %}
-        {% elif row.molecule_id is defined %}
-          {% set labels = labels + ["molecule_id=" ~ row.molecule_id] %}
-        {% endif %}
-      {% endif %}
-    {% endfor %}
-    {% if labels %}
-      {% set identity_summary = labels|join(", ") %}
-    {% endif %}
-  {% elif report_type == "program_comparative_report" %}
-    {% set rows = (payload_sections.program_set.rows if payload_sections.program_set is defined and payload_sections.program_set is mapping and payload_sections.program_set.rows is defined and payload_sections.program_set.rows is iterable else []) %}
-    {% set labels = [] %}
-    {% for row in rows %}
-      {% if row is mapping and row.program_id is defined %}
-        {% if row.molecule_count is defined %}
-          {% set labels = labels + ["program_id=" ~ row.program_id ~ " (molecules=" ~ row.molecule_count ~ ")"] %}
-        {% else %}
-          {% set labels = labels + ["program_id=" ~ row.program_id] %}
-        {% endif %}
-      {% endif %}
-    {% endfor %}
-    {% if labels %}
-      {% set identity_summary = labels|join(", ") %}
-    {% endif %}
-  {% endif %}
-{% endif %}
+{% set is_pdf = (is_pdf if is_pdf is defined else false) %}
 <div class="card">
-  <h1>Report #{{ report_run.id }}</h1>
+  <div class="row" style="justify-content:space-between;align-items:center;">
+    <h1 style="margin:0;">Report #{{ report_run.id }}</h1>
+    {% if not is_pdf %}
+    <a class="btn no-print" href="/reports/{{ report_run.id }}?export=pdf">Export PDF</a>
+    {% endif %}
+  </div>
   <div class="card executive-header" style="margin-top:8px;">
     <h2 style="margin-top:0;">Executive Header</h2>
     <div class="grid cols-2">
       <div>
-        <div><strong>Identity:</strong> <code>{{ identity_summary }}</code></div>
+        <div><strong>Identity:</strong> <code>{{ identity_summary if identity_summary is defined else "missing" }}</code></div>
         <div><strong>Type:</strong> <code>{{ report_run.report_type }}</code></div>
         <div><strong>Subjects:</strong> <code>{{ subject_ids }}</code></div>
       </div>
@@ -98,21 +32,26 @@
     </div>
   </div>
 
+  {% if not is_pdf %}
   <div class="tabs no-print" role="tablist" aria-label="Report view mode" style="margin-top:12px;">
     <button type="button" class="btn mini" data-view-tab="board" aria-selected="true" aria-controls="report-board-panel">Board View</button>
     <button type="button" class="btn mini" data-view-tab="technical" aria-selected="false" aria-controls="report-technical-panel">Technical View</button>
   </div>
+  {% endif %}
 
   <section id="report-board-panel" data-view-panel="board">
     {% include "reports/_board_narrative.html" %}
   </section>
 
+  {% if not is_pdf %}
   <section id="report-technical-panel" class="technical-panel" data-view-panel="technical">
     {% include "reports/_technical_audit.html" %}
   </section>
+  {% endif %}
 </div>
 {% endblock %}
 {% block scripts %}
+{% if not is_pdf %}
 <script>
 (() => {
   const tabs = document.querySelectorAll("[data-view-tab]");
@@ -135,4 +74,5 @@
   apply("board");
 })();
 </script>
+{% endif %}
 {% endblock %}

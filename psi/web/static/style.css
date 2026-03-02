@@ -87,7 +87,22 @@ textarea{min-height:110px;resize:vertical}
 .nm-cell.selected{background:rgba(51,184,255,.18);outline:1px solid rgba(51,184,255,.32)}
 .nm-tile:hover{filter:brightness(1.03)}
 
-@media print{.nav,.no-print{display:none !important}.print-only{display:block}.card{box-shadow:none;background:white;color:black;border-color:#ddd}body{background:white;color:black}a{color:#004C97}}
+body.pdf-mode{background:white;color:black}
+body.pdf-mode .nav,body.pdf-mode .footer,body.pdf-mode .no-print{display:none !important}
+body.pdf-mode .card{box-shadow:none;background:white;color:black;border-color:#d0d7de}
+body.pdf-mode .grid.cols-2{grid-template-columns:1fr 1fr}
+body.pdf-mode .technical-panel{display:none !important}
+body.pdf-mode pre,body.pdf-mode code{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+@media print{
+  @page{size:auto;margin:12mm}
+  .nav,.no-print{display:none !important}
+  .print-only{display:block}
+  .card{box-shadow:none;background:white;color:black;border-color:#ddd}
+  body{background:white;color:black}
+  a{color:#004C97}
+  .grid.cols-2{grid-template-columns:1fr 1fr !important}
+  pre,code{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+}
 
 /* Ruler labels: center multi-digit position numbers over residue columns */
 .ruler-label{position:relative;left:50%;transform:translateX(-50%);display:inline-block;white-space:nowrap;font-weight:600;color:rgba(219,231,244,.82)}

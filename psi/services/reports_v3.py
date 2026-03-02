@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 
 from sqlalchemy.orm import Session
 
-from psi.core.models import ReportRun
+from psi.core.models import Molecule, Program, ReportRun
 from psi.core.di.policy import sha256_hex_of_canonical_json
 from psi.services.report_engine import (
     generate_molecule_comparative_report_v0,
@@ -16,6 +17,8 @@ from psi.services.report_engine import (
     load_report_run_payload,
 )
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings, run_semantic_action_with_ack_guard
+
+_HEX64_RE = re.compile(r"\b[a-f0-9]{64}\b", flags=re.IGNORECASE)
 
 
 def _parse_as_of(as_of_text: str | None) -> datetime:
@@ -32,6 +35,127 @@ def _parse_as_of(as_of_text: str | None) -> datetime:
 def _load_json(path: Path) -> dict:
     raw = json.loads(path.read_text(encoding="utf-8"))
     return raw if isinstance(raw, dict) else {}
+
+
+def _clean_board_text(value: object) -> str:
+    txt = str(value or "").strip()
+    if not txt:
+        return ""
+    return _HEX64_RE.sub("[hash-hidden]", txt)
+
+
+def _format_molecule_row_label(row: dict) -> str:
+    primary_id = _clean_board_text(row.get("primary_id"))
+    title = _clean_board_text(row.get("title"))
+    molecule_id = row.get("molecule_id")
+    if primary_id and title:
+        return f"{primary_id} ({title})"
+    if primary_id:
+        return primary_id
+    if title:
+        return title
+    if molecule_id is not None:
+        return f"molecule_id={molecule_id}"
+    return ""
+
+
+def _program_name_map(db: Session, program_ids: list[int]) -> dict[int, str]:
+    pids = sorted({int(x) for x in program_ids})
+    if not pids:
+        return {}
+    rows = (
+        db.query(Program.id, Program.name)
+        .filter(Program.id.in_(pids))
+        .order_by(Program.id.asc())
+        .all()
+    )
+    return {int(r[0]): _clean_board_text(r[1]) for r in rows}
+
+
+def build_report_identity_summary(
+    db: Session,
+    *,
+    report_type: str,
+    payload: dict,
+    subject_ids: list[int],
+    snapshot_coverage: list[int],
+) -> str:
+    sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
+    if not isinstance(sections, dict):
+        return "missing"
+    identity = sections.get("identity_context") if isinstance(sections.get("identity_context"), dict) else {}
+    if identity:
+        primary_id = _clean_board_text(identity.get("primary_id"))
+        title = _clean_board_text(identity.get("title"))
+        molecule_id = identity.get("molecule_id")
+        out: list[str] = []
+        if primary_id and title:
+            out.append(f"{primary_id} ({title})")
+        elif primary_id:
+            out.append(primary_id)
+        elif title:
+            out.append(title)
+        elif molecule_id is not None:
+            out.append(f"molecule_id={molecule_id}")
+        if identity.get("program_id") is not None:
+            out.append(f"program_id={identity.get('program_id')}")
+        if identity.get("snapshot_id") is not None:
+            out.append(f"snapshot_id={identity.get('snapshot_id')}")
+        txt = " · ".join([x for x in out if x])
+        return txt if txt else "missing"
+    if report_type == "molecule_comparative_report":
+        rows = (
+            sections.get("molecule_set", {}).get("rows")
+            if isinstance(sections.get("molecule_set"), dict)
+            else []
+        )
+        labels = [_format_molecule_row_label(r) for r in (rows if isinstance(rows, list) else []) if isinstance(r, dict)]
+        labels = [x for x in labels if x]
+        if labels:
+            return ", ".join(labels)
+    if report_type == "program_comparative_report":
+        rows = (
+            sections.get("program_set", {}).get("rows")
+            if isinstance(sections.get("program_set"), dict)
+            else []
+        )
+        ids = [int(r.get("program_id")) for r in (rows if isinstance(rows, list) else []) if isinstance(r, dict) and r.get("program_id") is not None]
+        names = _program_name_map(db, ids)
+        labels: list[str] = []
+        for r in rows if isinstance(rows, list) else []:
+            if not isinstance(r, dict) or r.get("program_id") is None:
+                continue
+            pid = int(r.get("program_id"))
+            pname = names.get(pid, "")
+            if pname:
+                labels.append(f"{pname} (program_id={pid})")
+            else:
+                labels.append(f"Program #{pid}")
+        if labels:
+            return ", ".join(labels)
+    if report_type == "program_report":
+        pid = None
+        meta = sections.get("metadata") if isinstance(sections.get("metadata"), dict) else {}
+        if isinstance(meta, dict) and meta.get("program_id") is not None:
+            pid = int(meta.get("program_id"))
+        elif subject_ids:
+            pid = int(subject_ids[0])
+        if pid is not None:
+            name = _program_name_map(db, [pid]).get(pid, "")
+            if name:
+                return f"{name} (program_id={pid})"
+            return f"program_id={pid}"
+    if report_type == "molecule_report" and subject_ids:
+        mol = db.get(Molecule, int(subject_ids[0]))
+        if mol is not None:
+            label = _format_molecule_row_label({"primary_id": mol.primary_id, "title": mol.title, "molecule_id": mol.id})
+            if label:
+                return label
+    if subject_ids:
+        return ", ".join(str(int(x)) for x in subject_ids)
+    if snapshot_coverage:
+        return f"snapshots={len(snapshot_coverage)}"
+    return "missing"
 
 
 def get_v3_report_policy_pins(report_type: str) -> dict:
@@ -74,6 +198,10 @@ def generate_report_from_form(
     as_of_text: str | None,
 ) -> ReportRun:
     ids = sorted({int(x.strip()) for x in str(subject_ids_text or "").split(",") if x.strip()})
+    if not ids:
+        raise ValueError("subject_ids must include at least one integer id")
+    if report_type in {"molecule_comparative_report", "program_comparative_report"} and not (2 <= len(ids) <= 5):
+        raise ValueError(f"{report_type} requires 2-5 subject ids")
     as_of = _parse_as_of(as_of_text)
     policy_pins = get_v3_report_policy_pins(report_type)
 
@@ -97,6 +225,31 @@ def generate_report_from_form(
 
 def list_report_runs(db: Session) -> list[ReportRun]:
     return db.query(ReportRun).order_by(ReportRun.created_at.desc(), ReportRun.id.desc()).limit(100).all()
+
+
+def list_report_program_options(db: Session) -> list[dict]:
+    rows = db.query(Program).order_by(Program.id.asc()).all()
+    out = [{"id": int(r.id), "name": str(r.name or "")} for r in rows]
+    return out
+
+
+def list_report_molecule_options(db: Session, *, program_id: int) -> list[dict]:
+    rows = (
+        db.query(Molecule)
+        .filter(Molecule.program_id == int(program_id))
+        .order_by(Molecule.primary_id.asc(), Molecule.id.asc())
+        .all()
+    )
+    out = [
+        {
+            "id": int(r.id),
+            "primary_id": str(r.primary_id or ""),
+            "title": str(r.title or ""),
+            "program_id": int(r.program_id),
+        }
+        for r in rows
+    ]
+    return out
 
 
 def get_report_run_detail(db: Session, report_run_id: int) -> dict:
@@ -172,10 +325,19 @@ def get_report_run_detail(db: Session, report_run_id: int) -> dict:
             snapshot_refs.add(int(sid))
         except Exception:
             pass
+    report_type = str(getattr(row, "report_type", "") or "")
+    identity_summary = build_report_identity_summary(
+        db,
+        report_type=report_type,
+        payload=payload,
+        subject_ids=[int(x) for x in subject_ids if str(x).strip().isdigit()],
+        snapshot_coverage=[int(x) for x in snapshot_cov if str(x).strip().isdigit()],
+    )
     return {
         "report_run": row,
         "payload": payload,
         "subject_ids": subject_ids,
+        "identity_summary": identity_summary,
         "policy_pins": policy_pins,
         "policy_pin_summary": policy_pin_summary,
         "rule_ids": sorted(rule_ids),

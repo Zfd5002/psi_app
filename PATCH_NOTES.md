@@ -1,3 +1,58 @@
+## 2026-03-02 — v1.3.0a82
+Why:
+- Fix brittle comparative report identity rendering by moving board-facing identity derivation into deterministic Python context assembly.
+- Add print/PDF export mode for report detail pages with stable board-first layout.
+- Replace raw-ID report generation UX with guided deterministic selectors while preserving manual-ID fallback.
+
+What:
+- Server-derived identity summary (Option B) added in `psi/services/reports_v3.py`:
+  - New `build_report_identity_summary(...)` used by `get_report_run_detail(...)`.
+  - Deterministic identity formatting for `molecule_report`, `program_report`, `molecule_comparative_report`, and `program_comparative_report`.
+  - Comparative identity uses `molecule_set.rows` / `program_set.rows` stable row order.
+  - Board identity text filters 64-hex hash tokens.
+- Report detail route/template PDF mode:
+  - `GET /reports/{id}?export=pdf` sets `is_pdf` and `body_class="pdf-mode"`.
+  - Board View remains default; in PDF mode tabs and technical pane are suppressed.
+  - Added deterministic “Export PDF” link in normal mode.
+- Guided report generation form:
+  - New JSON endpoints:
+    - `GET /reports/options/programs`
+    - `GET /reports/options/molecules?program_id=...`
+  - `reports/new.html` now uses dependent selectors:
+    - program selector for program report types,
+    - program then molecule selector for molecule report types.
+  - Comparative selection validation enforces 2–5 picks in UI and server-side form parser.
+  - Manual IDs path retained behind toggle for graceful degradation.
+- Added deterministic tests:
+  - `tests/test_v3_reports_ui_identity.py`
+    - identity summary derivation coverage
+    - options endpoints ordering/filter behavior.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/routers/reports.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/new.html`
+- `psi/web/templates/base.html`
+- `psi/web/static/style.css`
+- `tests/test_v3_reports_ui_identity.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DI semantic/policy/ranking/replay logic changes.
+- No DB schema/migration changes.
+- Deterministic ordering preserved.
+
+Rsync overlay instructions:
+- `rsync -av --no-times ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a82_<timestamp>/ /home/zach/psi_repo/`
+
 ## 2026-03-02 — v1.3.0a81
 Why:
 - Fix board readability regressions where report identity and subjects could render as `missing`/`Not yet captured` despite available payload data.

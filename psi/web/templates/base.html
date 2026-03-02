@@ -6,7 +6,7 @@
   <title>{% block title %}PSI{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body>
+<body class="{{ body_class if body_class is defined else '' }}">
   <div class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="/">PSI</a>
