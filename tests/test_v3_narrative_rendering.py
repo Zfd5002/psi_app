@@ -84,10 +84,10 @@ def test_comparison_narrative_uses_friendly_subject_labels_and_no_array_literal(
         "metadata": {"report_type": "molecule_comparison_report"},
         "sections": {
             "identity_context": {"subjects": [1, 2]},
-            "II_general_profile": {
-                "columns": [
-                    {"primary_id": "M1", "title": "Mol One"},
-                    {"primary_id": "M2", "title": "Mol Two"},
+            "molecule_set": {
+                "rows": [
+                    {"molecule_id": 1, "primary_id": "M1", "title": "Mol One"},
+                    {"molecule_id": 2, "primary_id": "M2", "title": "Mol Two"},
                 ]
             },
             "experimental_gaps": [],
@@ -97,3 +97,38 @@ def test_comparison_narrative_uses_friendly_subject_labels_and_no_array_literal(
     raw = stable_json_dumps(out)
     assert "M1 (Mol One), M2 (Mol Two)" in raw
     assert "[]" not in raw
+
+
+def test_molecule_narrative_uses_decision_state_and_experimental_gap_lists() -> None:
+    payload = {
+        "metadata": {"report_type": "molecule_report"},
+        "sections": {
+            "identity_context": {"molecule_id": 9, "primary_id": "M9"},
+            "stage_determination": {"decision_state": "ready", "readiness_state": "not_ready"},
+            "experimental_gaps": {
+                "blockers": ["missing_pk_window"],
+                "next_best_experiments": ["repeat_pk"],
+            },
+        },
+    }
+    out = render_molecule_narrative(payload)
+    stage_row = next((x for x in out["status_rows"] if x.get("label") == "Stage"), {})
+    assert stage_row.get("value") == "ready"
+    assert out["next_steps"] == ["missing_pk_window"]
+
+
+def test_program_comparison_narrative_uses_program_set_rows() -> None:
+    payload = {
+        "metadata": {"report_type": "program_comparison_report"},
+        "sections": {
+            "program_set": {
+                "rows": [
+                    {"program_id": 2, "molecule_count": 5},
+                    {"program_id": 7, "molecule_count": 1},
+                ]
+            }
+        },
+    }
+    out = render_program_comparison_narrative(payload)
+    status_row = next((x for x in out["status_rows"] if x.get("label") == "Subjects"), {})
+    assert status_row.get("value") == "program_id=2 (molecules=5), program_id=7 (molecules=1)"

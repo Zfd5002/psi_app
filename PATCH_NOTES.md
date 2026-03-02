@@ -1,3 +1,46 @@
+## 2026-03-02 — v1.3.0a81
+Why:
+- Fix board readability regressions where report identity and subjects could render as `missing`/`Not yet captured` despite available payload data.
+
+What:
+- Updated `reports/detail.html` Executive Header identity rendering (template-only):
+  - Added deterministic `identity_summary` for all report types.
+  - Uses `identity_context` when present.
+  - Falls back to `metadata` + `molecule_set.rows` / `program_set.rows` for comparative reports.
+  - Avoids raw dict dumps in board identity display.
+- Updated `psi/services/v3_narrative.py` (derived narrative layer only):
+  - Molecule Stage now prefers `stage_determination.decision_state`, then `readiness_state`, then `Not assessed yet`.
+  - Molecule Next steps now reads `experimental_gaps.blockers` first, then `experimental_gaps.next_best_experiments`, preserving payload order.
+  - Comparative Subjects now derive from:
+    - `molecule_set.rows` for molecule comparative
+    - `program_set.rows` for program comparative
+    with deterministic best-effort labels.
+- Added deterministic regression tests in `tests/test_v3_narrative_rendering.py` for:
+  - molecule stage precedence
+  - molecule next-step extraction
+  - molecule/program comparative subjects derivation from row sets.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/services/v3_narrative.py`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (matched=5 failed=0 skipped=0)
+
+Guarantees:
+- No DI semantic changes.
+- No DB changes.
+- Replay invariance preserved.
+
+Rsync overlay instructions:
+- `rsync -av --no-times ~/psi_codex/_artifacts/v1.3.0/overlays/psi_overlay_v1.3.0a81_<timestamp>/ ~/psi_repo/`
+
 ## 2026-03-02 — v1.3.0a80
 Why:
 - Final board-readability consistency and accessibility pass across report/lineage toggles and section framing.

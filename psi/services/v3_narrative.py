@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -88,19 +89,52 @@ def _base_narrative(headline: str) -> dict[str, Any]:
     }
 
 
+def _stringify_item(x: Any) -> str:
+    if isinstance(x, str):
+        return x
+    if isinstance(x, (int, float, bool)):
+        return str(x)
+    if isinstance(x, dict):
+        return json.dumps(x, sort_keys=True, ensure_ascii=False)
+    if isinstance(x, list):
+        return json.dumps(x, ensure_ascii=False)
+    return str(x)
+
+
+def _molecule_stage(sections: dict[str, Any]) -> str:
+    stage = _as_dict(sections.get("stage_determination"))
+    decision_state = str(stage.get("decision_state") or "").strip()
+    if decision_state:
+        return decision_state
+    readiness_state = str(stage.get("readiness_state") or "").strip()
+    if readiness_state:
+        return readiness_state
+    return "Not assessed yet"
+
+
+def _molecule_next_steps(sections: dict[str, Any]) -> list[str]:
+    gaps = _as_dict(sections.get("experimental_gaps"))
+    blockers = _as_list(gaps.get("blockers"))
+    if blockers:
+        return [_clean_text(_stringify_item(x)) for x in blockers]
+    next_best = _as_list(gaps.get("next_best_experiments"))
+    if next_best:
+        return [_clean_text(_stringify_item(x)) for x in next_best]
+    return [_clean_text("No experimental gaps listed yet.")]
+
+
 def render_molecule_narrative(report_payload: dict) -> dict:
     sections, metadata = _collect_sections(_as_dict(report_payload))
     ident = _as_dict(sections.get("identity_context"))
     comp = _comparability_det(sections)
     snapshots = _snapshot_count(sections)
     measurement_keys = _measurement_keys(sections)
-    gaps = _as_str_list(sections.get("experimental_gaps"))
     headline = f"Molecule report for {ident.get('primary_id') or ident.get('molecule_id') or 'unidentified molecule'}"
     out = _base_narrative(headline)
     out["status_rows"] = [
         {"label": "Report type", "value": _clean_text(metadata.get("report_type") or "molecule_report")},
         {"label": "Molecule", "value": _clean_text(ident.get("title") or ident.get("primary_id") or "Not available")},
-        {"label": "Stage", "value": _clean_text(_as_dict(sections.get("stage_determination")).get("stage") or "Not assessed yet")},
+        {"label": "Stage", "value": _clean_text(_molecule_stage(sections))},
     ]
     out["what_this_means"] = [
         _clean_text("This narrative restates existing report sections and does not add new conclusions."),
@@ -131,10 +165,7 @@ def render_molecule_narrative(report_payload: dict) -> dict:
             ],
         )
     ]
-    if gaps:
-        out["next_steps"] = [_clean_text(x) for x in gaps]
-    else:
-        out["next_steps"] = [_clean_text("No experimental gaps listed yet.")]
+    out["next_steps"] = _molecule_next_steps(sections)
     out["technical_notes"] = [_clean_text("Board view hides hashes and raw audit payloads.")]
     return out
 
@@ -184,30 +215,46 @@ def render_program_narrative(report_payload: dict) -> dict:
     return out
 
 
-def _comparison_narrative(report_payload: dict, *, subject_label: str) -> dict:
-    sections, metadata = _collect_sections(_as_dict(report_payload))
+def _comparison_subjects(sections: dict[str, Any], *, subject_kind: str) -> list[str]:
+    subjects: list[str] = []
+    if subject_kind == "molecule":
+        rows = _as_list(_as_dict(sections.get("molecule_set")).get("rows"))
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            primary_id = str(row.get("primary_id") or "").strip()
+            title = str(row.get("title") or "").strip()
+            molecule_id = row.get("molecule_id")
+            if primary_id and title:
+                subjects.append(f"{primary_id} ({title})")
+            elif primary_id:
+                subjects.append(primary_id)
+            elif title:
+                subjects.append(title)
+            elif molecule_id is not None:
+                subjects.append(f"molecule_id={molecule_id}")
+    elif subject_kind == "program":
+        rows = _as_list(_as_dict(sections.get("program_set")).get("rows"))
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            program_id = row.get("program_id")
+            molecule_count = row.get("molecule_count")
+            if program_id is None:
+                continue
+            if molecule_count is not None:
+                subjects.append(f"program_id={program_id} (molecules={molecule_count})")
+            else:
+                subjects.append(f"program_id={program_id}")
+    if subjects:
+        return subjects
     ident = _as_dict(sections.get("identity_context"))
-    subjects = _as_str_list(ident.get("subjects"))
-    profile = _as_dict(sections.get("II_general_profile"))
-    profile_cols = _as_list(profile.get("columns"))
-    friendly_subjects: list[str] = []
-    for col in profile_cols:
-        if not isinstance(col, dict):
-            continue
-        primary_id = str(col.get("primary_id") or "").strip()
-        title = str(col.get("title") or "").strip()
-        program_name = str(col.get("program_name") or "").strip()
-        if primary_id and title:
-            friendly_subjects.append(f"{primary_id} ({title})")
-        elif primary_id:
-            friendly_subjects.append(primary_id)
-        elif program_name and title:
-            friendly_subjects.append(f"{program_name} ({title})")
-        elif program_name:
-            friendly_subjects.append(program_name)
-        elif title:
-            friendly_subjects.append(title)
-    subjects = friendly_subjects if friendly_subjects else subjects
+    return _as_str_list(ident.get("subjects"))
+
+
+def _comparison_narrative(report_payload: dict, *, subject_label: str, subject_kind: str) -> dict:
+    sections, metadata = _collect_sections(_as_dict(report_payload))
+    subjects = _comparison_subjects(sections, subject_kind=subject_kind)
     comp = _comparability_det(sections)
     out = _base_narrative(f"{subject_label} comparison report")
     out["status_rows"] = [
@@ -246,8 +293,8 @@ def _comparison_narrative(report_payload: dict, *, subject_label: str) -> dict:
 
 
 def render_molecule_comparison_narrative(report_payload: dict) -> dict:
-    return _comparison_narrative(report_payload, subject_label="Molecule")
+    return _comparison_narrative(report_payload, subject_label="Molecule", subject_kind="molecule")
 
 
 def render_program_comparison_narrative(report_payload: dict) -> dict:
-    return _comparison_narrative(report_payload, subject_label="Program")
+    return _comparison_narrative(report_payload, subject_label="Program", subject_kind="program")
