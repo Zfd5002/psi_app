@@ -4402,6 +4402,332 @@ Schema changes:
 
 Gates:
 - PASS
+## 2026-03-02 — v1.3.0a46
+Intent:
+- Document V3 hardening contracts and changelog alignment for a32-a46.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/V3_HARDENING_CONTRACT_NOTES_a32_a46.md`
+
+Determinism notes:
+- Added operator-facing contract doc covering:
+  - canonical serialization rules
+  - ranking tie-break contract
+  - comparability citation requirements
+  - policy-upgrade diff artifact format
+- Document is aligned to implemented code paths and tests from a32-a46.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a45
+Intent:
+- Surface deterministic measurement-key and evidence-snapshot citations in report detail UI for comparability/rollup context.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Added deterministic citation extraction in report detail:
+  - `measurement_key_citations` (sorted)
+  - `evidence_snapshot_refs` (sorted)
+- Extraction uses only stored report payload structures and snapshot coverage.
+- UI now shows policy, rule, measurement, and evidence citation summaries in fixed positions.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a44
+Intent:
+- Improve scientist-facing report clarity by surfacing policy pin versions/hashes and involved rule IDs prominently in report detail UI.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Added deterministic `policy_pin_summary` and sorted `rule_ids` extraction in report detail service.
+- UI render is strictly data-driven from stored report payload and pins; no new inference logic.
+- Smoke template check now locks the presence of policy/rule summary surfaces.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a43
+Intent:
+- Add deterministic optional `report_fingerprint` computed from canonical report payload body.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_contracts.py`
+
+Determinism notes:
+- Added canonical SHA-256 report fingerprint generation from canonical serialized payload basis (excluding fingerprint field itself).
+- Fingerprint is persisted in payload metadata only; no DI snapshot hash semantics changed.
+- Added contract checks for fingerprint stability across repeated generation.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a42
+Intent:
+- Add explicit attribution-isolation contracts ensuring actor/attribution metadata never influences deterministic report/ranking/rollup outputs.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_attribution_isolation.py`
+
+Determinism notes:
+- Added pytest contracts showing that adding attribution events does not alter:
+  - program rollup outputs
+  - generated program report payloads
+  - ranking surfaces
+- Confirms attribution remains governance metadata only, not part of deterministic computed surfaces.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a41
+Intent:
+- Expand replay regression harness coverage to include deterministic program rollup surface checks.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_replay_regression.py`
+
+Determinism notes:
+- Replay harness now tracks program IDs in the tested snapshot slice and verifies `build_program_rollup()` is deterministic (double-run equality at fixed `as_of`).
+- Rollup nondeterminism is governance-fatal and now contributes to replay failure output.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a40
+Intent:
+- Add upgrade-session verification routine requiring deterministic snapshot-set and input-link presence.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_policy_upgrade_diff_artifact.py`
+
+Determinism notes:
+- Policy diff artifact now carries:
+  - `snapshot_ids`
+  - `deterministic_inputs`
+- Added `verify_policy_upgrade_session()` with deterministic failure modes:
+  - `policy_upgrade_session_missing_snapshot_set`
+  - `policy_upgrade_session_missing_deterministic_inputs`
+- Smoke and unit tests now validate verification success/failure paths deterministically.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a39
+Intent:
+- Add deterministic policy diff artifact generation for upgrade sessions with canonical hash metadata.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_policy_upgrade_diff_artifact.py`
+
+Determinism notes:
+- Added `build_policy_diff_artifact()` with stable structured payload:
+  - old/new policy pins
+  - old/new package and semantics hashes
+  - sorted changed keys
+  - deterministic nested delta surface
+- `PolicyUpgradeSession.delta_payload_json` now stores this canonical diff artifact.
+- Added deterministic artifact tests and updated smoke checks for new shape.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a38
+Intent:
+- Formalize deterministic comparability category resolution order, including explicit partial-data fallback behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/comparability.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Added `resolve_comparability_category()` with explicit policy-order precedence and stable candidate normalization.
+- Added conservative deterministic fallback for partial/missing data (`not_comparable` when configured).
+- `get_effective_comparability()` now returns deterministic `category_resolution` metadata.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a37
+Intent:
+- Enforce governance-grade comparability citations (measurement keys + snapshot IDs) and fail deterministically when absent.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/comparability.py`
+- `psi/tools/di_contract_smoke.py`
+
+Determinism notes:
+- Comparability creation now requires non-empty citations:
+  - `cited_measurement_keys`
+  - `cited_snapshot_ids`
+- Added deterministic validation errors:
+  - `comparability_missing_measurement_citations`
+  - `comparability_missing_snapshot_citations`
+- Updated smoke fixtures and added explicit missing-citation failure assertions.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a36
+Intent:
+- Normalize and strengthen deterministic ranking explanation trace surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_ranking.py`
+- `tests/test_v3_ranking_tiebreak.py`
+
+Determinism notes:
+- `reason_trail` entries now include explicit `policy_rule_id`, `criterion_id`, `outcome`, `applied`.
+- `tie_break_explanation` now includes deterministic `key_values` for configured tie-break keys.
+- Added top-level `explanation_trace_version` for stable trace contract evolution.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a35
+Intent:
+- Formalize ranking tie-break contract in policy v0.2 and enforce deterministic tie resolution path in ranking service.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/ranking_policy_v0_2.json`
+- `psi/services/v3_ranking.py`
+- `tests/test_v3_ranking_tiebreak.py`
+
+Determinism notes:
+- Ranking tie-break now derives directly from ordered `method.tie_break_keys` in policy.
+- Added explicit `tie_break_contract` policy stanza (`deterministic_only=true`, `weights_allowed=false`).
+- Added tie-scenario tests that lock deterministic ranking order and explanation keys.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a34
+Intent:
+- Add V3 report contract tests for all four report types plus canonical serialization stability checks.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_report_contracts.py`
+
+Determinism notes:
+- Added contract checks for required section keys across:
+  - molecule report
+  - program report
+  - molecule comparative report
+  - program comparative report
+- Added repeat-generation canonical serialization lock for identical fixture inputs.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a33
+Intent:
+- Formalize deterministic ordering contracts for comparative report entity rows.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_engine_contracts.py`
+
+Determinism notes:
+- Added explicit comparative ordering helpers:
+  - molecule rows: `(primary_id, molecule_id, title)`
+  - program rows: `(program_id)`
+- Comparative report generators now call these helpers directly.
+- Added unit contracts asserting stable ordering regardless of input order.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
+## 2026-03-02 — v1.3.0a32
+Intent:
+- Introduce canonical report serialization utilities for deterministic JSON string/bytes emission.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_engine_contracts.py`
+- `pytest.ini`
+
+Determinism notes:
+- Added canonical report serialization helpers with stable dict-key ordering, explicit UTF-8 byte encoding, tuple/set normalization, and stable float formatting.
+- Persisted `ReportRun` JSON fields now use canonical report serialization.
+- Added byte-for-byte deterministic serialization tests.
+- Added deterministic pytest discovery scoping to `tests/` to prevent artifact tree collection drift.
+
+Schema changes:
+- None.
+
+Gates:
+- PASS
 ## 2026-03-02 — v1.3.0a31
 Intent:
 - Add deterministic governance red-flag surfaces to report reproducibility appendices.
