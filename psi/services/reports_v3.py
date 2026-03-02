@@ -15,7 +15,7 @@ from psi.services.report_engine import (
     generate_program_report_v0,
     load_report_run_payload,
 )
-from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
+from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings, require_upgrade_acknowledged_for_semantic_actions
 
 
 def _parse_as_of(as_of_text: str | None) -> datetime:
@@ -41,6 +41,11 @@ def get_v3_report_policy_pins(report_type: str) -> dict:
     ranking_pol = _load_json(base / "ranking_policy_v0_2.json")
     pins = {
         "report_type": str(report_type),
+        "shortlisting_policy": {
+            "status": "deprecated_non_executable",
+            "allow_shortlisting": False,
+            "effective_version": "v1.3.0a48",
+        },
         "template_catalog": {
             "catalog_id": str(template_cat.get("catalog_id") or ""),
             "catalog_version": str(template_cat.get("catalog_version") or ""),
@@ -71,6 +76,7 @@ def generate_report_from_form(
     ids = sorted({int(x.strip()) for x in str(subject_ids_text or "").split(",") if x.strip()})
     as_of = _parse_as_of(as_of_text)
     policy_pins = get_v3_report_policy_pins(report_type)
+    require_upgrade_acknowledged_for_semantic_actions(db, current_policy_pins=policy_pins)
     if report_type == "molecule_report":
         if len(ids) != 1:
             raise ValueError("molecule_report requires exactly 1 subject id")
@@ -107,11 +113,71 @@ def get_report_run_detail(db: Session, report_run_id: int) -> dict:
         snapshot_cov = json.loads(row.snapshot_coverage_json or "[]")
     except Exception:
         snapshot_cov = []
+    policy_pin_summary = []
+    if isinstance(policy_pins, dict):
+        for k in sorted(policy_pins.keys(), key=lambda x: str(x)):
+            v = policy_pins.get(k)
+            if isinstance(v, dict):
+                policy_pin_summary.append(
+                    {
+                        "pin_key": str(k),
+                        "version": str(v.get("policy_version") or v.get("catalog_version") or ""),
+                        "hash": str(v.get("policy_hash") or v.get("catalog_hash") or ""),
+                    }
+                )
+            else:
+                policy_pin_summary.append({"pin_key": str(k), "version": str(v), "hash": ""})
+    rule_ids: set[str] = set()
+    measurement_keys: set[str] = set()
+    snapshot_refs: set[int] = set()
+    sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
+    for sec in sections.values():
+        if not isinstance(sec, dict):
+            continue
+        if isinstance(sec.get("assessments"), list):
+            for row_obj in sec.get("assessments"):
+                if isinstance(row_obj, dict):
+                    if str(row_obj.get("rule_id") or "").strip():
+                        rule_ids.add(str(row_obj.get("rule_id")))
+                    for mk in (row_obj.get("cited_measurement_keys") or []):
+                        if str(mk).strip():
+                            measurement_keys.add(str(mk))
+                    for sid in (row_obj.get("cited_snapshot_ids") or []):
+                        try:
+                            snapshot_refs.add(int(sid))
+                        except Exception:
+                            pass
+        if isinstance(sec.get("rows"), list):
+            for row_obj in sec.get("rows"):
+                if isinstance(row_obj, dict) and isinstance(row_obj.get("reason_trail"), list):
+                    for rr in row_obj.get("reason_trail"):
+                        if isinstance(rr, dict) and str(rr.get("policy_rule_id") or "").strip():
+                            rule_ids.add(str(rr.get("policy_rule_id")))
+        if isinstance(sec.get("rollup"), dict):
+            rc = sec.get("rollup", {}).get("rollup_citations")
+            if isinstance(rc, dict):
+                for mk in (rc.get("measurement_keys") or []):
+                    if str(mk).strip():
+                        measurement_keys.add(str(mk))
+                for sid in (rc.get("snapshot_ids") or []):
+                    try:
+                        snapshot_refs.add(int(sid))
+                    except Exception:
+                        pass
+    for sid in snapshot_cov if isinstance(snapshot_cov, list) else []:
+        try:
+            snapshot_refs.add(int(sid))
+        except Exception:
+            pass
     return {
         "report_run": row,
         "payload": payload,
         "subject_ids": subject_ids,
         "policy_pins": policy_pins,
+        "policy_pin_summary": policy_pin_summary,
+        "rule_ids": sorted(rule_ids),
+        "measurement_key_citations": sorted(measurement_keys),
+        "evidence_snapshot_refs": sorted(snapshot_refs),
         "snapshot_coverage": snapshot_cov,
         "governance_warnings": get_unacknowledged_upgrade_warnings(db, current_policy_pins=policy_pins),
     }

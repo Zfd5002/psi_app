@@ -49,6 +49,46 @@ def _stable_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+def resolve_comparability_category(
+    *,
+    statuses: list[str] | tuple[str, ...],
+    allowed_statuses: list[str] | tuple[str, ...],
+    missing_data: bool = False,
+) -> dict[str, Any]:
+    allowed = [str(x).strip().lower() for x in (allowed_statuses or []) if str(x).strip()]
+    statuses_norm = [str(s).strip().lower() for s in (statuses or []) if str(s).strip()]
+    statuses_seen: dict[str, bool] = {}
+    for s in statuses_norm:
+        if s not in statuses_seen:
+            statuses_seen[s] = True
+    if bool(missing_data):
+        fallback = "not_comparable"
+        return {
+            "resolved_status": fallback,
+            "resolution_reason": "missing_data",
+            "ordered_candidates": [],
+            "allowed_statuses": allowed,
+        }
+    valid: list[str] = []
+    for s in allowed:
+        if s in statuses_seen:
+            valid.append(s)
+    if not valid:
+        fallback = "not_comparable" if "not_comparable" in allowed else (allowed[-1] if allowed else "not_comparable")
+        return {
+            "resolved_status": fallback,
+            "resolution_reason": "no_valid_status_candidates",
+            "ordered_candidates": [s for s in statuses_norm if s in statuses_seen],
+            "allowed_statuses": allowed,
+        }
+    return {
+        "resolved_status": valid[0],
+        "resolution_reason": "policy_precedence",
+        "ordered_candidates": valid,
+        "allowed_statuses": allowed,
+    }
+
+
 def create_comparability_assessment(
     db: Session,
     *,
@@ -69,7 +109,8 @@ def create_comparability_assessment(
     pol = _load_comparability_policy()
     status_norm = str(status or "").strip().lower()
     allowed_statuses = [str(x).strip().lower() for x in (pol.get("allowed_statuses") or []) if str(x).strip()]
-    if status_norm not in allowed_statuses:
+    resolved = resolve_comparability_category(statuses=[status_norm], allowed_statuses=allowed_statuses)
+    if status_norm not in allowed_statuses or str(resolved.get("resolved_status") or "") != status_norm:
         raise ValueError("comparability_unknown_status")
     rules = pol.get("rule_registry") if isinstance(pol.get("rule_registry"), list) else []
     rule_obj = next((r for r in rules if isinstance(r, dict) and str(r.get("rule_id") or "") == str(rule_id)), None)
@@ -87,6 +128,10 @@ def create_comparability_assessment(
         raise ValueError("comparability_rule_scope_mismatch")
     keys = sorted({str(k) for k in (cited_measurement_keys or []) if str(k)})
     snaps = sorted({int(s) for s in (cited_snapshot_ids or [])})
+    if not keys:
+        raise ValueError("comparability_missing_measurement_citations")
+    if not snaps:
+        raise ValueError("comparability_missing_snapshot_citations")
     existing = (
         db.query(ComparabilityAssessment)
         .filter(ComparabilityAssessment.left_scope_type == l_type)
@@ -258,6 +303,11 @@ def get_effective_comparability(
             "policy_package_hash": (str(effective.policy_package_hash) if effective.policy_package_hash else None),
             "policy_semantics_hash": (str(effective.policy_semantics_hash) if effective.policy_semantics_hash else None),
         },
+        "category_resolution": resolve_comparability_category(
+            statuses=[str(r.status or "") for r in rows],
+            allowed_statuses=[str(x).strip().lower() for x in ((_load_comparability_policy().get("allowed_statuses") or [])) if str(x).strip()],
+            missing_data=False,
+        ),
         "history_summary": {k: summary[k] for k in sorted(summary.keys())},
         "governance_warnings": warnings,
         "canonical_pair": {"left_scope_type": l_type, "left_scope_id": l_id, "right_scope_type": r_type, "right_scope_id": r_id},

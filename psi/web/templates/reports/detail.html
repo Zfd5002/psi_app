@@ -3,6 +3,16 @@
 {% block content %}
 <div class="card">
   <h1>Report #{{ report_run.id }}</h1>
+  <div class="card" style="margin-top:8px;">
+    <h2 style="margin-top:0;">Policy Versions</h2>
+    <pre style="white-space:pre-wrap;">{{ (policy_pin_summary if policy_pin_summary is defined else []) | tojson(indent=2) }}</pre>
+    <h2>Rule IDs</h2>
+    <pre style="white-space:pre-wrap;">{{ (rule_ids if rule_ids is defined else []) | tojson(indent=2) }}</pre>
+    <h2>Measurement Key Citations</h2>
+    <pre style="white-space:pre-wrap;">{{ (measurement_key_citations if measurement_key_citations is defined else []) | tojson(indent=2) }}</pre>
+    <h2>Evidence Snapshot References</h2>
+    <pre style="white-space:pre-wrap;">{{ (evidence_snapshot_refs if evidence_snapshot_refs is defined else []) | tojson(indent=2) }}</pre>
+  </div>
   <div class="grid cols-2">
     <div>
       <div><strong>Type:</strong> <code>{{ report_run.report_type }}</code></div>
@@ -21,6 +31,16 @@
 
   <h2>Governance Warnings</h2>
   <pre style="white-space:pre-wrap;">{{ (governance_warnings if governance_warnings is defined else []) | tojson(indent=2) }}</pre>
+
+  <h2>Structured Report Payload</h2>
+  <pre style="white-space:pre-wrap;">{
+  "identity_context": {{ ((payload.sections.identity_context if payload is defined and payload.sections is defined and payload.sections.identity_context is defined else "missing") | tojson(indent=2)) }},
+  "molecule_report": {{ ((payload.metadata.report_type if payload is defined and payload.metadata is defined and payload.metadata.report_type is defined else "missing") | tojson(indent=2)) }},
+  "policy_summary": {{ ((policy_pin_summary if policy_pin_summary is defined and policy_pin_summary else "missing") | tojson(indent=2)) }},
+  "rule_summary": {{ ((rule_ids if rule_ids is defined and rule_ids else "missing") | tojson(indent=2)) }},
+  "measurement_summary": {{ ((measurement_key_citations if measurement_key_citations is defined and measurement_key_citations else "missing") | tojson(indent=2)) }},
+  "evidence_summary": {{ ((evidence_snapshot_refs if evidence_snapshot_refs is defined and evidence_snapshot_refs else "missing") | tojson(indent=2)) }}
+}</pre>
 
   <h2>Sections</h2>
   {% for section_name, section_value in (payload.sections or {}).items() %}

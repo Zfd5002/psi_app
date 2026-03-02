@@ -1,3 +1,38 @@
+## 2026-03-02 — v1.3.0a63
+Summary:
+- Fix comparability category resolution precedence to enforce:
+  - `missing_data=True` => deterministic conservative fallback `resolved_status="not_comparable"` with `resolution_reason="missing_data"`.
+  - `missing_data=False` => policy-order precedence where earliest status in `allowed_statuses` present in input statuses wins, with `resolution_reason="policy_precedence"`.
+- Add dedicated comparability resolution tests for precedence and partial-data determinism.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/comparability.py`
+- `tests/test_comparability_resolution.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-02 — v1.3.0a62
+Summary:
+- Fix report detail template contract requirements by adding a deterministic structured payload block with fixed keys and required literal markers.
+- Always render fixed-order keys: `identity_context`, `molecule_report`, `policy_summary`, `rule_summary`, `measurement_summary`, `evidence_summary`, using deterministic `"missing"` placeholders when absent.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
 ## 2026-02-26 — v1.2.9x32 (Closeout hardening)
 What changed:
 - Archived legacy MVP app source to `docs/legacy/legacy_mvp_app.py` and replaced `psi/legacy_mvp_app.py` with an overlay-safe tombstone shim so it is not part of active PSI runtime paths.
@@ -4402,6 +4437,270 @@ Schema changes:
 
 Gates:
 - PASS
+## 2026-03-02 — v1.3.0a48
+Summary:
+- Hard-deprecate V3 shortlisting policy usage by quarantining legacy shortlisting catalog as non-executable metadata and removing executable `ranking_weights` content.
+- Ensure V3 report policy pins surface shortlisting as deprecated/non-executable (`allow_shortlisting=false`) for board-safe surfaces.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/shortlisting_policy_v0_1.json`
+- `psi/services/reports_v3.py`
+- `psi/tools/di_contract_smoke.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`21 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a49
+Summary:
+- Add deterministic governance tests that forbid weighted-heuristic tokens in specific DI runtime modules and the shortlisting legacy catalog.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_v3_no_weighted_heuristics.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`22 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a50
+Summary:
+- Define canonical V3 Molecule Report schema builder with fixed section ordering (`I..VIII`), deterministic JSON serialization, and governance fingerprinting that explicitly excludes report timestamp.
+- Wire molecule report fields to real molecule/snapshot/readiness/evidence/policy data where available.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_board_reports.py`
+- `tests/test_v3_molecule_report_schema.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`23 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a51
+Summary:
+- Add canonical V3 Comparison Report schema builder with fixed `I..VIII` section ordering, metric-row/table format, stable molecule column sorting by `molecule_id`, and comparability citation/status surfaces.
+- Keep comparison contract non-scored and non-weighted.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_board_reports.py`
+- `tests/test_v3_comparison_report_schema.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`24 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a52
+Summary:
+- Add board-readable Jinja templates for canonical V3 molecule/comparison reports and a deterministic renderer that consumes report JSON without mutating canonical payloads.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_board_reports.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `psi/web/templates/reports/board_comparison_v3.html`
+- `tests/test_v3_board_report_rendering.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`25 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a53
+Summary:
+- Add determinism tests for canonical V3 molecule/comparison reports:
+  - timestamp exclusion from fingerprint
+  - stable section/column ordering
+  - byte-stable canonical JSON basis comparisons
+  - stable non-scientific float formatting in canonical serialization
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_board_reports.py`
+- `tests/test_v3_board_report_determinism.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`26 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a54
+Summary:
+- Add deterministic rule-based executive summary bullet generator for strengths/risks/decision status/required actions.
+- Wire molecule and comparison report section VIII to generated bullet surfaces.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_board_reports.py`
+- `tests/test_v3_executive_summary_bullets.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`27 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a55
+Summary:
+- Add deterministic Upgrade Delta Report skeleton under policy upgrade artifacts:
+  - `header`
+  - `executive_summary_bullets`
+  - `change_table`
+  - `appendix`
+- Add board-readable HTML rendering template for upgrade delta report.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `psi/web/templates/reports/board_upgrade_delta_v3.html`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_policy_upgrade_diff_artifact.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`28 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a56
+Summary:
+- Populate deterministic `ranking_delta` section in upgrade delta appendix:
+  - enabled flag changes
+  - tie-break contract changes
+  - criteria registry ID diffs (added/removed/unchanged)
+- Keep ranking deltas ID-only with no weight/scoring fields.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `tests/test_policy_upgrade_diff_artifact.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`28 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a57
+Summary:
+- Populate deterministic `comparability_delta` in upgrade delta appendix:
+  - rule registry ID diffs
+  - allowed status diffs
+  - gating behavior ID change status
+- Keep citations/deltas as IDs/keys (no prose scoring surfaces).
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `tests/test_policy_upgrade_diff_artifact.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`28 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a58
+Summary:
+- Populate deterministic `template_catalog_delta` appendix section for upgrade deltas:
+  - template key diffs
+  - current version changes
+  - immutable version set changes
+  - prerequisite catalog ID changes
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `tests/test_policy_upgrade_diff_artifact.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`28 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a59
+Summary:
+- Enforce explicit operator acknowledgment for semantic upgrade deltas:
+  - add deterministic `action_required` warning surfaces with board-visible `Action Required` label
+  - add semantic-action guard (`policy_upgrade_action_required`) before report generation when unacknowledged semantic upgrades affect current pins
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/policy_upgrade.py`
+- `psi/services/reports_v3.py`
+- `tests/test_policy_upgrade_diff_artifact.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`29 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a60
+Summary:
+- Formalize deterministic Template Ladder board packet/report:
+  - stage list table
+  - current stage
+  - missing prerequisites
+  - derived next actions
+- Add board-readable ladder report template renderer and determinism tests.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/template_ladder_report.py`
+- `psi/web/templates/reports/board_template_ladder_v3.html`
+- `tests/test_template_ladder_report.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`30 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a61
+Summary:
+- Add fixed-schema lineage board packet surfaces for program and portfolio lineage with deterministic ordering.
+- Add lineage board packet determinism tests analogous to report determinism coverage.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/lineage.py`
+- `tests/test_lineage_board_packet.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS (`31 passed`)
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`tested=5 passed=5 failed=0 skipped=0`)
+## 2026-03-02 — v1.3.0a47
+Summary:
+- Remove numeric weight tables from executable shortlisting ranking logic, replacing weighted score math with deterministic lexicographic tie-break ordering only.
+
+Changed paths:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/shortlisting.py`
+
+Gates run + results:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
 ## 2026-03-02 — v1.3.0a46
 Intent:
 - Document V3 hardening contracts and changelog alignment for a32-a46.

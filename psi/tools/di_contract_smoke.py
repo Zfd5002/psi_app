@@ -617,25 +617,41 @@ def test_progress_policy_catalog_v0_1_loads_and_validates() -> None:
     _assert(latest_1.policy_hash == latest_2.policy_hash, "progress policy latest loader hash must be deterministic")
 
 
-def test_shortlisting_policy_catalog_v0_1_weights_schema_and_values() -> None:
+def test_shortlisting_policy_catalog_v0_1_is_deprecated_non_executable_legacy_shape() -> None:
     p = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "catalogs" / "shortlisting_policy_v0_1.json"
     raw = json.loads(p.read_text(encoding="utf-8"))
     _assert(str(raw.get("policy_id") or "") == "shortlisting_policy_v0_1", "shortlisting policy id mismatch")
     _assert(str(raw.get("policy_version") or "") == "v0.1", "shortlisting policy version mismatch")
-    rw = raw.get("ranking_weights") if isinstance(raw.get("ranking_weights"), dict) else {}
-    _assert(set(rw.keys()) == {"batch_scope", "molecule_scope"}, "shortlisting policy ranking_weights scopes mismatch")
-    batch = rw.get("batch_scope") if isinstance(rw.get("batch_scope"), dict) else {}
-    mol = rw.get("molecule_scope") if isinstance(rw.get("molecule_scope"), dict) else {}
-    _assert(list(batch.keys()) == sorted(batch.keys()), "shortlisting policy batch_scope keys must be sorted")
-    _assert(list(mol.keys()) == sorted(mol.keys()), "shortlisting policy molecule_scope keys must be sorted")
+    _assert(str(raw.get("status") or "") == "deprecated_non_executable", "shortlisting policy must be marked deprecated_non_executable")
+    _assert("ranking_weights" not in raw, "shortlisting policy must not carry executable ranking_weights payload")
+    shape = raw.get("legacy_shortlisting_shape") if isinstance(raw.get("legacy_shortlisting_shape"), dict) else {}
+    batch = shape.get("batch_scope_keys") if isinstance(shape.get("batch_scope_keys"), list) else []
+    mol = shape.get("molecule_scope_keys") if isinstance(shape.get("molecule_scope_keys"), list) else []
+    _assert(list(batch) == sorted(batch), "shortlisting legacy batch_scope_keys must be sorted")
+    _assert(list(mol) == sorted(mol), "shortlisting legacy molecule_scope_keys must be sorted")
     allowed_batch = {"decision_state_pro", "decision_state_con", "blockers_count", "comparability_high_severity", "metrics_present", "metrics_missing", "warnings_count"}
     allowed_mol = {"metrics_sourced_count", "used_metric_count", "ignored_count", "warning_count"}
-    _assert(set(batch.keys()) == allowed_batch, "shortlisting policy batch_scope allowed keys mismatch")
-    _assert(set(mol.keys()) == allowed_mol, "shortlisting policy molecule_scope allowed keys mismatch")
-    for k, v in sorted(batch.items()):
-        _assert(isinstance(v, (int, float)), f"shortlisting policy batch weight {k} must be numeric")
-    for k, v in sorted(mol.items()):
-        _assert(isinstance(v, (int, float)), f"shortlisting policy molecule weight {k} must be numeric")
+    _assert(set(str(x) for x in batch) == allowed_batch, "shortlisting policy batch legacy keys mismatch")
+    _assert(set(str(x) for x in mol) == allowed_mol, "shortlisting policy molecule legacy keys mismatch")
+
+
+def test_governance_forbid_weighted_heuristics_in_di_runtime_targets() -> None:
+    root = Path(__file__).resolve().parents[2]
+    targets = [
+        root / "psi" / "services" / "di" / "shortlisting.py",
+        root / "psi" / "services" / "di" / "compute.py",
+        root / "psi" / "services" / "di" / "eval.py",
+        root / "psi" / "core" / "di" / "catalogs" / "shortlisting_policy_v0_1.json",
+    ]
+    banned_literals = [
+        "\"ranking_weights\"",
+        "\"weight\":",
+        "weighted_scoring\": true",
+    ]
+    for p in targets:
+        txt = p.read_text(encoding="utf-8")
+        for lit in banned_literals:
+            _assert(lit not in txt, f"governance prohibition violated in {p.name}: {lit}")
 
 
 def test_progress_policy_metric_keys_are_representable_in_measurement_registry() -> None:
@@ -3172,6 +3188,10 @@ def test_reports_ui_templates_render_deterministic_structured_payload_surface() 
     h2 = tmpl.render(request=None, **ctx)
     _assert(h1 == h2, "reports/detail template must render deterministically for fixed payload")
     _assert("identity_context" in h1 and "molecule_report" in h1, "reports/detail template must show structured metadata/sections verbatim")
+    _assert(
+        "Policy Versions" in h1 and "Rule IDs" in h1 and "Measurement Key Citations" in h1 and "Evidence Snapshot References" in h1,
+        "reports/detail template must surface policy, rule, measurement, and evidence summaries",
+    )
 
 
 def test_reports_v3_policy_pin_bundle_deterministic_and_catalog_derived() -> None:
@@ -3372,7 +3392,7 @@ def test_policy_upgrade_session_scaffold_requires_explicit_ack_and_deterministic
     from sqlalchemy.orm import sessionmaker
 
     from psi.core.models import Base
-    from psi.services.policy_upgrade import acknowledge_policy_upgrade_session, create_policy_upgrade_session
+    from psi.services.policy_upgrade import acknowledge_policy_upgrade_session, create_policy_upgrade_session, verify_policy_upgrade_session
 
     eng = create_engine("sqlite:///:memory:", future=True)
     try:
@@ -3384,25 +3404,42 @@ def test_policy_upgrade_session_scaffold_requires_explicit_ack_and_deterministic
                 db,
                 old_policy_pins={"ranking_policy": "v0.1", "comparability_policy": "v0.1"},
                 new_policy_pins={"ranking_policy": "v0.2", "comparability_policy": "v0.1"},
+                snapshot_ids=[1, 2],
+                deterministic_inputs={"as_of": "2026-02-26T00:00:00", "subject_count": 1},
             )
             s2 = create_policy_upgrade_session(
                 db,
                 old_policy_pins={"ranking_policy": "v0.1", "comparability_policy": "v0.1"},
                 new_policy_pins={"ranking_policy": "v0.2", "comparability_policy": "v0.1"},
+                snapshot_ids=[1, 2],
+                deterministic_inputs={"as_of": "2026-02-26T00:00:00", "subject_count": 1},
             )
             _assert(int(s1.operator_acknowledged or 0) == 0, "policy upgrade session must default to unacknowledged")
             _assert(str(s1.delta_payload_json or "") == str(s2.delta_payload_json or ""), "policy upgrade delta payload must be deterministic")
             delta = json.loads(s1.delta_payload_json or "{}")
             _assert(
-                list(delta.keys()) == ["changed_policy_keys", "classification", "downstream_impact_flags"],
+                list(delta.keys()) == sorted([
+                    "artifact_type",
+                    "old_policy_pins",
+                    "new_policy_pins",
+                    "old_policy_package_hash",
+                    "new_policy_package_hash",
+                    "old_policy_semantics_hash",
+                    "new_policy_semantics_hash",
+                    "changed_keys",
+                    "snapshot_ids",
+                    "deterministic_inputs",
+                    "delta",
+                    "upgrade_delta_report",
+                ]),
                 "policy upgrade delta payload must expose deterministic top-level keys",
             )
-            cls = delta.get("classification") if isinstance(delta.get("classification"), dict) else {}
+            cls = (delta.get("delta") or {}).get("classification") if isinstance((delta.get("delta") or {}).get("classification"), dict) else {}
             _assert(
                 list(cls.keys()) == ["catalog_changes", "comparability_policy_changes", "ranking_policy_changes", "template_changes"],
                 "policy upgrade delta classification keys must be deterministic",
             )
-            flags = delta.get("downstream_impact_flags") if isinstance(delta.get("downstream_impact_flags"), dict) else {}
+            flags = (delta.get("delta") or {}).get("downstream_impact_flags") if isinstance((delta.get("delta") or {}).get("downstream_impact_flags"), dict) else {}
             _assert(
                 list(flags.keys()) == ["comparability_semantics_changed", "ranking_semantics_changed", "reports_may_change"],
                 "policy upgrade downstream impact keys must be deterministic",
@@ -3411,6 +3448,8 @@ def test_policy_upgrade_session_scaffold_requires_explicit_ack_and_deterministic
                 flags.get("ranking_semantics_changed") == "yes" and flags.get("reports_may_change") == "yes",
                 "policy upgrade delta flags should reflect ranking pin change deterministically",
             )
+            ver = verify_policy_upgrade_session(db, session_id=int(s1.id))
+            _assert(bool(ver.get("verified")) is True, "policy upgrade session verification must pass when required links are present")
             s1 = acknowledge_policy_upgrade_session(db, session_id=int(s1.id), acknowledged=True)
         finally:
             db.close()
@@ -3553,7 +3592,7 @@ def test_attribution_coverage_for_report_policy_upgrade_and_comparability_creati
                 right_scope_id=int(m2.id),
                 status="not_comparable",
                 rule_id="placeholder_not_assessed",
-                cited_measurement_keys=[],
+                cited_measurement_keys=["metric_x"],
                 cited_snapshot_ids=[int(rr.id)],
                 as_of=datetime(2026, 2, 26, 2, 5, 0),
             )
@@ -3583,14 +3622,14 @@ def test_comparability_assessment_enforces_categorical_only_statuses() -> None:
         try:
             ok = create_comparability_assessment(
                 db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
-                status="not_comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=[], cited_snapshot_ids=[], as_of=datetime(2026,2,26)
+                status="not_comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=["metric_x"], cited_snapshot_ids=[1], as_of=datetime(2026,2,26)
             )
             _assert(str(ok.status) == "not_comparable", "categorical comparability status should persist")
             bad_raised = False
             try:
                 create_comparability_assessment(
                     db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
-                    status="fuzzy", rule_id="placeholder_not_assessed", cited_measurement_keys=[], cited_snapshot_ids=[], as_of=datetime(2026,2,26)
+                    status="fuzzy", rule_id="placeholder_not_assessed", cited_measurement_keys=["metric_x"], cited_snapshot_ids=[1], as_of=datetime(2026,2,26)
                 )
             except ValueError as exc:
                 bad_raised = (str(exc) == "comparability_unknown_status")
@@ -3599,6 +3638,44 @@ def test_comparability_assessment_enforces_categorical_only_statuses() -> None:
             db.close()
     finally:
         eng.dispose()
+
+
+def test_comparability_assessment_requires_citation_fields_deterministically() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from psi.core.models import Base
+    from psi.services.comparability import create_comparability_assessment
+
+    eng = create_engine("sqlite:///:memory:", future=True)
+    try:
+        Base.metadata.create_all(bind=eng)
+        SessionTmp = sessionmaker(bind=eng, future=True)
+        db = SessionTmp()
+        try:
+            missing_measurements = False
+            missing_snapshots = False
+            try:
+                create_comparability_assessment(
+                    db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
+                    status="not_comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=[],
+                    cited_snapshot_ids=[1], as_of=datetime(2026, 2, 26),
+                )
+            except ValueError as exc:
+                missing_measurements = (str(exc) == "comparability_missing_measurement_citations")
+            try:
+                create_comparability_assessment(
+                    db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
+                    status="not_comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=["metric_x"],
+                    cited_snapshot_ids=[], as_of=datetime(2026, 2, 26),
+                )
+            except ValueError as exc:
+                missing_snapshots = (str(exc) == "comparability_missing_snapshot_citations")
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+    _assert(missing_measurements, "comparability missing measurement citations must fail with deterministic error")
+    _assert(missing_snapshots, "comparability missing snapshot citations must fail with deterministic error")
 
 
 def test_comparability_pair_canonicalization_symmetry_and_duplicate_guards() -> None:
@@ -3641,8 +3718,8 @@ def test_comparability_pair_canonicalization_symmetry_and_duplicate_guards() -> 
                     right_scope_id=9,
                     status="comparable",
                     rule_id="placeholder_not_assessed",
-                    cited_measurement_keys=[],
-                    cited_snapshot_ids=[],
+                    cited_measurement_keys=["metric_x"],
+                    cited_snapshot_ids=[1],
                     as_of=as_of,
                 )
             except ValueError as exc:
@@ -3658,8 +3735,8 @@ def test_comparability_pair_canonicalization_symmetry_and_duplicate_guards() -> 
                     right_scope_id=9,
                     status="not_comparable",
                     rule_id="placeholder_not_assessed",
-                    cited_measurement_keys=[],
-                    cited_snapshot_ids=[],
+                    cited_measurement_keys=["metric_x"],
+                    cited_snapshot_ids=[1],
                     as_of=as_of,
                 )
             except ValueError as exc:
@@ -3694,8 +3771,8 @@ def test_comparability_policy_rule_and_load_errors_deterministic() -> None:
                     right_scope_id=2,
                     status="comparable",
                     rule_id="unknown_rule",
-                    cited_measurement_keys=[],
-                    cited_snapshot_ids=[],
+                    cited_measurement_keys=["metric_x"],
+                    cited_snapshot_ids=[1],
                     as_of=as_of,
                 )
             except ValueError as exc:
@@ -3719,8 +3796,8 @@ def test_comparability_policy_rule_and_load_errors_deterministic() -> None:
                         right_scope_id=2,
                         status="comparable",
                         rule_id="placeholder_not_assessed",
-                        cited_measurement_keys=[],
-                        cited_snapshot_ids=[],
+                        cited_measurement_keys=["metric_x"],
+                        cited_snapshot_ids=[1],
                         as_of=as_of,
                     )
                 except ValueError as exc:
@@ -3749,12 +3826,12 @@ def test_comparability_effective_latest_asof_selector_and_warning_ordering() -> 
         try:
             create_comparability_assessment(
                 db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
-                status="comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=[], cited_snapshot_ids=[],
+                status="comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=["metric_x"], cited_snapshot_ids=[1],
                 as_of=datetime(2026, 2, 26, 0, 0, 0),
             )
             create_comparability_assessment(
                 db, left_scope_type="molecule", left_scope_id=1, right_scope_type="molecule", right_scope_id=2,
-                status="not_comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=[], cited_snapshot_ids=[],
+                status="not_comparable", rule_id="placeholder_not_assessed", cited_measurement_keys=["metric_x"], cited_snapshot_ids=[1],
                 as_of=datetime(2026, 2, 27, 0, 0, 0), allow_conflict_override=True,
             )
             eff = get_effective_comparability(
@@ -3767,8 +3844,22 @@ def test_comparability_effective_latest_asof_selector_and_warning_ordering() -> 
         eng.dispose()
     e = eff.get("effective") if isinstance(eff.get("effective"), dict) else {}
     _assert(str(e.get("status") or "") == "not_comparable", "effective comparability must select latest by (as_of desc, id desc)")
+    cres = eff.get("category_resolution") if isinstance(eff.get("category_resolution"), dict) else {}
+    _assert(str(cres.get("resolved_status") or "") == "comparable", "category resolution should use policy-order status precedence deterministically")
     _assert(list((eff.get("history_summary") or {}).keys()) == sorted((eff.get("history_summary") or {}).keys()), "history summary keys must be sorted deterministically")
     _assert((eff.get("governance_warnings") or []) == sorted((eff.get("governance_warnings") or []), key=lambda w: str(w.get("warning_code") or "")), "governance warnings must be deterministically ordered")
+
+
+def test_comparability_category_resolution_handles_partial_data_deterministically() -> None:
+    from psi.services.comparability import resolve_comparability_category
+
+    out = resolve_comparability_category(
+        statuses=["comparable", "not_comparable"],
+        allowed_statuses=["comparable", "conditionally_comparable", "not_comparable"],
+        missing_data=True,
+    )
+    _assert(str(out.get("resolved_status") or "") == "not_comparable", "partial/missing data must resolve to deterministic conservative fallback")
+    _assert(str(out.get("resolution_reason") or "") == "missing_data", "partial/missing data reason code must be deterministic")
 
 
 def test_attribution_presence_non_interference_for_report_payload_generation() -> None:
@@ -3826,7 +3917,8 @@ def main() -> int:
         test_risk_flag_enrichment_unknown_key_defaults_to_unspecified_neutral()
         test_progress_policy_catalog_v0_1_loads_and_validates()
         test_progress_policy_metric_keys_are_representable_in_measurement_registry()
-        test_shortlisting_policy_catalog_v0_1_weights_schema_and_values()
+        test_shortlisting_policy_catalog_v0_1_is_deprecated_non_executable_legacy_shape()
+        test_governance_forbid_weighted_heuristics_in_di_runtime_targets()
         test_template_prerequisites_catalog_v0_1_loads_and_validates()
         test_confidence_policy_catalog_loads_and_latest_loader_is_deterministic()
         test_confidence_policy_catalog_non_weighted_language_and_keys()

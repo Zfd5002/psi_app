@@ -1,91 +1,43 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any, Dict, List
 
 from psi.core.di.schema import DIInput
 from psi.services.di.util import parse_iso
 
 
-RANKING_RULE_VERSION = "v0.5.1"
-_SHORTLISTING_POLICY_CACHE: Dict[str, Any] | None = None
+RANKING_RULE_VERSION = "v0.5.2"
 
 
-def _shortlisting_policy_defaults() -> Dict[str, Any]:
-    return {
-        "batch_scope": {
-            "decision_state_pro": 50.0,
-            "decision_state_con": 50.0,
-            "blockers_count": 5.0,
-            "comparability_high_severity": 3.0,
-            "metrics_present": 1.0,
-            "metrics_missing": 1.0,
-            "warnings_count": 1.0,
-        },
-        "molecule_scope": {
-            "metrics_sourced_count": 2.0,
-            "used_metric_count": 1.0,
-            "ignored_count": 0.5,
-            "warning_count": 1.0,
-        },
-    }
+def _ranking_factor(key: str, direction: str, value: Any) -> Dict[str, Any]:
+    return {"key": key, "direction": direction, "value": value}
 
 
-def _load_shortlisting_policy_weights() -> Dict[str, Any]:
-    global _SHORTLISTING_POLICY_CACHE
-    if isinstance(_SHORTLISTING_POLICY_CACHE, dict):
-        return _SHORTLISTING_POLICY_CACHE
-    defaults = _shortlisting_policy_defaults()
-    p = Path(__file__).resolve().parents[2] / "core" / "di" / "catalogs" / "shortlisting_policy_v0_1.json"
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        _SHORTLISTING_POLICY_CACHE = defaults
-        return _SHORTLISTING_POLICY_CACHE
-    body = raw.get("ranking_weights") if isinstance(raw, dict) and isinstance(raw.get("ranking_weights"), dict) else {}
-    out = json.loads(json.dumps(defaults))
-    for scope_key in ("batch_scope", "molecule_scope"):
-        src = body.get(scope_key) if isinstance(body.get(scope_key), dict) else {}
-        dst = out.get(scope_key) if isinstance(out.get(scope_key), dict) else {}
-        for k in sorted(dst.keys()):
-            if k in src:
-                try:
-                    dst[k] = float(src.get(k))
-                except Exception:
-                    pass
-    _SHORTLISTING_POLICY_CACHE = out
-    return _SHORTLISTING_POLICY_CACHE
-
-
-def _ranking_factor(key: str, direction: str, value: Any, weight: float) -> Dict[str, Any]:
-    return {"key": key, "direction": direction, "value": value, "weight": weight}
-
-
-def _score_from_factors(factors: List[Dict[str, Any]]) -> float:
-    score = 0.0
-    for f in factors:
-        try:
-            v = float(f.get("value") or 0.0)
-            w = float(f.get("weight") or 0.0)
-        except Exception:
-            continue
-        direction = str(f.get("direction") or "pro").strip().lower()
-        if direction == "con":
-            score -= v * w
-        else:
-            score += v * w
-    return float(score)
+def _candidate_sort_tuple(cand: Dict[str, Any]) -> tuple:
+    # Deterministic lexicographic ranking only; no weighted aggregates.
+    values = cand.get("sort_values") if isinstance(cand.get("sort_values"), dict) else {}
+    return (
+        -float(values.get("decision_ready") or 0.0),
+        float(values.get("blockers_count") or 0.0),
+        float(values.get("comparability_high_severity") or 0.0),
+        -float(values.get("metrics_present") or 0.0),
+        float(values.get("metrics_missing") or 0.0),
+        float(values.get("warnings_count") or 0.0),
+        -float(values.get("metrics_sourced_count") or 0.0),
+        -float(values.get("used_metric_count") or 0.0),
+        float(values.get("ignored_count") or 0.0),
+        float(values.get("warning_count") or 0.0),
+    )
 
 
 def _ranking_sort_key(cand: Dict[str, Any]) -> tuple:
-    score = float(cand.get("score") or 0.0)
+    rank_tuple = _candidate_sort_tuple(cand)
     tb = cand.get("tie_breaker") if isinstance(cand.get("tie_breaker"), dict) else {}
     created_raw = tb.get("created_at")
     dt = parse_iso(str(created_raw)) if created_raw else None
     created_ts = dt.timestamp() if dt is not None else -1.0
     cid = int(cand.get("candidate_id") or 0)
-    return (-score, -created_ts, -cid)
+    return rank_tuple + (-created_ts, -cid)
 
 
 def build_ranking_payload(
@@ -95,48 +47,53 @@ def build_ranking_payload(
     selection_provenance: Dict[str, Any],
 ) -> Dict[str, Any]:
     scope_type = str(di_in.scope_type or "batch")
-    ranking_w = _load_shortlisting_policy_weights()
-    batch_w = ranking_w.get("batch_scope") if isinstance(ranking_w.get("batch_scope"), dict) else {}
-    mol_w = ranking_w.get("molecule_scope") if isinstance(ranking_w.get("molecule_scope"), dict) else {}
     candidates: List[Dict[str, Any]] = []
 
     if scope_type == "batch":
         factors: List[Dict[str, Any]] = []
+        sort_values: Dict[str, float] = {}
         decision_state = str(out.get("decision_state") or "")
         if decision_state == "ready":
-            factors.append(_ranking_factor("decision_state", "pro", 1.0, float(batch_w.get("decision_state_pro", 50.0))))
-        elif decision_state == "not_ready":
-            factors.append(_ranking_factor("decision_state", "con", 1.0, float(batch_w.get("decision_state_con", 50.0))))
+            factors.append(_ranking_factor("decision_state", "pro", 1.0))
+            sort_values["decision_ready"] = 1.0
         else:
-            factors.append(_ranking_factor("decision_state", "con", 1.0, float(batch_w.get("decision_state_con", 50.0))))
+            factors.append(_ranking_factor("decision_state", "con", 1.0))
+            sort_values["decision_ready"] = 0.0
 
         blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
-        factors.append(_ranking_factor("blockers_count", "con", float(len(blockers)), float(batch_w.get("blockers_count", 5.0))))
+        blockers_count = float(len(blockers))
+        factors.append(_ranking_factor("blockers_count", "con", blockers_count))
+        sort_values["blockers_count"] = blockers_count
 
         comp = out.get("comparability") if isinstance(out.get("comparability"), dict) else {}
         summary = comp.get("summary") if isinstance(comp.get("summary"), dict) else {}
         high_sev = float(summary.get("high_severity_count") or 0)
-        factors.append(_ranking_factor("comparability_high_severity", "con", high_sev, float(batch_w.get("comparability_high_severity", 3.0))))
+        factors.append(_ranking_factor("comparability_high_severity", "con", high_sev))
+        sort_values["comparability_high_severity"] = high_sev
 
         soe = out.get("state_of_evidence") if isinstance(out.get("state_of_evidence"), dict) else {}
         soe_v0_2 = soe.get("soe_v0_2") if isinstance(soe.get("soe_v0_2"), dict) else {}
         coverage = soe_v0_2.get("coverage") if isinstance(soe_v0_2.get("coverage"), dict) else {}
         missing = float(len(coverage.get("metrics_missing") or []))
         present = float(len(coverage.get("metrics_present") or []))
-        factors.append(_ranking_factor("metrics_present", "pro", present, float(batch_w.get("metrics_present", 1.0))))
-        factors.append(_ranking_factor("metrics_missing", "con", missing, float(batch_w.get("metrics_missing", 1.0))))
+        factors.append(_ranking_factor("metrics_present", "pro", present))
+        factors.append(_ranking_factor("metrics_missing", "con", missing))
+        sort_values["metrics_present"] = present
+        sort_values["metrics_missing"] = missing
 
         warnings = soe.get("warnings") if isinstance(soe.get("warnings"), list) else []
-        factors.append(_ranking_factor("warnings_count", "con", float(len(warnings)), float(batch_w.get("warnings_count", 1.0))))
+        warnings_count = float(len(warnings))
+        factors.append(_ranking_factor("warnings_count", "con", warnings_count))
+        sort_values["warnings_count"] = warnings_count
 
-        score = _score_from_factors(factors)
         candidates.append(
             {
                 "candidate_type": "batch",
                 "candidate_id": int(di_in.scope_id),
-                "score": score,
+                "score": None,
                 "tie_breaker": {"created_at": None, "id": int(di_in.scope_id)},
                 "factors": factors,
+                "sort_values": sort_values,
             }
         )
     else:
@@ -157,23 +114,28 @@ def build_ranking_payload(
 
         for bid in batch_ids:
             factors = []
+            sort_values: Dict[str, float] = {}
             mcount = float(metrics_by_batch.get(int(bid), 0))
-            factors.append(_ranking_factor("metrics_sourced_count", "pro", mcount, float(mol_w.get("metrics_sourced_count", 2.0))))
+            factors.append(_ranking_factor("metrics_sourced_count", "pro", mcount))
+            sort_values["metrics_sourced_count"] = mcount
             summ = summary_map.get(int(bid)) or {}
             used_cnt = float(summ.get("used_metric_count") or 0)
             ignored_cnt = float(summ.get("ignored_count") or 0)
             warn_cnt = float(summ.get("warning_count") or 0)
-            factors.append(_ranking_factor("used_metric_count", "pro", used_cnt, float(mol_w.get("used_metric_count", 1.0))))
-            factors.append(_ranking_factor("ignored_count", "con", ignored_cnt, float(mol_w.get("ignored_count", 0.5))))
-            factors.append(_ranking_factor("warning_count", "con", warn_cnt, float(mol_w.get("warning_count", 1.0))))
-            score = _score_from_factors(factors)
+            factors.append(_ranking_factor("used_metric_count", "pro", used_cnt))
+            factors.append(_ranking_factor("ignored_count", "con", ignored_cnt))
+            factors.append(_ranking_factor("warning_count", "con", warn_cnt))
+            sort_values["used_metric_count"] = used_cnt
+            sort_values["ignored_count"] = ignored_cnt
+            sort_values["warning_count"] = warn_cnt
             candidates.append(
                 {
                     "candidate_type": "batch",
                     "candidate_id": int(bid),
-                    "score": score,
+                    "score": None,
                     "tie_breaker": {"created_at": created_map.get(str(bid)), "id": int(bid)},
                     "factors": factors,
+                    "sort_values": sort_values,
                 }
             )
 

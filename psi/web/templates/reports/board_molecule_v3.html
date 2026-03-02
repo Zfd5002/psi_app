@@ -1,0 +1,45 @@
+<h2>I Governance Header</h2>
+<table>
+  <tbody>
+    {% for k, v in report.sections.I_governance_header.items() %}
+    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>II General Profile</h2>
+<table>
+  <tbody>
+    {% for k, v in report.sections.II_general_profile.items() %}
+    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>III Molecular Structure and Design</h2>
+<table>
+  <tbody>
+    {% for k, v in report.sections.III_molecular_structure_and_design.items() %}
+    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>IV In Vitro Evidence Tables</h2>
+<pre>{{ report.sections.IV_in_vitro_evidence_tables | tojson(indent=2) }}</pre>
+
+<h2>V Developability Biophys Tables</h2>
+<pre>{{ report.sections.V_developability_biophys_tables | tojson(indent=2) }}</pre>
+
+<h2>VI In Vivo PK ADA Tables</h2>
+<pre>{{ report.sections.VI_in_vivo_pk_ada_tables | tojson(indent=2) }}</pre>
+
+<h2>VII Policy Interpretation and Governance State</h2>
+<pre>{{ report.sections.VII_policy_interpretation_and_governance_state | tojson(indent=2) }}</pre>
+
+<h2>VIII Executive Summary Bullets</h2>
+<ul>
+  {% for x in report.sections.VIII_executive_summary_bullets.decision_status %}
+  <li>{{ x }}</li>
+  {% endfor %}
+</ul>

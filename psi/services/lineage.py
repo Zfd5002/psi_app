@@ -166,3 +166,66 @@ def get_portfolio_lineage(db: Session, *, portfolio_id: int) -> dict[str, Any]:
             for pl in sorted(child_program_lineage, key=lambda x: int(x.get("program_id") or 0))
         ],
     }
+
+
+def get_program_lineage_board_packet(db: Session, *, program_id: int) -> dict[str, Any]:
+    base = get_program_lineage(db, program_id=int(program_id))
+    packet = {
+        "schema_id": "lineage_board_packet_program_v3",
+        "schema_version": "v0.1",
+        "program_id": int(base.get("program_id") or 0),
+        "rollups": sorted(
+            [r for r in (base.get("rollups") or []) if isinstance(r, dict)],
+            key=lambda r: (str(r.get("as_of") or ""), int(r.get("id") or 0)),
+            reverse=True,
+        ),
+        "report_history": sorted(
+            [r for r in (base.get("report_history") or []) if isinstance(r, dict)],
+            key=lambda r: (str(r.get("as_of") or ""), int(r.get("id") or 0)),
+            reverse=True,
+        ),
+        "membership_state": sorted(
+            [r for r in (base.get("membership_state") or []) if isinstance(r, dict)],
+            key=lambda r: (int(r.get("sort_index") or 0), int(r.get("id") or 0)),
+        ),
+        "change_surfaces": {
+            "evidence_changes": sorted([r for r in (base.get("evidence_changes") or []) if isinstance(r, dict)], key=lambda r: int(r.get("report_run_id") or 0)),
+            "policy_changes": sorted([r for r in (base.get("policy_changes") or []) if isinstance(r, dict)], key=lambda r: int(r.get("report_run_id") or 0)),
+            "governance_changes": sorted([r for r in (base.get("governance_changes") or []) if isinstance(r, dict)], key=lambda r: int(r.get("id") or 0), reverse=True),
+        },
+        "policy_upgrade_warnings": sorted(
+            [r for r in (base.get("policy_upgrade_warnings") or []) if isinstance(r, dict)],
+            key=lambda r: int(r.get("session_id") or 0),
+            reverse=True,
+        ),
+    }
+    return packet
+
+
+def get_portfolio_lineage_board_packet(db: Session, *, portfolio_id: int) -> dict[str, Any]:
+    base = get_portfolio_lineage(db, portfolio_id=int(portfolio_id))
+    packet = {
+        "schema_id": "lineage_board_packet_portfolio_v3",
+        "schema_version": "v0.1",
+        "portfolio_id": int(base.get("portfolio_id") or 0),
+        "portfolio_name": str(base.get("portfolio_name") or ""),
+        "membership_state": sorted(
+            [r for r in (base.get("membership_state") or []) if isinstance(r, dict)],
+            key=lambda r: (int(r.get("sort_index") or 0), int(r.get("id") or 0)),
+        ),
+        "governance_changes": sorted(
+            [r for r in (base.get("governance_changes") or []) if isinstance(r, dict)],
+            key=lambda r: int(r.get("id") or 0),
+            reverse=True,
+        ),
+        "policy_upgrade_warnings": sorted(
+            [r for r in (base.get("policy_upgrade_warnings") or []) if isinstance(r, dict)],
+            key=lambda r: int(r.get("session_id") or 0),
+            reverse=True,
+        ),
+        "child_program_lineage_summary": sorted(
+            [r for r in (base.get("child_program_lineage_summary") or []) if isinstance(r, dict)],
+            key=lambda r: int(r.get("program_id") or 0),
+        ),
+    }
+    return packet

@@ -1,0 +1,29 @@
+<h2>Template Ladder Header</h2>
+<table>
+  <tbody>
+    {% for k, v in report.header.items() %}
+    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Stage Table</h2>
+<table>
+  <thead><tr><th>Stage Key</th><th>Current Version</th></tr></thead>
+  <tbody>
+    {% for row in report.stage_table.stages %}
+    <tr><td>{{ row.stage_key }}</td><td>{{ row.current_version }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div>Current Stage: {{ report.stage_table.current_stage }}</div>
+
+<h2>Missing Prerequisites</h2>
+<pre>{{ report.missing_prerequisites_table | tojson(indent=2) }}</pre>
+
+<h2>Next Actions</h2>
+<ul>
+  {% for item in report.next_actions_bullets %}
+  <li>{{ item }}</li>
+  {% endfor %}
+</ul>

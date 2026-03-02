@@ -1,0 +1,30 @@
+<h2>Upgrade Delta Header</h2>
+<table>
+  <tbody>
+    {% for k, v in report.header.items() %}
+    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Executive Summary</h2>
+<ul>
+  {% for b in report.executive_summary_bullets.categorical %}
+  <li>{{ b }}</li>
+  {% endfor %}
+</ul>
+
+<h2>Change Table</h2>
+<table>
+  <thead>
+    <tr><th>Key</th><th>Old</th><th>New</th><th>Changed</th></tr>
+  </thead>
+  <tbody>
+    {% for row in report.change_table.rows %}
+    <tr><td>{{ row.key }}</td><td>{{ row.old }}</td><td>{{ row.new }}</td><td>{{ row.changed }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Appendix</h2>
+<pre>{{ report.appendix | tojson(indent=2) }}</pre>
