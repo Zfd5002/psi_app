@@ -1,3 +1,31 @@
+## 2026-03-02 — v1.3.0a89
+Why:
+- Complete removal of the legacy compatibility shim for `v3_board_reports` so only the quarantined deprecated module remains.
+
+What:
+- Deleted `psi/services/v3_board_reports.py` (legacy shim removed).
+- Confirmed legacy skipped tests remain skip-only and do not import the removed shim at module import time:
+  - `tests/test_v3_board_report_rendering.py`
+  - `tests/test_v3_molecule_report_schema.py`
+  - `tests/test_v3_board_report_determinism.py`
+  - `tests/test_v3_executive_summary_bullets.py`
+  - `tests/test_v3_comparison_report_schema.py`
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_board_reports.py` (deleted)
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
 ## 2026-03-02 — v1.3.0a88
 Why:
 - Resolve maintenance ambiguity from parallel “board report” code paths by quarantining the orphan path that is not router-wired in V3 runtime surfaces.
