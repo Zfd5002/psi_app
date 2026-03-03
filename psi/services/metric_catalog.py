@@ -56,3 +56,28 @@ def metric_catalog_entry(metric_key: str) -> dict[str, Any]:
         "sort_order": 9999,
         "notes": "",
     }
+
+
+def metric_group_for_key(metric_key: str) -> str:
+    """Canonical report grouping for a metric key (catalog-backed with deterministic fallback)."""
+    key = str(metric_key or "").strip()
+    if not key:
+        return "Other"
+    entry = metric_catalog_entry(key)
+    domain = str(entry.get("domain") or "").strip()
+    if domain and domain.lower() != "other":
+        return domain
+    mk = key.lower()
+    if "sec" in mk or "hmw" in mk or "lmw" in mk or "monomer" in mk:
+        return "SEC"
+    if "sds" in mk or "ce-sds" in mk or "cesds" in mk:
+        return "SDS"
+    if "dsf" in mk or "tm" in mk:
+        return "DSF"
+    if "endo" in mk or "lal" in mk:
+        return "Endotoxin"
+    if "pk" in mk or "pd" in mk:
+        return "PK/PD"
+    if "ec50" in mk or "ic50" in mk or "potency" in mk or "kd" in mk:
+        return "Assay"
+    return "Other"

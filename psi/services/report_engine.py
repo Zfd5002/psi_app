@@ -21,6 +21,8 @@ from psi.services.program_rollups import build_program_rollup
 from psi.services.v3_ranking import build_ranking_surface, load_ranking_policy_v0_1
 from psi.services.di.util import is_di_snapshot_record
 from psi.services.metric_catalog import metric_catalog_entry
+from psi.services.json_helpers import safe_json_dict
+from psi.services.fact_sheet import assemble_molecule_fact_sheet
 
 REPORT_TYPE_MOLECULE = "molecule_report"
 REPORT_TYPE_PROGRAM = "program_report"
@@ -346,6 +348,7 @@ def _empty_sections_for_type(report_type: str) -> dict[str, Any]:
             "risk_profile": {},
             "experimental_gaps": {},
             "scientific_summary": {},
+            "fact_sheet": {},
             "drift_history": {},
             "reproducibility_appendix": dict(repro_base),
         }
@@ -485,14 +488,6 @@ def load_report_run_payload(row: ReportRun) -> dict[str, Any]:
     return obj
 
 
-def _safe_json_dict(raw: str | None) -> dict[str, Any]:
-    try:
-        obj = json.loads(raw or "{}")
-    except Exception:
-        return {}
-    return obj if isinstance(obj, dict) else {}
-
-
 def _latest_di_snapshot_for_molecule_as_of(db: Session, *, molecule_id: int, as_of: datetime) -> tuple[DecisionSnapshot | None, dict[str, Any], dict[str, Any]]:
     snaps = (
         db.query(DecisionSnapshot)
@@ -502,8 +497,8 @@ def _latest_di_snapshot_for_molecule_as_of(db: Session, *, molecule_id: int, as_
         .all()
     )
     for snap in snaps:
-        out = _safe_json_dict(snap.outputs_json)
-        inn = _safe_json_dict(snap.inputs_json)
+        out = safe_json_dict(snap.outputs_json)
+        inn = safe_json_dict(snap.inputs_json)
         if is_di_snapshot_record(snap, out, inn):
             return snap, out, inn
     return None, {}, {}
@@ -604,6 +599,15 @@ def generate_molecule_report_v0(
         "comparability_determination": determination,
     }
     sections["scientific_summary"] = _build_scientific_summary(used_by_metric=used_by_metric)
+    template_ids_used = [str(snap.decision_key or "").strip()] if snap is not None and str(snap.decision_key or "").strip() else []
+    sections["fact_sheet"] = assemble_molecule_fact_sheet(
+        db,
+        molecule_id=int(molecule_id),
+        as_of=as_of,
+        template_ids_used=template_ids_used,
+        policy_pins=policy_pins,
+        snapshot_output=out,
+    )
     sections["reproducibility_appendix"] = {
         "policy_pins": _sorted_dict(dict(policy_pins or {})),
         "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.2"), "ranking_policy": "v0.2"},

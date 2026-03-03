@@ -1,3 +1,159 @@
+## 2026-03-03 — v1.3.0b5
+Why:
+- Harden fact-sheet replay guardrails with explicit schema/ordering invariants and prevent regressions where view-time DB dependence could re-enter molecule board rendering.
+
+What:
+- Kept fact-sheet rendering path payload-driven and retained no-view-time-query guard test coverage.
+- Added schema invariant coverage for fact-sheet matrix cell contract:
+  - each cell must include `status`, `display`, `measurement_id`, and `data_record_id`.
+- Added deterministic ordering invariant coverage:
+  - `batch_registry` ordering contract
+  - `metrics_index.required_metric_keys` ordering
+  - `best_batch.trace` score ordering
+- Expanded targeted test coverage in `tests/test_v3_molecule_report_schema.py`:
+  - `test_fact_sheet_cell_schema_invariants`
+  - `test_fact_sheet_ordering_invariants`
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_molecule_report_schema.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-03 — v1.3.0b4
+Why:
+- Persist deterministic stability status from fact-sheet batch coverage so molecule board reports carry replayable stability outcomes without snapshot-time recomputation.
+
+What:
+- Added named stability constants in `psi/services/fact_sheet.py`:
+  - `_STABILITY_MIN_BATCHES_WITH_REQUIRED = 2`
+  - `_STABILITY_MAX_REGRESSION_REQUIRED_PRESENT = 2`
+- Implemented `stability.method = "coverage_only_v1"` persisted at report write-time:
+  - `insufficient_data` when fewer than minimum batches have required coverage
+  - `unstable` when a later batch regresses required coverage by threshold
+  - `stable` otherwise
+- Added deterministic rationale serialization and ordering in `stability.rationale`.
+- Added targeted stability regression tests:
+  - `test_stability_insufficient_with_one_batch`
+  - `test_stability_unstable_on_regression_threshold`
+  - `test_stability_not_snapshot_dependent`
+- Updated schema assertions to validate filled stability fields while preserving field shape.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/fact_sheet.py`
+- `tests/test_v3_molecule_report_schema.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-03 — v1.3.0b3
+Why:
+- Persist deterministic best-batch selection in fact-sheet payload so board rendering is replayable and auditable without view-time recomputation.
+
+What:
+- Implemented best-batch computation in `psi/services/fact_sheet.py`:
+  - `best_batch.selection_method = "coverage_score_v1"`
+  - Lexicographic score tuple:
+    1. `required_present_count`
+    2. `total_present_count`
+    3. recency (`created_at` when parseable, else `batch_id`)
+    4. `batch_id`
+  - Persisted `best_batch.status="computed"`, `selected_batch_id`, and stable-ordered `trace[]` with per-candidate score and counts.
+- Added deterministic regression tests:
+  - `test_best_batch_tiebreak_deterministic`
+  - `test_best_batch_trace_persisted_and_sorted`
+- Updated schema assertions to validate filled `best_batch` values while preserving placeholder shape contract.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/fact_sheet.py`
+- `tests/test_v3_molecule_report_schema.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-03 — v1.3.0b2
+Why:
+- Persist molecule fact-sheet surfaces at report generation time so molecule report rendering is replayable from `report_runs.payload_json` and does not depend on live DB recomputation.
+
+What:
+- Added write-time fact-sheet assembler:
+  - `psi/services/fact_sheet.py::assemble_molecule_fact_sheet(...)`
+  - Persists deterministic `sections.fact_sheet` with locked schema:
+    - `schema_version`, `meta`, `metrics_index`, `batch_registry`, `metric_matrix`, `coverage_summary`, `best_batch`, `stability`
+- Wired molecule report generation to persist fact-sheet payload:
+  - `psi/services/report_engine.py::generate_molecule_report_v0(...)`
+  - `metrics_index.template_ids_used` and `metrics_index.required_metric_keys` persisted deterministically.
+  - Matrix cells now resolve deterministic measurement values/units from `data_measurements` with traceability ids.
+  - Batch registry includes deterministic `latest_notes` snapshot from record ordering.
+- Hardened report schema contracts:
+  - Molecule `_empty_sections_for_type(...)` and payload validation now include `fact_sheet`.
+- Switched molecule board display shaping to payload-first formatter path:
+  - `psi/services/reports_v3.py` fact-sheet display uses persisted payload structure rather than live recomputation.
+- Replaced previously skipped V3 tests with active deterministic coverage:
+  - `tests/test_v3_molecule_report_schema.py`
+  - `tests/test_v3_board_report_determinism.py`
+  - Updated `tests/test_v3_report_contracts.py` for required `fact_sheet`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/fact_sheet.py`
+- `psi/services/report_engine.py`
+- `psi/services/reports_v3.py`
+- `tests/test_v3_molecule_report_schema.py`
+- `tests/test_v3_board_report_determinism.py`
+- `tests/test_v3_report_contracts.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-03 — pre-b2 cleanup (no version bump)
+Why:
+- Remove low-risk divergence traps before introducing persisted fact-sheet assembly in b2.
+
+What:
+- Canonicalized safe JSON parsing for report code paths:
+  - added `psi/services/json_helpers.py::safe_json_dict(...)`
+  - routed report modules to this helper:
+    - `psi/services/report_engine.py`
+    - `psi/services/reports_v3.py`
+    - `psi/services/program_rollups.py`
+- Canonicalized metric grouping path for report display:
+  - added `psi/services/metric_catalog.py::metric_group_for_key(...)` (catalog-backed with deterministic fallback)
+  - removed ad-hoc grouping logic from `psi/services/reports_v3.py` and switched to canonical helper.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/services/json_helpers.py`
+- `psi/services/metric_catalog.py`
+- `psi/services/report_engine.py`
+- `psi/services/reports_v3.py`
+- `psi/services/program_rollups.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
 ## 2026-03-03 — v1.3.0b1
 Why:
 - Start b-series board template workstream with a deterministic, batch-aware molecule report layout for meeting-ready fact sheet + conclusions rendering.

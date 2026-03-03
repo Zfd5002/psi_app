@@ -79,6 +79,7 @@ def _required_sections(report_type: str) -> tuple[str, ...]:
             "risk_profile",
             "experimental_gaps",
             "scientific_summary",
+            "fact_sheet",
             "drift_history",
             "reproducibility_appendix",
         )
@@ -144,6 +145,8 @@ def test_v3_report_contract_sections_and_canonical_serialization_stability():
             repro = sections.get("reproducibility_appendix") if isinstance(sections.get("reproducibility_appendix"), dict) else {}
             if rt == REPORT_TYPE_MOLECULE:
                 assert repro.get("measurement_keys") == ["ec50", "kd"]
+                fact = sections.get("fact_sheet") if isinstance(sections.get("fact_sheet"), dict) else {}
+                assert str(fact.get("schema_version") or "") == "v1"
             if rt == REPORT_TYPE_PROGRAM:
                 assert repro.get("measurement_keys") == ["ec50", "kd"]
             if rt in {REPORT_TYPE_MOLECULE_COMPARATIVE, REPORT_TYPE_PROGRAM_COMPARATIVE}:

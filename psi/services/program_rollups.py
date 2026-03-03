@@ -11,14 +11,7 @@ from psi.core.models import DecisionSnapshot, Molecule, ProgramMembership, Progr
 from psi.core.utils import now_utc, stable_json_dumps
 from psi.services.di.util import is_di_snapshot_record
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
-
-
-def _safe_json_dict(raw: str | None) -> dict[str, Any]:
-    try:
-        obj = json.loads(raw or "{}")
-    except Exception:
-        return {}
-    return obj if isinstance(obj, dict) else {}
+from psi.services.json_helpers import safe_json_dict
 
 
 _PROGRAM_POSTURE_POLICY_CACHE: dict[str, Any] | None = None
@@ -149,8 +142,8 @@ def _latest_di_snapshot_as_of(db: Session, *, molecule_id: int, as_of: datetime)
         .all()
     )
     for snap in snaps:
-        out = _safe_json_dict(snap.outputs_json)
-        inn = _safe_json_dict(snap.inputs_json)
+        out = safe_json_dict(snap.outputs_json)
+        inn = safe_json_dict(snap.inputs_json)
         if is_di_snapshot_record(snap, out, inn, include_input_schema_version=True):
             return snap, out, inn
     return None, {}, {}

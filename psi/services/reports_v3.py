@@ -7,7 +7,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from psi.core.models import Batch, DataRecord, DecisionSnapshot, Molecule, Program, ReportRun
+from psi.core.models import Molecule, Program, ReportRun
 from psi.core.di.policy import sha256_hex_of_canonical_json
 from psi.services.report_engine import (
     generate_molecule_comparative_report_v0,
@@ -19,7 +19,6 @@ from psi.services.report_engine import (
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 from psi.services.comparability import load_comparability_policy_latest
 from psi.services.v3_ranking import load_ranking_policy_latest
-from psi.services.di.util import is_di_snapshot_record
 
 _HEX64_RE = re.compile(r"\b[a-f0-9]{64}\b", flags=re.IGNORECASE)
 
@@ -57,33 +56,6 @@ def _clean_board_text(value: object) -> str:
     if not txt:
         return ""
     return _HEX64_RE.sub("[hash-hidden]", txt)
-
-
-def _safe_json_dict(raw: str | None) -> dict[str, object]:
-    try:
-        obj = json.loads(raw or "{}")
-    except Exception:
-        return {}
-    return obj if isinstance(obj, dict) else {}
-
-
-def _metric_group_for_key(metric_key: str) -> str:
-    mk = str(metric_key or "").strip().lower()
-    if not mk:
-        return "Other"
-    if "sec" in mk or "hmw" in mk or "lmw" in mk or "monomer" in mk:
-        return "SEC"
-    if "sds" in mk or "ce-sds" in mk or "cesds" in mk:
-        return "SDS"
-    if "dsf" in mk or "tm" in mk:
-        return "DSF"
-    if "endo" in mk or "lal" in mk:
-        return "Endotoxin"
-    if "pk" in mk or "pd" in mk:
-        return "PK/PD"
-    if "ec50" in mk or "ic50" in mk or "potency" in mk or "kd" in mk:
-        return "Assay"
-    return "Other"
 
 
 def _gate_status(gate: dict[str, object]) -> str:
@@ -131,18 +103,7 @@ def _cell_from_metric_refs(value: object) -> str:
     return f"{len(refs)} cited"
 
 
-def _build_molecule_board_display(
-    db: Session,
-    *,
-    row: ReportRun,
-    payload: dict,
-    subject_ids: list[int],
-    snapshot_coverage: list[int],
-) -> dict[str, object]:
-    if str(row.report_type or "") != "molecule_report" or not subject_ids:
-        return {}
-    molecule_id = int(subject_ids[0])
-    as_of = row.as_of
+def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) -> dict[str, object]:
     sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
     identity = sections.get("identity_context") if isinstance(sections.get("identity_context"), dict) else {}
     stage = sections.get("stage_determination") if isinstance(sections.get("stage_determination"), dict) else {}
@@ -151,212 +112,39 @@ def _build_molecule_board_display(
     repro = sections.get("reproducibility_appendix") if isinstance(sections.get("reproducibility_appendix"), dict) else {}
     risk_profile = sections.get("risk_profile") if isinstance(sections.get("risk_profile"), dict) else {}
     gaps = sections.get("experimental_gaps") if isinstance(sections.get("experimental_gaps"), dict) else {}
+    fact = sections.get("fact_sheet") if isinstance(sections.get("fact_sheet"), dict) else {}
+    batch_registry = fact.get("batch_registry") if isinstance(fact.get("batch_registry"), list) else []
+    matrix = fact.get("metric_matrix") if isinstance(fact.get("metric_matrix"), dict) else {}
+    metrics_idx = fact.get("metrics_index") if isinstance(fact.get("metrics_index"), dict) else {}
+    coverage = fact.get("coverage_summary") if isinstance(fact.get("coverage_summary"), dict) else {}
+    best = fact.get("best_batch") if isinstance(fact.get("best_batch"), dict) else {}
+    stability = fact.get("stability") if isinstance(fact.get("stability"), dict) else {}
 
-    snaps = (
-        db.query(DecisionSnapshot)
-        .filter(DecisionSnapshot.molecule_id == int(molecule_id))
-        .filter(DecisionSnapshot.created_at <= as_of)
-        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
-        .all()
-    )
-    di_snaps: list[tuple[DecisionSnapshot, dict[str, object]]] = []
-    for snap in snaps:
-        out = _safe_json_dict(snap.outputs_json)
-        inn = _safe_json_dict(snap.inputs_json)
-        if is_di_snapshot_record(snap, out, inn):
-            di_snaps.append((snap, out))
-
-    latest_by_batch: dict[int | None, tuple[DecisionSnapshot, dict[str, object]]] = {}
-    for snap, out in di_snaps:
-        bid = int(snap.batch_id) if snap.batch_id is not None else None
-        if bid not in latest_by_batch:
-            latest_by_batch[bid] = (snap, out)
-
-    batch_ids = sorted({int(bid) for bid in latest_by_batch.keys() if bid is not None})
-    batches_by_id = {
-        int(b.id): b
-        for b in (
-            db.query(Batch)
-            .filter(Batch.id.in_(batch_ids))
-            .order_by(Batch.id.asc())
-            .all()
-            if batch_ids
-            else []
-        )
+    batch_cols = matrix.get("batch_columns") if isinstance(matrix.get("batch_columns"), list) else []
+    matrix_rows = matrix.get("rows") if isinstance(matrix.get("rows"), list) else []
+    descriptor_by_key = {
+        str(d.get("metric_key") or ""): d
+        for d in (metrics_idx.get("metrics") if isinstance(metrics_idx.get("metrics"), list) else [])
+        if isinstance(d, dict) and str(d.get("metric_key") or "").strip()
     }
-
-    run_date_by_batch: dict[int, str] = {}
-    if batch_ids:
-        dr_rows = (
-            db.query(DataRecord.batch_id, DataRecord.run_date, DataRecord.created_at, DataRecord.id)
-            .filter(DataRecord.molecule_id == int(molecule_id))
-            .filter(DataRecord.batch_id.in_(batch_ids))
-            .order_by(DataRecord.created_at.desc(), DataRecord.id.desc())
-            .all()
-        )
-        for bid, run_date, _created_at, _rid in dr_rows:
-            if bid is None:
-                continue
-            ibid = int(bid)
-            if ibid not in run_date_by_batch and str(run_date or "").strip():
-                run_date_by_batch[ibid] = str(run_date)
-
-    batch_rows: list[dict[str, object]] = []
-    per_batch_gate_rows: list[dict[str, object]] = []
-    batch_metric_map: dict[str, dict[str, str]] = {}
-    all_metric_keys: set[str] = set()
-
-    for bid, (snap, out) in latest_by_batch.items():
-        bobj = batches_by_id.get(int(bid)) if bid is not None else None
-        batch_label = str(bobj.batch_id or "") if bobj is not None else ""
-        if not batch_label:
-            batch_label = f"batch_id={int(bid)}" if bid is not None else "unassigned"
-        batch_date = "unknown"
-        if bid is not None and int(bid) in run_date_by_batch:
-            batch_date = run_date_by_batch[int(bid)]
-        elif snap.created_at is not None:
-            batch_date = snap.created_at.isoformat()
-        producer = "unknown"
-        purpose = _clean_board_text((bobj.title if bobj is not None else "") or (bobj.expression_notes if bobj is not None else "") or (bobj.purification_notes if bobj is not None else "") or "unknown")
-
-        used = out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {}
-        metric_keys = sorted(str(k).strip() for k in used.keys() if str(k).strip())
-        for mk in metric_keys:
-            all_metric_keys.add(mk)
-        coverage_groups = sorted({_metric_group_for_key(mk) for mk in metric_keys}, key=lambda x: str(x))
-        coverage_summary = ", ".join(coverage_groups) if coverage_groups else "none"
-
-        gates = out.get("gates") if isinstance(out.get("gates"), list) else []
-        normalized_gates = []
-        fail_gates: list[str] = []
-        missing_gates: list[str] = []
-        for g in gates:
-            if not isinstance(g, dict):
-                continue
-            gkey = str(g.get("gate_key") or g.get("key") or "").strip() or "unknown_gate"
-            gstatus = _gate_status(g)
-            if _is_failing_gate_status(gstatus):
-                fail_gates.append(gkey)
-            if gstatus in {"missing", "not_assessed", "unknown"}:
-                missing_gates.append(gkey)
-            normalized_gates.append(
-                {
-                    "gate_key": gkey,
-                    "status": gstatus,
-                    "primary_evidence": _clean_board_text(g.get("primary_evidence") or g.get("evidence") or "Not available"),
-                    "notes": _clean_board_text(g.get("notes") or ""),
-                }
-            )
-        normalized_gates = sorted(normalized_gates, key=lambda x: str(x.get("gate_key") or ""))
-        fail_gates = sorted(set(fail_gates))
-        missing_gates = sorted(set(missing_gates))
-        overall = _overall_from_snapshot(out)
-
-        for mk in metric_keys:
-            cell = _cell_from_metric_refs(used.get(mk))
-            batch_metric_map.setdefault(mk, {})[batch_label] = cell
-
-        batch_rows.append(
-            {
-                "batch_id": int(bid) if bid is not None else None,
-                "batch_label": batch_label,
-                "batch_date": batch_date,
-                "producer": producer,
-                "purpose_notes": purpose,
-                "coverage_summary": coverage_summary,
-                "snapshot_id": int(snap.id),
-                "overall": overall,
-                "gates": normalized_gates,
-                "metric_keys": metric_keys,
-            }
-        )
-        per_batch_gate_rows.append(
-            {
-                "batch_label": batch_label,
-                "overall": overall,
-                "fail_gates": fail_gates,
-                "missing_gates": missing_gates,
-            }
-        )
-
-    batch_rows = sorted(
-        batch_rows,
-        key=lambda r: (
-            str(r.get("batch_date") or ""),
-            int(r.get("batch_id") or 0),
-            str(r.get("batch_label") or ""),
-        ),
-        reverse=True,
-    )
-    per_batch_gate_rows = sorted(
-        per_batch_gate_rows,
-        key=lambda r: (
-            str(next((b.get("batch_date") for b in batch_rows if b.get("batch_label") == r.get("batch_label")), "")),
-            str(r.get("batch_label") or ""),
-        ),
-        reverse=True,
-    )
-
-    best_batch_id_from_payload = None
-    for source in (stage, repro):
-        if not isinstance(source, dict):
+    fact_rows = []
+    for row_obj in matrix_rows:
+        if not isinstance(row_obj, dict):
             continue
-        cand = source.get("best_batch_id")
-        if str(cand or "").strip().isdigit():
-            best_batch_id_from_payload = int(cand)
-            break
-    best_row = None
-    if best_batch_id_from_payload is not None:
-        best_row = next((r for r in batch_rows if r.get("batch_id") == best_batch_id_from_payload), None)
-    if best_row is None:
-        best_row = next((r for r in batch_rows if str(r.get("overall") or "") == "ready"), None)
-    if best_row is None and batch_rows:
-        best_row = batch_rows[0]
-
-    meaningful_batches = [r for r in batch_rows if r.get("gates") or r.get("metric_keys")]
-    stability = "INSUFFICIENT DATA"
-    stability_rationale: list[str] = []
-    if len(meaningful_batches) < 2:
-        stability_rationale.append("Fewer than two batches with gate or metric coverage.")
-    else:
-        latest_two = meaningful_batches[:2]
-        latest_fail = all(str(r.get("overall") or "") != "ready" for r in latest_two)
-        best_ready = bool(best_row is not None and str(best_row.get("overall") or "") == "ready")
-        if best_ready and latest_fail:
-            stability = "UNSTABLE"
-            stability_rationale.append("Best batch is ready but the latest two batches are not ready.")
-        else:
-            stability = "STABLE"
-            stability_rationale.append("Recent batch outcomes are not in conflict with best-batch readiness.")
-
-    policy_req = []
-    for source in (comp_det.get("missing_inputs"),):
-        if isinstance(source, dict):
-            policy_req.extend(str(x) for x in (source.get("required_measurement_keys_missing") or []) if str(x).strip())
-    required_first = sorted(set(policy_req))
-    remaining = sorted([mk for mk in all_metric_keys if mk not in set(required_first)], key=lambda x: str(x))
-    ordered_metric_keys = required_first + remaining
-    ordered_batch_labels = [str(r.get("batch_label") or "") for r in batch_rows]
-    metric_rows = []
-    for mk in ordered_metric_keys:
-        row_cells = [batch_metric_map.get(mk, {}).get(lbl, "not run") for lbl in ordered_batch_labels]
-        metric_rows.append(
+        mk = str(row_obj.get("metric_key") or "").strip()
+        desc = descriptor_by_key.get(mk, {})
+        cells = row_obj.get("cells") if isinstance(row_obj.get("cells"), list) else []
+        fact_rows.append(
             {
                 "metric_key": mk,
-                "metric_group": _metric_group_for_key(mk),
-                "cells": row_cells,
+                "metric_group": str(desc.get("group") or "Other"),
+                "cells": [str((c.get("display") if isinstance(c, dict) else "") or "not run") for c in cells],
             }
         )
-
-    best_gate_rows = sorted(
-        [g for g in (best_row.get("gates") if isinstance(best_row, dict) else []) if isinstance(g, dict)],
-        key=lambda x: str(x.get("gate_key") or ""),
-    )
 
     risk_flags = risk_profile.get("risk_flags_enriched") if isinstance(risk_profile.get("risk_flags_enriched"), list) else []
     governance_warnings = repro.get("governance_red_flags") if isinstance(repro.get("governance_red_flags"), list) else []
     missing_metrics = sorted(str(x) for x in (comp_det.get("missing_inputs", {}).get("required_measurement_keys_missing") if isinstance(comp_det.get("missing_inputs"), dict) else []) if str(x).strip())
-
     risk_qc_bullets: list[str] = []
     if missing_metrics:
         risk_qc_bullets.append("Missing required metrics: " + ", ".join(missing_metrics))
@@ -380,49 +168,55 @@ def _build_molecule_board_display(
     if not risk_qc_bullets:
         risk_qc_bullets.append("No major risk or QC warnings captured by this surface.")
 
-    notes_rows = (
-        db.query(DataRecord.id, DataRecord.batch_id, DataRecord.created_at, DataRecord.notes)
-        .filter(DataRecord.molecule_id == int(molecule_id))
-        .filter(DataRecord.notes.isnot(None))
-        .order_by(DataRecord.created_at.desc(), DataRecord.id.desc())
-        .limit(20)
-        .all()
-    )
-    notes = []
-    for rid, bid, created_at, notes_text in notes_rows:
-        txt = str(notes_text or "").strip()
+    notes: list[dict[str, object]] = []
+    normalized_batch_registry: list[dict[str, object]] = []
+    for br in batch_registry:
+        if not isinstance(br, dict):
+            continue
+        normalized_batch_registry.append(
+            {
+                "batch_id": br.get("batch_id"),
+                "batch_label": str(br.get("batch_label") or ""),
+                "batch_date": str(br.get("batch_date") or "unknown"),
+                "producer": str(br.get("producer") or "unknown"),
+                "purpose_notes": str(br.get("purpose_notes") or "unknown"),
+                "coverage_summary": str(br.get("data_coverage_summary") or br.get("coverage_summary") or "none"),
+            }
+        )
+        txt = str(br.get("latest_notes") or "").strip()
         if not txt:
             continue
-        bobj = batches_by_id.get(int(bid)) if bid is not None else None
         notes.append(
             {
-                "record_id": int(rid),
+                "record_id": 0,
                 "author": "local-user",
-                "timestamp": (created_at.isoformat() if created_at is not None else ""),
-                "scope": (str(bobj.batch_id) if bobj is not None and str(bobj.batch_id or "").strip() else ("molecule" if bid is None else f"batch_id={int(bid)}")),
+                "timestamp": "",
+                "scope": str(br.get("batch_label") or "molecule"),
                 "body": _clean_board_text(txt),
             }
         )
-    notes = sorted(notes, key=lambda n: (str(n.get("timestamp") or ""), int(n.get("record_id") or 0)), reverse=True)
 
     readiness = str(stage.get("decision_state") or stage.get("readiness_state") or "not_assessed").strip() or "not_assessed"
     blockers = [str(x).strip() for x in (gaps.get("blockers") if isinstance(gaps.get("blockers"), list) else []) if str(x).strip()]
     comp_status = str(comp_det.get("category") or "not_assessed")
     warnings_compact = sorted(str(w.get("flag_code") or "") for w in governance_warnings if isinstance(w, dict) and str(w.get("flag_code") or "").strip())
+    best_label = "unknown"
+    best_id = best.get("selected_batch_id")
+    if best_id is not None:
+        for br in batch_registry:
+            if isinstance(br, dict) and br.get("batch_id") == best_id:
+                best_label = str(br.get("batch_label") or best_id)
+                break
     executive_paragraph = (
-        f"Readiness is {readiness.replace('_', ' ')}; stability is {stability.lower()}; "
+        f"Readiness is {readiness.replace('_', ' ')}; stability is {str(stability.get('status') or 'uncomputed').replace('_', ' ').lower()}; "
         f"comparability is {comp_status.replace('_', ' ')}; "
-        + (
-            ("blockers include " + ", ".join(blockers[:3]) + "; ") if blockers else "no explicit blockers were recorded; "
-        )
-        + (
-            ("governance warnings: " + ", ".join(warnings_compact[:3]) + ".") if warnings_compact else "no governance warnings were recorded."
-        )
+        + (("blockers include " + ", ".join(blockers[:3]) + "; ") if blockers else "no explicit blockers were recorded; ")
+        + (("governance warnings: " + ", ".join(warnings_compact[:3]) + ".") if warnings_compact else "no governance warnings were recorded.")
     )
 
     return {
         "header": {
-            "molecule": _clean_board_text(identity.get("primary_id") or identity.get("title") or f"molecule_id={molecule_id}"),
+            "molecule": _clean_board_text(identity.get("primary_id") or identity.get("title") or f"molecule_id={identity.get('molecule_id') or ''}"),
             "program": (f"program_id={identity.get('program_id')}" if identity.get("program_id") is not None else "unknown"),
             "decision_template": _clean_board_text(payload.get("metadata", {}).get("report_type") if isinstance(payload.get("metadata"), dict) else row.report_type),
             "policy_version": _clean_board_text(repro.get("catalog_versions", {}).get("comparability_policy") if isinstance(repro.get("catalog_versions"), dict) else "unknown"),
@@ -431,23 +225,23 @@ def _build_molecule_board_display(
         },
         "conclusions": {
             "readiness_status": readiness,
-            "best_overall_batch": (str(best_row.get("batch_label")) if isinstance(best_row, dict) else "unknown"),
+            "best_overall_batch": best_label,
             "comparability_status": comp_status,
             "confidence": _clean_board_text(sections.get("confidence_decomposition", {}).get("confidence", {}).get("overall") if isinstance(sections.get("confidence_decomposition"), dict) else ""),
-            "stability_status": stability,
+            "stability_status": str(stability.get("status") or "uncomputed").upper(),
             "blockers": blockers,
             "governance_warnings": warnings_compact,
             "executive_paragraph": _clean_board_text(executive_paragraph),
-            "stability_rationale": stability_rationale,
+            "stability_rationale": [str(x) for x in (stability.get("rationale") if isinstance(stability.get("rationale"), list) else []) if str(x).strip()],
         },
-        "batch_registry": batch_rows,
+        "batch_registry": normalized_batch_registry,
         "gate_summary": {
-            "best_batch_rows": best_gate_rows,
-            "per_batch_rows": per_batch_gate_rows,
+            "best_batch_rows": [],
+            "per_batch_rows": [],
         },
         "fact_sheet": {
-            "batch_labels": ordered_batch_labels,
-            "metric_rows": metric_rows,
+            "batch_labels": [str(c.get("batch_label") or "") for c in batch_cols if isinstance(c, dict)],
+            "metric_rows": fact_rows,
         },
         "comparability": {
             "effective_status": _clean_board_text(comp_det.get("category") or "not_assessed"),
@@ -459,9 +253,24 @@ def _build_molecule_board_display(
         },
         "risk_qc": {
             "bullets": risk_qc_bullets,
+            "coverage_summary": coverage,
         },
         "scientist_notes": notes,
     }
+
+
+def _build_molecule_board_display(
+    db: Session,
+    *,
+    row: ReportRun,
+    payload: dict,
+    subject_ids: list[int],
+    snapshot_coverage: list[int],
+) -> dict[str, object]:
+    _ = (db, subject_ids, snapshot_coverage)  # rendering is payload-only for fact-sheet replayability
+    if str(row.report_type or "") != "molecule_report":
+        return {}
+    return build_molecule_board_display_from_payload(row=row, payload=payload)
 
 
 def _format_molecule_row_label(row: dict) -> str:
