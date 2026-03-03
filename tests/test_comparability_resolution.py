@@ -5,6 +5,7 @@ from psi.services.comparability import (
     load_comparability_policy_latest,
     resolve_comparability_category,
 )
+from psi.services.report_engine import _map_governance_status_to_policy_status
 
 
 def test_comparability_category_resolution_precedence_deterministic() -> None:
@@ -68,3 +69,8 @@ def test_comparability_determination_deterministic_for_same_inputs() -> None:
     a = derive_comparability_determination(**kwargs)
     b = derive_comparability_determination(**kwargs)
     assert a == b
+
+
+def test_governance_status_mapping_keeps_conditional_as_partial() -> None:
+    assert _map_governance_status_to_policy_status("conditionally_comparable") == "comparable_partial"
+    assert _map_governance_status_to_policy_status("comparable") == "comparable_full"

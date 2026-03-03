@@ -42,7 +42,7 @@
                     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                       {% for c in cm.components %}
                         <span class="chip" title="{% if c.details is defined and c.details %}{{ c.details }}{% endif %}">
-                          {{ c.name }}: {{ (c.state if c.state is defined else 'not_assessed')|replace('_', ' ') }}
+                          {{ c.name }}: {{ (c.state if c.state is defined else 'not_assessed')|humanize_state }}
                         </span>
                       {% endfor %}
                     </div>

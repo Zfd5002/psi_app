@@ -20,6 +20,7 @@ from psi.services.policy_upgrade import run_semantic_action_with_ack_guard
 from psi.services.program_rollups import build_program_rollup
 from psi.services.v3_ranking import build_ranking_surface, load_ranking_policy_v0_1
 from psi.services.di.util import is_di_snapshot_record
+from psi.services.metric_catalog import metric_catalog_entry
 
 REPORT_TYPE_MOLECULE = "molecule_report"
 REPORT_TYPE_PROGRAM = "program_report"
@@ -40,7 +41,7 @@ def _map_governance_status_to_policy_status(status: str) -> str:
     mapping = {
         "comparable_full": "comparable_full",
         "comparable": "comparable_full",
-        "conditionally_comparable": "comparable_full",
+        "conditionally_comparable": "comparable_partial",
         "not_comparable": "not_comparable",
         "not_assessed": "not_assessed",
     }
@@ -250,6 +251,55 @@ def _order_program_comparative_rows(rows: list[dict[str, Any]]) -> list[dict[str
     return sorted([r for r in rows if isinstance(r, dict)], key=lambda r: int(r.get("program_id") or 0))
 
 
+def _build_scientific_summary(*, used_by_metric: dict[str, Any]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for mk in sorted((str(k).strip() for k in used_by_metric.keys()), key=lambda x: str(x)):
+        if not mk:
+            continue
+        raw_refs = used_by_metric.get(mk)
+        refs = raw_refs if isinstance(raw_refs, list) else []
+        n_refs = len([x for x in refs if x is not None])
+        meta = metric_catalog_entry(mk)
+        rows.append(
+            {
+                "metric_key": mk,
+                "label": str(meta.get("label") or mk),
+                "domain": str(meta.get("domain") or "Other"),
+                "unit": str(meta.get("unit") or ""),
+                "sort_order": int(meta.get("sort_order") or 9999),
+                "value_display": (f"{n_refs} cited" if n_refs > 0 else "No cited measurements"),
+                "n": int(n_refs),
+                "status": ("present" if n_refs > 0 else "not_available"),
+            }
+        )
+    rows = sorted(
+        rows,
+        key=lambda r: (
+            str(r.get("domain") or ""),
+            int(r.get("sort_order") or 9999),
+            str(r.get("label") or ""),
+            str(r.get("metric_key") or ""),
+        ),
+    )
+    domain_rows: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        domain = str(row.get("domain") or "Other")
+        domain_rows.setdefault(domain, []).append(
+            {
+                "metric_key": str(row.get("metric_key") or ""),
+                "label": str(row.get("label") or ""),
+                "value_display": str(row.get("value_display") or ""),
+                "unit": str(row.get("unit") or ""),
+                "n": int(row.get("n") or 0),
+                "status": str(row.get("status") or "not_available"),
+            }
+        )
+    return {
+        "status": ("assessed" if rows else "not_assessed"),
+        "domains": [{"domain": d, "rows": domain_rows[d]} for d in sorted(domain_rows.keys(), key=lambda x: str(x))],
+    }
+
+
 @dataclass(frozen=True)
 class ReportRequest:
     report_type: str
@@ -295,6 +345,7 @@ def _empty_sections_for_type(report_type: str) -> dict[str, Any]:
             "mechanistic_evidence_map": {},
             "risk_profile": {},
             "experimental_gaps": {},
+            "scientific_summary": {},
             "drift_history": {},
             "reproducibility_appendix": dict(repro_base),
         }
@@ -552,6 +603,7 @@ def generate_molecule_report_v0(
         "comparability_summary": comparability.get("summary") if isinstance(comparability.get("summary"), dict) else {},
         "comparability_determination": determination,
     }
+    sections["scientific_summary"] = _build_scientific_summary(used_by_metric=used_by_metric)
     sections["reproducibility_appendix"] = {
         "policy_pins": _sorted_dict(dict(policy_pins or {})),
         "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.2"), "ranking_policy": "v0.2"},
@@ -649,6 +701,7 @@ def generate_program_report_v0(
                 "stage": str(m.get("stage") or "not_assessed"),
                 "snapshot_id": (int(m.get("snapshot_id")) if m.get("snapshot_id") is not None else None),
                 "policy_version": (str(m.get("policy_version")) if m.get("policy_version") else None),
+                "high_severity_risk_present": bool(m.get("high_severity_risk_present")),
             }
             for m in molecules
             if isinstance(m, dict)
@@ -713,6 +766,8 @@ def generate_molecule_comparative_report_v0(
         if snap is not None:
             snapshot_cov.append(int(snap.id))
         risk_flags = out.get("risk_flags_enriched") if isinstance(out.get("risk_flags_enriched"), list) else []
+        used_by_metric = out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {}
+        present_measurement_keys = sorted(str(k).strip() for k in used_by_metric.keys() if str(k).strip())
         has_high_risk = any(
             isinstance(rf, dict) and str(rf.get("severity") or "").strip().lower() == "high"
             for rf in risk_flags
@@ -728,6 +783,7 @@ def generate_molecule_comparative_report_v0(
                 "drift": out.get("drift") if isinstance(out.get("drift"), dict) else {},
                 "confidence": out.get("confidence") if isinstance(out.get("confidence"), dict) else {},
                 "has_high_risk": has_high_risk,
+                "present_measurement_keys": present_measurement_keys,
             }
         )
     rows = _order_molecule_comparative_rows(rows)

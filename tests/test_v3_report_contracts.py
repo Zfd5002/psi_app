@@ -78,6 +78,7 @@ def _required_sections(report_type: str) -> tuple[str, ...]:
             "mechanistic_evidence_map",
             "risk_profile",
             "experimental_gaps",
+            "scientific_summary",
             "drift_history",
             "reproducibility_appendix",
         )

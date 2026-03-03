@@ -3,13 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from psi.web.ui_labels import humanize_key
+from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
 
 def test_board_comparison_template_renders_alignment_matrix() -> None:
     root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
     env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
     env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
     tpl = env.get_template("reports/board_comparison_v3.html")
     html = tpl.render(
         board_narrative={
@@ -24,7 +26,17 @@ def test_board_comparison_template_renders_alignment_matrix() -> None:
             "sections": {
                 "program_set": {"rows": [{"program_id": 20, "molecule_count": 2}, {"program_id": 10, "molecule_count": 1}]},
                 "portfolio_posture_comparison": {"rows": [{"program_id": 10, "posture_state": "on_track"}, {"program_id": 20, "posture_state": "at_risk"}]},
-                "molecule_set": {"rows": [{"molecule_id": 1, "primary_id": "M1", "stage": "ready", "program_id": 10}]},
+                "molecule_set": {
+                    "rows": [
+                        {
+                            "molecule_id": 1,
+                            "primary_id": "M1",
+                            "stage": "ready",
+                            "program_id": 10,
+                            "present_measurement_keys": ["ec50"],
+                        }
+                    ]
+                },
                 "reproducibility_appendix": {"measurement_keys": ["ec50", "kd"]},
                 "comparability_surface": {"assessments": [{"cited_measurement_keys": ["ec50"]}]},
                 "resource_implications": {"rows": []},
@@ -33,8 +45,10 @@ def test_board_comparison_template_renders_alignment_matrix() -> None:
     )
     assert "Lineage Comparison" in html
     assert "Alignment Matrix" in html
+    assert "Scientific Summary" in html
     assert "ec50" in html
     assert "✓" in html
+    assert "—" in html
     assert "Portfolio / Program Posture Comparison" in html
     assert "program_id=10" in html and "program_id=20" in html
     assert html.find("program_id=10") < html.find("program_id=20")

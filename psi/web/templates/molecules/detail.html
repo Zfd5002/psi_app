@@ -132,7 +132,7 @@
                   <div class="molecule-confidence-item state-{{ c.state if c.state is defined else 'not_assessed' }}">
                     <div class="molecule-confidence-item-name">{{ c.name }}</div>
                     <div class="molecule-confidence-item-state">
-                      {{ (c.state if c.state is defined else 'not_assessed')|replace('_', ' ') }}
+                      {{ (c.state if c.state is defined else 'not_assessed')|humanize_state }}
                       {% if c.severity is defined and c.severity %} · {{ c.severity }}{% endif %}
                     </div>
                     {% if c.details is defined and c.details %}
@@ -688,7 +688,7 @@
               {% if dev.value.flags and (dev.value.flags|length) > 0 %}
                 {% set shown_flags = dev.value.flags[:4] %}
                 <div class="muted mini" style="margin-top:4px;">
-                  Why: <strong>{{ shown_flags|join(', ')|replace('_',' ') }}</strong>{% if (dev.value.flags|length) > 4 %} (+{{ (dev.value.flags|length) - 4 }} more){% endif %}
+                  Why: <strong>{% for flag in shown_flags %}{{ flag|humanize_state }}{% if not loop.last %}, {% endif %}{% endfor %}</strong>{% if (dev.value.flags|length) > 4 %} (+{{ (dev.value.flags|length) - 4 }} more){% endif %}
                 </div>
               {% endif %}
 
@@ -738,7 +738,7 @@
                             <td><strong>{{ comp }}</strong></td>
                             <td>{{ v.overall }}</td>
                             <td>{{ v.score }}</td>
-                            <td class="muted">{% if top_driver %}{{ top_driver|replace('_',' ') }}{% else %}—{% endif %}</td>
+                            <td class="muted">{% if top_driver %}{{ top_driver|humanize_state }}{% else %}—{% endif %}</td>
                           </tr>
                         {% endif %}
                       {% endfor %}

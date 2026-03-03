@@ -1,3 +1,230 @@
+## 2026-03-03 — v1.3.0a116
+Why:
+- Surface the new additive molecule `scientific_summary` payload in board templates for meeting-ready scientific review.
+
+What:
+- Updated molecule board template:
+  - `psi/web/templates/reports/board_molecule_v3.html`
+  - Added `Scientific Summary` section grouped by domain.
+  - Renders deterministic table columns: `Metric | Value | Unit | Status | N`.
+- Added minimal comparative board support (derived-only from existing comparative payload rows):
+  - `psi/web/templates/reports/board_comparison_v3.html`
+  - Added per-molecule `Scientific Summary` section based on `present_measurement_keys`.
+- Added/updated deterministic template tests:
+  - `tests/test_board_molecule_sections_rendering.py`
+  - `tests/test_board_comparison_alignment_rendering.py`
+  - verifies section headings and representative rendered content.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `psi/web/templates/reports/board_comparison_v3.html`
+- `tests/test_board_molecule_sections_rendering.py`
+- `tests/test_board_comparison_alignment_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -m psi.tools.ui_label_audit` — PASS
+
+Guarantees:
+- Template/display-layer rendering only.
+- No DI semantic/policy/ranking/replay/snapshot/fingerprint behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-03 — v1.3.0a115
+Why:
+- Add a deterministic, template-friendly molecule `scientific_summary` payload section derived from existing snapshot evidence coverage.
+
+What:
+- Added additive molecule report section key:
+  - `sections.scientific_summary`
+- Updated report engine molecule section scaffold/validation path:
+  - `psi/services/report_engine.py::_empty_sections_for_type()`
+  - `psi/services/report_engine.py::generate_molecule_report_v0()`
+- Added deterministic scientific summary builder in report engine:
+  - derives rows from `used_by_metric`
+  - joins with metric catalog metadata from `metric_catalog_entry(...)`
+  - emits:
+    - `scientific_summary.status`
+    - `scientific_summary.domains[]`
+    - per-row `{metric_key,label,value_display,unit,n,status}`
+  - stable ordering:
+    - domain (alphabetical)
+    - row order (`sort_order`, `label`, `metric_key`)
+- Added deterministic tests:
+  - updated `tests/test_v3_report_contracts.py` for additive section key
+  - new `tests/test_scientific_summary_report.py` for ordering/content stability.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_contracts.py`
+- `tests/test_scientific_summary_report.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -m psi.tools.ui_label_audit` — PASS
+
+Guarantees:
+- Additive report payload surface only.
+- No DI semantic/policy/ranking/replay/snapshot/fingerprint behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-03 — v1.3.0a114
+Why:
+- Introduce a deterministic metric catalog layer to support scientist-readable summaries without changing DI/report semantics.
+
+What:
+- Added deterministic metric catalog data file:
+  - `psi/data/metric_catalog_v1.json`
+  - Includes stable `metric_key -> {label, domain, unit, sort_order, notes}` entries.
+- Added loader service:
+  - `psi/services/metric_catalog.py`
+  - `load_metric_catalog_v1()` with stable-key normalization and deterministic defaults.
+  - `metric_catalog_entry(metric_key)` fallback behavior:
+    - `label=humanize_key(metric_key)`
+    - `domain=Other`
+    - `unit=""`
+    - `sort_order=9999`
+    - `notes=""`
+- Added deterministic unit tests:
+  - `tests/test_metric_catalog.py`
+  - validates stable loader output and fallback behavior.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/data/metric_catalog_v1.json`
+- `psi/services/metric_catalog.py`
+- `tests/test_metric_catalog.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -m psi.tools.ui_label_audit` — PASS
+
+Guarantees:
+- Data/loader addition only; no DI semantic/policy/ranking/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-03 — v1.3.0a113
+Why:
+- Improve scientist-facing readability on UI surfaces by humanizing state/path tokens and removing visible underscore artifacts without changing payload semantics.
+
+What:
+- Extended `psi/web/ui_labels.py` with deterministic presentation helpers:
+  - `humanize_state(value)`
+  - `humanize_path_token(value)`
+  - shared `humanize_slug_or_token(value)`
+- Added deterministic state override:
+  - `not_assessed` -> `Not assessed by this surface.`
+- Added additional abbreviation handling for scientific display tokens:
+  - `QC, DI, ID, API, URL, JSON, SQL, PK, PD, NOD, SPR, SEC, LAL, HMW, LMW, Fc, IgG, HEK, NONCOMP`
+- Registered new filters in all relevant template environments:
+  - app Jinja env (`psi/web/app.py`)
+  - policy upgrade HTML renderer (`psi/services/policy_upgrade.py`)
+  - DI contract smoke template env (`psi/tools/di_contract_smoke.py`)
+  - standalone Jinja envs in board template tests.
+- Replaced visible underscore formatting hacks in molecule templates:
+  - `psi/web/templates/molecules/list.html`
+  - `psi/web/templates/molecules/detail.html`
+  - moved from `|replace('_',' ')` to `|humanize_state`.
+- Improved program dashboard table readability with `humanize_key` / `humanize_state`:
+  - `psi/web/templates/programs/detail.html`
+- Added presentation-only path token humanization for batch data/evidence domains:
+  - `psi/web/templates/batches/detail.html`
+- Added tests for new helpers:
+  - `tests/test_ui_label_humanization.py` now covers `humanize_state` and `humanize_path_token`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/ui_labels.py`
+- `psi/web/app.py`
+- `psi/services/policy_upgrade.py`
+- `psi/tools/di_contract_smoke.py`
+- `psi/web/templates/molecules/list.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/batches/detail.html`
+- `psi/web/templates/reports/board_comparison_v3.html`
+- `tests/test_ui_label_humanization.py`
+- `tests/test_board_comparison_alignment_rendering.py`
+- `tests/test_board_determination_card_rendering.py`
+- `tests/test_board_molecule_sections_rendering.py`
+- `tests/test_board_program_posture_rendering.py`
+- `tests/test_report_detail_board_template_selection.py`
+- `tests/test_report_upgrade_delta_view.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -m psi.tools.ui_label_audit` — PASS
+
+Guarantees:
+- Presentation-only labeling/formatting improvements.
+- No DI/policy/ranking/replay/snapshot/fingerprint behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-03 — v1.3.0a112
+Why:
+- Close Phase E report-layer correctness blockers without changing DI semantics or persisted-contract meaning.
+
+What:
+- Fixed governance comparability status mapping in `psi/services/report_engine.py`:
+  - `conditionally_comparable` now maps to `comparable_partial` (no collapse to `comparable_full`).
+- Fixed program board high-risk wiring:
+  - `psi/services/program_rollups.py` now derives deterministic `high_severity_risk_present` per molecule from `risk_flags_enriched`.
+  - `psi/services/report_engine.py` forwards this field into `sections.molecule_overview_table.rows`.
+- Fixed comparison alignment matrix behavior:
+  - `psi/services/report_engine.py` adds per-molecule `present_measurement_keys` (from DI `used_by_metric` keys, sorted).
+  - `psi/web/templates/reports/board_comparison_v3.html` now renders `✓` only when a molecule has that key, else `—`.
+- Added molecule board experimental gaps rendering:
+  - `psi/web/templates/reports/board_molecule_v3.html` now includes deterministic `Experimental Gaps` section for blockers and next-best experiments.
+- Removed hardcoded lineage nav link:
+  - `psi/web/templates/base.html` changed `/lineage/programs/1` to `/lineage/programs`.
+- Added required deterministic UI underscore audit tool:
+  - new `psi/tools/ui_label_audit.py` writes `_artifacts/ui_label_audit/UI_UNDERSCORE_REPORT.md`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/services/program_rollups.py`
+- `psi/web/templates/reports/board_comparison_v3.html`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `psi/web/templates/base.html`
+- `psi/tools/ui_label_audit.py`
+- `tests/test_comparability_resolution.py`
+- `tests/test_v3_narrative_measurement_wiring.py`
+- `tests/test_board_comparison_alignment_rendering.py`
+- `tests/test_board_molecule_sections_rendering.py`
+- `tests/test_report_detail_board_template_selection.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -m psi.tools.ui_label_audit` — PASS
+
+Guarantees:
+- No DI/policy/ranking/replay/snapshot/fingerprint behavior changes.
+- No DB schema/migration changes.
+- Report payload contract changes are additive presentation fields only.
+
 ## 2026-03-02 — v1.3.0a111
 Why:
 - Add a canonical presentation-layer key humanization path and reduce visible snake_case labels while preserving technical raw-key auditability.

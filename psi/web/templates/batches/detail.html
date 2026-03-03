@@ -32,8 +32,8 @@
         <tr>
           <td class="muted">{{ r.run_date or '' }}</td>
           <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
-          <td class="muted">{{ r.domain }}</td>
-          <td class="muted">{{ r.data_type }}/{{ r.method }}</td>
+          <td class="muted">{{ r.domain|humanize_path_token }}</td>
+          <td class="muted">{{ (r.data_type ~ '/' ~ r.method)|humanize_path_token }}</td>
         </tr>
         {% else %}
         <tr><td colspan="4" class="muted">No data records yet.</td></tr>
@@ -48,7 +48,7 @@
         {% for e in evidence %}
         <tr>
           <td><a href="/evidence/{{ e.id }}">{{ e.evidence_type }}</a></td>
-          <td class="muted">{{ e.domain }}</td>
+          <td class="muted">{{ e.domain|humanize_path_token }}</td>
           <td>{{ e.strength }}</td>
           <td class="muted">{{ e.summary }}</td>
         </tr>
@@ -84,7 +84,7 @@
             <td>{{ row.decision_key }}</td>
             <td class="muted">{{ row.policy_id }}@{{ row.policy_version }}</td>
             <td>
-              <div><b>{{ row.summary.decision_state }}</b></div>
+              <div><b>{{ row.summary.decision_state|humanize_state }}</b></div>
               <div class="muted">gates: {{ row.summary.gates_pass }} pass / {{ row.summary.gates_nonpass }} non-pass · blockers: {{ row.summary.blockers }}</div>
             </td>
             <td class="no-print">

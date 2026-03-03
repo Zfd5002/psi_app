@@ -44,7 +44,7 @@ from psi.services.di.sub_assessments import (
 )
 from psi.services.di.templates.registry import list_template_keys_sorted, template_dependency_graph
 from psi.services.di.util import value_functions_enforcement_reason
-from psi.web.ui_labels import humanize_key
+from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -3178,6 +3178,8 @@ def test_reports_ui_templates_render_deterministic_structured_payload_surface() 
     tpl_dir = repo_root / "psi" / "web" / "templates"
     env = Environment(loader=FileSystemLoader(str(tpl_dir)))
     env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
     tmpl = env.get_template("reports/detail.html")
     ctx = {
         "report_run": {"id": 1, "report_type": "molecule_report", "as_of": "2026-02-26T00:00:00", "created_at": "2026-02-26T00:00:01"},

@@ -137,13 +137,13 @@
   <div style="margin-top:12px;">
     <h3>Policy governance</h3>
     {% if di_dashboard.policy_version_filter %}
-      <div class="muted">Filter: policy_version = {{ di_dashboard.policy_version_filter }} · <a href="/programs/{{ program.id }}">clear</a></div>
+      <div class="muted">Filter: {{ "policy_version"|humanize_key }} = {{ di_dashboard.policy_version_filter }} · <a href="/programs/{{ program.id }}">clear</a></div>
     {% endif %}
     <div class="grid cols-2" style="margin-top:8px;">
       <div>
         <div class="muted">Policy versions</div>
         <table class="table mini">
-          <thead><tr><th>policy_version</th><th>count</th></tr></thead>
+          <thead><tr><th>{{ "policy_version"|humanize_key }}</th><th>Count</th></tr></thead>
           <tbody>
             {% for k,v in di_dashboard.policy_versions %}
               <tr>
@@ -159,7 +159,7 @@
       <div>
         <div class="muted">Policy IDs</div>
         <table class="table mini">
-          <thead><tr><th>policy_id</th><th>count</th></tr></thead>
+          <thead><tr><th>{{ "policy_id"|humanize_key }}</th><th>Count</th></tr></thead>
           <tbody>
             {% for k,v in di_dashboard.policy_ids %}
               <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
@@ -176,10 +176,10 @@
     <div>
       <h3>Most common blockers</h3>
       <table class="table mini">
-        <thead><tr><th>blocker_key</th><th>count</th></tr></thead>
+        <thead><tr><th>{{ "blocker_key"|humanize_key }}</th><th>Count</th></tr></thead>
         <tbody>
           {% for k,v in di_dashboard.top_blockers %}
-            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+            <tr><td>{{ k|humanize_key }}</td><td class="muted">{{ v }}</td></tr>
           {% else %}
             <tr><td colspan="2" class="muted">—</td></tr>
           {% endfor %}
@@ -189,10 +189,10 @@
     <div>
       <h3>Most common missing required metrics</h3>
       <table class="table mini">
-        <thead><tr><th>metric_key</th><th>count</th></tr></thead>
+        <thead><tr><th>{{ "metric_key"|humanize_key }}</th><th>Count</th></tr></thead>
         <tbody>
           {% for k,v in di_dashboard.top_missing_metrics %}
-            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+            <tr><td>{{ k|humanize_key }}</td><td class="muted">{{ v }}</td></tr>
           {% else %}
             <tr><td colspan="2" class="muted">—</td></tr>
           {% endfor %}
@@ -205,10 +205,10 @@
     <div>
       <h3>Most common failing gates</h3>
       <table class="table mini">
-        <thead><tr><th>gate_key</th><th>count</th></tr></thead>
+        <thead><tr><th>{{ "gate_key"|humanize_key }}</th><th>Count</th></tr></thead>
         <tbody>
           {% for k,v in di_dashboard.top_failing_gates %}
-            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+            <tr><td>{{ k|humanize_key }}</td><td class="muted">{{ v }}</td></tr>
           {% else %}
             <tr><td colspan="2" class="muted">—</td></tr>
           {% endfor %}
@@ -218,11 +218,11 @@
     <div>
       <h3>Metric coverage frequency</h3>
       <table class="table mini">
-        <thead><tr><th>metric_key</th><th>present</th><th>missing</th><th>% present</th></tr></thead>
+        <thead><tr><th>{{ "metric_key"|humanize_key }}</th><th>Present</th><th>Missing</th><th>% Present</th></tr></thead>
         <tbody>
           {% for row in di_dashboard.metric_coverage %}
             <tr>
-              <td>{{ row.metric_key }}</td>
+              <td>{{ row.metric_key|humanize_key }}</td>
               <td class="muted">{{ row.present_count }}</td>
               <td class="muted">{{ row.missing_count }}</td>
               <td class="muted">{{ row.percent_present }}</td>
@@ -239,10 +239,10 @@
     <div>
       <h3>QC ignore reasons</h3>
       <table class="table mini">
-        <thead><tr><th>reason_key</th><th>count</th></tr></thead>
+        <thead><tr><th>{{ "reason_key"|humanize_key }}</th><th>Count</th></tr></thead>
         <tbody>
           {% for k,v in di_dashboard.qc_ignore_reasons %}
-            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+            <tr><td>{{ k|humanize_key }}</td><td class="muted">{{ v }}</td></tr>
           {% else %}
             <tr><td colspan="2" class="muted">—</td></tr>
           {% endfor %}
@@ -252,10 +252,10 @@
     <div>
       <h3>QC failed metrics</h3>
       <table class="table mini">
-        <thead><tr><th>metric_key</th><th>count</th></tr></thead>
+        <thead><tr><th>{{ "metric_key"|humanize_key }}</th><th>Count</th></tr></thead>
         <tbody>
           {% for k,v in di_dashboard.qc_failed_metrics %}
-            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+            <tr><td>{{ k|humanize_key }}</td><td class="muted">{{ v }}</td></tr>
           {% else %}
             <tr><td colspan="2" class="muted">—</td></tr>
           {% endfor %}
@@ -265,10 +265,10 @@
     <div>
       <h3>QC unreviewed (strict)</h3>
       <table class="table mini">
-        <thead><tr><th>metric_key</th><th>count</th></tr></thead>
+        <thead><tr><th>{{ "metric_key"|humanize_key }}</th><th>Count</th></tr></thead>
         <tbody>
           {% for k,v in di_dashboard.qc_unreviewed_metrics %}
-            <tr><td>{{ k }}</td><td class="muted">{{ v }}</td></tr>
+            <tr><td>{{ k|humanize_key }}</td><td class="muted">{{ v }}</td></tr>
           {% else %}
             <tr><td colspan="2" class="muted">—</td></tr>
           {% endfor %}
@@ -300,7 +300,7 @@
               <span class="muted">—</span>
             {% endif %}
           </td>
-          <td><span class="chip">{{ r.readiness_state }}</span></td>
+          <td><span class="chip">{{ r.readiness_state|humanize_state }}</span></td>
           <td class="muted">{{ r.blocker_count }}</td>
           <td class="muted">{{ r.policy_version or '' }}</td>
         </tr>
@@ -349,8 +349,8 @@
               <div class="muted">{{ row.policy_version }}</div>
             </td>
             <td>
-              <div><b>{{ row.decision_state }}</b></div>
-              <div class="muted">{{ row.readiness_state or '' }}</div>
+              <div><b>{{ row.decision_state|humanize_state }}</b></div>
+              <div class="muted">{{ (row.readiness_state or '')|humanize_state }}</div>
             </td>
             <td>
               {% if row.is_superseded == 1 %}

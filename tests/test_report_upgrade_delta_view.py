@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from psi.core.models import Base
 from psi.services.reports_v3 import build_report_upgrade_delta_view
 from psi.services.report_engine import generate_molecule_report_v0
-from psi.web.ui_labels import humanize_key
+from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
 
 def _mkdb():
@@ -60,6 +60,8 @@ def test_upgrade_delta_board_template_renders_fragments() -> None:
     root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
     env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
     env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
     tpl = env.get_template("reports/board_upgrade_delta_v3.html")
     html = tpl.render(
         report={

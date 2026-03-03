@@ -42,7 +42,7 @@
           <tr>
             <td>{{ row.primary_id if row is mapping and row.primary_id is defined else ("molecule_id=" ~ row.molecule_id if row is mapping and row.molecule_id is defined else "Not available") }}</td>
             <td>{{ row.program_id if row is mapping and row.program_id is defined else "Not available" }}</td>
-            <td>{{ row.stage if row is mapping and row.stage is defined else "Not assessed" }}</td>
+            <td>{{ (row.stage if row is mapping and row.stage is defined else "not_assessed")|humanize_state }}</td>
             <td>{{ row.snapshot_id if row is mapping and row.snapshot_id is defined else "Not available" }}</td>
           </tr>
           {% else %}
@@ -84,7 +84,8 @@
             {% endif %}
           </td>
           {% for col in align_cols %}
-          <td>✓</td>
+          {% set row_keys = (row.present_measurement_keys if row is mapping and row.present_measurement_keys is defined and row.present_measurement_keys is iterable else []) %}
+          <td>{{ "✓" if col in row_keys else "—" }}</td>
           {% else %}
           <td>Not available</td>
           {% endfor %}
@@ -95,6 +96,36 @@
       </tbody>
     </table>
   </div>
+
+  {% if molecule_rows %}
+  <h2>Scientific Summary <span class="mini muted">(display-only derived section)</span></h2>
+  <div class="card report-block report-section-card">
+    <table class="board-section-table">
+      <thead><tr><th>Molecule</th><th>Measurement Coverage</th></tr></thead>
+      <tbody>
+        {% for row in molecule_rows %}
+        {% set rkeys = (row.present_measurement_keys if row is mapping and row.present_measurement_keys is defined and row.present_measurement_keys is iterable else []) %}
+        <tr>
+          <td>{{ row.primary_id if row is mapping and row.primary_id is defined else ("molecule_id=" ~ row.molecule_id if row is mapping and row.molecule_id is defined else "Not available") }}</td>
+          <td>
+            {% if rkeys %}
+            <div class="chip-list measurement-chip-list">
+              {% for k in rkeys|sort %}
+              <span class="chip">{{ k|humanize_key }}</span>
+              {% endfor %}
+            </div>
+            {% else %}
+            Not available
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2">Not available</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 
   {% if program_rows %}
   <h2>Portfolio / Program Posture Comparison</h2>
@@ -107,10 +138,10 @@
         {% for row in program_rows|sort(attribute="program_id") %}
         {% set program_id = (row.program_id if row is mapping and row.program_id is defined else "") %}
         {% set match = (posture_rows|selectattr("program_id", "equalto", program_id)|list|first if posture_rows else {}) %}
-        {% set posture_state = (match.posture_state if match is mapping and match.posture_state is defined else "Not assessed") %}
+        {% set posture_state = (match.posture_state if match is mapping and match.posture_state is defined else "not_assessed") %}
         <tr>
           <td>{{ "program_id=" ~ program_id if program_id != "" else "Not available" }}</td>
-          <td>{{ posture_state }}</td>
+          <td>{{ posture_state|humanize_state }}</td>
           <td>{{ "unchanged" if loop.first else "changed/unknown" }}</td>
         </tr>
         {% else %}

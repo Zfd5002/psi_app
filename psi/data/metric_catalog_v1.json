@@ -1,0 +1,36 @@
+{
+  "catalog_id": "metric_catalog_v1",
+  "catalog_version": "v1",
+  "metrics": {
+    "ec50": {
+      "label": "EC50",
+      "domain": "Potency",
+      "unit": "nM",
+      "sort_order": 10
+    },
+    "kd": {
+      "label": "KD",
+      "domain": "Binding",
+      "unit": "nM",
+      "sort_order": 20
+    },
+    "koff": {
+      "label": "Koff",
+      "domain": "Binding",
+      "unit": "1/s",
+      "sort_order": 30
+    },
+    "kon": {
+      "label": "Kon",
+      "domain": "Binding",
+      "unit": "1/M/s",
+      "sort_order": 40
+    },
+    "tm": {
+      "label": "Tm",
+      "domain": "Developability",
+      "unit": "C",
+      "sort_order": 50
+    }
+  }
+}

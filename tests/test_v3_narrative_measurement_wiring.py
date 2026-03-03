@@ -131,3 +131,62 @@ def test_program_narrative_headline_uses_program_id_from_sections_metadata() -> 
             db.close()
     finally:
         eng.dispose()
+
+
+def test_program_report_molecule_rows_include_high_severity_risk_present() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            program = Program(name="P-risk", description="", created_at=datetime(2026, 2, 26), updated_at=datetime(2026, 2, 26))
+            db.add(program)
+            db.commit()
+            db.refresh(program)
+            mol = Molecule(
+                program_id=int(program.id),
+                primary_id="M-risk",
+                title="Mol risk",
+                created_at=datetime(2026, 2, 26),
+                updated_at=datetime(2026, 2, 26),
+            )
+            db.add(mol)
+            db.commit()
+            db.refresh(mol)
+            db.add(
+                DecisionSnapshot(
+                    program_id=int(program.id),
+                    molecule_id=int(mol.id),
+                    batch_id=None,
+                    decision_key="advance_to_in_vivo",
+                    rules_version="vX",
+                    engine_key="di",
+                    schema_version="di.snapshot.v0_4",
+                    inputs_json=stable_json_dumps({"engine_key": "di"}),
+                    outputs_json=stable_json_dumps(
+                        {
+                            "decision_state": "ready",
+                            "readiness": {"state": "ready"},
+                            "gates": [],
+                            "risk_flags_enriched": [{"severity": "high", "key": "agg"}],
+                        }
+                    ),
+                    evidence_ids_json="[]",
+                    created_at=datetime(2026, 2, 26, 1, 0, 0),
+                )
+            )
+            db.commit()
+
+            run = generate_program_report_v0(
+                db,
+                program_id=int(program.id),
+                as_of=datetime(2026, 2, 26, 2, 0, 0),
+                policy_pins={"report_policy": "v0"},
+            )
+            payload = load_report_run_payload(run)
+            rows = payload.get("sections", {}).get("molecule_overview_table", {}).get("rows", [])
+            assert len(rows) == 1
+            assert bool(rows[0].get("high_severity_risk_present")) is True
+        finally:
+            db.close()
+    finally:
+        eng.dispose()

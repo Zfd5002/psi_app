@@ -187,6 +187,11 @@ def build_program_rollup(db: Session, *, program_id: int, as_of: datetime) -> di
             template_keys.add(tkey)
         used_by_metric = out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {}
         measurement_keys = sorted(str(k).strip() for k in used_by_metric.keys() if str(k).strip())
+        risk_flags = out.get("risk_flags_enriched") if isinstance(out.get("risk_flags_enriched"), list) else []
+        high_severity_risk_present = any(
+            isinstance(rf, dict) and str(rf.get("severity") or "").strip().lower() == "high"
+            for rf in risk_flags
+        )
         molecules.append(
             {
                 "molecule_id": int(row["molecule_id"]),
@@ -200,6 +205,7 @@ def build_program_rollup(db: Session, *, program_id: int, as_of: datetime) -> di
                 "policy_version": pver or None,
                 "policy_package_hash": pph or None,
                 "measurement_keys": measurement_keys,
+                "high_severity_risk_present": bool(high_severity_risk_present),
             }
         )
     governance_warnings = get_unacknowledged_upgrade_warnings(db, current_policy_pins={})

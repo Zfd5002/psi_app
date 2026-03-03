@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from psi.web.ui_labels import humanize_key
+from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
 from psi.web.routers.reports import _board_template_for_report_type
 
@@ -13,6 +13,8 @@ def _env() -> Environment:
     root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
     env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
     env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
     return env
 
 
@@ -57,3 +59,9 @@ def test_detail_renders_program_board_template_sentinel() -> None:
 def test_detail_renders_comparison_board_template_sentinel() -> None:
     html = _render_detail("reports/board_comparison_v3.html")
     assert 'id="board-comparison-v3"' in html
+
+
+def test_base_nav_lineage_link_is_not_hardcoded_to_program_1() -> None:
+    html = _render_detail("reports/board_molecule_v3.html")
+    assert 'href="/lineage/programs/1"' not in html
+    assert 'href="/lineage/programs"' in html

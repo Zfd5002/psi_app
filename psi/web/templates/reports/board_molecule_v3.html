@@ -6,6 +6,9 @@
   {% set mech = (sections.mechanistic_evidence_map if sections.mechanistic_evidence_map is defined and sections.mechanistic_evidence_map is mapping else {}) %}
   {% set risk = (sections.risk_profile if sections.risk_profile is defined and sections.risk_profile is mapping else {}) %}
   {% set conf = (sections.confidence_decomposition if sections.confidence_decomposition is defined and sections.confidence_decomposition is mapping else {}) %}
+  {% set gaps = (sections.experimental_gaps if sections.experimental_gaps is defined and sections.experimental_gaps is mapping else {}) %}
+  {% set scientific = (sections.scientific_summary if sections.scientific_summary is defined and sections.scientific_summary is mapping else {}) %}
+  {% set scientific_domains = (scientific.domains if scientific.domains is defined and scientific.domains is iterable else []) %}
   {% set repro = (sections.reproducibility_appendix if sections.reproducibility_appendix is defined and sections.reproducibility_appendix is mapping else {}) %}
   {% set risk_rows = (risk.risk_flags_enriched if risk.risk_flags_enriched is defined and risk.risk_flags_enriched is iterable else []) %}
   {% set ns = namespace(risk_rendered=0) %}
@@ -72,6 +75,57 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <h2>Scientific Summary</h2>
+  <div class="card report-block report-section-card">
+    {% for domain in scientific_domains %}
+    <h3>{{ domain.domain if domain is mapping and domain.domain is defined else "Other" }}</h3>
+    <table class="board-section-table">
+      <thead><tr><th>Metric</th><th>Value</th><th>Unit</th><th>Status</th><th>N</th></tr></thead>
+      <tbody>
+        {% for row in (domain.rows if domain is mapping and domain.rows is defined and domain.rows is iterable else []) %}
+        <tr>
+          <td>{{ row.label if row is mapping and row.label is defined else ((row.metric_key if row is mapping and row.metric_key is defined else "")|humanize_key) }}</td>
+          <td>{{ row.value_display if row is mapping and row.value_display is defined else "Not available" }}</td>
+          <td>{{ row.unit if row is mapping and row.unit is defined else "" }}</td>
+          <td>{{ (row.status if row is mapping and row.status is defined else "not_assessed")|humanize_state }}</td>
+          <td>{{ row.n if row is mapping and row.n is defined else 0 }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">Not available</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Not assessed by this surface.</p>
+    {% endfor %}
+  </div>
+
+  <h2>Experimental Gaps</h2>
+  <div class="card report-block report-section-card">
+    <h3>Blockers</h3>
+    <ul class="narrative-list">
+      {% for item in (gaps.blockers if gaps.blockers is defined and gaps.blockers is iterable else []) %}
+      <li>{{ item }}</li>
+      {% else %}
+      <li>Not available</li>
+      {% endfor %}
+    </ul>
+    <h3>Next best experiments</h3>
+    <ul class="narrative-list">
+      {% for item in (gaps.next_best_experiments if gaps.next_best_experiments is defined and gaps.next_best_experiments is iterable else []) %}
+      <li>
+        {% if item is mapping %}
+        {{ item.label if item.label is defined else (item.suggestion_key if item.suggestion_key is defined else (item | tojson(indent=0))) }}
+        {% else %}
+        {{ item }}
+        {% endif %}
+      </li>
+      {% else %}
+      <li>Not available</li>
+      {% endfor %}
+    </ul>
   </div>
 
   <h2>Reproducibility Appendix</h2>
