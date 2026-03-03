@@ -4,13 +4,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from psi.web.ui_labels import humanize_key
 
 from psi.web.routers.reports import _board_template_for_report_type
 
 
 def _env() -> Environment:
     root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
-    return Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env.filters["humanize_key"] = humanize_key
+    return env
 
 
 def _render_detail(board_template_name: str) -> str:

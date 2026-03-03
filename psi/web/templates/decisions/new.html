@@ -20,7 +20,7 @@
         <label>Decision</label>
         <select name="decision_key" required>
           {% for k in decision_keys %}
-            <option value="{{ k }}">{{ k }}</option>
+            <option value="{{ k }}">{{ k|humanize_key }}</option>
           {% endfor %}
         </select>
       </div>

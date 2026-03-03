@@ -1,3 +1,159 @@
+## 2026-03-02 — v1.3.0a111
+Why:
+- Add a canonical presentation-layer key humanization path and reduce visible snake_case labels while preserving technical raw-key auditability.
+
+What:
+- Added `psi/web/ui_labels.py` with deterministic pure `humanize_key(key)`:
+  - underscore-to-space normalization,
+  - title casing,
+  - acronym handling (`QC`, `DI`, `ID`, `API`, `URL`, `JSON`, `SQL`, `PK`, `PD`, `MABEL`, `NOAEL`),
+  - explicit overrides (e.g., `as_of_ts -> As Of`, `qc_mode -> QC Mode`).
+- Registered Jinja filter in `psi/web/app.py`:
+  - `templates.env.filters[\"humanize_key\"] = humanize_key`
+- Applied humanized labels (with raw key preserved in secondary monospace text) in high-impact report templates:
+  - `psi/web/templates/reports/_board_narrative.html`
+  - `psi/web/templates/reports/board_molecule_v3.html`
+  - `psi/web/templates/reports/board_comparison_v3.html`
+  - `psi/web/templates/reports/board_upgrade_delta_v3.html`
+  - plus decision form option labels in `psi/web/templates/decisions/new.html`
+- Added focused tests `tests/test_ui_label_humanization.py`:
+  - acronym/override unit assertions,
+  - board view humanization assertion,
+  - technical view raw-key preservation assertion.
+- Registered `humanize_key` in standalone/non-app Jinja environments used by
+  helper rendering and template tests, so board templates that use the filter
+  compile consistently in smoke/test paths.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/ui_labels.py`
+- `psi/web/app.py`
+- `psi/web/templates/reports/_board_narrative.html`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `psi/web/templates/reports/board_comparison_v3.html`
+- `psi/web/templates/reports/board_upgrade_delta_v3.html`
+- `psi/web/templates/decisions/new.html`
+- `tests/test_ui_label_humanization.py`
+- `psi/services/policy_upgrade.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_board_comparison_alignment_rendering.py`
+- `tests/test_board_determination_card_rendering.py`
+- `tests/test_board_molecule_sections_rendering.py`
+- `tests/test_board_program_posture_rendering.py`
+- `tests/test_report_detail_board_template_selection.py`
+- `tests/test_report_upgrade_delta_view.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Presentation-only humanization layer; persisted/report payload keys unchanged.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a110
+Why:
+- Improve comparative narrative next-step usefulness when `experimental_gaps` is empty by deriving deterministic guidance from existing comparative payload sections.
+
+What:
+- Updated `psi/services/v3_narrative.py` comparative next-step logic with deterministic priority:
+  1) explicit `experimental_gaps` content (list/dict),
+  2) high-severity risk signal summary (if present),
+  3) measurement comparability resolution prompt from cited/appendix measurement keys,
+  4) canonical fallback: `No next steps provided by comparative schema.`
+- Added targeted test in `tests/test_v3_narrative_rendering.py` asserting comparative next steps are non-`None` and deterministic when gaps are empty but measurement evidence exists.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_narrative.py`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Derived narrative-layer improvement only.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a109
+Why:
+- Improve program-comparative board clarity by replacing hollow posture/resource placeholders with deterministic display sections.
+
+What:
+- Updated `psi/web/templates/reports/board_comparison_v3.html`:
+  - added `Portfolio / Program Posture Comparison` table for program comparative payloads,
+  - deterministic program ordering by `program_id`,
+  - added `Resource Implications` section with canonical fallback phrase:
+    `Not assessed by this report schema.`
+- Augmented targeted render test `tests/test_board_comparison_alignment_rendering.py` to assert:
+  - posture section rendering,
+  - deterministic ordering,
+  - canonical resource-implication fallback wording.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/board_comparison_v3.html`
+- `tests/test_board_comparison_alignment_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Board-template display improvement only.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a108
+Why:
+- Add a deterministic, derived-only policy upgrade delta surface for comparing two existing report runs without modifying persisted report payload semantics.
+
+What:
+- Added derived delta builder in `psi/services/reports_v3.py`:
+  - `build_report_upgrade_delta_view(db, base_report_run_id, candidate_report_run_id)`
+  - compares policy pins and key determination/ranking surfaces with deterministic ordering.
+- Added new route `GET /reports/upgrade-delta?base=<id>&cand=<id>[&export=pdf]` in `psi/web/routers/reports.py`.
+- Added wrapper page template `psi/web/templates/reports/upgrade_delta_detail.html`.
+- Extended `psi/web/templates/reports/board_upgrade_delta_v3.html` to render:
+  - executive summary,
+  - changed rows,
+  - unchanged rows,
+  - policy pin comparison,
+  - comparison citations.
+- Added targeted tests in `tests/test_report_upgrade_delta_view.py` for stable ordering and board template fragment rendering.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/routers/reports.py`
+- `psi/web/templates/reports/upgrade_delta_detail.html`
+- `psi/web/templates/reports/board_upgrade_delta_v3.html`
+- `tests/test_report_upgrade_delta_view.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Derived-only comparison surface; no DI semantic/policy outcome/ranking execution changes.
+- No DB schema/migration changes.
+- No hashing/fingerprint or replay behavior changes.
+
 ## 2026-03-02 — v1.3.0a107
 Why:
 - Apply report-layer hygiene and wording consistency improvements without changing runtime semantics.

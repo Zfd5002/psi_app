@@ -83,3 +83,32 @@ def report_detail(report_run_id: int, request: Request, export: str | None = Que
     ctx["body_class"] = "pdf-mode" if is_pdf else ""
     ctx["request"] = request
     return templates.TemplateResponse("reports/detail.html", ctx)
+
+
+@router.get("/reports/upgrade-delta", response_class=HTMLResponse)
+def report_upgrade_delta(
+    request: Request,
+    base: int = Query(...),
+    cand: int = Query(...),
+    export: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    try:
+        report = svc.build_report_upgrade_delta_view(
+            db,
+            base_report_run_id=int(base),
+            candidate_report_run_id=int(cand),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="ReportRun not found")
+    is_pdf = str(export or "").strip().lower() == "pdf"
+    return templates.TemplateResponse(
+        "reports/upgrade_delta_detail.html",
+        {
+            "request": request,
+            "report": report,
+            "is_pdf": is_pdf,
+            "body_class": ("pdf-mode" if is_pdf else ""),
+        },
+    )

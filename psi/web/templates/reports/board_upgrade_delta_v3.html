@@ -32,10 +32,43 @@
     </thead>
     <tbody>
       {% for row in report.change_table.rows %}
-      <tr><td>{{ row.key }}</td><td>{{ row.old }}</td><td>{{ row.new }}</td><td>{{ row.changed }}</td></tr>
+      <tr><td>{{ row.key|humanize_key }} <span class="mini muted"><code>{{ row.key }}</code></span></td><td>{{ row.old }}</td><td>{{ row.new }}</td><td>{{ row.changed }}</td></tr>
+      {% else %}
+      <tr><td colspan="4">No changed rows.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <h3>Unchanged</h3>
+  <table>
+    <thead>
+      <tr><th>Key</th><th>Old</th><th>New</th><th>Changed</th></tr>
+    </thead>
+    <tbody>
+      {% for row in (report.unchanged_table.rows if report.unchanged_table is defined and report.unchanged_table.rows is defined else []) %}
+      <tr><td>{{ row.key|humanize_key }} <span class="mini muted"><code>{{ row.key }}</code></span></td><td>{{ row.old }}</td><td>{{ row.new }}</td><td>{{ row.changed }}</td></tr>
+      {% else %}
+      <tr><td colspan="4">No unchanged rows.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Policy Pin Comparison</h3>
+  <table>
+    <thead>
+      <tr><th>Pin</th><th>Base</th><th>Candidate</th><th>Changed</th></tr>
+    </thead>
+    <tbody>
+      {% for row in (report.policy_pin_comparison.rows if report.policy_pin_comparison is defined and report.policy_pin_comparison.rows is defined else []) %}
+      <tr><td>{{ row.pin_key|humanize_key }} <span class="mini muted"><code>{{ row.pin_key }}</code></span></td><td>{{ row.base_version }}</td><td>{{ row.candidate_version }}</td><td>{{ row.changed }}</td></tr>
+      {% else %}
+      <tr><td colspan="4">No policy pin rows.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Citations</h3>
+  <pre>{{ (report.appendix.comparison_citations if report.appendix is defined and report.appendix.comparison_citations is defined else {}) | tojson(indent=2) }}</pre>
 </section>
 
 <section id="upgrade-technical-panel" class="technical-panel" data-upgrade-panel="technical">

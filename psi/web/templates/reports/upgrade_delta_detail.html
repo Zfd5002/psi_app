@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Upgrade Delta | PSI{% endblock %}
+{% block content %}
+<div class="card report-detail-page">
+  <div class="row report-detail-header-row" style="justify-content:space-between;align-items:center;">
+    <h1 style="margin:0;">Policy Upgrade Delta</h1>
+    {% if not is_pdf %}
+    <a class="btn no-print" href="?base={{ report.header.base_report_run_id }}&cand={{ report.header.candidate_report_run_id }}&export=pdf">Export PDF</a>
+    {% endif %}
+  </div>
+  {% include "reports/board_upgrade_delta_v3.html" %}
+</div>
+{% endblock %}

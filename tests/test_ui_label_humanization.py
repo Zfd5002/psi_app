@@ -1,0 +1,51 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from psi.web.ui_labels import humanize_key
+
+
+def _env() -> Environment:
+    root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
+    env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env.filters["humanize_key"] = humanize_key
+    return env
+
+
+def test_humanize_key_applies_acronyms_and_overrides() -> None:
+    assert humanize_key("qc_mode") == "QC Mode"
+    assert humanize_key("api_url") == "API URL"
+    assert humanize_key("as_of_ts") == "As Of"
+
+
+def test_board_view_humanizes_known_snake_case_key() -> None:
+    tpl = _env().get_template("reports/board_molecule_v3.html")
+    html = tpl.render(
+        board_narrative={
+            "headline": "x",
+            "status_rows": [],
+            "what_this_means": [],
+            "evidence_status": [],
+            "determinations": [],
+            "next_steps": [],
+        },
+        payload={"sections": {"mechanistic_evidence_map": {"as_of_ts": "2026-02-26"}}},
+        policy_pin_summary=[],
+        runtime_policy_versions={},
+    )
+    assert "As Of" in html
+
+
+def test_technical_view_keeps_raw_key_for_auditability() -> None:
+    tpl = _env().get_template("reports/_technical_audit.html")
+    html = tpl.render(
+        payload={"sections": {"as_of_ts": "2026-02-26"}, "metadata": {"report_type": "molecule_report"}},
+        policy_pin_summary=[],
+        rule_ids=[],
+        measurement_key_citations=[],
+        evidence_snapshot_refs=[],
+        governance_warnings=[],
+    )
+    assert "as_of_ts" in html

@@ -332,6 +332,53 @@ def _comparison_subjects(sections: dict[str, Any], *, subject_kind: str) -> list
     return _as_str_list(ident.get("subjects"))
 
 
+def _comparison_next_steps(sections: dict[str, Any]) -> list[str]:
+    gaps_raw = sections.get("experimental_gaps")
+    if isinstance(gaps_raw, list):
+        gaps = _as_str_list(gaps_raw)
+        if gaps:
+            return gaps
+    if isinstance(gaps_raw, dict):
+        blockers = _as_str_list(gaps_raw.get("blockers"))
+        if blockers:
+            return blockers
+        next_best = _as_str_list(gaps_raw.get("next_best_experiments"))
+        if next_best:
+            return next_best
+
+    high_risk_count = 0
+    molecule_rows = _as_list(_as_dict(sections.get("molecule_set")).get("rows"))
+    for row in molecule_rows:
+        if not isinstance(row, dict):
+            continue
+        for rf in _as_list(row.get("risk_flags_enriched")):
+            if isinstance(rf, dict) and str(rf.get("severity") or "").strip().lower() == "high":
+                high_risk_count += 1
+    assessments = _as_list(_as_dict(sections.get("comparability_surface")).get("assessments"))
+    for row in assessments:
+        if isinstance(row, dict) and str(row.get("severity") or "").strip().lower() == "high":
+            high_risk_count += 1
+    if high_risk_count > 0:
+        return [f"Address high-severity risk signals ({high_risk_count}) before comparative decisions."]
+
+    mk_set: dict[str, bool] = {}
+    for row in assessments:
+        if not isinstance(row, dict):
+            continue
+        for mk in _as_str_list(row.get("cited_measurement_keys")):
+            if mk not in mk_set:
+                mk_set[mk] = True
+    if not mk_set:
+        repro = _as_dict(sections.get("reproducibility_appendix"))
+        for mk in _as_str_list(repro.get("measurement_keys")):
+            if mk not in mk_set:
+                mk_set[mk] = True
+    mks = sorted(mk_set.keys())
+    if len(mks) > 1:
+        return [f"Resolve measurement comparability across: {', '.join(mks)}."]
+    return ["No next steps provided by comparative schema."]
+
+
 def _comparison_narrative(report_payload: dict, *, subject_label: str, subject_kind: str) -> dict:
     sections, metadata = _collect_sections(_as_dict(report_payload))
     subjects = _comparison_subjects(sections, subject_kind=subject_kind)
@@ -369,9 +416,8 @@ def _comparison_narrative(report_payload: dict, *, subject_label: str, subject_k
             missing_inputs=(_as_dict(comp.get("missing_inputs")) if isinstance(comp.get("missing_inputs"), dict) else {}),
         )
     ]
-    gaps = _as_str_list(sections.get("experimental_gaps"))
     out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.", ensure_sentence_punctuation=True)
-    out["next_steps"] = _display_limited(gaps, empty_fallback="None.")
+    out["next_steps"] = _display_limited(_comparison_next_steps(sections), empty_fallback="No next steps provided by comparative schema.", ensure_sentence_punctuation=True)
     out["technical_notes"] = [_clean_text("Technical View includes raw comparison tables and governance warnings.")]
     return out
 

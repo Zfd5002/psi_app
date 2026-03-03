@@ -12,6 +12,7 @@ from psi.core.models import PolicyUpgradeSession
 from psi.core.utils import now_utc, stable_json_dumps
 from psi.core.di.policy import sha256_hex_of_canonical_json
 from psi.services.attribution import record_attribution_event
+from psi.web.ui_labels import humanize_key
 
 
 def _sorted_pins(pins: dict[str, Any]) -> dict[str, Any]:
@@ -215,6 +216,7 @@ def render_upgrade_delta_report_html(*, delta_payload: dict[str, Any]) -> str:
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    env.filters["humanize_key"] = humanize_key
     tpl = env.get_template("board_upgrade_delta_v3.html")
     return str(tpl.render(report=report))
 

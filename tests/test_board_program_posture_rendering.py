@@ -3,11 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from psi.web.ui_labels import humanize_key
 
 
 def test_board_program_template_renders_posture_summary_counts() -> None:
     root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
     env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env.filters["humanize_key"] = humanize_key
     tpl = env.get_template("reports/board_program_v3.html")
     html = tpl.render(
         board_narrative={

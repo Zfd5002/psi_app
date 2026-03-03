@@ -5,6 +5,8 @@
   {% set sections = (payload.sections if payload is defined and payload.sections is defined and payload.sections is mapping else {}) %}
   {% set molecule_rows = (sections.molecule_set.rows if sections.molecule_set is defined and sections.molecule_set is mapping and sections.molecule_set.rows is defined and sections.molecule_set.rows is iterable else []) %}
   {% set program_rows = (sections.program_set.rows if sections.program_set is defined and sections.program_set is mapping and sections.program_set.rows is defined and sections.program_set.rows is iterable else []) %}
+  {% set posture_rows = (sections.portfolio_posture_comparison.rows if sections.portfolio_posture_comparison is defined and sections.portfolio_posture_comparison is mapping and sections.portfolio_posture_comparison.rows is defined and sections.portfolio_posture_comparison.rows is iterable else []) %}
+  {% set resource_rows = (sections.resource_implications.rows if sections.resource_implications is defined and sections.resource_implications is mapping and sections.resource_implications.rows is defined and sections.resource_implications.rows is iterable else []) %}
   {% set lineage_rows = (molecule_rows if molecule_rows else program_rows) %}
   {% set repro = (sections.reproducibility_appendix if sections.reproducibility_appendix is defined and sections.reproducibility_appendix is mapping else {}) %}
   {% set comp_surface = (sections.comparability_surface if sections.comparability_surface is defined and sections.comparability_surface is mapping else {}) %}
@@ -92,5 +94,47 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  {% if program_rows %}
+  <h2>Portfolio / Program Posture Comparison</h2>
+  <div class="card report-block report-section-card">
+    <table class="board-section-table">
+      <thead>
+        <tr><th>Program</th><th>Posture State</th><th>Delta</th></tr>
+      </thead>
+      <tbody>
+        {% for row in program_rows|sort(attribute="program_id") %}
+        {% set program_id = (row.program_id if row is mapping and row.program_id is defined else "") %}
+        {% set match = (posture_rows|selectattr("program_id", "equalto", program_id)|list|first if posture_rows else {}) %}
+        {% set posture_state = (match.posture_state if match is mapping and match.posture_state is defined else "Not assessed") %}
+        <tr>
+          <td>{{ "program_id=" ~ program_id if program_id != "" else "Not available" }}</td>
+          <td>{{ posture_state }}</td>
+          <td>{{ "unchanged" if loop.first else "changed/unknown" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">Not assessed by this report schema.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <h2>Resource Implications</h2>
+  <div class="card report-block report-section-card">
+    {% if resource_rows %}
+    <table class="board-section-table">
+      <thead><tr><th>Item</th><th>Value</th></tr></thead>
+      <tbody>
+        {% for row in resource_rows %}
+        {% set rk = (row.key if row is mapping and row.key is defined else "item") %}
+        <tr><td>{{ rk|humanize_key }} <span class="mini muted"><code>{{ rk }}</code></span></td><td>{{ row.value if row is mapping and row.value is defined else "Not available" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Not assessed by this report schema.</p>
+    {% endif %}
   </div>
 </section>

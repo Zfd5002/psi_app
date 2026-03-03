@@ -361,3 +361,130 @@ def get_report_run_detail(db: Session, report_run_id: int) -> dict:
         "snapshot_coverage": snapshot_cov,
         "governance_warnings": get_unacknowledged_upgrade_warnings(db, current_policy_pins=policy_pins),
     }
+
+
+def _extract_determination_surface(payload: dict) -> dict[str, str]:
+    sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
+    out: dict[str, str] = {}
+    if not isinstance(sections, dict):
+        return out
+    drift = sections.get("drift_history") if isinstance(sections.get("drift_history"), dict) else {}
+    if isinstance(drift.get("comparability_determination"), dict):
+        det = drift.get("comparability_determination") or {}
+        out["comparability.category"] = str(det.get("category") or "")
+        out["comparability.rule_id"] = str(det.get("rule_id") or "")
+    stage = sections.get("stage_determination") if isinstance(sections.get("stage_determination"), dict) else {}
+    posture = stage.get("program_posture") if isinstance(stage.get("program_posture"), dict) else {}
+    if posture:
+        out["posture.state"] = str(posture.get("posture_state") or "")
+        out["posture.rule_id"] = str(posture.get("rule_id") or "")
+    ranking = sections.get("ranking_surface") if isinstance(sections.get("ranking_surface"), dict) else {}
+    if ranking:
+        out["ranking.enabled"] = str(bool(ranking.get("enabled"))).lower()
+        out["ranking.status"] = str(ranking.get("status") or "")
+        out["ranking.reason"] = str(ranking.get("reason") or "")
+    nbe = sections.get("next_best_experiments") if isinstance(sections.get("next_best_experiments"), dict) else {}
+    if nbe:
+        out["next_best_experiments.status"] = str(nbe.get("status") or "")
+    return {k: out[k] for k in sorted(out.keys())}
+
+
+def build_report_upgrade_delta_view(db: Session, *, base_report_run_id: int, candidate_report_run_id: int) -> dict[str, object]:
+    base_row = db.get(ReportRun, int(base_report_run_id))
+    cand_row = db.get(ReportRun, int(candidate_report_run_id))
+    if base_row is None or cand_row is None:
+        raise KeyError("ReportRun not found")
+    base_payload = load_report_run_payload(base_row)
+    cand_payload = load_report_run_payload(cand_row)
+    try:
+        base_pins = json.loads(base_row.policy_pins_json or "{}")
+    except Exception:
+        base_pins = {}
+    try:
+        cand_pins = json.loads(cand_row.policy_pins_json or "{}")
+    except Exception:
+        cand_pins = {}
+    try:
+        base_snaps = sorted({int(x) for x in json.loads(base_row.snapshot_coverage_json or "[]") if str(x).strip().isdigit()})
+    except Exception:
+        base_snaps = []
+    try:
+        cand_snaps = sorted({int(x) for x in json.loads(cand_row.snapshot_coverage_json or "[]") if str(x).strip().isdigit()})
+    except Exception:
+        cand_snaps = []
+
+    base_surface = _extract_determination_surface(base_payload)
+    cand_surface = _extract_determination_surface(cand_payload)
+    surface_keys = sorted(set(base_surface.keys()) | set(cand_surface.keys()))
+    surface_rows = []
+    for key in surface_keys:
+        old = str(base_surface.get(key) or "")
+        new = str(cand_surface.get(key) or "")
+        changed = old != new
+        surface_rows.append({"key": f"surface:{key}", "old": old, "new": new, "changed": changed})
+
+    pin_keys = sorted(set((base_pins.keys() if isinstance(base_pins, dict) else [])) | set((cand_pins.keys() if isinstance(cand_pins, dict) else [])), key=lambda x: str(x))
+    pin_rows = []
+    for key in pin_keys:
+        b = base_pins.get(key) if isinstance(base_pins, dict) else None
+        c = cand_pins.get(key) if isinstance(cand_pins, dict) else None
+        b_obj = b if isinstance(b, dict) else {}
+        c_obj = c if isinstance(c, dict) else {}
+        b_ver = str(b_obj.get("policy_version") or b_obj.get("catalog_version") or b or "")
+        c_ver = str(c_obj.get("policy_version") or c_obj.get("catalog_version") or c or "")
+        b_hash = str(b_obj.get("policy_hash") or b_obj.get("catalog_hash") or "")
+        c_hash = str(c_obj.get("policy_hash") or c_obj.get("catalog_hash") or "")
+        pin_rows.append(
+            {
+                "pin_key": str(key),
+                "base_version": b_ver,
+                "candidate_version": c_ver,
+                "base_hash": b_hash,
+                "candidate_hash": c_hash,
+                "changed": (b_ver != c_ver or b_hash != c_hash),
+            }
+        )
+
+    pin_change_rows = [
+        {
+            "key": f"pin:{r['pin_key']}",
+            "old": f"{r['base_version']}|{r['base_hash']}",
+            "new": f"{r['candidate_version']}|{r['candidate_hash']}",
+            "changed": bool(r["changed"]),
+        }
+        for r in pin_rows
+    ]
+    all_rows = sorted(surface_rows + pin_change_rows, key=lambda r: str(r.get("key") or ""))
+    changed_rows = [r for r in all_rows if bool(r.get("changed"))]
+    unchanged_rows = [r for r in all_rows if not bool(r.get("changed"))]
+    executive = [
+        f"Compared report runs {int(base_row.id)} -> {int(cand_row.id)}.",
+        f"Changed rows: {len(changed_rows)}.",
+        f"Unchanged rows: {len(unchanged_rows)}.",
+    ]
+    return {
+        "schema_id": "report_upgrade_delta_view_v1",
+        "schema_version": "v1",
+        "header": {
+            "base_report_run_id": int(base_row.id),
+            "candidate_report_run_id": int(cand_row.id),
+            "base_report_type": str(base_row.report_type or ""),
+            "candidate_report_type": str(cand_row.report_type or ""),
+            "changed_key_count": len(changed_rows),
+        },
+        "executive_summary_bullets": {"categorical": executive},
+        "change_table": {"rows": changed_rows},
+        "unchanged_table": {"rows": unchanged_rows},
+        "policy_pin_comparison": {"rows": pin_rows},
+        "appendix": {
+            "comparison_citations": {
+                "base_report_run_id": int(base_row.id),
+                "candidate_report_run_id": int(cand_row.id),
+                "base_snapshot_ids": base_snaps,
+                "candidate_snapshot_ids": cand_snaps,
+            },
+            "base_policy_pins": base_pins if isinstance(base_pins, dict) else {},
+            "candidate_policy_pins": cand_pins if isinstance(cand_pins, dict) else {},
+            "surface_rows": surface_rows,
+        },
+    }

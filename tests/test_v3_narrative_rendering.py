@@ -195,3 +195,22 @@ def test_narrative_what_this_means_normalizes_spacing_and_terminal_punctuation()
     assert "  " not in first
     assert ".." not in first
     assert first.endswith(".")
+
+
+def test_comparison_narrative_next_steps_uses_derived_priority_when_gaps_missing() -> None:
+    payload = {
+        "metadata": {"report_type": "molecule_comparison_report"},
+        "sections": {
+            "experimental_gaps": [],
+            "comparability_surface": {
+                "assessments": [
+                    {"cited_measurement_keys": ["ec50"]},
+                    {"cited_measurement_keys": ["kd"]},
+                ]
+            },
+        },
+    }
+    out = render_molecule_comparison_narrative(payload)
+    assert out["next_steps"]
+    assert out["next_steps"][0] != "None."
+    assert "Resolve measurement comparability across: ec50, kd." in out["next_steps"][0]

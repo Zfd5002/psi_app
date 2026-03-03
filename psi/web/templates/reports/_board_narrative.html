@@ -127,7 +127,7 @@
       {% set pinned = (row.version if row is mapping and row.version is defined else "") %}
       {% set latest = (runtime_versions.get(key) if runtime_versions else "") %}
       <tr>
-        <td><code>{{ key if key else "unknown" }}</code></td>
+        <td>{{ (key if key else "unknown")|humanize_key }} <span class="mini muted"><code>{{ key if key else "unknown" }}</code></span></td>
         <td>{{ pinned if pinned else "Not available" }}</td>
         <td>{{ latest if latest else "Not available" }}</td>
         <td>{{ "yes" if pinned and latest and (pinned != latest) else "no" }}</td>

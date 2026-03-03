@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from psi.web.ui_labels import humanize_key
 
 
 def test_board_narrative_template_surfaces_determination_citations() -> None:
@@ -11,6 +12,7 @@ def test_board_narrative_template_surfaces_determination_citations() -> None:
         loader=FileSystemLoader(str(template_root)),
         autoescape=select_autoescape(["html", "xml"]),
     )
+    env.filters["humanize_key"] = humanize_key
     tpl = env.get_template("reports/_board_narrative.html")
     html = tpl.render(
         board_narrative={

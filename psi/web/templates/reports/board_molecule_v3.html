@@ -16,7 +16,7 @@
       <thead><tr><th>Key</th><th>Value</th></tr></thead>
       <tbody>
         {% for key, value in mech|dictsort %}
-        <tr><td><code>{{ key }}</code></td><td>{{ value | tojson(indent=0) }}</td></tr>
+        <tr><td>{{ key|humanize_key }} <span class="mini muted"><code>{{ key }}</code></span></td><td>{{ value | tojson(indent=0) }}</td></tr>
         {% else %}
         <tr><td colspan="2">Not available</td></tr>
         {% endfor %}
@@ -35,7 +35,8 @@
             {% if row_sev == sev %}
             <tr>
               <td>{{ row_sev }}</td>
-              <td><code>{{ row.key if row is mapping and row.key is defined else "unknown" }}</code></td>
+              {% set rk = (row.key if row is mapping and row.key is defined else "unknown") %}
+              <td>{{ rk|humanize_key }} <span class="mini muted"><code>{{ rk }}</code></span></td>
               <td>{{ row.description if row is mapping and row.description is defined else "Not available" }}</td>
             </tr>
             {% set ns.risk_rendered = ns.risk_rendered + 1 %}
@@ -55,7 +56,7 @@
     <table class="board-section-table">
       <tbody>
         {% for key, value in (conf.confidence if conf.confidence is defined and conf.confidence is mapping else {})|dictsort %}
-        <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+        <tr><th>{{ key|humanize_key }}</th><td>{{ value }}</td></tr>
         {% else %}
         <tr><th>Confidence</th><td>Not assessed</td></tr>
         {% endfor %}
@@ -65,7 +66,7 @@
     <table class="board-section-table">
       <tbody>
         {% for key, value in (conf.state_of_evidence_summary if conf.state_of_evidence_summary is defined and conf.state_of_evidence_summary is mapping else {})|dictsort %}
-        <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+        <tr><th>{{ key|humanize_key }}</th><td>{{ value }}</td></tr>
         {% else %}
         <tr><th>Summary</th><td>Not available</td></tr>
         {% endfor %}
@@ -79,7 +80,7 @@
     <table class="board-section-table">
       <tbody>
         {% for key, value in (repro.policy_pins if repro.policy_pins is defined and repro.policy_pins is mapping else {})|dictsort %}
-        <tr><th>{{ key }}</th><td>{{ value | tojson(indent=0) }}</td></tr>
+        <tr><th>{{ key|humanize_key }} <span class="mini muted"><code>{{ key }}</code></span></th><td>{{ value | tojson(indent=0) }}</td></tr>
         {% else %}
         <tr><th>Policy pins</th><td>Not available</td></tr>
         {% endfor %}
