@@ -40,7 +40,7 @@
   {% endif %}
 
   <section id="report-board-panel" class="report-board-panel" data-view-panel="board">
-    {% include "reports/_board_narrative.html" %}
+    {% include (board_template_name if board_template_name is defined else "reports/_board_narrative.html") %}
   </section>
 
   {% if not is_pdf %}

@@ -8,6 +8,8 @@
 {% set evidence_rows = (n.evidence_status if n.evidence_status is defined and n.evidence_status is iterable else []) %}
 {% set det_rows = (n.determinations if n.determinations is defined and n.determinations is iterable else []) %}
 {% set next_steps = (n.next_steps if n.next_steps is defined and n.next_steps is iterable else []) %}
+{% set pin_rows = (policy_pin_summary if policy_pin_summary is defined and policy_pin_summary is iterable else []) %}
+{% set runtime_versions = (runtime_policy_versions if runtime_policy_versions is defined and runtime_policy_versions is mapping else {}) %}
 
 <h2>Executive Summary</h2>
 <div class="card report-block report-section-card executive-summary-card">
@@ -20,7 +22,7 @@
           {% for row in status_rows %}
           <tr><th>{{ row.label if row is mapping and row.label is defined else "Label" }}</th><td>{{ row.value if row is mapping and row.value is defined else "Not available" }}</td></tr>
           {% else %}
-          <tr><th>Status</th><td>Not available</td></tr>
+          <tr><th>Status</th><td>Not assessed</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -111,4 +113,28 @@
     <li>None.</li>
     {% endfor %}
   </ul>
+</div>
+
+<h2>Policy Upgrade Delta <span class="mini muted">(display-only derived section)</span></h2>
+<div class="card report-block report-section-card">
+  <table class="board-section-table">
+    <thead>
+      <tr><th>Policy</th><th>Pinned</th><th>Latest Runtime</th><th>Mismatch</th></tr>
+    </thead>
+    <tbody>
+      {% for row in pin_rows %}
+      {% set key = (row.pin_key if row is mapping and row.pin_key is defined else "") %}
+      {% set pinned = (row.version if row is mapping and row.version is defined else "") %}
+      {% set latest = (runtime_versions.get(key) if runtime_versions else "") %}
+      <tr>
+        <td><code>{{ key if key else "unknown" }}</code></td>
+        <td>{{ pinned if pinned else "Not available" }}</td>
+        <td>{{ latest if latest else "Not available" }}</td>
+        <td>{{ "yes" if pinned and latest and (pinned != latest) else "no" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">Not available</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>

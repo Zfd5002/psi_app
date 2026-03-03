@@ -11,6 +11,17 @@ from psi.web.deps import get_db, get_templates
 router = APIRouter()
 
 
+def _board_template_for_report_type(report_type: str) -> str:
+    rt = str(report_type or "").strip()
+    if rt == "molecule_report":
+        return "reports/board_molecule_v3.html"
+    if rt in {"molecule_comparative_report", "molecule_comparison_report", "program_comparative_report", "program_comparison_report"}:
+        return "reports/board_comparison_v3.html"
+    if rt == "program_report":
+        return "reports/board_program_v3.html"
+    return "reports/_board_narrative.html"
+
+
 @router.get("/reports", response_class=HTMLResponse)
 def list_reports(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
@@ -66,6 +77,7 @@ def report_detail(report_run_id: int, request: Request, export: str | None = Que
     }
     renderer = renderers.get(report_type, narrative_svc.render_molecule_narrative)
     ctx["board_narrative"] = renderer(payload)
+    ctx["board_template_name"] = _board_template_for_report_type(report_type)
     is_pdf = str(export or "").strip().lower() == "pdf"
     ctx["is_pdf"] = is_pdf
     ctx["body_class"] = "pdf-mode" if is_pdf else ""

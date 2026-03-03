@@ -1,0 +1,49 @@
+<section id="board-program-v3" class="board-template board-template-program">
+  <h2 class="print-only">Program Board View</h2>
+  {% include "reports/_board_narrative.html" %}
+
+  {% set sections = (payload.sections if payload is defined and payload.sections is defined and payload.sections is mapping else {}) %}
+  {% set rows = (sections.molecule_overview_table.rows if sections.molecule_overview_table is defined and sections.molecule_overview_table is mapping and sections.molecule_overview_table.rows is defined and sections.molecule_overview_table.rows is iterable else []) %}
+  {% set ns = namespace(total=0, ready=0, blocked=0, not_assessed=0, high_risk=0) %}
+  {% for row in rows %}
+    {% if row is mapping %}
+      {% set ns.total = ns.total + 1 %}
+      {% set st = (row.stage|string|lower if row.stage is defined else "not_assessed") %}
+      {% if st == "ready" %}{% set ns.ready = ns.ready + 1 %}{% endif %}
+      {% if st in ["blocked", "failed"] %}{% set ns.blocked = ns.blocked + 1 %}{% endif %}
+      {% if st == "not_assessed" %}{% set ns.not_assessed = ns.not_assessed + 1 %}{% endif %}
+      {% if row.high_severity_risk_present is defined and row.high_severity_risk_present %}{% set ns.high_risk = ns.high_risk + 1 %}{% endif %}
+    {% endif %}
+  {% endfor %}
+
+  <h2>Portfolio Posture Summary <span class="mini muted">(display-only derived section)</span></h2>
+  <div class="card report-block report-section-card">
+    <table class="board-section-table">
+      <tbody>
+        <tr><th>Total molecules</th><td>{{ ns.total }}</td></tr>
+        <tr><th>Ready</th><td>{{ ns.ready }}</td></tr>
+        <tr><th>Blocked/Failed</th><td>{{ ns.blocked }}</td></tr>
+        <tr><th>Not assessed</th><td>{{ ns.not_assessed }}</td></tr>
+        <tr><th>High severity risk present</th><td>{{ ns.high_risk }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Resource Implications <span class="mini muted">(display-only derived section)</span></h2>
+  <div class="card report-block report-section-card">
+    <ul class="narrative-list">
+      {% if ns.high_risk > 0 %}
+      <li>High-risk signals are present; consider additional characterization work before advancing.</li>
+      {% else %}
+      <li>No high-severity risk signals are captured in this report payload.</li>
+      {% endif %}
+      {% if ns.blocked > 0 %}
+      <li>Blocked/failed stages exist; prioritize unblock experiments for those molecules.</li>
+      {% elif ns.ready > 0 %}
+      <li>Ready molecules exist; plan resource allocation for the next governed stage checks.</li>
+      {% else %}
+      <li>No molecules are currently stage-ready in this payload snapshot.</li>
+      {% endif %}
+    </ul>
+  </div>
+</section>

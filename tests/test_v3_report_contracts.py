@@ -21,6 +21,7 @@ from psi.services.report_engine import (
 )
 from psi.services.comparability import create_comparability_assessment
 from psi.services.comparability import load_comparability_policy_latest
+from psi.services.reports_v3 import get_v3_report_policy_pins
 
 
 def _build_fixture_db():
@@ -260,6 +261,25 @@ def test_molecule_comparative_ranking_marks_high_risk_only_when_present() -> Non
         by_id = {int(e.get("entity_id")): e for e in entities if isinstance(e, dict) and e.get("entity_id") is not None}
         assert "high_severity_risk_present" in by_id[int(m1.id)].get("criteria_hits", [])
         assert "high_severity_risk_present" not in by_id[int(m2.id)].get("criteria_hits", [])
+    finally:
+        db.close()
+        eng.dispose()
+
+
+def test_molecule_comparative_report_policy_pins_use_latest_comparability_version() -> None:
+    eng, db, m1, m2, _p1, _p2 = _build_fixture_db()
+    try:
+        latest = load_comparability_policy_latest()
+        row = generate_molecule_comparative_report_v0(
+            db,
+            molecule_ids=[m1, m2],
+            as_of=datetime(2026, 2, 26, 2, 0, 0),
+            policy_pins=get_v3_report_policy_pins("molecule_comparative_report"),
+        )
+        payload = load_report_run_payload(row)
+        pins = payload.get("metadata", {}).get("policy_pins", {})
+        comp_pin = pins.get("comparability_policy") if isinstance(pins, dict) else {}
+        assert str(comp_pin.get("policy_version") or "") == str(latest.get("policy_version") or "")
     finally:
         db.close()
         eng.dispose()

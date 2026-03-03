@@ -1,45 +1,96 @@
-<h2>I Governance Header</h2>
-<table>
-  <tbody>
-    {% for k, v in report.sections.I_governance_header.items() %}
-    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<section id="board-comparison-v3" class="board-template board-template-comparison">
+  <h2 class="print-only">Comparison Board View</h2>
+  {% include "reports/_board_narrative.html" %}
 
-<h2>II General Profile</h2>
-<table>
-  <thead>
-    <tr><th>Molecule ID</th><th>Primary ID</th><th>Title</th></tr>
-  </thead>
-  <tbody>
-    {% for c in report.sections.II_general_profile.columns %}
-    <tr><td>{{ c.molecule_id }}</td><td>{{ c.primary_id }}</td><td>{{ c.title }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<h2>IV In Vitro Evidence Tables</h2>
-{% for row in report.sections.IV_in_vitro_evidence_tables.rows %}
-<h3>{{ row.label }}</h3>
-<table>
-  <thead>
-    <tr><th>Metric</th><th>Molecule</th><th>Value</th></tr>
-  </thead>
-  <tbody>
-    {% for cell in row.cells %}
-    <tr><td>{{ row.metric_key }}</td><td>{{ cell.molecule_id }}</td><td>{{ cell.value }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% endfor %}
-
-<h2>VII Policy Interpretation and Governance State</h2>
-<pre>{{ report.sections.VII_policy_interpretation_and_governance_state | tojson(indent=2) }}</pre>
-
-<h2>VIII Executive Summary Bullets</h2>
-<ul>
-  {% for x in report.sections.VIII_executive_summary_bullets.decision_status %}
-  <li>{{ x }}</li>
+  {% set sections = (payload.sections if payload is defined and payload.sections is defined and payload.sections is mapping else {}) %}
+  {% set molecule_rows = (sections.molecule_set.rows if sections.molecule_set is defined and sections.molecule_set is mapping and sections.molecule_set.rows is defined and sections.molecule_set.rows is iterable else []) %}
+  {% set program_rows = (sections.program_set.rows if sections.program_set is defined and sections.program_set is mapping and sections.program_set.rows is defined and sections.program_set.rows is iterable else []) %}
+  {% set lineage_rows = (molecule_rows if molecule_rows else program_rows) %}
+  {% set repro = (sections.reproducibility_appendix if sections.reproducibility_appendix is defined and sections.reproducibility_appendix is mapping else {}) %}
+  {% set comp_surface = (sections.comparability_surface if sections.comparability_surface is defined and sections.comparability_surface is mapping else {}) %}
+  {% set comp_assessments = (comp_surface.assessments if comp_surface.assessments is defined and comp_surface.assessments is iterable else []) %}
+  {% set ns = namespace(mk={}) %}
+  {% for mk in (repro.measurement_keys if repro.measurement_keys is defined and repro.measurement_keys is iterable else []) %}
+    {% set key = (mk|string).strip() %}
+    {% if key %}{% set _ = ns.mk.update({key: 1}) %}{% endif %}
   {% endfor %}
-</ul>
+  {% for a in comp_assessments %}
+    {% if a is mapping and a.cited_measurement_keys is defined and a.cited_measurement_keys is iterable %}
+      {% for mk in a.cited_measurement_keys %}
+        {% set key = (mk|string).strip() %}
+        {% if key %}{% set _ = ns.mk.update({key: 1}) %}{% endif %}
+      {% endfor %}
+    {% endif %}
+  {% endfor %}
+  {% set align_cols = ns.mk.keys()|list|sort %}
+
+  <h2>Lineage Comparison</h2>
+  <div class="card report-block report-section-card">
+    <table class="board-section-table">
+      <thead>
+        {% if molecule_rows %}
+        <tr><th>Molecule</th><th>Program</th><th>Stage</th><th>Snapshot</th></tr>
+        {% else %}
+        <tr><th>Program</th><th>Molecule Count</th><th>Stage Summary</th></tr>
+        {% endif %}
+      </thead>
+      <tbody>
+        {% for row in lineage_rows %}
+          {% if molecule_rows %}
+          <tr>
+            <td>{{ row.primary_id if row is mapping and row.primary_id is defined else ("molecule_id=" ~ row.molecule_id if row is mapping and row.molecule_id is defined else "Not available") }}</td>
+            <td>{{ row.program_id if row is mapping and row.program_id is defined else "Not available" }}</td>
+            <td>{{ row.stage if row is mapping and row.stage is defined else "Not assessed" }}</td>
+            <td>{{ row.snapshot_id if row is mapping and row.snapshot_id is defined else "Not available" }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td>{{ ("program_id=" ~ row.program_id) if row is mapping and row.program_id is defined else "Not available" }}</td>
+            <td>{{ row.molecule_count if row is mapping and row.molecule_count is defined else "Not available" }}</td>
+            <td>{{ row.stage_counts | tojson(indent=0) if row is mapping and row.stage_counts is defined else "Not available" }}</td>
+          </tr>
+          {% endif %}
+        {% else %}
+        <tr><td colspan="4">Not available</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Alignment Matrix <span class="mini muted">(display-only derived section)</span></h2>
+  <div class="card report-block report-section-card">
+    <div class="mini muted" style="margin-bottom:8px;">Derived from report payload measurement and comparability citation fields.</div>
+    <table class="board-section-table">
+      <thead>
+        <tr>
+          <th>Subject</th>
+          {% for col in align_cols %}
+          <th><code>{{ col }}</code></th>
+          {% else %}
+          <th>No measurement categories</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in lineage_rows %}
+        <tr>
+          <td>
+            {% if molecule_rows %}
+            {{ row.primary_id if row is mapping and row.primary_id is defined else ("molecule_id=" ~ row.molecule_id if row is mapping and row.molecule_id is defined else "Not available") }}
+            {% else %}
+            {{ ("program_id=" ~ row.program_id) if row is mapping and row.program_id is defined else "Not available" }}
+            {% endif %}
+          </td>
+          {% for col in align_cols %}
+          <td>✓</td>
+          {% else %}
+          <td>Not available</td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="2">Not available</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

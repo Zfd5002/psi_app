@@ -164,3 +164,34 @@ def test_program_narrative_next_steps_uses_next_best_experiments_items() -> None
     }
     out = render_program_narrative(payload)
     assert out["next_steps"] == ["Run PK panel", "extend_ada"]
+
+
+def test_program_narrative_next_steps_prefers_next_best_experiments_items_over_other_fields() -> None:
+    payload = {
+        "metadata": {"report_type": "program_report"},
+        "sections": {
+            "metadata": {"program_id": 77},
+            "experimental_gaps": {"blockers": ["do_not_use_this_for_program"]},
+            "next_best_experiments": {
+                "items": [
+                    {"suggestion_key": "run_pk_panel", "label": "Run PK panel."},
+                    {"suggestion_key": "ada_followup", "label": "Run ADA follow-up.."},
+                ]
+            },
+        },
+    }
+    out = render_program_narrative(payload)
+    assert out["next_steps"] == ["Run PK panel.", "Run ADA follow-up."]
+
+
+def test_narrative_what_this_means_normalizes_spacing_and_terminal_punctuation() -> None:
+    payload = {
+        "metadata": {"report_type": "program_report"},
+        "sections": {"metadata": {"program_id": 12}},
+    }
+    out = render_program_narrative(payload)
+    assert out["what_this_means"]
+    first = out["what_this_means"][0]
+    assert "  " not in first
+    assert ".." not in first
+    assert first.endswith(".")

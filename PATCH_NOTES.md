@@ -1,3 +1,210 @@
+## 2026-03-02 — v1.3.0a107
+Why:
+- Apply report-layer hygiene and wording consistency improvements without changing runtime semantics.
+
+What:
+- Replaced mutable module-level suggestions catalog cache in `psi/services/report_engine.py` with deterministic `functools.lru_cache(maxsize=1)` on the loader.
+- Improved narrative text normalization in `psi/services/v3_narrative.py`:
+  - added sentence-level bullet normalization helper,
+  - applied consistent terminal punctuation to `what_this_means` bullets while preserving content meaning.
+- Clarified board template fallback status wording in `psi/web/templates/reports/_board_narrative.html` (`Not assessed`).
+- Added targeted formatting regression test in `tests/test_v3_narrative_rendering.py` for spacing/punctuation normalization edge case.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/services/v3_narrative.py`
+- `psi/web/templates/reports/_board_narrative.html`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Hygiene/clarity updates only in report/narrative presentation layer.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a106
+Why:
+- Replace hollow board placeholders with deterministic display-only summaries using existing report payload/context.
+
+What:
+- Added runtime policy-version comparison context in `psi/services/reports_v3.py` (`runtime_policy_versions`) using existing policy loaders.
+- Added `Policy Upgrade Delta` display-only section in `psi/web/templates/reports/_board_narrative.html`:
+  - policy name, pinned version, latest runtime version, mismatch yes/no.
+- Expanded `psi/web/templates/reports/board_program_v3.html` with display-only:
+  - `Portfolio Posture Summary` counts (total, ready, blocked/failed, not assessed, high-risk),
+  - `Resource Implications` deterministic guidance text derived from counts.
+- Added targeted render test `tests/test_board_program_posture_rendering.py` asserting posture summary/count rendering.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/templates/reports/_board_narrative.html`
+- `psi/web/templates/reports/board_program_v3.html`
+- `tests/test_board_program_posture_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Display-only board enrichment from existing payload/runtime metadata.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a105
+Why:
+- Improve comparison Board View completeness with payload-derived lineage and alignment surfaces for board interpretation.
+
+What:
+- Expanded `psi/web/templates/reports/board_comparison_v3.html` with:
+  - `Lineage Comparison` table (molecule/program comparative payload rows),
+  - `Alignment Matrix` (display-only derived from payload measurement/citation categories),
+  - deterministic ordering for derived measurement columns.
+- Added targeted render test `tests/test_board_comparison_alignment_rendering.py` asserting matrix header and indicator rendering from representative payload context.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/board_comparison_v3.html`
+- `tests/test_board_comparison_alignment_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Board-template display enrichment only (payload-derived).
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a104
+Why:
+- Improve molecule board completeness by rendering key V3 payload sections directly in Board View without changing report semantics.
+
+What:
+- Expanded `psi/web/templates/reports/board_molecule_v3.html` to render additional payload-backed sections:
+  - Mechanistic Evidence Map
+  - Risk Profile (deterministic severity-first display: high/medium/low/unknown; stable key ordering)
+  - Confidence Decomposition
+  - Reproducibility Appendix (policy pins, measurement keys, cited snapshot IDs)
+- Added compact/wrap-safe table styles for board section tables in `psi/web/static/style.css`.
+- Added targeted render test `tests/test_board_molecule_sections_rendering.py` asserting key section headings render from a representative payload context.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `psi/web/static/style.css`
+- `tests/test_board_molecule_sections_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Board-template rendering enhancement only (payload-derived display).
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a103
+Why:
+- Route report detail Board View through deterministic report-type template selection while preserving PDF/export behavior and fallback safety.
+
+What:
+- Added router helper `_board_template_for_report_type(...)` in `psi/web/routers/reports.py` and set `board_template_name` in detail context.
+- Updated `psi/web/templates/reports/detail.html` to include the selected board template (fallback remains `_board_narrative`).
+- Added runtime-safe board template wrappers with sentinels:
+  - `psi/web/templates/reports/board_molecule_v3.html`
+  - `psi/web/templates/reports/board_comparison_v3.html`
+  - `psi/web/templates/reports/board_program_v3.html`
+  Each wrapper includes `reports/_board_narrative.html` so payload compatibility is preserved.
+- Added targeted render tests in `tests/test_report_detail_board_template_selection.py` asserting template selection/mapping and sentinel presence.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/reports.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `psi/web/templates/reports/board_comparison_v3.html`
+- `psi/web/templates/reports/board_program_v3.html`
+- `tests/test_report_detail_board_template_selection.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Deterministic template wiring/presentation change only.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a102
+Why:
+- Confirm report policy pins in generated comparative reports remain aligned with the same latest comparability policy loader used by runtime surfaces.
+
+What:
+- Added targeted report-generation test in `tests/test_v3_report_contracts.py`:
+  - generates a molecule comparative report,
+  - asserts `metadata.policy_pins.comparability_policy.policy_version` matches `load_comparability_policy_latest().policy_version`.
+- No policy pin behavior change required; coverage now guards against regressions/hardcoding.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_report_contracts.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Deterministic regression coverage only.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a101
+Why:
+- Lock program narrative next-steps extraction to the intended payload key path with deterministic regression coverage.
+
+What:
+- Added targeted narrative test in `tests/test_v3_narrative_rendering.py` asserting program next steps are sourced from `sections.next_best_experiments.items` and not unrelated fields.
+- Test also validates deterministic text normalization for repeated punctuation in display bullets.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_narrative_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Renderer/test-layer reinforcement only.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
 ## 2026-03-02 — v1.3.0a100
 Why:
 - Ensure board determination cards faithfully surface available citation fields from narrative determinations instead of rendering placeholder values.

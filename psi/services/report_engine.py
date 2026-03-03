@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+from functools import lru_cache
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -32,7 +33,6 @@ REPORT_TYPES = (
     REPORT_TYPE_MOLECULE_COMPARATIVE,
 )
 
-_V3_SUGGESTIONS_CACHE: dict[str, Any] | None = None
 
 
 def _map_governance_status_to_policy_status(status: str) -> str:
@@ -87,14 +87,11 @@ def _compute_report_fingerprint(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_report_json_bytes(basis)).hexdigest()
 
 
+@lru_cache(maxsize=1)
 def _load_v3_suggestions_catalog() -> dict[str, Any]:
-    global _V3_SUGGESTIONS_CACHE
-    if isinstance(_V3_SUGGESTIONS_CACHE, dict):
-        return _V3_SUGGESTIONS_CACHE
     p = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs" / "v3_experiment_suggestions_v0_1.json"
     raw = json.loads(p.read_text(encoding="utf-8"))
-    _V3_SUGGESTIONS_CACHE = raw if isinstance(raw, dict) else {}
-    return _V3_SUGGESTIONS_CACHE
+    return raw if isinstance(raw, dict) else {}
 
 
 def _priority_rank(priority: str, priority_order: list[str]) -> int:

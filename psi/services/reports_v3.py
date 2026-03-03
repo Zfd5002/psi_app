@@ -18,6 +18,7 @@ from psi.services.report_engine import (
 )
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 from psi.services.comparability import load_comparability_policy_latest
+from psi.services.v3_ranking import load_ranking_policy_latest
 
 _HEX64_RE = re.compile(r"\b[a-f0-9]{64}\b", flags=re.IGNORECASE)
 
@@ -36,6 +37,18 @@ def _parse_as_of(as_of_text: str | None) -> datetime:
 def _load_json(path: Path) -> dict:
     raw = json.loads(path.read_text(encoding="utf-8"))
     return raw if isinstance(raw, dict) else {}
+
+
+def _runtime_policy_versions_display() -> dict[str, str]:
+    base = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs"
+    template_cat = _load_json(base / "template_catalog_v0_1.json")
+    comp = load_comparability_policy_latest()
+    ranking = load_ranking_policy_latest()
+    return {
+        "template_catalog": str(template_cat.get("catalog_version") or ""),
+        "comparability_policy": str(comp.get("policy_version") or ""),
+        "ranking_policy": str(ranking.get("policy_version") or ""),
+    }
 
 
 def _clean_board_text(value: object) -> str:
@@ -341,6 +354,7 @@ def get_report_run_detail(db: Session, report_run_id: int) -> dict:
         "identity_summary": identity_summary,
         "policy_pins": policy_pins,
         "policy_pin_summary": policy_pin_summary,
+        "runtime_policy_versions": _runtime_policy_versions_display(),
         "rule_ids": sorted(rule_ids),
         "measurement_key_citations": sorted(measurement_keys),
         "evidence_snapshot_refs": sorted(snapshot_refs),

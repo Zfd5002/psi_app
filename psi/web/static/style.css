@@ -65,6 +65,8 @@ textarea{min-height:110px;resize:vertical}
 .executive-headline{line-height:1.3}
 .narrative-list{margin:8px 0 6px 20px;padding:0;display:grid;gap:4px}
 .narrative-list-tight{gap:3px}
+.board-section-table{width:100%;table-layout:fixed}
+.board-section-table th,.board-section-table td{overflow-wrap:anywhere;word-break:break-word;vertical-align:top}
 
 /* --- Sequence-aligned feature tracks (molecule detail) --- */
 .seq-scroll{margin-top:10px;overflow-x:hidden;padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(7,13,24,.55);max-width:100%;min-width:0;width:100%}

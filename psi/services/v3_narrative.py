@@ -38,14 +38,27 @@ def _clean_text(s: Any) -> str:
     return txt.strip() or "Not available"
 
 
-def _display_limited(items: list[str], *, empty_fallback: str) -> list[str]:
+def _normalize_bullet_text(s: str) -> str:
+    txt = _clean_text(s)
+    if txt and txt[-1] not in ".!?":
+        return txt + "."
+    return txt
+
+
+def _display_limited(items: list[str], *, empty_fallback: str, ensure_sentence_punctuation: bool = False) -> list[str]:
     cleaned = [_clean_text(x) for x in items if str(x or "").strip()]
+    if ensure_sentence_punctuation:
+        cleaned = [_normalize_bullet_text(x) for x in cleaned]
     if not cleaned:
-        return [_clean_text(empty_fallback)]
+        base = _clean_text(empty_fallback)
+        return [_normalize_bullet_text(base) if ensure_sentence_punctuation else base]
     if len(cleaned) <= DISPLAY_LIST_LIMIT:
         return cleaned
     remaining = len(cleaned) - DISPLAY_LIST_LIMIT
-    return cleaned[:DISPLAY_LIST_LIMIT] + [_clean_text(f"...and {remaining} more.")]
+    overflow = _clean_text(f"...and {remaining} more.")
+    if ensure_sentence_punctuation:
+        overflow = _normalize_bullet_text(overflow)
+    return cleaned[:DISPLAY_LIST_LIMIT] + [overflow]
 
 
 def _collect_sections(report_payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -224,7 +237,7 @@ def render_molecule_narrative(report_payload: dict) -> dict:
             missing_inputs=(_as_dict(comp.get("missing_inputs")) if isinstance(comp.get("missing_inputs"), dict) else {}),
         )
     ]
-    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.")
+    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.", ensure_sentence_punctuation=True)
     out["next_steps"] = _display_limited(_molecule_next_steps(sections), empty_fallback="No experimental gaps listed yet.")
     out["technical_notes"] = [_clean_text("Board view hides hashes and raw audit payloads.")]
     return out
@@ -276,7 +289,7 @@ def render_program_narrative(report_payload: dict) -> dict:
             missing_inputs={},
         )
     ]
-    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.")
+    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.", ensure_sentence_punctuation=True)
     out["next_steps"] = _display_limited(_program_next_steps(sections), empty_fallback="No next steps recorded yet.")
     out["technical_notes"] = [_clean_text("Use Technical View for policy pins and report fingerprint.")]
     return out
@@ -357,7 +370,7 @@ def _comparison_narrative(report_payload: dict, *, subject_label: str, subject_k
         )
     ]
     gaps = _as_str_list(sections.get("experimental_gaps"))
-    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.")
+    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.", ensure_sentence_punctuation=True)
     out["next_steps"] = _display_limited(gaps, empty_fallback="None.")
     out["technical_notes"] = [_clean_text("Technical View includes raw comparison tables and governance warnings.")]
     return out

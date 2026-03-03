@@ -1,45 +1,105 @@
-<h2>I Governance Header</h2>
-<table>
-  <tbody>
-    {% for k, v in report.sections.I_governance_header.items() %}
-    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<section id="board-molecule-v3" class="board-template board-template-molecule">
+  <h2 class="print-only">Molecule Board View</h2>
+  {% include "reports/_board_narrative.html" %}
 
-<h2>II General Profile</h2>
-<table>
-  <tbody>
-    {% for k, v in report.sections.II_general_profile.items() %}
-    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+  {% set sections = (payload.sections if payload is defined and payload.sections is defined and payload.sections is mapping else {}) %}
+  {% set mech = (sections.mechanistic_evidence_map if sections.mechanistic_evidence_map is defined and sections.mechanistic_evidence_map is mapping else {}) %}
+  {% set risk = (sections.risk_profile if sections.risk_profile is defined and sections.risk_profile is mapping else {}) %}
+  {% set conf = (sections.confidence_decomposition if sections.confidence_decomposition is defined and sections.confidence_decomposition is mapping else {}) %}
+  {% set repro = (sections.reproducibility_appendix if sections.reproducibility_appendix is defined and sections.reproducibility_appendix is mapping else {}) %}
+  {% set risk_rows = (risk.risk_flags_enriched if risk.risk_flags_enriched is defined and risk.risk_flags_enriched is iterable else []) %}
+  {% set ns = namespace(risk_rendered=0) %}
 
-<h2>III Molecular Structure and Design</h2>
-<table>
-  <tbody>
-    {% for k, v in report.sections.III_molecular_structure_and_design.items() %}
-    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+  <h2>Mechanistic Evidence Map</h2>
+  <div class="card report-block report-section-card">
+    <table class="board-section-table">
+      <thead><tr><th>Key</th><th>Value</th></tr></thead>
+      <tbody>
+        {% for key, value in mech|dictsort %}
+        <tr><td><code>{{ key }}</code></td><td>{{ value | tojson(indent=0) }}</td></tr>
+        {% else %}
+        <tr><td colspan="2">Not available</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
-<h2>IV In Vitro Evidence Tables</h2>
-<pre>{{ report.sections.IV_in_vitro_evidence_tables | tojson(indent=2) }}</pre>
+  <h2>Risk Profile</h2>
+  <div class="card report-block report-section-card">
+    <table class="board-section-table">
+      <thead><tr><th>Severity</th><th>Key</th><th>Description</th></tr></thead>
+      <tbody>
+        {% for sev in ["high", "medium", "low", "unknown"] %}
+          {% for row in risk_rows|sort(attribute="key") %}
+            {% set row_sev = (row.severity|string|lower if row is mapping and row.severity is defined else "unknown") %}
+            {% if row_sev == sev %}
+            <tr>
+              <td>{{ row_sev }}</td>
+              <td><code>{{ row.key if row is mapping and row.key is defined else "unknown" }}</code></td>
+              <td>{{ row.description if row is mapping and row.description is defined else "Not available" }}</td>
+            </tr>
+            {% set ns.risk_rendered = ns.risk_rendered + 1 %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+        {% if ns.risk_rendered == 0 %}
+        <tr><td colspan="3">Not available</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
 
-<h2>V Developability Biophys Tables</h2>
-<pre>{{ report.sections.V_developability_biophys_tables | tojson(indent=2) }}</pre>
+  <h2>Confidence Decomposition</h2>
+  <div class="card report-block report-section-card">
+    <h3>Confidence</h3>
+    <table class="board-section-table">
+      <tbody>
+        {% for key, value in (conf.confidence if conf.confidence is defined and conf.confidence is mapping else {})|dictsort %}
+        <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+        {% else %}
+        <tr><th>Confidence</th><td>Not assessed</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <h3>State Of Evidence Summary</h3>
+    <table class="board-section-table">
+      <tbody>
+        {% for key, value in (conf.state_of_evidence_summary if conf.state_of_evidence_summary is defined and conf.state_of_evidence_summary is mapping else {})|dictsort %}
+        <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+        {% else %}
+        <tr><th>Summary</th><td>Not available</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
-<h2>VI In Vivo PK ADA Tables</h2>
-<pre>{{ report.sections.VI_in_vivo_pk_ada_tables | tojson(indent=2) }}</pre>
-
-<h2>VII Policy Interpretation and Governance State</h2>
-<pre>{{ report.sections.VII_policy_interpretation_and_governance_state | tojson(indent=2) }}</pre>
-
-<h2>VIII Executive Summary Bullets</h2>
-<ul>
-  {% for x in report.sections.VIII_executive_summary_bullets.decision_status %}
-  <li>{{ x }}</li>
-  {% endfor %}
-</ul>
+  <h2>Reproducibility Appendix</h2>
+  <div class="card report-block report-section-card">
+    <h3>Policy Pins</h3>
+    <table class="board-section-table">
+      <tbody>
+        {% for key, value in (repro.policy_pins if repro.policy_pins is defined and repro.policy_pins is mapping else {})|dictsort %}
+        <tr><th>{{ key }}</th><td>{{ value | tojson(indent=0) }}</td></tr>
+        {% else %}
+        <tr><th>Policy pins</th><td>Not available</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div><strong>Measurement keys:</strong>
+      {% set mkeys = (repro.measurement_keys if repro.measurement_keys is defined and repro.measurement_keys is iterable else []) %}
+      {% if mkeys %}
+      <code>{{ mkeys|sort|join(", ") }}</code>
+      {% else %}
+      <span>Not available</span>
+      {% endif %}
+    </div>
+    <div><strong>Snapshot IDs:</strong>
+      {% set sids = (repro.cited_snapshot_ids if repro.cited_snapshot_ids is defined and repro.cited_snapshot_ids is iterable else []) %}
+      {% if sids %}
+      <code>{{ sids|sort|join(", ") }}</code>
+      {% else %}
+      <span>Not available</span>
+      {% endif %}
+    </div>
+  </div>
+</section>
