@@ -67,3 +67,36 @@ def test_smoke_runtime_default_mode_copies_and_rebinds(monkeypatch, tmp_path: Pa
         assert runtime.active_db != live_db
     assert calls[0] == ("copy", live_db, tmp_path / "scratch" / "di_contract_smoke.sqlite")
     assert calls[1] == ("rebind", tmp_path / "scratch" / "di_contract_smoke.sqlite", None)
+
+
+def test_prepare_two_run_db_copies_use_seeded_base_and_isolate_runs(tmp_path: Path) -> None:
+    source_db = tmp_path / "live.sqlite"
+    source_db.write_text("baseline\n", encoding="utf-8")
+    scratch_dir = tmp_path / "scratch"
+
+    def _seed_once(path: Path) -> None:
+        path.write_text(path.read_text(encoding="utf-8") + "seeded\n", encoding="utf-8")
+
+    base_db, run1_db, run2_db = smoke._prepare_two_run_db_copies(
+        source_db,
+        scratch_dir=scratch_dir,
+        seed_once_fn=_seed_once,
+    )
+    assert base_db == scratch_dir / "di_contract_smoke_base.sqlite"
+    assert run1_db == scratch_dir / "di_contract_smoke_run1.sqlite"
+    assert run2_db == scratch_dir / "di_contract_smoke_run2.sqlite"
+    assert base_db.read_text(encoding="utf-8") == "baseline\nseeded\n"
+    assert run1_db.read_text(encoding="utf-8") == "baseline\nseeded\n"
+    assert run2_db.read_text(encoding="utf-8") == "baseline\nseeded\n"
+
+    # Simulate a write in run1; run2 must stay unchanged.
+    run1_db.write_text("mutated-run1\n", encoding="utf-8")
+    assert run2_db.read_text(encoding="utf-8") == "baseline\nseeded\n"
+
+
+def test_difference_classifier_reports_timestamp_drift(capsys) -> None:
+    a = {"x": "created_at='2026-03-03 12:00:00.123456'", "y": {"z": 1}}
+    b = {"x": "created_at='2026-03-03 12:00:01.654321'", "y": {"z": 1}}
+    smoke._print_difference_classifier(a, b)
+    err = capsys.readouterr().err
+    assert "class=timestamp_drift" in err

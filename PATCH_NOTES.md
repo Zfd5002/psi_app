@@ -7499,3 +7499,53 @@ Notes:
 
 Gates:
 - PASS
+
+## 2026-03-03 — v1.3.0a128
+Intent:
+- Fix di_contract_smoke determinism harness drift by guaranteeing run1/run2 start from identical seeded DB state.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_di_contract_smoke_scratch_mode.py`
+
+Behavior:
+- Added deterministic two-run scratch harness (`base -> run1/run2`) with stable file names:
+  - `di_contract_smoke_base.sqlite`
+  - `di_contract_smoke_run1.sqlite`
+  - `di_contract_smoke_run2.sqlite`
+- Batch-scope smoke determinism now seeds the base copy once, then fans out run1/run2 from that seeded base.
+- This prevents run-local timestamp drift (e.g., `created_at` in evidence refs) from causing false non-determinism failures.
+- Tool now logs per-run DB paths and base-copy usage during determinism checks.
+
+Guardrails:
+- No DB schema changes.
+- No DI semantic, snapshot-contract, hash/fingerprint, or replay behavior changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0a129
+Intent:
+- Fix `di_contract_smoke` determinism drift caused by volatile tool-seeded timestamps (`created_at`/derived recency) across run1 vs run2.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_di_contract_smoke_scratch_mode.py`
+
+Behavior:
+- Added fixed seed timestamp constant for smoke-tool generated fixture rows.
+- Added harness helper to pin `data_records` and `data_measurements` timestamps for seeded records.
+- Made smoke seed helpers idempotent for run-pair comparisons so run1/run2 do not add fresh timestamped fixture rows.
+- Added failure diagnostics classifier for first differences, including timestamp-drift classification and path/value snippets.
+- Preserved a128 base/run copy strategy and current CLI contract.
+
+Guardrails:
+- Tools-only harness fix.
+- No DB schema, DI semantics, snapshot contract, hash/fingerprint, or replay behavior changes.
+
+Gates:
+- PASS

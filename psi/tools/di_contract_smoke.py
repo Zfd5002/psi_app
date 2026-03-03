@@ -19,6 +19,7 @@ import os
 import tempfile
 import shutil
 import io
+import re
 import warnings
 from dataclasses import dataclass
 from contextlib import contextmanager
@@ -49,6 +50,9 @@ from psi.services.di.templates.registry import list_template_keys_sorted, templa
 from psi.services.di.util import value_functions_enforcement_reason
 from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
+_FIXED_SEED_TS_STR = "2000-01-01 00:00:00.000000"
+_TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z)?")
+
 
 @dataclass(frozen=True)
 class _SmokeDbRuntime:
@@ -61,6 +65,101 @@ class _SmokeDbRuntime:
 def _assert(cond: bool, msg: str) -> None:
     if not cond:
         raise AssertionError(msg)
+
+
+def _table_columns(db, table: str) -> set[str]:
+    from sqlalchemy import text
+
+    rows = db.execute(text(f"PRAGMA table_info({table})")).all()
+    out: set[str] = set()
+    for row in rows:
+        try:
+            out.add(str(row[1]))
+        except Exception:
+            continue
+    return out
+
+
+def _pin_seed_record_timestamps(db, *, record_id: int) -> None:
+    from sqlalchemy import text
+
+    record_id = int(record_id)
+    dr_cols = _table_columns(db, "data_records")
+    dr_sets: list[str] = []
+    if "created_at" in dr_cols:
+        dr_sets.append("created_at=:ts")
+    if "updated_at" in dr_cols:
+        dr_sets.append("updated_at=:ts")
+    if dr_sets:
+        db.execute(
+            text(f"UPDATE data_records SET {', '.join(dr_sets)} WHERE id=:rid"),
+            {"ts": _FIXED_SEED_TS_STR, "rid": record_id},
+        )
+
+    dm_cols = _table_columns(db, "data_measurements")
+    dm_fk = "data_record_id" if "data_record_id" in dm_cols else ("record_id" if "record_id" in dm_cols else "")
+    if dm_fk:
+        dm_sets: list[str] = []
+        if "created_at" in dm_cols:
+            dm_sets.append("created_at=:ts")
+        if "updated_at" in dm_cols:
+            dm_sets.append("updated_at=:ts")
+        if "produced_at" in dm_cols:
+            dm_sets.append("produced_at=:ts")
+        if dm_sets:
+            db.execute(
+                text(f"UPDATE data_measurements SET {', '.join(dm_sets)} WHERE {dm_fk}=:rid"),
+                {"ts": _FIXED_SEED_TS_STR, "rid": record_id},
+            )
+    db.commit()
+
+
+def _collect_json_differences(a, b, *, path: str = "$", out=None, limit: int = 20):
+    if out is None:
+        out = []
+    if len(out) >= int(limit):
+        return out
+    if type(a) is not type(b):
+        out.append((path, a, b))
+        return out
+    if isinstance(a, dict):
+        for k in sorted(set(a.keys()) | set(b.keys()), key=lambda x: str(x)):
+            _collect_json_differences(a.get(k), b.get(k), path=f"{path}.{k}", out=out, limit=limit)
+            if len(out) >= int(limit):
+                break
+        return out
+    if isinstance(a, list):
+        max_n = max(len(a), len(b))
+        for i in range(max_n):
+            av = a[i] if i < len(a) else None
+            bv = b[i] if i < len(b) else None
+            _collect_json_differences(av, bv, path=f"{path}[{i}]", out=out, limit=limit)
+            if len(out) >= int(limit):
+                break
+        return out
+    if a != b:
+        out.append((path, a, b))
+    return out
+
+
+def _print_difference_classifier(a_obj, b_obj) -> None:
+    diffs = _collect_json_differences(a_obj, b_obj, limit=20)
+    if not diffs:
+        return
+    ts_hits = 0
+    for _, av, bv in diffs:
+        a_txt = "" if av is None else str(av)
+        b_txt = "" if bv is None else str(bv)
+        if _TIMESTAMP_RE.search(a_txt) or _TIMESTAMP_RE.search(b_txt):
+            ts_hits += 1
+    cls = "timestamp_drift" if ts_hits == len(diffs) else "mixed_drift"
+    print(
+        "di_contract_smoke: diff_classifier "
+        f"class={cls} timestamp_hits={ts_hits} total_diffs={len(diffs)}",
+        file=sys.stderr,
+    )
+    for p, av, bv in diffs:
+        print(f"  diff {p}: {av!r} != {bv!r}", file=sys.stderr)
 
 
 def _assert_snapshot_provenance_block(prov: dict, *, expected_scope_type: str) -> None:
@@ -1454,6 +1553,8 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
     from psi.services.di.verify import verify_snapshot
 
     def _seed_contract_db(db):
+        from sqlalchemy import text
+
         # Program
         p = db.query(Program).filter(Program.name == "DI_SMOKE").first()
         if p is None:
@@ -1474,6 +1575,18 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         b = db.query(Batch).filter(Batch.molecule_id == m.id).first()
         if b is None:
             b = create_batch(db=db, molecule_id=m.id, title="DI Smoke batch", expression_notes="", purification_notes="")
+
+        existing_record_id = db.execute(
+            text(
+                "SELECT id FROM data_records "
+                "WHERE batch_id=:bid AND title=:title "
+                "ORDER BY id ASC LIMIT 1"
+            ),
+            {"bid": int(b.id), "title": "DI contract record"},
+        ).scalar()
+        if existing_record_id is not None:
+            _pin_seed_record_timestamps(db, record_id=int(existing_record_id))
+            return b.id
 
         # Minimal records + measurements to exercise alias mapping + missing coverage.
         # Provide alias metric key (hmw_percent) that canonicalizes to hmw_pct in policy.
@@ -1533,6 +1646,7 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
                 },
             ],
         )
+        _pin_seed_record_timestamps(db, record_id=int(r.id))
         return b.id
 
     def _run_once(db_path: Path, *, policy_path_override: Path | None = None):
@@ -1559,33 +1673,40 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
             raise
 
     if os.environ.get("PSI_DB_PATH"):
-        baseline_path = Path(os.environ["PSI_DB_PATH"])
+        baseline_path = Path(os.environ["PSI_DB_PATH"]).expanduser().resolve()
         _assert(baseline_path.exists(), f"PSI_DB_PATH not found: {baseline_path}")
     else:
         root = Path(tempfile.gettempdir()) / "psi_di_contract"
         root.mkdir(parents=True, exist_ok=True)
         baseline_path = root / "psi_di_contract.sqlite"
-        for p in (baseline_path, baseline_path.with_name(baseline_path.name + "-wal"), baseline_path.with_name(baseline_path.name + "-shm")):
-            try:
-                if p.exists():
-                    p.unlink()
-            except Exception:
-                pass
+        _cleanup_sqlite_file_bundle(baseline_path)
         eng = create_engine(f"sqlite:///{baseline_path}", connect_args={"check_same_thread": False}, future=True)
         _install_sqlite_pragmas(eng, read_only=False)
         ensure_schema(engine_override=eng)
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)
-        db = SessionLocal()
+        db = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)()
         try:
             _seed_contract_db(db)
         finally:
             db.close()
             eng.dispose()
 
-    run1_dir = Path(tempfile.mkdtemp(prefix="psi_di_contract_run1_", dir=tempfile.gettempdir()))
-    run2_dir = Path(tempfile.mkdtemp(prefix="psi_di_contract_run2_", dir=tempfile.gettempdir()))
-    db1_path = _copy_sqlite_bundle(baseline_path, run1_dir)
-    db2_path = _copy_sqlite_bundle(baseline_path, run2_dir)
+    def _seed_base_once(db_path: Path) -> None:
+        eng = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False}, future=True)
+        _install_sqlite_pragmas(eng, read_only=False)
+        ensure_schema(engine_override=eng)
+        db = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)()
+        try:
+            _seed_contract_db(db)
+        finally:
+            db.close()
+            eng.dispose()
+
+    pair_dir = Path(tempfile.mkdtemp(prefix="psi_di_contract_pair_", dir=tempfile.gettempdir()))
+    _, db1_path, db2_path = _prepare_two_run_db_copies(
+        baseline_path,
+        scratch_dir=pair_dir,
+        seed_once_fn=_seed_base_once,
+    )
 
     policy_path = Path(__file__).resolve().parents[2] / "psi" / "core" / "di" / "policies" / "advance_to_in_vivo_v0_3.json"
 
@@ -1604,6 +1725,10 @@ def test_soe_v0_2_contract_snapshot_shape_and_determinism() -> None:
         p2 = Path(tempfile.gettempdir()) / "di_contract_out2.json"
         p1.write_text(s1 + "\n", encoding="utf-8")
         p2.write_text(s2 + "\n", encoding="utf-8")
+        try:
+            _print_difference_classifier(json.loads(s1), json.loads(s2))
+        except Exception:
+            pass
         print(f"Wrote non-deterministic DI outputs to:\n  {p1}\n  {p2}", file=sys.stderr)
 
     _assert(s1 == s2, "DI output must be deterministic for identical DB + inputs")
@@ -1710,6 +1835,8 @@ def test_molecule_scope_determinism() -> None:
     from psi.services.di.runner import run_di
 
     def _seed_molecule_db(db):
+        from sqlalchemy import text
+
         p = db.query(Program).filter(Program.name == "DI_SMOKE_MOL").first()
         if p is None:
             p = create_program(db, name="DI_SMOKE_MOL", description="DI molecule smoke")
@@ -1731,61 +1858,83 @@ def test_molecule_scope_determinism() -> None:
         if b2 is None or b2.id == b1.id:
             b2 = create_batch(db=db, molecule_id=m.id, title="DI Smoke mol batch 2", expression_notes="", purification_notes="")
 
-        r1 = create_data_record(
-            db=db,
-            program_id=p.id,
-            molecule_id=None,
-            batch_id=b1.id,
-            domain="generic",
-            data_type="generic",
-            method="generic",
-            title="DI mol contract record 1",
-            params_json={},
-            results_json={},
-        )
-        upsert_measurements(
-            db=db,
-            record_id=r1.id,
-            measurements=[
-                {
-                    "name": "hmw_percent",
-                    "value_num": 1.0,
-                    "value_text": "1.0",
-                    "unit": None,
-                    "comparator": None,
-                    "data_type": r1.data_type,
-                    "method": r1.method,
-                },
-            ],
-        )
+        r1_id = db.execute(
+            text(
+                "SELECT id FROM data_records "
+                "WHERE batch_id=:bid AND title=:title "
+                "ORDER BY id ASC LIMIT 1"
+            ),
+            {"bid": int(b1.id), "title": "DI mol contract record 1"},
+        ).scalar()
+        if r1_id is None:
+            r1 = create_data_record(
+                db=db,
+                program_id=p.id,
+                molecule_id=None,
+                batch_id=b1.id,
+                domain="generic",
+                data_type="generic",
+                method="generic",
+                title="DI mol contract record 1",
+                params_json={},
+                results_json={},
+            )
+            upsert_measurements(
+                db=db,
+                record_id=r1.id,
+                measurements=[
+                    {
+                        "name": "hmw_percent",
+                        "value_num": 1.0,
+                        "value_text": "1.0",
+                        "unit": None,
+                        "comparator": None,
+                        "data_type": r1.data_type,
+                        "method": r1.method,
+                    },
+                ],
+            )
+            r1_id = int(r1.id)
+        _pin_seed_record_timestamps(db, record_id=int(r1_id))
 
-        r2 = create_data_record(
-            db=db,
-            program_id=p.id,
-            molecule_id=None,
-            batch_id=b2.id,
-            domain="generic",
-            data_type="generic",
-            method="generic",
-            title="DI mol contract record 2",
-            params_json={},
-            results_json={},
-        )
-        upsert_measurements(
-            db=db,
-            record_id=r2.id,
-            measurements=[
-                {
-                    "name": "monomer_pct",
-                    "value_num": 97.0,
-                    "value_text": "97%",
-                    "unit": "%",
-                    "comparator": None,
-                    "data_type": r2.data_type,
-                    "method": r2.method,
-                },
-            ],
-        )
+        r2_id = db.execute(
+            text(
+                "SELECT id FROM data_records "
+                "WHERE batch_id=:bid AND title=:title "
+                "ORDER BY id ASC LIMIT 1"
+            ),
+            {"bid": int(b2.id), "title": "DI mol contract record 2"},
+        ).scalar()
+        if r2_id is None:
+            r2 = create_data_record(
+                db=db,
+                program_id=p.id,
+                molecule_id=None,
+                batch_id=b2.id,
+                domain="generic",
+                data_type="generic",
+                method="generic",
+                title="DI mol contract record 2",
+                params_json={},
+                results_json={},
+            )
+            upsert_measurements(
+                db=db,
+                record_id=r2.id,
+                measurements=[
+                    {
+                        "name": "monomer_pct",
+                        "value_num": 97.0,
+                        "value_text": "97%",
+                        "unit": "%",
+                        "comparator": None,
+                        "data_type": r2.data_type,
+                        "method": r2.method,
+                    },
+                ],
+            )
+            r2_id = int(r2.id)
+        _pin_seed_record_timestamps(db, record_id=int(r2_id))
 
         return m.id, [b1.id, b2.id]
 
@@ -3949,6 +4098,44 @@ def _copy_sqlite_file_bundle(src_db: Path, dst_db: Path) -> None:
         shutil.copy2(src_wal, dst_db.with_name(dst_db.name + "-wal"))
     if src_shm.exists():
         shutil.copy2(src_shm, dst_db.with_name(dst_db.name + "-shm"))
+
+
+def _cleanup_sqlite_file_bundle(db_path: Path) -> None:
+    for p in (
+        db_path,
+        db_path.with_name(db_path.name + "-wal"),
+        db_path.with_name(db_path.name + "-shm"),
+    ):
+        try:
+            p.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _prepare_two_run_db_copies(
+    source_db: Path,
+    *,
+    scratch_dir: Path,
+    seed_once_fn=None,
+) -> tuple[Path, Path, Path]:
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    base_db = scratch_dir / "di_contract_smoke_base.sqlite"
+    run1_db = scratch_dir / "di_contract_smoke_run1.sqlite"
+    run2_db = scratch_dir / "di_contract_smoke_run2.sqlite"
+    _cleanup_sqlite_file_bundle(base_db)
+    _cleanup_sqlite_file_bundle(run1_db)
+    _cleanup_sqlite_file_bundle(run2_db)
+    _copy_sqlite_file_bundle(source_db, base_db)
+    if seed_once_fn is not None:
+        seed_once_fn(base_db)
+    _copy_sqlite_file_bundle(base_db, run1_db)
+    _copy_sqlite_file_bundle(base_db, run2_db)
+    print(
+        "di_contract_smoke: "
+        f"base_db={base_db} run1_db={run1_db} run2_db={run2_db} "
+        "base_copy_used=True"
+    )
+    return base_db, run1_db, run2_db
 
 
 def _rebind_core_db_runtime(db_path: Path) -> None:
