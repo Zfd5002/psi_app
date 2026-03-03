@@ -15,10 +15,10 @@ def _record_metric_keys(db: Session, *, record_id: int) -> list[str]:
     rows = db.execute(
         text(
             """
-            SELECT dm.name AS metric_key
+            SELECT dm.metric_key AS metric_key
             FROM data_measurements dm
             WHERE dm.data_record_id = :rid
-            ORDER BY dm.name ASC, dm.id ASC
+            ORDER BY dm.metric_key ASC, dm.id ASC
             """
         ),
         {"rid": int(record_id)},

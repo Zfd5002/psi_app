@@ -1,3 +1,63 @@
+## 2026-03-03 — v1.3.0a122
+Why:
+- Hotfix mixed/legacy `data_measurements` schemas where both `metric_key` and required `name` exist.
+
+What:
+- Fixed measurement upsert compatibility in `psi/services/measurements.py`:
+  - insert path now populates both physical columns when both exist:
+    - canonical key column (`metric_key` or mapped name column)
+    - legacy required `name` column
+  - safe update path now backfills blank alias key columns (`name`/`metric_key`) only, without overwriting populated values.
+  - row lookup for upsert is robust across mixed schemas:
+    - when matching by `metric_key`, also matches legacy `name` fallback (and vice versa).
+- Added deterministic regression test:
+  - `tests/test_measurements_mixed_schema_compat.py`
+  - verifies `create_data_record -> upsert_measurements` writes both `name` and `metric_key` when both columns are present.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/measurements.py`
+- `tests/test_measurements_mixed_schema_compat.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DB schema/migration changes.
+- No DI semantic/snapshot/hash/replay/ranking changes.
+
+## 2026-03-03 — v1.3.0a121
+Why:
+- Hotfix runtime SQL bug causing `/programs/{id}` 500 (`sqlite3.OperationalError: no such column: dm.name`).
+
+What:
+- Fixed `data_measurements` column reference from `dm.name` to `dm.metric_key` in:
+  - `psi/services/programs.py` (`build_program_review_queue` metric query)
+  - `psi/services/evidence_preview.py` (`_record_metric_keys` query)
+- Preserved deterministic ordering:
+  - `ORDER BY ... dm.metric_key ASC, dm.id ASC`
+- No refactor and no behavior change beyond schema-correct column usage.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/services/evidence_preview.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DB schema/migration changes.
+- No DI semantic/snapshot/hash/replay/ranking changes.
+
 ## 2026-03-03 — v1.3.0a120
 Why:
 - Add scientist-facing Evidence Preview surfaces that feel automatic after entry capture while remaining read-only and DI-safe.

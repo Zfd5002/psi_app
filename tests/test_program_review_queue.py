@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from sqlalchemy import create_engine
+from sqlalchemy import text
+from sqlalchemy.orm import sessionmaker
+
+from psi.core.db import ensure_schema
+from psi.core.models import Base, Batch, Molecule, Program
+from psi.services.data_records import apply_bulk_qc_action_for_record, create_data_record
+from psi.services.programs import build_program_review_queue
+from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
+
+
+def _mkdb():
+    eng = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=eng)
+    ensure_schema(engine_override=eng)
+    with eng.begin() as conn:
+        cols = conn.exec_driver_sql("PRAGMA table_info(data_measurements)").mappings().all()
+        col_names = {str(r.get('name') or '') for r in cols}
+        if "metric_key" not in col_names:
+            conn.exec_driver_sql("ALTER TABLE data_measurements ADD COLUMN metric_key TEXT")
+        if "name" in col_names:
+            conn.exec_driver_sql("UPDATE data_measurements SET metric_key = COALESCE(metric_key, name)")
+    SessionTmp = sessionmaker(bind=eng, future=True)
+    return eng, SessionTmp
+
+
+def _sync_metric_key(db) -> None:
+    db.execute(text("UPDATE data_measurements SET metric_key = COALESCE(metric_key, name)"))
+    db.commit()
+
+
+def _env() -> Environment:
+    root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
+    env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
+    return env
+
+
+def test_program_review_queue_deterministic_grouping_and_pending_filter() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            p = Program(name="P1", description="", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+            db.add(p); db.commit(); db.refresh(p)
+            ma = Molecule(program_id=int(p.id), primary_id="A-1", title="A", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+            mb = Molecule(program_id=int(p.id), primary_id="B-1", title="B", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+            db.add_all([ma, mb]); db.commit(); db.refresh(ma); db.refresh(mb)
+            ba = Batch(molecule_id=int(ma.id), batch_id="BA", title="BA", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+            bb = Batch(molecule_id=int(mb.id), batch_id="BB", title="BB", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+            db.add_all([ba, bb]); db.commit(); db.refresh(ba); db.refresh(bb)
+            rec_a = create_data_record(
+                db,
+                program_id=int(p.id),
+                molecule_id=int(ma.id),
+                batch_id=int(ba.id),
+                domain="Biological",
+                data_type="Binding",
+                method="BLI",
+                title="A run",
+                results_json={"ec50": 1.2},
+            )
+            rec_b = create_data_record(
+                db,
+                program_id=int(p.id),
+                molecule_id=int(mb.id),
+                batch_id=int(bb.id),
+                domain="Biological",
+                data_type="Binding",
+                method="BLI",
+                title="B run",
+                results_json={"kd": 2.3},
+            )
+            _sync_metric_key(db)
+            # Fully approve B entry so only A remains pending.
+            apply_bulk_qc_action_for_record(db, record_id=int(rec_b.id), action="approve", actor="scientist")
+            queue = build_program_review_queue(db, program_id=int(p.id))
+            assert len(queue) == 1
+            assert queue[0]["molecule_primary_id"] == "A-1"
+            assert len(queue[0]["records"]) == 1
+            assert queue[0]["records"][0]["record_id"] == int(rec_a.id)
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_program_detail_template_renders_review_queue_actions_and_order() -> None:
+    tpl = _env().get_template("programs/detail.html")
+    queue = [
+        {"molecule_id": 2, "molecule_primary_id": "A-1", "molecule_title": "A", "records": [{"record_id": 11, "created_at": "2026-03-03T00:00:00", "batch_id": 5, "assay_key": "IN_VIVO_EFFICACY/NOD", "preview_snippet": "EC50"}]},
+        {"molecule_id": 3, "molecule_primary_id": "B-1", "molecule_title": "B", "records": [{"record_id": 12, "created_at": "2026-03-03T00:00:00", "batch_id": 6, "assay_key": "PK_PD/NONCOMP", "preview_snippet": "KD"}]},
+    ]
+    html = tpl.render(
+        request=SimpleNamespace(query_params={}),
+        program=SimpleNamespace(id=1, name="P1", description=""),
+        program_memberships_v3=[],
+        all_molecules_for_membership=[],
+        molecules=[],
+        recent_batches=[],
+        recent_data=[],
+        recent_evidence=[],
+        recent_decisions=[],
+        review_queue_by_molecule=queue,
+        di_dashboard={
+            "counts": {"READY": 0, "BLOCKED": 0, "UNKNOWN": 0},
+            "policy_version_filter": None,
+            "policy_versions": [],
+            "policy_ids": [],
+            "top_blockers": [],
+            "top_missing_metrics": [],
+            "top_failing_gates": [],
+            "metric_coverage": [],
+            "qc_ignore_reasons": [],
+            "qc_failed_metrics": [],
+            "qc_unreviewed_metrics": [],
+            "molecule_rollup": [],
+            "molecule_rollup_filtered": [],
+            "lineage": [],
+            "lineage_verify_enabled": False,
+        },
+        audits=[],
+    )
+    assert "Review data entries" in html
+    assert "/data/11/qc/approve" in html
+    assert "/data/11/edit?return_to=/programs/1" in html
+    assert html.find("A-1") < html.find("B-1")

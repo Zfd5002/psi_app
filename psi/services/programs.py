@@ -446,10 +446,10 @@ def build_program_review_queue(db: Session, *, program_id: int) -> list[dict[str
         mrows = db.execute(
             text(
                 f"""
-                SELECT dm.data_record_id AS record_id, dm.name AS metric_key
+                SELECT dm.data_record_id AS record_id, dm.metric_key AS metric_key
                 FROM data_measurements dm
                 WHERE dm.data_record_id IN ({in_clause})
-                ORDER BY dm.data_record_id ASC, dm.name ASC, dm.id ASC
+                ORDER BY dm.data_record_id ASC, dm.metric_key ASC, dm.id ASC
                 """
             ),
             bind_params,

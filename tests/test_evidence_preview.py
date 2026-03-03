@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import create_engine
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from psi.core.db import ensure_schema
@@ -12,10 +13,22 @@ from psi.services.data_records import apply_bulk_qc_action_for_record, create_da
 from psi.services.evidence_preview import build_pending_evidence_preview_for_molecule, build_record_evidence_preview
 
 
+def _sync_metric_key(db) -> None:
+    db.execute(text("UPDATE data_measurements SET metric_key = COALESCE(metric_key, name)"))
+    db.commit()
+
+
 def _mkdb():
     eng = create_engine("sqlite:///:memory:", future=True)
     Base.metadata.create_all(bind=eng)
     ensure_schema(engine_override=eng)
+    with eng.begin() as conn:
+        cols = conn.exec_driver_sql("PRAGMA table_info(data_measurements)").mappings().all()
+        col_names = {str(r.get('name') or '') for r in cols}
+        if "metric_key" not in col_names:
+            conn.exec_driver_sql("ALTER TABLE data_measurements ADD COLUMN metric_key TEXT")
+        if "name" in col_names:
+            conn.exec_driver_sql("UPDATE data_measurements SET metric_key = COALESCE(metric_key, name)")
     SessionTmp = sessionmaker(bind=eng, future=True)
     return eng, SessionTmp
 
@@ -50,6 +63,7 @@ def test_build_record_evidence_preview_new_vs_existing_deterministic() -> None:
                 title="Binding",
                 results_json={"ec50": 1.2, "kd": 2.4},
             )
+            _sync_metric_key(db)
 
             snap = DecisionSnapshot(
                 program_id=int(p.id),
@@ -123,6 +137,7 @@ def test_build_pending_evidence_preview_for_molecule_filters_approved_entries() 
                 title="Approved rec",
                 results_json={"kd": 3.0},
             )
+            _sync_metric_key(db)
             apply_bulk_qc_action_for_record(db, record_id=int(rec_approved.id), action="approve", actor="scientist")
 
             rows = build_pending_evidence_preview_for_molecule(db, molecule_id=int(m.id))

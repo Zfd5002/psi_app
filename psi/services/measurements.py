@@ -305,15 +305,31 @@ def upsert_measurements(db: Session, *, record_id: int, measurements: List[Dict[
     wrote = 0
     primary_exists = _has_primary(db, record_id, cols)
 
+    def _row_lookup_params(metric_name: str) -> tuple[str, Dict[str, Any]]:
+        base_params: Dict[str, Any] = {"rid": record_id, "name": metric_name}
+        name_col = str(cols.get("name") or "")
+        has_metric_key = "metric_key" in all_cols
+        has_name_phys = "name" in all_cols
+        if name_col == "metric_key" and has_name_phys:
+            return (
+                f"{cols['record_fk']}=:rid AND ({name_col}=:name OR name=:name)",
+                base_params,
+            )
+        if name_col == "name" and has_metric_key:
+            return (
+                f"{cols['record_fk']}=:rid AND ({name_col}=:name OR metric_key=:name)",
+                base_params,
+            )
+        return (f"{cols['record_fk']}=:rid AND {name_col}=:name", base_params)
+
     for m in measurements:
         name = (m.get("name") or "").strip()
         if not name:
             continue
 
-        sel = text(
-            f"SELECT * FROM data_measurements WHERE {cols['record_fk']}=:rid AND {cols['name']}=:name LIMIT 1"
-        )
-        row = db.execute(sel, {"rid": record_id, "name": name}).mappings().first()
+        where_sql, where_params = _row_lookup_params(name)
+        sel = text(f"SELECT * FROM data_measurements WHERE {where_sql} LIMIT 1")
+        row = db.execute(sel, where_params).mappings().first()
 
         if row is None:
             insert_phys_cols: List[str] = []
@@ -330,6 +346,12 @@ def upsert_measurements(db: Session, *, record_id: int, measurements: List[Dict[
             # Required keys
             add_phys(cols["record_fk"], "rid", record_id)
             add_phys(cols["name"], "name", name)
+            # Mixed-schema compatibility: keep metric identifier mirrored in both canonical
+            # and legacy physical key columns when both are present.
+            if ("name" in all_cols) and (str(cols["name"]) != "name"):
+                add_phys("name", "name_phys", name)
+            if ("metric_key" in all_cols) and (str(cols["name"]) != "metric_key"):
+                add_phys("metric_key", "metric_key_phys", name)
 
             # Optional value payload
             add_phys(cols.get("value_num") or "", "value_num", m.get("value_num"))
@@ -420,6 +442,15 @@ def upsert_measurements(db: Session, *, record_id: int, measurements: List[Dict[
             if cur is None or cur == "":
                 updates[col] = newval
 
+        # Backfill blank alias columns only; never overwrite populated values.
+        if ("name" in all_cols) and ("metric_key" in all_cols):
+            cur_name = row.get("name")
+            cur_metric_key = row.get("metric_key")
+            if (cur_name is None or cur_name == "") and name:
+                updates["name"] = name
+            if (cur_metric_key is None or cur_metric_key == "") and name:
+                updates["metric_key"] = name
+
         fill("value_num", m.get("value_num"))
         fill("value_text", m.get("value_text"))
         fill("unit", m.get("unit"))
@@ -454,18 +485,35 @@ def upsert_measurements_force(db: Session, *, record_id: int, measurements: List
         return 0
 
     cols = _measurement_cols(db)
+    all_cols = _all_measurement_cols(db)
     wrote = 0
     primary_exists = _has_primary(db, record_id, cols)
+
+    def _row_lookup_params(metric_name: str) -> tuple[str, Dict[str, Any]]:
+        base_params: Dict[str, Any] = {"rid": record_id, "name": metric_name}
+        name_col = str(cols.get("name") or "")
+        has_metric_key = "metric_key" in all_cols
+        has_name_phys = "name" in all_cols
+        if name_col == "metric_key" and has_name_phys:
+            return (
+                f"{cols['record_fk']}=:rid AND ({name_col}=:name OR name=:name)",
+                base_params,
+            )
+        if name_col == "name" and has_metric_key:
+            return (
+                f"{cols['record_fk']}=:rid AND ({name_col}=:name OR metric_key=:name)",
+                base_params,
+            )
+        return (f"{cols['record_fk']}=:rid AND {name_col}=:name", base_params)
 
     for m in measurements:
         name = (m.get("name") or "").strip()
         if not name:
             continue
 
-        sel = text(
-            f"SELECT * FROM data_measurements WHERE {cols['record_fk']}=:rid AND {cols['name']}=:name LIMIT 1"
-        )
-        row = db.execute(sel, {"rid": record_id, "name": name}).mappings().first()
+        where_sql, where_params = _row_lookup_params(name)
+        sel = text(f"SELECT * FROM data_measurements WHERE {where_sql} LIMIT 1")
+        row = db.execute(sel, where_params).mappings().first()
 
         if row is None:
             # Create then treat as overwrite (insert with values)
