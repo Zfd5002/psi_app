@@ -119,6 +119,7 @@ def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) 
     coverage = fact.get("coverage_summary") if isinstance(fact.get("coverage_summary"), dict) else {}
     best = fact.get("best_batch") if isinstance(fact.get("best_batch"), dict) else {}
     stability = fact.get("stability") if isinstance(fact.get("stability"), dict) else {}
+    gates_v1 = fact.get("gates_v1") if isinstance(fact.get("gates_v1"), dict) else {}
 
     batch_cols = matrix.get("batch_columns") if isinstance(matrix.get("batch_columns"), list) else []
     matrix_rows = matrix.get("rows") if isinstance(matrix.get("rows"), list) else []
@@ -236,8 +237,16 @@ def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) 
         },
         "batch_registry": normalized_batch_registry,
         "gate_summary": {
-            "best_batch_rows": [],
-            "per_batch_rows": [],
+            "best_batch_rows": (
+                [r for r in gates_v1.get("best_batch_gate_matrix", []) if isinstance(r, dict)]
+                if isinstance(gates_v1.get("best_batch_gate_matrix"), list)
+                else []
+            ),
+            "per_batch_rows": (
+                [r for r in gates_v1.get("per_batch_gate_snapshot", []) if isinstance(r, dict)]
+                if isinstance(gates_v1.get("per_batch_gate_snapshot"), list)
+                else []
+            ),
         },
         "fact_sheet": {
             "batch_labels": [str(c.get("batch_label") or "") for c in batch_cols if isinstance(c, dict)],

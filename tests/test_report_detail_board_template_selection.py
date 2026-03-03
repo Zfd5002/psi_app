@@ -18,7 +18,7 @@ def _env() -> Environment:
     return env
 
 
-def _render_detail(board_template_name: str) -> str:
+def _render_detail(board_template_name: str, *, is_pdf: bool = True) -> str:
     env = _env()
     tpl = env.get_template("reports/detail.html")
     return tpl.render(
@@ -36,7 +36,7 @@ def _render_detail(board_template_name: str) -> str:
             "determinations": [],
             "next_steps": [],
         },
-        is_pdf=True,
+        is_pdf=is_pdf,
     )
 
 
@@ -65,3 +65,8 @@ def test_base_nav_lineage_link_is_not_hardcoded_to_program_1() -> None:
     html = _render_detail("reports/board_molecule_v3.html")
     assert 'href="/lineage/programs/1"' not in html
     assert 'href="/lineage/programs"' in html
+
+
+def test_detail_template_has_no_technical_view_tab_label() -> None:
+    html = _render_detail("reports/board_molecule_v3.html", is_pdf=False)
+    assert "Technical View" not in html

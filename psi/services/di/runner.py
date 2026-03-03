@@ -14,8 +14,9 @@ from sqlalchemy.orm import Session
 from psi.core.di.catalog import load_experiment_catalog_v0_1
 from psi.core.di.policy import load_policy
 from psi.core.di.schema import DIInput
-from psi.core.models import DecisionSnapshot, Molecule, Program
+from psi.core.models import DIRunSubject, DecisionSnapshot, Molecule, Program
 from psi.core.utils import now_utc, stable_json_dumps
+from psi.services.di.run_manifest import create_di_run_manifest
 from psi.services.di.selection import select_batch_measurements
 from psi.services.di.compute import _compute_di_from_used_by_metric
 from psi.services.di.error_output import build_di_error_output_payload
@@ -413,6 +414,161 @@ def _select_batches_for_molecule(db: Session, *, molecule_id: int) -> list[Dict[
             continue
         out.append({"batch_id": bid, "created_at": r.get("created_at")})
     return out
+
+
+def _select_batches_for_multi_subject_run(db: Session, *, molecule_id: int) -> list[Dict[str, Any]]:
+    """Deterministic batch order for multi-subject runs.
+
+    Rule:
+    - include all batches where batch.molecule_id == molecule_id
+    - order by created_at DESC, then id DESC (stable, tie-safe)
+    """
+
+    rows = (
+        db.execute(
+            text(
+                """
+                SELECT id, created_at
+                FROM batches
+                WHERE molecule_id = :mid
+                ORDER BY created_at DESC, id DESC
+                """
+            ),
+            {"mid": int(molecule_id)},
+        )
+        .mappings()
+        .all()
+    )
+    out: list[Dict[str, Any]] = []
+    for r in rows:
+        try:
+            bid = int(r.get("id"))
+        except Exception:
+            continue
+        out.append({"batch_id": bid, "created_at": r.get("created_at")})
+    return out
+
+
+def _build_di_run_id(
+    *,
+    molecule_id: int,
+    decision_key: str,
+    as_of: str,
+    created_at_iso: str,
+    subject_scope_ids: list[int],
+) -> str:
+    payload = {
+        "molecule_id": int(molecule_id),
+        "decision_key": str(decision_key),
+        "as_of": str(as_of),
+        "created_at": str(created_at_iso),
+        "subject_scope_ids": [int(x) for x in subject_scope_ids],
+    }
+    digest = hashlib.sha256(stable_json_dumps(payload).encode("utf-8")).hexdigest()
+    return f"di_run_{digest[:24]}"
+
+
+def run_di_multi_subject(
+    db: Session,
+    *,
+    molecule_id: int,
+    decision_key: str,
+    as_of_ts: str | None,
+    policy_path: Path,
+    qc_mode: str = "model_safe",
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run DI deterministically for molecule scope plus all batch subjects.
+
+    The run links immutable DecisionSnapshot rows to a run-manifest envelope in
+    di_runs/di_run_subjects and does not alter snapshot semantics.
+    """
+
+    molecule_id_int = int(molecule_id)
+    program_id = _resolve_molecule_lineage(db, molecule_id=molecule_id_int)
+    as_of_value = str(as_of_ts or "")
+    created_at_dt = now_utc()
+    created_at_iso = created_at_dt.isoformat()
+    pol = load_policy(policy_path)
+    policy_pins = {
+        "policy_id": str(getattr(pol, "policy_id", "") or ""),
+        "policy_version": str(getattr(pol, "version", "") or ""),
+        "policy_source": str(getattr(pol, "source_name", "") or ""),
+    }
+
+    subjects: list[dict[str, Any]] = [
+        {
+            "subject_index": 0,
+            "scope_type": "molecule",
+            "scope_id": molecule_id_int,
+            "molecule_id": molecule_id_int,
+            "batch_id": None,
+        }
+    ]
+    for i, b in enumerate(_select_batches_for_multi_subject_run(db, molecule_id=molecule_id_int), start=1):
+        subjects.append(
+            {
+                "subject_index": int(i),
+                "scope_type": "batch",
+                "scope_id": int(b["batch_id"]),
+                "molecule_id": molecule_id_int,
+                "batch_id": int(b["batch_id"]),
+            }
+        )
+
+    run_id = _build_di_run_id(
+        molecule_id=molecule_id_int,
+        decision_key=str(decision_key),
+        as_of=as_of_value,
+        created_at_iso=created_at_iso,
+        subject_scope_ids=[int(s["scope_id"]) for s in subjects],
+    )
+    run = create_di_run_manifest(
+        db,
+        run_id=run_id,
+        decision_key=str(decision_key),
+        as_of=as_of_value,
+        policy_pins=policy_pins,
+        policy_semantics_hash=str(getattr(pol, "policy_semantics_hash", "") or ""),
+        policy_package_hash=str(getattr(pol, "policy_package_hash", "") or ""),
+        scope_root_id=molecule_id_int,
+        program_id=int(program_id),
+        subjects=subjects,
+        producer_id="di.rules",
+        producer_version="v1",
+        catalog_ref=None,
+        notes=None,
+        is_active=1,
+    )
+    db.commit()
+    db.refresh(run)
+
+    snapshot_ids: list[int] = []
+    ordered_subjects = sorted(subjects, key=lambda s: int(s["subject_index"]))
+    for s in ordered_subjects:
+        di_input = DIInput(
+            decision_key=str(decision_key),
+            scope_type=str(s["scope_type"]),
+            scope_id=int(s["scope_id"]),
+            qc_mode=str(qc_mode or "model_safe"),
+            as_of_ts=(as_of_value if as_of_value else None),
+            context=(dict(context) if isinstance(context, dict) else {}),
+        )
+        run_res = run_di(db, di_input=di_input, policy_path=policy_path)
+        snapshot_id = int(run_res.get("snapshot_id"))
+        snapshot_ids.append(snapshot_id)
+        row = (
+            db.query(DIRunSubject)
+            .filter(DIRunSubject.di_run_id == int(run.id))
+            .filter(DIRunSubject.subject_index == int(s["subject_index"]))
+            .first()
+        )
+        if row is None:
+            raise RuntimeError(f"Missing di_run_subject row for di_run_id={int(run.id)} index={int(s['subject_index'])}")
+        row.decision_snapshot_id = int(snapshot_id)
+        db.commit()
+
+    return {"di_run_id": int(run.id), "run_id": str(run.run_id), "snapshot_ids": list(snapshot_ids)}
 
 
 def _format_ts(v: Any) -> Optional[str]:

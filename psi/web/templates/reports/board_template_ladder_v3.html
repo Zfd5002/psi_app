@@ -1,8 +1,3 @@
-<div class="tabs no-print" role="tablist" aria-label="Template ladder view mode">
-  <button type="button" class="btn mini" data-ladder-tab="board" aria-selected="true" aria-controls="ladder-board-panel">Board View</button>
-  <button type="button" class="btn mini" data-ladder-tab="technical" aria-selected="false" aria-controls="ladder-technical-panel">Technical View</button>
-</div>
-
 <section id="ladder-board-panel" data-ladder-panel="board">
   <h2>Executive Summary</h2>
   <div class="mini muted">Template Ladder Header</div>
@@ -52,20 +47,10 @@
 
 <script>
 (() => {
-  const tabs = document.querySelectorAll("[data-ladder-tab]");
   const board = document.querySelector("[data-ladder-panel='board']");
   const tech = document.querySelector("[data-ladder-panel='technical']");
-  if (!tabs.length || !board || !tech) return;
-  const apply = (mode) => {
-    const isBoard = mode === "board";
-    board.style.display = isBoard ? "block" : "none";
-    tech.style.display = isBoard ? "none" : "block";
-    tabs.forEach((btn) => {
-      const active = btn.getAttribute("data-ladder-tab") === mode;
-      btn.setAttribute("aria-selected", active ? "true" : "false");
-    });
-  };
-  tabs.forEach((btn) => btn.addEventListener("click", () => apply(btn.getAttribute("data-ladder-tab"))));
-  apply("board");
+  if (!board || !tech) return;
+  board.style.display = "block";
+  tech.style.display = "block";
 })();
 </script>

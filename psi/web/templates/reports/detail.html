@@ -32,13 +32,6 @@
     </div>
   </div>
 
-  {% if not is_pdf %}
-  <div class="tabs no-print" role="tablist" aria-label="Report view mode" style="margin-top:12px;">
-    <button type="button" class="btn mini" data-view-tab="board" aria-selected="true" aria-controls="report-board-panel">Board View</button>
-    <button type="button" class="btn mini" data-view-tab="technical" aria-selected="false" aria-controls="report-technical-panel">Technical View</button>
-  </div>
-  {% endif %}
-
   <section id="report-board-panel" class="report-board-panel" data-view-panel="board">
     {% include (board_template_name if board_template_name is defined else "reports/_board_narrative.html") %}
   </section>
@@ -54,24 +47,11 @@
 {% if not is_pdf %}
 <script>
 (() => {
-  const tabs = document.querySelectorAll("[data-view-tab]");
   const boardPanel = document.querySelector("[data-view-panel='board']");
   const techPanel = document.querySelector("[data-view-panel='technical']");
-  if (!tabs.length || !boardPanel || !techPanel) return;
-  const apply = (mode) => {
-    const board = mode === "board";
-    boardPanel.style.display = board ? "block" : "none";
-    techPanel.style.display = board ? "none" : "block";
-    tabs.forEach((btn) => {
-      const active = btn.getAttribute("data-view-tab") === mode;
-      btn.setAttribute("aria-selected", active ? "true" : "false");
-      btn.classList.toggle("active", active);
-    });
-  };
-  tabs.forEach((btn) => {
-    btn.addEventListener("click", () => apply(btn.getAttribute("data-view-tab")));
-  });
-  apply("board");
+  if (!boardPanel || !techPanel) return;
+  boardPanel.style.display = "block";
+  techPanel.style.display = "block";
 })();
 </script>
 {% endif %}

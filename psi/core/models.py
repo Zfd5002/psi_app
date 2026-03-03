@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text, UniqueConstraint, Float
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text, UniqueConstraint, Float, Index
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -578,6 +578,54 @@ class ReportRun(Base):
     snapshot_coverage_json = Column(Text, nullable=False)
     payload_json = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
+
+
+class DIRun(Base):
+    __tablename__ = "di_runs"
+    __table_args__ = (UniqueConstraint("run_id", name="uq_di_runs_run_id"),)
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(Text, nullable=False)
+    decision_key = Column(Text, nullable=False)
+    as_of = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    producer_id = Column(Text, nullable=False, default="di.rules")
+    producer_version = Column(Text, nullable=False, default="v1")
+    policy_pins_json = Column(Text, nullable=False)
+    policy_semantics_hash = Column(Text, nullable=True)
+    policy_package_hash = Column(Text, nullable=True)
+    catalog_ref_json = Column(Text, nullable=True)
+    scope_root_type = Column(Text, nullable=False, default="molecule")
+    scope_root_id = Column(Integer, nullable=False)
+    program_id = Column(Integer, ForeignKey("programs.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    is_active = Column(Integer, nullable=False, default=1)
+
+    program = relationship("Program")
+    subjects = relationship("DIRunSubject", back_populates="di_run", cascade="all, delete-orphan")
+
+
+class DIRunSubject(Base):
+    __tablename__ = "di_run_subjects"
+    __table_args__ = (
+        UniqueConstraint("di_run_id", "subject_index", name="uq_di_run_subjects_run_subject_index"),
+        Index("ix_di_run_subjects_scope_compound", "molecule_id", "batch_id", "scope_type"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    di_run_id = Column(Integer, ForeignKey("di_runs.id"), nullable=False, index=True)
+    subject_index = Column(Integer, nullable=False)
+    scope_type = Column(Text, nullable=False)
+    scope_id = Column(Integer, nullable=False)
+    molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=True, index=True)
+    batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True, index=True)
+    decision_snapshot_id = Column(Integer, ForeignKey("decision_snapshots.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    di_run = relationship("DIRun", back_populates="subjects")
+    molecule = relationship("Molecule")
+    batch = relationship("Batch")
+    decision_snapshot = relationship("DecisionSnapshot")
 
 
 class PolicyUpgradeSession(Base):

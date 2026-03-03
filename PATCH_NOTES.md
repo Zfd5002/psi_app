@@ -6779,6 +6779,135 @@ Schema changes:
 
 Gates:
 - PASS
+
+## 2026-03-03 — v1.3.0b10
+Intent:
+- Harden run-governance coherence checks and pin-warning coverage without changing replay defaults.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/run_manifest.py`
+- `tests/test_di_run_verify_and_report_pins.py`
+
+Behavior:
+- Added `verify_di_run(di_run_id)` to validate run-subject coherence deterministically:
+  - contiguous `subject_index` from 0
+  - each subject has a linked snapshot
+  - snapshot scope and decision key match each subject/run
+- Added tests for:
+  - verify happy path
+  - detection of missing snapshot link
+  - `missing_policy_pins_or_hashes` warning emitted only when pins/hashes are actually absent
+
+Guardrails:
+- Replay regression defaults unchanged.
+- No DI semantic, snapshot contract, hash/fingerprint, or schema migration changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b9
+Intent:
+- Persist best-batch/per-batch gate summaries into molecule report payload at write-time and render gate sections from payload only.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/services/reports_v3.py`
+- `tests/test_v3_board_report_determinism.py`
+
+Behavior:
+- Added deterministic write-time gate extraction for molecule reports:
+  - best-batch gate matrix
+  - per-batch gate snapshot summary
+  - snapshot selection trace
+- Persisted gate data under `sections.fact_sheet.gates_v1` in report payload.
+- Updated molecule board display shaping to read gate rows from persisted payload (`gates_v1`) instead of placeholder empties.
+- Extended no-view-query determinism tests to assert gate rendering remains payload-driven.
+
+Guardrails:
+- Payload additive-only (`fact_sheet.gates_v1`).
+- No DI semantic, snapshot contract, hash/fingerprint, or replay behavior changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b8
+Intent:
+- Add deterministic multi-subject DI orchestration that persists run manifests and links per-subject snapshots.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/runner.py`
+- `tests/test_di_multi_subject_runner.py`
+
+Behavior:
+- Added `run_di_multi_subject(...)` to orchestrate one run across ordered subjects:
+  - subject index `0`: molecule scope
+  - subject indices `1..N`: batch scopes ordered by `created_at DESC, id DESC`
+- Added deterministic run-id construction and manifest creation via `di_runs`/`di_run_subjects`.
+- Linked generated snapshot ids back onto `di_run_subjects.decision_snapshot_id` in deterministic subject order.
+- Added tests for deterministic subject ordering and snapshot-link persistence.
+
+Guardrails:
+- No change to existing `run_di(...)` single-subject semantics.
+- No snapshot contract, policy semantics, hash/fingerprint, or replay behavior changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b7
+Intent:
+- Introduce additive DI run coverage tables (`di_runs`, `di_run_subjects`) and deterministic run-manifest helpers.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/services/di/run_manifest.py`
+- `tests/test_di_run_manifest_tables.py`
+
+Behavior:
+- Added `DIRun` and `DIRunSubject` SQLAlchemy models with deterministic indexing and uniqueness constraints.
+- Added `create_di_run_manifest`, `list_run_subjects`, and `lookup_run_by_run_id` helpers for deterministic run manifest persistence and lookup.
+- Added tests covering minimal roundtrip insert, stable subject ordering, and unique `(di_run_id, subject_index)` enforcement.
+
+Guardrails:
+- Additive schema only; no destructive changes.
+- No DI semantic, snapshot contract, policy, hash/fingerprint, or replay behavior changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b6
+Intent:
+- Remove Technical View tab buttons from board-facing UI while keeping technical sections/routes available.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/board_upgrade_delta_v3.html`
+- `psi/web/templates/reports/board_template_ladder_v3.html`
+- `psi/web/templates/lineage/program_detail.html`
+- `psi/web/templates/lineage/portfolio_detail.html`
+- `tests/test_report_detail_board_template_selection.py`
+
+Behavior:
+- Removed “Technical View” tab buttons from report detail, upgrade delta, template ladder, and lineage board pages.
+- Kept technical panels intact and accessible in rendered views; only tab controls were removed.
+- Simplified tab scripts to avoid runtime errors after button removal.
+- Added a template regression test asserting “Technical View” label is absent from the report detail tab controls.
+
+Guardrails:
+- UI-only/template changes.
+- No DI semantic, snapshot-contract, hash/fingerprint, policy, or replay behavior changes.
+
+Gates:
+- PASS
 ## 2026-03-02 — v1.3.0a48
 Summary:
 - Hard-deprecate V3 shortlisting policy usage by quarantining legacy shortlisting catalog as non-executable metadata and removing executable `ranking_weights` content.

@@ -166,6 +166,8 @@ def _derive_governance_red_flags(db: Session, *, req: ReportRequest, sections: d
         for k in sorted(pins.keys(), key=lambda x: str(x)):
             v = pins.get(k)
             if isinstance(v, dict):
+                if str(v.get("status") or "").strip().lower() == "deprecated_non_executable":
+                    continue
                 hash_keys = [hk for hk in ("policy_hash", "catalog_hash") if str(v.get(hk) or "").strip()]
                 if not hash_keys:
                     missing_pin_hashes.append(str(k))
@@ -504,6 +506,153 @@ def _latest_di_snapshot_for_molecule_as_of(db: Session, *, molecule_id: int, as_
     return None, {}, {}
 
 
+def _latest_batch_di_snapshot_for_decision_as_of(
+    db: Session,
+    *,
+    batch_id: int,
+    decision_key: str,
+    as_of: datetime,
+) -> tuple[DecisionSnapshot | None, dict[str, Any]]:
+    snaps = (
+        db.query(DecisionSnapshot)
+        .filter(DecisionSnapshot.batch_id == int(batch_id))
+        .filter(DecisionSnapshot.decision_key == str(decision_key))
+        .filter(DecisionSnapshot.created_at <= as_of)
+        .filter(DecisionSnapshot.superseded_by_snapshot_id.is_(None))
+        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
+        .all()
+    )
+    for snap in snaps:
+        out = safe_json_dict(snap.outputs_json)
+        inn = safe_json_dict(snap.inputs_json)
+        if is_di_snapshot_record(snap, out, inn):
+            return snap, out
+    return None, {}
+
+
+def _gate_status_for_row(gate: dict[str, Any]) -> str:
+    for key in ("status", "state", "result"):
+        st = str(gate.get(key) or "").strip().lower()
+        if st:
+            return st
+    return "not_assessed"
+
+
+def _is_gate_failing_status(status: str) -> bool:
+    st = str(status or "").strip().lower()
+    return st in {"fail", "failed", "blocked", "not_ready", "rejected", "reject"}
+
+
+def _overall_from_snapshot_output(out: dict[str, Any]) -> str:
+    decision = str(out.get("decision_state") or "").strip().lower()
+    if decision in {"ready", "pass", "approved"}:
+        return "ready"
+    if decision in {"blocked", "fail", "not_ready", "rejected"}:
+        return "not_ready"
+    readiness = out.get("readiness") if isinstance(out.get("readiness"), dict) else {}
+    state = str(readiness.get("state") or "").strip().lower()
+    if state:
+        return state
+    return "not_assessed"
+
+
+def _build_fact_sheet_gates_v1(
+    db: Session,
+    *,
+    as_of: datetime,
+    decision_key: str,
+    fact_sheet: dict[str, Any],
+) -> dict[str, Any]:
+    batch_registry = fact_sheet.get("batch_registry") if isinstance(fact_sheet.get("batch_registry"), list) else []
+    best_batch = fact_sheet.get("best_batch") if isinstance(fact_sheet.get("best_batch"), dict) else {}
+    selected_best_batch_id = best_batch.get("selected_batch_id")
+    best_batch_rows: list[dict[str, Any]] = []
+    per_batch_rows: list[dict[str, Any]] = []
+    selection_trace: list[dict[str, Any]] = []
+
+    for br in batch_registry:
+        if not isinstance(br, dict):
+            continue
+        batch_id = br.get("batch_id")
+        if not isinstance(batch_id, int):
+            continue
+        batch_label = str(br.get("batch_label") or f"batch_id={batch_id}")
+        snap, out = _latest_batch_di_snapshot_for_decision_as_of(
+            db,
+            batch_id=int(batch_id),
+            decision_key=str(decision_key),
+            as_of=as_of,
+        )
+        selection_trace.append(
+            {
+                "batch_id": int(batch_id),
+                "batch_label": batch_label,
+                "snapshot_id": (int(snap.id) if snap is not None else None),
+                "decision_key": str(decision_key),
+            }
+        )
+        if snap is None:
+            per_batch_rows.append(
+                {
+                    "batch_id": int(batch_id),
+                    "batch_label": batch_label,
+                    "overall": "not_assessed",
+                    "fail_gates": [],
+                    "missing_gates": [],
+                    "snapshot_id": None,
+                }
+            )
+            continue
+
+        gates = out.get("gates") if isinstance(out.get("gates"), list) else []
+        normalized_gates = [g for g in gates if isinstance(g, dict)]
+        fail_gates = sorted(
+            [
+                str(g.get("gate_key") or "")
+                for g in normalized_gates
+                if _is_gate_failing_status(_gate_status_for_row(g)) and str(g.get("gate_key") or "").strip()
+            ]
+        )
+        missing_gates = sorted(
+            [
+                str(g.get("gate_key") or "")
+                for g in normalized_gates
+                if _gate_status_for_row(g) in {"missing", "not_assessed", "unknown"} and str(g.get("gate_key") or "").strip()
+            ]
+        )
+        per_batch_rows.append(
+            {
+                "batch_id": int(batch_id),
+                "batch_label": batch_label,
+                "overall": _overall_from_snapshot_output(out),
+                "fail_gates": fail_gates,
+                "missing_gates": missing_gates,
+                "snapshot_id": int(snap.id),
+            }
+        )
+
+        if selected_best_batch_id is not None and int(selected_best_batch_id) == int(batch_id):
+            for g in sorted(normalized_gates, key=lambda gg: str(gg.get("gate_key") or "")):
+                gate_key = str(g.get("gate_key") or "")
+                req_metrics = sorted(str(m) for m in (g.get("required_metrics") if isinstance(g.get("required_metrics"), list) else []) if str(m).strip())
+                evidence_txt = ", ".join(req_metrics[:3]) if req_metrics else "Not available"
+                notes = str(g.get("reason") or g.get("explanation") or "").strip()
+                best_batch_rows.append(
+                    {
+                        "gate_key": gate_key or "unknown",
+                        "status": _gate_status_for_row(g),
+                        "primary_evidence": evidence_txt,
+                        "notes": notes,
+                    }
+                )
+
+    return {
+        "selection_trace": selection_trace,
+        "best_batch_gate_matrix": best_batch_rows,
+        "per_batch_gate_snapshot": per_batch_rows,
+    }
+
+
 def generate_molecule_report_v0(
     db: Session,
     *,
@@ -607,6 +756,12 @@ def generate_molecule_report_v0(
         template_ids_used=template_ids_used,
         policy_pins=policy_pins,
         snapshot_output=out,
+    )
+    sections["fact_sheet"]["gates_v1"] = _build_fact_sheet_gates_v1(
+        db,
+        as_of=as_of,
+        decision_key=(template_ids_used[0] if template_ids_used else str(out.get("decision_key") or "advance_to_in_vivo")),
+        fact_sheet=(sections["fact_sheet"] if isinstance(sections.get("fact_sheet"), dict) else {}),
     )
     sections["reproducibility_appendix"] = {
         "policy_pins": _sorted_dict(dict(policy_pins or {})),

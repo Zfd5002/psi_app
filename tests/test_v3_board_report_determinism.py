@@ -119,6 +119,7 @@ def test_fact_sheet_no_db_query_at_view_time() -> None:
             snapshot_coverage=[],
         )
         assert out2.get("fact_sheet", {}).get("metric_rows") is not None
+        assert out2.get("gate_summary", {}).get("best_batch_rows") is not None
     finally:
         db.close()
         eng.dispose()
@@ -135,6 +136,56 @@ def test_fact_sheet_notes_are_frozen_from_payload_not_live_db() -> None:
         rendered = " | ".join(str((n or {}).get("body") or "") for n in notes if isinstance(n, dict))
         assert "frozen note" in rendered
         assert "mutated note" not in rendered
+    finally:
+        db.close()
+        eng.dispose()
+
+
+def test_report_persists_best_batch_gate_matrix_from_snapshots() -> None:
+    db, eng, row, payload = _seed_report()
+    try:
+        fact = payload.get("sections", {}).get("fact_sheet", {})
+        gates = fact.get("gates_v1", {}) if isinstance(fact, dict) else {}
+        best_rows = gates.get("best_batch_gate_matrix", []) if isinstance(gates, dict) else []
+        assert isinstance(best_rows, list)
+        assert best_rows
+        assert any(str(r.get("gate_key") or "") == "G1" for r in best_rows if isinstance(r, dict))
+    finally:
+        db.close()
+        eng.dispose()
+
+
+def test_report_persists_per_batch_gate_snapshot_summary() -> None:
+    db, eng, row, payload = _seed_report()
+    try:
+        fact = payload.get("sections", {}).get("fact_sheet", {})
+        gates = fact.get("gates_v1", {}) if isinstance(fact, dict) else {}
+        per_batch = gates.get("per_batch_gate_snapshot", []) if isinstance(gates, dict) else []
+        assert isinstance(per_batch, list)
+        assert per_batch
+        first = per_batch[0] if isinstance(per_batch[0], dict) else {}
+        assert str(first.get("overall") or "") in {"ready", "not_ready", "not_assessed"}
+    finally:
+        db.close()
+        eng.dispose()
+
+
+def test_report_gate_render_no_db_query_at_view_time() -> None:
+    db, eng, row, payload = _seed_report()
+    try:
+        class NoQuerySession:
+            def query(self, *_args, **_kwargs):
+                raise AssertionError("view-time query not allowed")
+
+        out = _build_molecule_board_display(
+            NoQuerySession(),
+            row=row,
+            payload=payload,
+            subject_ids=[1],
+            snapshot_coverage=[],
+        )
+        gate_summary = out.get("gate_summary") if isinstance(out.get("gate_summary"), dict) else {}
+        assert gate_summary.get("best_batch_rows")
     finally:
         db.close()
         eng.dispose()

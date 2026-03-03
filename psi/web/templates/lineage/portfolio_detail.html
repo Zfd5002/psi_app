@@ -5,11 +5,6 @@
   <h1>Portfolio Lineage #{{ portfolio_id }} — {{ portfolio_name }}</h1>
   <div class="mini muted">Executive-first lineage packet with deterministic ordering.</div>
 
-  <div class="tabs no-print" role="tablist" aria-label="Portfolio lineage view mode">
-    <button type="button" class="btn mini" data-lineage-portfolio-tab="board" aria-selected="true" aria-controls="lineage-portfolio-board-panel">Board View</button>
-    <button type="button" class="btn mini" data-lineage-portfolio-tab="technical" aria-selected="false" aria-controls="lineage-portfolio-technical-panel">Technical View</button>
-  </div>
-
   <section id="lineage-portfolio-board-panel" data-lineage-portfolio-panel="board">
     <h2>Executive Summary</h2>
     <table>
@@ -49,21 +44,11 @@
 {% block scripts %}
 <script>
 (() => {
-  const tabs = document.querySelectorAll("[data-lineage-portfolio-tab]");
   const board = document.querySelector("[data-lineage-portfolio-panel='board']");
   const tech = document.querySelector("[data-lineage-portfolio-panel='technical']");
-  if (!tabs.length || !board || !tech) return;
-  const apply = (mode) => {
-    const isBoard = mode === "board";
-    board.style.display = isBoard ? "block" : "none";
-    tech.style.display = isBoard ? "none" : "block";
-    tabs.forEach((btn) => {
-      const active = btn.getAttribute("data-lineage-portfolio-tab") === mode;
-      btn.setAttribute("aria-selected", active ? "true" : "false");
-    });
-  };
-  tabs.forEach((btn) => btn.addEventListener("click", () => apply(btn.getAttribute("data-lineage-portfolio-tab"))));
-  apply("board");
+  if (!board || !tech) return;
+  board.style.display = "block";
+  tech.style.display = "block";
 })();
 </script>
 {% endblock %}
