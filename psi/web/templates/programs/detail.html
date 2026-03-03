@@ -120,6 +120,19 @@
 
   <h2>Review data entries</h2>
   <div class="muted">Pending entry queue grouped by molecule (QC not fully approved).</div>
+  {% set pending_records_total = (review_queue_by_molecule | map(attribute='records') | map('length') | sum) %}
+  {% if pending_records_total > 0 %}
+  <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 10px 0;">
+    <form method="post" action="{{ request.url_for('program_review_approve_all', program_id=program.id) }}" style="display:inline;">
+      <input type="hidden" name="actor" value="scientist">
+      <button class="btn primary" type="submit">Approve all pending</button>
+    </form>
+    <form method="post" action="{{ request.url_for('program_review_reject_all', program_id=program.id) }}" style="display:inline;">
+      <input type="hidden" name="actor" value="scientist">
+      <button class="btn" type="submit">Reject all pending</button>
+    </form>
+  </div>
+  {% endif %}
   {% for group in review_queue_by_molecule %}
   <div class="card" style="margin-top:10px;">
     <h3>

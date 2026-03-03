@@ -1,3 +1,42 @@
+## 2026-03-03 — v1.3.0a126
+Why:
+- Add scientist bulk-review controls on Program landing page to process all pending review-queue records quickly.
+
+What:
+- Added program-level bulk review endpoints in `psi/web/routers/programs.py`:
+  - `POST /programs/{program_id}/review/approve-all`
+  - `POST /programs/{program_id}/review/reject-all`
+  - Reuses existing per-record bulk QC helper (`apply_bulk_qc_action_for_record`).
+  - Pending records sourced from existing `build_program_review_queue(...)`.
+  - Deterministic processing order: sorted `record_id` ascending.
+- Updated `psi/web/templates/programs/detail.html`:
+  - Added top-of-section buttons/forms:
+    - `Approve all pending`
+    - `Reject all pending`
+  - Uses `request.url_for(...)`.
+  - Buttons render only when pending queue contains at least one record.
+- Extended deterministic tests in `tests/test_program_review_queue.py`:
+  - route existence for both new POST endpoints
+  - template renders/hides bulk buttons based on pending queue
+  - integration-style endpoint test verifying approve-all drains pending queue.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DB schema/migration changes.
+- No DI/snapshot/hash/replay/routing semantic changes.
+
 ## 2026-03-03 — v1.3.0a125
 Why:
 - Improve scientist review UX on Program landing page by preserving scroll position after Approve/Reject actions.

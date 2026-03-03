@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from psi.web.deps import get_db, get_templates
 from psi.services import programs as svc
+from psi.services import data_records as data_records_svc
 
 router = APIRouter()
 
@@ -112,4 +113,62 @@ def remove_program_membership(
         svc.remove_program_membership(db, membership_id=membership_id)
     except KeyError:
         raise HTTPException(404)
+    return RedirectResponse(url=f"/programs/{program_id}", status_code=303)
+
+
+@router.post("/programs/{program_id}/review/approve-all", name="program_review_approve_all")
+def program_review_approve_all(
+    program_id: int,
+    actor: str = Form("scientist"),
+    db: Session = Depends(get_db),
+):
+    p = svc.get_program(db, program_id)
+    if not p:
+        raise HTTPException(404)
+    queue = svc.build_program_review_queue(db, program_id=program_id)
+    record_ids = sorted(
+        {
+            int(row.get("record_id"))
+            for group in queue
+            for row in (group.get("records") or [])
+            if isinstance(row, dict) and row.get("record_id") is not None
+        }
+    )
+    for rid in record_ids:
+        data_records_svc.apply_bulk_qc_action_for_record(
+            db,
+            record_id=int(rid),
+            action="approve",
+            actor=(actor or "scientist"),
+            note=None,
+        )
+    return RedirectResponse(url=f"/programs/{program_id}", status_code=303)
+
+
+@router.post("/programs/{program_id}/review/reject-all", name="program_review_reject_all")
+def program_review_reject_all(
+    program_id: int,
+    actor: str = Form("scientist"),
+    db: Session = Depends(get_db),
+):
+    p = svc.get_program(db, program_id)
+    if not p:
+        raise HTTPException(404)
+    queue = svc.build_program_review_queue(db, program_id=program_id)
+    record_ids = sorted(
+        {
+            int(row.get("record_id"))
+            for group in queue
+            for row in (group.get("records") or [])
+            if isinstance(row, dict) and row.get("record_id") is not None
+        }
+    )
+    for rid in record_ids:
+        data_records_svc.apply_bulk_qc_action_for_record(
+            db,
+            record_id=int(rid),
+            action="reject",
+            actor=(actor or "scientist"),
+            note=None,
+        )
     return RedirectResponse(url=f"/programs/{program_id}", status_code=303)

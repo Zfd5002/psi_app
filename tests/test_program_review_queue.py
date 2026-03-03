@@ -13,6 +13,7 @@ from psi.core.db import ensure_schema
 from psi.core.models import Base, Batch, Molecule, Program
 from psi.services.data_records import apply_bulk_qc_action_for_record, create_data_record
 from psi.services.programs import build_program_review_queue
+from psi.web.routers import programs as programs_router
 from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
 
@@ -22,10 +23,15 @@ class _Req:
     @staticmethod
     def url_for(name: str, **path_params) -> str:
         rid = int(path_params.get("record_id", 0))
+        pid = int(path_params.get("program_id", 0))
         if name == "approve_record_qc":
             return f"/data/{rid}/qc/approve"
         if name == "reject_record_qc":
             return f"/data/{rid}/qc/reject"
+        if name == "program_review_approve_all":
+            return f"/programs/{pid}/review/approve-all"
+        if name == "program_review_reject_all":
+            return f"/programs/{pid}/review/reject-all"
         return "/"
 
 
@@ -144,6 +150,8 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
         audits=[],
     )
     assert "Review data entries" in html
+    assert "/programs/1/review/approve-all" in html
+    assert "/programs/1/review/reject-all" in html
     assert "/data/11/qc/approve" in html
     assert "/data/11/qc/reject" in html
     assert "/data/11/edit?return_to=/programs/1" in html
@@ -151,3 +159,93 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
     assert "psi_program_review_scroll_y" in html
     assert "review-queue-action-form" in html
     assert html.find("A-1") < html.find("B-1")
+
+
+def test_program_detail_template_hides_bulk_buttons_when_no_pending() -> None:
+    tpl = _env().get_template("programs/detail.html")
+    html = tpl.render(
+        request=_Req(),
+        program=SimpleNamespace(id=1, name="P1", description=""),
+        program_memberships_v3=[],
+        all_molecules_for_membership=[],
+        molecules=[],
+        recent_batches=[],
+        recent_data=[],
+        recent_evidence=[],
+        recent_decisions=[],
+        review_queue_by_molecule=[],
+        di_dashboard={
+            "counts": {"READY": 0, "BLOCKED": 0, "UNKNOWN": 0},
+            "policy_version_filter": None,
+            "policy_versions": [],
+            "policy_ids": [],
+            "top_blockers": [],
+            "top_missing_metrics": [],
+            "top_failing_gates": [],
+            "metric_coverage": [],
+            "qc_ignore_reasons": [],
+            "qc_failed_metrics": [],
+            "qc_unreviewed_metrics": [],
+            "molecule_rollup": [],
+            "molecule_rollup_filtered": [],
+            "lineage": [],
+            "lineage_verify_enabled": False,
+        },
+        audits=[],
+    )
+    assert "/programs/1/review/approve-all" not in html
+    assert "/programs/1/review/reject-all" not in html
+
+
+def test_program_review_bulk_routes_exist() -> None:
+    route_keys = {(r.path, tuple(sorted(getattr(r, "methods", set())))) for r in programs_router.router.routes}
+    assert ("/programs/{program_id}/review/approve-all", ("POST",)) in route_keys
+    assert ("/programs/{program_id}/review/reject-all", ("POST",)) in route_keys
+
+
+def test_program_review_approve_all_endpoint_processes_pending_queue() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 3)
+            p = Program(name="P-bulk", description="", created_at=now, updated_at=now)
+            db.add(p); db.commit(); db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="M-bulk", title="MB", created_at=now, updated_at=now)
+            db.add(m); db.commit(); db.refresh(m)
+            b = Batch(molecule_id=int(m.id), batch_id="B-bulk", title="BB", created_at=now, updated_at=now)
+            db.add(b); db.commit(); db.refresh(b)
+            create_data_record(
+                db,
+                program_id=int(p.id),
+                molecule_id=int(m.id),
+                batch_id=int(b.id),
+                domain="Biological",
+                data_type="Binding",
+                method="BLI",
+                title="Pending 1",
+                results_json={"ec50": 3.4},
+            )
+            create_data_record(
+                db,
+                program_id=int(p.id),
+                molecule_id=int(m.id),
+                batch_id=int(b.id),
+                domain="Biological",
+                data_type="Binding",
+                method="BLI",
+                title="Pending 2",
+                results_json={"kd": 5.6},
+            )
+            _sync_metric_key(db)
+            before = build_program_review_queue(db, program_id=int(p.id))
+            assert sum(len(g.get("records") or []) for g in before) == 2
+            resp = programs_router.program_review_approve_all(program_id=int(p.id), actor="scientist", db=db)
+            assert getattr(resp, "status_code", None) == 303
+            assert getattr(resp, "headers", {}).get("location") == f"/programs/{int(p.id)}"
+            after = build_program_review_queue(db, program_id=int(p.id))
+            assert sum(len(g.get("records") or []) for g in after) == 0
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
