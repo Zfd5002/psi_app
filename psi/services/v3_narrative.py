@@ -86,10 +86,28 @@ def _measurement_keys(sections: dict[str, Any]) -> list[str]:
     return _as_str_list(repro.get("measurement_keys"))
 
 
-def _format_det(title: str, outcome: str, rule_id: str, notes: list[str]) -> dict[str, Any]:
+def _format_det(
+    title: str,
+    outcome: str,
+    rule_id: str,
+    notes: list[str],
+    *,
+    snapshot_ids: list[Any] | None = None,
+    measurement_keys: list[str] | None = None,
+    missing_inputs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    snap_vals = sorted({str(x).strip() for x in (snapshot_ids or []) if str(x).strip()})
+    mk_vals = sorted({str(x).strip() for x in (measurement_keys or []) if str(x).strip()})
+    miss = missing_inputs if isinstance(missing_inputs, dict) else {}
+    rationale = " · ".join([_clean_text(x) for x in notes]) if notes else "Not available"
     return {
         "title": _clean_text(title),
         "outcome": _clean_text(outcome or "Not assessed yet"),
+        "rule_id": _clean_text(rule_id or "Not available"),
+        "snapshot_ids": snap_vals,
+        "measurement_keys": mk_vals,
+        "missing_inputs": miss,
+        "rationale": rationale,
         "details": [_clean_text(f"Policy rule: {rule_id or 'Not available'}")] + [_clean_text(x) for x in notes],
     }
 
@@ -201,6 +219,9 @@ def render_molecule_narrative(report_payload: dict) -> dict:
                 "Snapshots: " + (", ".join(_as_str_list(comp.get("snapshot_ids"))) or "none"),
                 "Measurements: " + (", ".join(_as_str_list(comp.get("measurement_keys"))) or "none"),
             ],
+            snapshot_ids=_as_str_list(comp.get("snapshot_ids")),
+            measurement_keys=_as_str_list(comp.get("measurement_keys")),
+            missing_inputs=(_as_dict(comp.get("missing_inputs")) if isinstance(comp.get("missing_inputs"), dict) else {}),
         )
     ]
     out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.")
@@ -250,6 +271,9 @@ def render_program_narrative(report_payload: dict) -> dict:
                 "Cited snapshots: " + (", ".join(_as_str_list(posture.get("cited_snapshot_ids"))) or "none"),
                 "Cited decisions: " + (", ".join(_as_str_list(posture.get("cited_decisions"))) or "none"),
             ],
+            snapshot_ids=_as_str_list(posture.get("cited_snapshot_ids")),
+            measurement_keys=[],
+            missing_inputs={},
         )
     ]
     out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.")
@@ -327,6 +351,9 @@ def _comparison_narrative(report_payload: dict, *, subject_label: str, subject_k
                 "Snapshots: " + (", ".join(_as_str_list(comp.get("snapshot_ids"))) or "none"),
                 "Measurements: " + (", ".join(_as_str_list(comp.get("measurement_keys"))) or "none"),
             ],
+            snapshot_ids=_as_str_list(comp.get("snapshot_ids")),
+            measurement_keys=_as_str_list(comp.get("measurement_keys")),
+            missing_inputs=(_as_dict(comp.get("missing_inputs")) if isinstance(comp.get("missing_inputs"), dict) else {}),
         )
     ]
     gaps = _as_str_list(sections.get("experimental_gaps"))

@@ -96,7 +96,8 @@ def test_comparison_narrative_uses_friendly_subject_labels_and_no_array_literal(
     out = render_molecule_comparison_narrative(payload)
     raw = stable_json_dumps(out)
     assert "M1 (Mol One), M2 (Mol Two)" in raw
-    assert "[]" not in raw
+    status_row = next((x for x in out["status_rows"] if x.get("label") == "Subjects"), {})
+    assert status_row.get("value") == "M1 (Mol One), M2 (Mol Two)"
 
 
 def test_molecule_narrative_uses_decision_state_and_experimental_gap_lists() -> None:

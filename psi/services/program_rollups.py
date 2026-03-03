@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from psi.core.models import DecisionSnapshot, Molecule, ProgramMembership, ProgramRollup
 from psi.core.utils import now_utc, stable_json_dumps
+from psi.services.di.util import is_di_snapshot_record
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 
 
@@ -102,16 +103,6 @@ def _derive_program_posture(
     }
 
 
-def _is_di_snapshot(snap: DecisionSnapshot, out: dict[str, Any], inn: dict[str, Any]) -> bool:
-    return bool(
-        (getattr(snap, "engine_key", None) == "di")
-        or str(getattr(snap, "schema_version", "") or "").startswith("di.")
-        or ("decision_state" in out and "gates" in out)
-        or str(inn.get("engine_key") or "").strip() == "di"
-        or str(inn.get("schema_version") or "").startswith("di.")
-    )
-
-
 def _program_molecule_order(db: Session, *, program_id: int) -> list[dict[str, Any]]:
     memberships = (
         db.query(ProgramMembership, Molecule)
@@ -160,7 +151,7 @@ def _latest_di_snapshot_as_of(db: Session, *, molecule_id: int, as_of: datetime)
     for snap in snaps:
         out = _safe_json_dict(snap.outputs_json)
         inn = _safe_json_dict(snap.inputs_json)
-        if _is_di_snapshot(snap, out, inn):
+        if is_di_snapshot_record(snap, out, inn, include_input_schema_version=True):
             return snap, out, inn
     return None, {}, {}
 
@@ -194,6 +185,8 @@ def build_program_rollup(db: Session, *, program_id: int, as_of: datetime) -> di
         tkey = str(prov.get("template_key") or "").strip()
         if tkey:
             template_keys.add(tkey)
+        used_by_metric = out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {}
+        measurement_keys = sorted(str(k).strip() for k in used_by_metric.keys() if str(k).strip())
         molecules.append(
             {
                 "molecule_id": int(row["molecule_id"]),
@@ -206,6 +199,7 @@ def build_program_rollup(db: Session, *, program_id: int, as_of: datetime) -> di
                 "stage": stage_norm,
                 "policy_version": pver or None,
                 "policy_package_hash": pph or None,
+                "measurement_keys": measurement_keys,
             }
         )
     governance_warnings = get_unacknowledged_upgrade_warnings(db, current_policy_pins={})

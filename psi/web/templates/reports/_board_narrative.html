@@ -44,15 +44,31 @@
   {{ cards.render_determination_card(
     (det.title if det is mapping and det.title is defined else "Determination"),
     (det.outcome if det is mapping and det.outcome is defined else "not_assessed"),
-    ("not_available"),
-    [],
-    [],
+    (det.rule_id if det is mapping and det.rule_id is defined else "not_available"),
     (
-      (det.details|join(" · "))
-      if det is mapping and det.details is defined and det.details is iterable
-      else "Not available"
+      det.snapshot_ids
+      if det is mapping and det.snapshot_ids is defined and det.snapshot_ids is iterable
+      else []
     ),
-    {}
+    (
+      det.measurement_keys
+      if det is mapping and det.measurement_keys is defined and det.measurement_keys is iterable
+      else []
+    ),
+    (
+      det.rationale
+      if det is mapping and det.rationale is defined
+      else (
+        (det.details|join(" · "))
+        if det is mapping and det.details is defined and det.details is iterable
+        else "Not available"
+      )
+    ),
+    (
+      det.missing_inputs
+      if det is mapping and det.missing_inputs is defined and det.missing_inputs is mapping
+      else {}
+    )
   ) }}
   {% else %}
   <div class="card report-block report-section-card">No determinations available.</div>

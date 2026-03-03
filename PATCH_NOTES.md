@@ -1,3 +1,234 @@
+## 2026-03-02 — v1.3.0a100
+Why:
+- Ensure board determination cards faithfully surface available citation fields from narrative determinations instead of rendering placeholder values.
+
+What:
+- Extended board narrative determination objects in `psi/services/v3_narrative.py` to include explicit deterministic fields:
+  - `rule_id`
+  - `snapshot_ids`
+  - `measurement_keys`
+  - `missing_inputs`
+  - `rationale`
+- Updated `psi/web/templates/reports/_board_narrative.html` to pass actual determination fields into `_determination_card` macro (removed hardcoded placeholders).
+- Added targeted template rendering regression test `tests/test_board_determination_card_rendering.py` asserting rendered HTML includes rule/snapshot/measurement citations from narrative context.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_narrative.py`
+- `psi/web/templates/reports/_board_narrative.html`
+- `tests/test_board_determination_card_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Board rendering fidelity improvement only (derived/template layer).
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a99
+Why:
+- Improve program-report path efficiency and remove duplicated DI snapshot detection logic while keeping behavior deterministic.
+
+What:
+- Removed program-report N+1 snapshot refetch in `psi/services/report_engine.py`:
+  - `generate_program_report_v0()` now consumes per-molecule `measurement_keys` from program rollup output instead of re-querying latest DI snapshots for each molecule.
+- Extended `psi/services/program_rollups.py` rollup molecule rows with deterministic `measurement_keys` derived from DI `used_by_metric`.
+- Introduced shared DI snapshot detection helper `is_di_snapshot_record(...)` in `psi/services/di/util.py` and wired:
+  - `psi/services/report_engine.py`
+  - `psi/services/program_rollups.py`
+  to use it with mode flags preserving existing per-caller semantics.
+- Confirmed no unreachable dead block remains after `generate_program_comparative_report_v0()` return path.
+- Added targeted tests:
+  - `tests/test_di_snapshot_helper.py` (shared helper behavior),
+  - `tests/test_program_report_no_n_plus_one.py` (program report path does not call report_engine snapshot refetch helper).
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/di/util.py`
+- `psi/services/program_rollups.py`
+- `psi/services/report_engine.py`
+- `tests/test_di_snapshot_helper.py`
+- `tests/test_program_report_no_n_plus_one.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Deterministic report-layer performance/maintenance improvement.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a98
+Why:
+- Remove redundant report-generation ack guard wrapping while preserving deterministic governance enforcement at persistence boundary.
+
+What:
+- Updated `psi/services/reports_v3.py`:
+  - removed outer `run_semantic_action_with_ack_guard(...)` in `generate_report_from_form()`,
+  - report generation now calls the generator directly; persistence path guard in `persist_report_run()` remains authoritative.
+- Added targeted unit test `tests/test_reports_v3_ack_guard.py` asserting `generate_report_from_form()` triggers ack guard exactly once.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `tests/test_reports_v3_ack_guard.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Governance enforcement preserved in single deterministic location.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a97
+Why:
+- Lock in board-narrative measurement and program-identity behavior with deterministic report-backed tests.
+
+What:
+- Added targeted narrative/report wiring tests in `tests/test_v3_narrative_measurement_wiring.py`:
+  - molecule narrative measurements reflect `sections.reproducibility_appendix.measurement_keys` from generated reports,
+  - program narrative headline does not fall back to `unidentified program` when `sections.metadata.program_id` exists.
+- Existing report-engine measurement key wiring remains unchanged and validated by new tests.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_narrative_measurement_wiring.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Deterministic test-layer reinforcement only.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a96
+Why:
+- Align comparative report reproducibility appendix policy pin display with the latest loaded comparability policy version.
+
+What:
+- Updated `psi/services/report_engine.py` in:
+  - `generate_molecule_comparative_report_v0()`
+  - `generate_program_comparative_report_v0()`
+  to set `reproducibility_appendix.catalog_versions.comparability_policy` from `load_comparability_policy_latest().policy_version` instead of hardcoded `v0.1`.
+- Added regression assertion in `tests/test_v3_report_contracts.py` verifying both comparative report types carry the loader-derived comparability policy version.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_contracts.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Report-layer reproducibility metadata alignment only.
+- No DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a95
+Why:
+- Fix molecule-comparative ranking criteria wiring so high-severity risk hits are only emitted when actually present in each molecule snapshot.
+
+What:
+- Updated `generate_molecule_comparative_report_v0()` in `psi/services/report_engine.py`:
+  - compute per-molecule `has_high_risk` from `risk_flags_enriched` (`severity == "high"`, case-insensitive),
+  - build `criteria_hits` deterministically with:
+    - `stage_ready` only when stage is ready,
+    - `high_severity_risk_present` only when `has_high_risk` is true,
+  - removed prior behavior that always injected `high_severity_risk_present`.
+- Added targeted test in `tests/test_v3_report_contracts.py` verifying only the high-risk molecule receives `high_severity_risk_present`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_contracts.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Report-layer correctness fix only; no DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a94
+Why:
+- Correct molecule-report comparability determination to derive from governance comparability assessments instead of DI snapshot-internal comparability hints.
+
+What:
+- Updated `generate_molecule_report_v0()` in `psi/services/report_engine.py`:
+  - removed DI-output comparability status candidate construction for governance determination,
+  - sourced statuses/measurement keys/snapshot IDs from `list_comparability_assessments(..., scope_type=\"molecule\")`,
+  - mapped governance statuses into policy categories deterministically before calling `derive_comparability_determination`.
+- Added targeted regression coverage in `tests/test_v3_report_contracts.py` ensuring:
+  - molecule comparability determination follows governance assessments,
+  - payload does not emit `comparable_partial`.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_contracts.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Report-layer correctness fix only; no DI semantic/policy/ranking/hashing/replay behavior changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a94
+Why:
+- Add report-layer engineering code review document (doc-only).
+
+What:
+- Added `REPORT_LAYER_CODE_REVIEW.md` with architecture evaluation, deterministic touchpoints, concrete risk/footgun analysis, and testing gap suggestions for the V3 report layer.
+- No runtime behavior changes.
+
+Files changed:
+- `REPORT_LAYER_CODE_REVIEW.md`
+- `PATCH_NOTES.md`
+- `psi/version.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Documentation-only patch.
+- No DI semantic/policy/ranking/hashing/replay changes.
+- No DB schema/migration changes.
+
 ## 2026-03-02 — v1.3.0a93
 Why:
 - Add a concise engineering review artifact for the current V3 report rendering architecture and presentation-layer guardrails.

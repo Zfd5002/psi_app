@@ -75,3 +75,21 @@ def heavy_compute_banner_text(*, enabled: bool) -> str:
     if bool(enabled):
         return "Heavy Compute: ON (PSI_HEAVY_COMPUTE=1). Does not affect DI snapshot hashes."
     return "Heavy Compute: OFF (default, PSI_HEAVY_COMPUTE=0). Does not affect DI snapshot hashes."
+
+
+def is_di_snapshot_record(
+    snap: Any,
+    out: dict[str, Any],
+    inn: dict[str, Any],
+    *,
+    include_input_schema_version: bool = False,
+) -> bool:
+    checks = [
+        (getattr(snap, "engine_key", None) == "di"),
+        str(getattr(snap, "schema_version", "") or "").startswith("di."),
+        ("decision_state" in out and "gates" in out),
+        str(inn.get("engine_key") or "").strip() == "di",
+    ]
+    if include_input_schema_version:
+        checks.append(str(inn.get("schema_version") or "").startswith("di."))
+    return bool(any(checks))

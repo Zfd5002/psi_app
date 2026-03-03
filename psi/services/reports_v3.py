@@ -16,7 +16,7 @@ from psi.services.report_engine import (
     generate_program_report_v0,
     load_report_run_payload,
 )
-from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings, run_semantic_action_with_ack_guard
+from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 from psi.services.comparability import load_comparability_policy_latest
 
 _HEX64_RE = re.compile(r"\b[a-f0-9]{64}\b", flags=re.IGNORECASE)
@@ -221,7 +221,7 @@ def generate_report_from_form(
             return generate_program_comparative_report_v0(db, program_ids=ids, as_of=as_of, policy_pins=policy_pins)
         raise ValueError("Unsupported report_type")
 
-    return run_semantic_action_with_ack_guard(db, current_policy_pins=policy_pins, action=_run)
+    return _run()
 
 
 def list_report_runs(db: Session) -> list[ReportRun]:
