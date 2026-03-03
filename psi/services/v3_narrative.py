@@ -5,6 +5,8 @@ import re
 from typing import Any
 
 _HEX64_RE = re.compile(r"\b[a-f0-9]{64}\b", flags=re.IGNORECASE)
+# Display-only cap for long narrative lists in board rendering.
+DISPLAY_LIST_LIMIT = 5
 
 
 def _as_dict(v: Any) -> dict[str, Any]:
@@ -28,7 +30,22 @@ def _clean_text(s: Any) -> str:
     txt = str(s or "").strip()
     if not txt:
         return "Not available"
-    return _HEX64_RE.sub("[hash-hidden]", txt)
+    txt = _HEX64_RE.sub("[hash-hidden]", txt)
+    txt = " ".join(txt.split())
+    txt = re.sub(r"\.{2,}", ".", txt)
+    txt = re.sub(r"([!?]){2,}", r"\1", txt)
+    txt = re.sub(r"\s+([,.;:!?])", r"\1", txt)
+    return txt.strip() or "Not available"
+
+
+def _display_limited(items: list[str], *, empty_fallback: str) -> list[str]:
+    cleaned = [_clean_text(x) for x in items if str(x or "").strip()]
+    if not cleaned:
+        return [_clean_text(empty_fallback)]
+    if len(cleaned) <= DISPLAY_LIST_LIMIT:
+        return cleaned
+    remaining = len(cleaned) - DISPLAY_LIST_LIMIT
+    return cleaned[:DISPLAY_LIST_LIMIT] + [_clean_text(f"...and {remaining} more.")]
 
 
 def _collect_sections(report_payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -120,7 +137,7 @@ def _molecule_next_steps(sections: dict[str, Any]) -> list[str]:
     next_best = _as_list(gaps.get("next_best_experiments"))
     if next_best:
         return [_clean_text(_stringify_item(x)) for x in next_best]
-    return [_clean_text("No experimental gaps listed yet.")]
+    return ["No experimental gaps listed yet."]
 
 
 def _program_next_steps(sections: dict[str, Any]) -> list[str]:
@@ -141,7 +158,7 @@ def _program_next_steps(sections: dict[str, Any]) -> list[str]:
             out.append(_clean_text(_stringify_item(item)))
     if out:
         return out
-    return [_clean_text("No next steps recorded yet.")]
+    return ["No next steps recorded yet."]
 
 
 def render_molecule_narrative(report_payload: dict) -> dict:
@@ -158,8 +175,8 @@ def render_molecule_narrative(report_payload: dict) -> dict:
         {"label": "Stage", "value": _clean_text(_molecule_stage(sections))},
     ]
     out["what_this_means"] = [
-        _clean_text("This narrative restates existing report sections and does not add new conclusions."),
-        _clean_text(
+        "This narrative restates existing report sections and does not add new conclusions.",
+        (
             "Comparability is "
             + str(comp.get("category") or "not assessed yet").replace("_", " ")
             + "."
@@ -186,7 +203,8 @@ def render_molecule_narrative(report_payload: dict) -> dict:
             ],
         )
     ]
-    out["next_steps"] = _molecule_next_steps(sections)
+    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.")
+    out["next_steps"] = _display_limited(_molecule_next_steps(sections), empty_fallback="No experimental gaps listed yet.")
     out["technical_notes"] = [_clean_text("Board view hides hashes and raw audit payloads.")]
     return out
 
@@ -208,7 +226,7 @@ def render_program_narrative(report_payload: dict) -> dict:
         {"label": "Posture", "value": _clean_text(posture.get("posture_state") or "Not assessed yet")},
     ]
     out["what_this_means"] = [
-        _clean_text("Program posture is derived from existing template outcomes and governance flags."),
+        "Program posture is derived from existing template outcomes and governance flags.",
     ]
     out["evidence_status"] = [
         {
@@ -234,7 +252,8 @@ def render_program_narrative(report_payload: dict) -> dict:
             ],
         )
     ]
-    out["next_steps"] = _program_next_steps(sections)
+    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.")
+    out["next_steps"] = _display_limited(_program_next_steps(sections), empty_fallback="No next steps recorded yet.")
     out["technical_notes"] = [_clean_text("Use Technical View for policy pins and report fingerprint.")]
     return out
 
@@ -286,7 +305,7 @@ def _comparison_narrative(report_payload: dict, *, subject_label: str, subject_k
         {"label": "Subjects", "value": _clean_text(", ".join(subjects) if subjects else "Not yet captured")},
     ]
     out["what_this_means"] = [
-        _clean_text("Rows compare existing metrics side-by-side in fixed ordering."),
+        "Rows compare existing metrics side-by-side in fixed ordering.",
     ]
     out["evidence_status"] = [
         {
@@ -311,7 +330,8 @@ def _comparison_narrative(report_payload: dict, *, subject_label: str, subject_k
         )
     ]
     gaps = _as_str_list(sections.get("experimental_gaps"))
-    out["next_steps"] = [_clean_text(x) for x in gaps] if gaps else [_clean_text("None")]
+    out["what_this_means"] = _display_limited(out["what_this_means"], empty_fallback="Not assessed yet.")
+    out["next_steps"] = _display_limited(gaps, empty_fallback="None.")
     out["technical_notes"] = [_clean_text("Technical View includes raw comparison tables and governance warnings.")]
     return out
 

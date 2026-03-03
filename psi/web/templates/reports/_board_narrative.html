@@ -1,5 +1,8 @@
 {% import "reports/_determination_card.html" as cards %}
 {% set n = (board_narrative if board_narrative is defined and board_narrative is mapping else {}) %}
+{% set payload_sections = (payload.sections if payload is defined and payload.sections is defined and payload.sections is mapping else {}) %}
+{% set repro_appendix = (payload_sections.reproducibility_appendix if payload_sections.reproducibility_appendix is defined and payload_sections.reproducibility_appendix is mapping else {}) %}
+{% set appendix_measurement_keys = (repro_appendix.measurement_keys if repro_appendix.measurement_keys is defined and repro_appendix.measurement_keys is iterable else []) %}
 {% set status_rows = (n.status_rows if n.status_rows is defined and n.status_rows is iterable else []) %}
 {% set meaning_rows = (n.what_this_means if n.what_this_means is defined and n.what_this_means is iterable else []) %}
 {% set evidence_rows = (n.evidence_status if n.evidence_status is defined and n.evidence_status is iterable else []) %}
@@ -7,8 +10,8 @@
 {% set next_steps = (n.next_steps if n.next_steps is defined and n.next_steps is iterable else []) %}
 
 <h2>Executive Summary</h2>
-<div class="card report-block report-section-card">
-  <h3 style="margin-top:0;">{{ n.headline if n.headline is defined else "Not available" }}</h3>
+<div class="card report-block report-section-card executive-summary-card">
+  <h3 class="executive-headline" style="margin-top:0;">{{ n.headline if n.headline is defined else "Not available" }}</h3>
   <div class="grid cols-2">
     <div>
       <h4>Status</h4>
@@ -24,7 +27,7 @@
     </div>
     <div>
       <h4>What this means</h4>
-      <ul>
+      <ul class="narrative-list narrative-list-tight">
         {% for item in meaning_rows %}
         <li>{{ item }}</li>
         {% else %}
@@ -65,13 +68,27 @@
       {% else %}
       <tr><th>Evidence</th><td>Not yet captured.</td></tr>
       {% endfor %}
+      <tr>
+        <th>Measurement keys</th>
+        <td>
+          {% if appendix_measurement_keys and appendix_measurement_keys|length %}
+          <div class="chip-list measurement-chip-list">
+            {% for mk in appendix_measurement_keys %}
+            <span class="chip">{{ mk }}</span>
+            {% endfor %}
+          </div>
+          {% else %}
+          None
+          {% endif %}
+        </td>
+      </tr>
     </tbody>
   </table>
 </div>
 
 <h2>Next steps</h2>
 <div class="card report-block report-section-card">
-  <ul>
+  <ul class="narrative-list">
     {% for item in next_steps %}
     <li>{{ item }}</li>
     {% else %}

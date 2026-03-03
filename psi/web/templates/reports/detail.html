@@ -11,20 +11,20 @@
     {% endif %}
   </div>
   <div class="card executive-header report-block" style="margin-top:8px;">
-    <h2 style="margin-top:0;">Executive Header</h2>
-    <div class="grid cols-2">
-      <div>
-        <div><strong>Identity:</strong> <code>{{ identity_summary if identity_summary is defined else "missing" }}</code></div>
-        <div><strong>Type:</strong> <code>{{ report_run.report_type }}</code></div>
-        <div><strong>Subjects:</strong> <code>{{ subject_ids }}</code></div>
+    <h2 class="executive-title" style="margin-top:0;">Executive Header</h2>
+    <div class="grid cols-2 executive-header-grid">
+      <div class="executive-header-col">
+        <div class="executive-kv-row"><strong>Identity:</strong> <code>{{ identity_summary if identity_summary is defined else "missing" }}</code></div>
+        <div class="executive-kv-row"><strong>Type:</strong> <code>{{ report_run.report_type }}</code></div>
+        <div class="executive-kv-row"><strong>Subjects:</strong> <code>{{ subject_ids }}</code></div>
       </div>
-      <div>
-        <div><strong>As Of:</strong> {{ report_run.as_of }}</div>
-        <div><strong>Created:</strong> {{ report_run.created_at }}</div>
-        <div><strong>Snapshot Coverage:</strong> <code>{{ snapshot_coverage }}</code></div>
+      <div class="executive-header-col">
+        <div class="executive-kv-row"><strong>As Of:</strong> {{ report_run.as_of }}</div>
+        <div class="executive-kv-row"><strong>Created:</strong> {{ report_run.created_at }}</div>
+        <div class="executive-kv-row"><strong>Snapshot Coverage:</strong> <code>{{ snapshot_coverage }}</code></div>
       </div>
     </div>
-    <div class="mini muted" style="margin-top:10px;">
+    <div class="mini muted executive-meta-line" style="margin-top:10px;">
       schema:
       <code>{{ (payload.schema_id if payload is defined and payload.schema_id is defined else "missing") }}</code>
       · report_type:

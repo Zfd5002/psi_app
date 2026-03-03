@@ -1,3 +1,94 @@
+## 2026-03-02 — v1.3.0a93
+Why:
+- Add a concise engineering review artifact for the current V3 report rendering architecture and presentation-layer guardrails.
+
+What:
+- Added `DEEP_CODE_REVIEW.md` at repo root covering:
+  - factual change summary across `v1.3.0a89-a93`,
+  - current report architecture (`report_engine`, `reports_v3`, `v3_narrative`, routers/templates, PDF mode),
+  - determinism/replay invariance touchpoints,
+  - presentation-layer wiring footguns,
+  - next safe steps (ideas only; no implementation).
+- Documentation-only patch; no runtime behavior changes.
+
+Files changed:
+- `DEEP_CODE_REVIEW.md`
+- `PATCH_NOTES.md`
+- `psi/version.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Documentation-only patch.
+- No DI semantic/policy/ranking/hashing/replay changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a92
+Why:
+- Improve board-view readability of measurement key citations using template/CSS presentation only.
+
+What:
+- Updated board narrative template to render `sections.reproducibility_appendix.measurement_keys` as compact wrapped chips in the Evidence section:
+  - `psi/web/templates/reports/_board_narrative.html`
+- Added small chip-list layout styles for stable wrapping and readable long keys:
+  - `psi/web/static/style.css`
+- No Python/report payload/routing/DI logic changes.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/_board_narrative.html`
+- `psi/web/static/style.css`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Presentation-only patch.
+- No DI semantic/policy/ranking/hashing/replay changes.
+- No DB schema/migration changes.
+
+## 2026-03-02 — v1.3.0a91
+Why:
+- Improve executive-header readability and narrative display formatting in Board/PDF views without changing report semantics.
+
+What:
+- Applied deterministic presentation-only narrative cleanup in `psi/services/v3_narrative.py`:
+  - normalized whitespace/punctuation formatting for display strings,
+  - added display-only list cap (`DISPLAY_LIST_LIMIT = 5`) with deterministic overflow marker.
+- Polished executive header and board narrative presentation wrappers/classes:
+  - `psi/web/templates/reports/detail.html`
+  - `psi/web/templates/reports/_board_narrative.html`
+- Added small spacing/typography rules for executive header and narrative bullet lists in:
+  - `psi/web/static/style.css`
+- No routing, payload schema, DI policy/logic, or replay behavior changes.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/v3_narrative.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/_board_narrative.html`
+- `psi/web/static/style.css`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Presentation-only patch.
+- No DI semantic/policy/ranking/hashing/replay changes.
+- No DB schema/migration changes.
+
 ## 2026-03-02 — v1.3.0a90
 Why:
 - Improve board-first PDF export readability and print stability without changing report semantics.
