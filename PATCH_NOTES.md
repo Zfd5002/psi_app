@@ -1,3 +1,36 @@
+## 2026-03-03 — v1.3.0a125
+Why:
+- Improve scientist review UX on Program landing page by preserving scroll position after Approve/Reject actions.
+
+What:
+- Updated `psi/web/templates/programs/detail.html` review queue rows:
+  - Added stable row anchors: `id="record-{{ row.record_id }}"`.
+  - Added reject action form alongside approve in review queue actions.
+  - Added `review-queue-action-form` + `data-record-id` attributes for action forms.
+- Added small deterministic vanilla JS (template-local):
+  - On approve/reject submit, stores `window.scrollY` and record id in `sessionStorage`.
+  - On page load, restores to `#record-<id>` if present (center), else restores scrollY.
+  - Clears stored values after restore.
+  - Uses normal form submits (no AJAX/fetch).
+- Updated deterministic template test:
+  - `tests/test_program_review_queue.py`
+  - asserts approve/reject URLs, row anchor presence, and script marker strings.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- UI/template only; no DB/schema/DI/snapshot/hash/replay/routing semantic changes.
+
 ## 2026-03-03 — v1.3.0a124
 Why:
 - Resolve runtime test regression caused by repo drift where `data/form.html` lacked edit-mode `Approve`/`Reject` entry controls.

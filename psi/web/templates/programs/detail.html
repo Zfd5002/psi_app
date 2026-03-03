@@ -132,17 +132,22 @@
       </thead>
       <tbody>
         {% for row in group.records %}
-        <tr>
+        <tr id="record-{{ row.record_id }}">
           <td class="muted">{{ row.created_at }}</td>
           <td class="muted">{{ row.batch_id if row.batch_id is not none else "—" }}</td>
           <td>{{ row.assay_key|humanize_path_token }}</td>
           <td class="muted">{{ row.preview_snippet }}</td>
           <td class="muted">{{ row.evidence_preview_short if row.evidence_preview_short is defined else "Not available" }}</td>
           <td class="no-print">
-            <form method="post" action="{{ request.url_for('approve_record_qc', record_id=row.record_id) }}" style="display:inline;">
+            <form method="post" action="{{ request.url_for('approve_record_qc', record_id=row.record_id) }}" style="display:inline;" class="review-queue-action-form" data-record-id="{{ row.record_id }}">
               <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}">
               <input type="hidden" name="actor" value="scientist">
               <button class="btn mini primary" type="submit">Approve</button>
+            </form>
+            <form method="post" action="{{ request.url_for('reject_record_qc', record_id=row.record_id) }}" style="display:inline;" class="review-queue-action-form" data-record-id="{{ row.record_id }}">
+              <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}">
+              <input type="hidden" name="actor" value="scientist">
+              <button class="btn mini" type="submit">Reject</button>
             </form>
             <a class="btn mini" href="/data/{{ row.record_id }}/edit?return_to=/programs/{{ program.id }}">Edit entry</a>
           </td>
@@ -428,6 +433,46 @@
   </div>
 
   <h2 id="audit">Audit</h2>
-  {% include "partials/audit_table.html" %}
+{% include "partials/audit_table.html" %}
 </div>
+
+<script>
+(function () {
+  var KEY_Y = "psi_program_review_scroll_y";
+  var KEY_REC = "psi_program_review_record_id";
+  var forms = document.querySelectorAll("form.review-queue-action-form[data-record-id]");
+  for (var i = 0; i < forms.length; i += 1) {
+    forms[i].addEventListener("submit", function (ev) {
+      try {
+        var rid = ev.currentTarget && ev.currentTarget.getAttribute("data-record-id");
+        sessionStorage.setItem(KEY_Y, String(window.scrollY || 0));
+        if (rid) {
+          sessionStorage.setItem(KEY_REC, String(rid));
+        } else {
+          sessionStorage.removeItem(KEY_REC);
+        }
+      } catch (_err) {}
+    });
+  }
+
+  window.addEventListener("load", function () {
+    try {
+      var rid = sessionStorage.getItem(KEY_REC);
+      var y = sessionStorage.getItem(KEY_Y);
+      if (rid) {
+        var anchor = document.getElementById("record-" + rid);
+        if (anchor) {
+          anchor.scrollIntoView({ block: "center" });
+        } else if (y !== null) {
+          window.scrollTo(0, parseInt(y, 10) || 0);
+        }
+      } else if (y !== null) {
+        window.scrollTo(0, parseInt(y, 10) || 0);
+      }
+      sessionStorage.removeItem(KEY_REC);
+      sessionStorage.removeItem(KEY_Y);
+    } catch (_err) {}
+  });
+})();
+</script>
 {% endblock %}

@@ -24,6 +24,8 @@ class _Req:
         rid = int(path_params.get("record_id", 0))
         if name == "approve_record_qc":
             return f"/data/{rid}/qc/approve"
+        if name == "reject_record_qc":
+            return f"/data/{rid}/qc/reject"
         return "/"
 
 
@@ -143,5 +145,9 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
     )
     assert "Review data entries" in html
     assert "/data/11/qc/approve" in html
+    assert "/data/11/qc/reject" in html
     assert "/data/11/edit?return_to=/programs/1" in html
+    assert 'id="record-11"' in html
+    assert "psi_program_review_scroll_y" in html
+    assert "review-queue-action-form" in html
     assert html.find("A-1") < html.find("B-1")
