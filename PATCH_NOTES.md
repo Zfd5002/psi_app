@@ -7471,3 +7471,31 @@ Schema changes:
 
 Gates:
 - PASS
+
+## 2026-03-03 — v1.3.0a127
+Intent:
+- Prevent canonical DB pollution from DI smoke tooling by defaulting contract smoke to an isolated scratch copy.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+- `tests/test_di_contract_smoke_scratch_mode.py`
+
+Behavior:
+- `python -m psi.tools.di_contract_smoke` now defaults to scratch mode.
+- New CLI options:
+  - `--use-live-db` (run directly on source DB)
+  - `--db-path` (explicit source DB)
+  - `--scratch-dir` (override scratch location)
+  - `--keep-scratch` (preserve scratch DB file)
+- Tool logs now emit deterministic runtime routing details: `live_db`, `scratch_db`, `use_live_db`.
+- Scratch file reuses stable name `di_contract_smoke.sqlite` and is deleted unless `--keep-scratch`.
+
+Notes:
+- No DB schema changes.
+- No DI semantic, replay, snapshot, or hashing behavior changes.
+- Optional read-only clutter visibility tool available at `python -m psi.tools.smoke_clutter_report`.
+
+Gates:
+- PASS

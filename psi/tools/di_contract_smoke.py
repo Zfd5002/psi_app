@@ -12,6 +12,7 @@ This is intentionally minimal and fast.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import os
@@ -19,6 +20,8 @@ import tempfile
 import shutil
 import io
 import warnings
+from dataclasses import dataclass
+from contextlib import contextmanager
 from contextlib import redirect_stderr
 
 from datetime import datetime, timezone
@@ -45,6 +48,14 @@ from psi.services.di.sub_assessments import (
 from psi.services.di.templates.registry import list_template_keys_sorted, template_dependency_graph
 from psi.services.di.util import value_functions_enforcement_reason
 from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
+
+
+@dataclass(frozen=True)
+class _SmokeDbRuntime:
+    live_db: Path
+    active_db: Path
+    scratch_db: Path | None
+    use_live_db: bool
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -3907,103 +3918,215 @@ def test_attribution_presence_non_interference_for_report_payload_generation() -
 
     _assert(_run(False) == _run(True), "attribution presence must not alter report payload outputs")
 
-def main() -> int:
+
+def _default_live_db_path() -> Path:
+    root = Path(__file__).resolve().parents[2]
+    return Path(os.environ.get("PSI_DB_PATH", str(root / "psi" / "psi.sqlite"))).expanduser().resolve()
+
+
+def _default_scratch_dir(*, live_db: Path) -> Path:
+    canonical_repo = Path("/home/zach/psi_repo")
+    if canonical_repo.exists() and (str(live_db).startswith(str(canonical_repo))):
+        return canonical_repo / "_scratch"
+    return Path(__file__).resolve().parents[2] / "_scratch"
+
+
+def _copy_sqlite_file_bundle(src_db: Path, dst_db: Path) -> None:
+    dst_db.parent.mkdir(parents=True, exist_ok=True)
+    for p in (
+        dst_db,
+        dst_db.with_name(dst_db.name + "-wal"),
+        dst_db.with_name(dst_db.name + "-shm"),
+    ):
+        try:
+            p.unlink()
+        except FileNotFoundError:
+            pass
+    shutil.copy2(src_db, dst_db)
+    src_wal = src_db.with_name(src_db.name + "-wal")
+    src_shm = src_db.with_name(src_db.name + "-shm")
+    if src_wal.exists():
+        shutil.copy2(src_wal, dst_db.with_name(dst_db.name + "-wal"))
+    if src_shm.exists():
+        shutil.copy2(src_shm, dst_db.with_name(dst_db.name + "-shm"))
+
+
+def _rebind_core_db_runtime(db_path: Path) -> None:
+    # Keep CLI process-local DB routing deterministic; this does not alter persisted data.
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    import psi.core.db as core_db
+
+    core_db.DB_PATH = str(db_path)
+    core_db.DATABASE_URL = f"sqlite:///{db_path}"
     try:
-        global _SMOKE_SET_BASELINE_CUTOFF
-        if "PSI_DI_BASELINE_CUTOFF_ISO" not in os.environ:
-            os.environ["PSI_DI_BASELINE_CUTOFF_ISO"] = datetime.now(timezone.utc).isoformat()
-            _SMOKE_SET_BASELINE_CUTOFF = True
-        test_policy_canonicalization_and_hash()
-        test_value_functions_enforcement_reason_helper()
-        test_policy_package_dual_hash_stability()
-        test_catalog_hash_validation()
-        test_experiment_catalog_v0_2_latest_loader_and_risk_mapping()
-        test_policy_template_structure_present()
-        test_policy_risk_flag_severity_tiers_present_and_cover_expected_flags()
-        test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically()
-        test_risk_flag_enrichment_unknown_key_defaults_to_unspecified_neutral()
-        test_progress_policy_catalog_v0_1_loads_and_validates()
-        test_progress_policy_metric_keys_are_representable_in_measurement_registry()
-        test_shortlisting_policy_catalog_v0_1_is_deprecated_non_executable_legacy_shape()
-        test_governance_forbid_weighted_heuristics_in_di_runtime_targets()
-        test_template_prerequisites_catalog_v0_1_loads_and_validates()
-        test_confidence_policy_catalog_loads_and_latest_loader_is_deterministic()
-        test_confidence_policy_catalog_non_weighted_language_and_keys()
-        test_molecule_header_confidence_model_non_weighted_neutral_missing()
-        test_molecule_header_prerequisite_blocker_sorting_deterministic()
-        test_molecule_header_risk_items_deterministic_and_neutral_unknown()
-        test_progress_hover_text_policy_key_ordering_and_explainability()
-        test_molecule_header_confidence_scaffold_no_snapshot_all_neutral()
-        test_confidence_component_derivation_missing_evidence_neutral()
-        test_confidence_component_derivation_deterministic_from_existing_artifacts()
-        test_interpretability_detail_items_ordering_deterministic()
-        test_confidence_scalar_non_weighted_counting_rules()
-        test_confidence_scalar_surface_rejects_weighting_language()
-        test_selection_semantics_version_constant()
-        test_policy_authoritative_required_gate_keys()
-        test_context_knob_branching_gate_outcomes_deterministic()
-        test_shortlisting_refusal_v04_extensions_deterministic()
-        test_tie_break_dimensions_v04_complete_and_deterministic()
-        test_scope_semantics_v04_deterministic()
-        test_template_registry_and_dependency_graph_deterministic()
-        test_shared_sub_assessments_pure_helpers()
-        test_sub_assessment_reproducibility_helper_key_shape_stable()
-        test_outcome_label_validation_helpers_deterministic()
-        test_shortlisting_reproducibility_from_soe_evidence_summary()
-        test_policy_blocker_taxonomy_and_experiment_suggestions()
-        test_nbe_uses_catalog_risk_mapping_only()
-        test_di_snapshot_ui_risk_flag_severity_rendering_deterministic()
-        test_di_run_view_toggle_ui_is_localstorage_only()
-        test_drift_plain_english_translation_deterministic()
-        test_di_web_latest_policy_selection_prefers_forward_immutable_forks()
-        test_policy_immutability_manifest_matches_policy_files()
-        test_policy_registry_manifest_matches_package_hashes()
-        test_policy_strict_versioned_path_resolution()
-        test_policy_registry_contains_forward_default_policy_hashes()
-        test_policy_hash_audit_report_deterministic()
-        test_risk_flag_enrichment_ordering_stable_with_medium_and_legacy_moderate()
-        test_policy_blocker_suggestions_mapping_key_order_stable()
-        test_policy_gate_lists_no_duplicates_and_stable_file_order()
-        test_policy_freeze_sidecar_covers_legacy_policy_files_without_mutating_json()
-        test_forward_policy_forks_use_medium_vocabulary_and_no_legacy_moderate()
-        test_ignore_reason_keys_allowed_set()
-        test_stable_json_dumps()
-        test_normalize_ignored_schema_compat()
-        test_soe_v0_2_contract_snapshot_shape_and_determinism()
-        test_molecule_scope_determinism()
-        test_baseline_cutoff_prevents_walk()
-        test_cross_version_snapshot_content_hash_stability()
-        test_di_error_output_top_level_key_parity()
-        test_di_error_output_parity_extension_gating_v03_vs_v04()
-        test_error_output_field_surface_guard_against_happy_path_drift()
-        test_di_error_output_parity_multiple_error_factories_defaults()
-        test_outcome_dataset_export_deterministic()
-        test_outcome_dataset_export_hash_field_enrichment_from_stored_snapshot_fields()
-        test_label_outcome_cli_outcome_event_date_parser_deterministic()
-        test_molecule_composition_hash_stability_after_helper_split()
-        test_yaml_engine_deprecation_warning_emits_only_on_use()
-        test_replay_policy_compat_catalog_loads_and_is_deterministic()
-        test_verify_snapshot_policy_resolution_metadata_default_strict()
-        test_compute_finalize_integrity_helper_deterministic()
-        test_comparability_policy_v0_1_scaffold_schema_and_ordering()
-        test_comparability_assessment_cited_items_are_sorted_deterministically()
-        test_v3_ranking_policy_scaffold_disabled_by_default_and_surface_deterministic()
-        test_v3_ranking_policy_v0_2_lexicographic_ladder_deterministic_and_non_weighted()
-        test_report_engine_v3_skeleton_fixed_schema_for_all_four_types()
-        test_molecule_report_v0_generator_fixed_structure_from_snapshot()
-        test_program_report_v0_generator_fixed_structure_uses_rollup_and_placeholders()
-        test_molecule_comparative_report_v0_ordering_and_disabled_ranking_surface()
-        test_program_comparative_report_v0_ordering_and_resource_placeholder()
-        test_reports_ui_templates_render_deterministic_structured_payload_surface()
-        test_reports_v3_policy_pin_bundle_deterministic_and_catalog_derived()
-        test_lineage_service_separates_evidence_policy_governance_changes_deterministically()
-        test_template_catalog_v0_1_schema_and_immutability_guardrails()
-        test_policy_upgrade_session_scaffold_requires_explicit_ack_and_deterministic_delta()
-        test_comparability_assessment_enforces_categorical_only_statuses()
-        test_comparability_pair_canonicalization_symmetry_and_duplicate_guards()
-        test_comparability_policy_rule_and_load_errors_deterministic()
-        test_comparability_effective_latest_asof_selector_and_warning_ordering()
-        test_attribution_presence_non_interference_for_report_payload_generation()
+        core_db.engine.dispose()
+    except Exception:
+        pass
+    eng = create_engine(
+        core_db.DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    core_db._install_sqlite_pragmas(eng, read_only=False)
+    core_db.engine = eng
+    core_db.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng, future=True)
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog="python -m psi.tools.di_contract_smoke")
+    p.add_argument("--use-live-db", action="store_true", help="Run directly against the source DB (no scratch copy)")
+    p.add_argument("--db-path", default="", help="Source DB path (defaults to PSI_DB_PATH or repo-local psi/psi.sqlite)")
+    p.add_argument("--scratch-dir", default="", help="Scratch directory for copied DB (default: canonical _scratch if applicable, else repo-local _scratch)")
+    p.add_argument("--keep-scratch", action="store_true", help="Keep scratch DB after run")
+    return p.parse_args(argv)
+
+
+@contextmanager
+def _smoke_db_runtime(args: argparse.Namespace):
+    prev_env = os.environ.get("PSI_DB_PATH")
+    live_db = Path(args.db_path).expanduser().resolve() if str(args.db_path or "").strip() else _default_live_db_path()
+    _assert(live_db.exists(), f"live DB not found: {live_db}")
+
+    scratch_db: Path | None = None
+    if args.use_live_db:
+        active_db = live_db
+    else:
+        scratch_dir = Path(args.scratch_dir).expanduser().resolve() if str(args.scratch_dir or "").strip() else _default_scratch_dir(live_db=live_db)
+        scratch_db = scratch_dir / "di_contract_smoke.sqlite"
+        _copy_sqlite_file_bundle(live_db, scratch_db)
+        active_db = scratch_db
+
+    os.environ["PSI_DB_PATH"] = str(active_db)
+    _rebind_core_db_runtime(active_db)
+    print(
+        "di_contract_smoke: "
+        f"live_db={live_db} "
+        f"scratch_db={(str(scratch_db) if scratch_db is not None else '(none)')} "
+        f"use_live_db={bool(args.use_live_db)}"
+    )
+    try:
+        yield _SmokeDbRuntime(
+            live_db=live_db,
+            active_db=active_db,
+            scratch_db=scratch_db,
+            use_live_db=bool(args.use_live_db),
+        )
+    finally:
+        if (scratch_db is not None) and (not bool(args.keep_scratch)):
+            for p in (
+                scratch_db,
+                scratch_db.with_name(scratch_db.name + "-wal"),
+                scratch_db.with_name(scratch_db.name + "-shm"),
+            ):
+                try:
+                    p.unlink()
+                except FileNotFoundError:
+                    pass
+        if prev_env is None:
+            os.environ.pop("PSI_DB_PATH", None)
+        else:
+            os.environ["PSI_DB_PATH"] = prev_env
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    try:
+        with _smoke_db_runtime(args):
+            global _SMOKE_SET_BASELINE_CUTOFF
+            if "PSI_DI_BASELINE_CUTOFF_ISO" not in os.environ:
+                os.environ["PSI_DI_BASELINE_CUTOFF_ISO"] = datetime.now(timezone.utc).isoformat()
+                _SMOKE_SET_BASELINE_CUTOFF = True
+            test_policy_canonicalization_and_hash()
+            test_value_functions_enforcement_reason_helper()
+            test_policy_package_dual_hash_stability()
+            test_catalog_hash_validation()
+            test_experiment_catalog_v0_2_latest_loader_and_risk_mapping()
+            test_policy_template_structure_present()
+            test_policy_risk_flag_severity_tiers_present_and_cover_expected_flags()
+            test_risk_flag_enrichment_uses_policy_severity_tiers_deterministically()
+            test_risk_flag_enrichment_unknown_key_defaults_to_unspecified_neutral()
+            test_progress_policy_catalog_v0_1_loads_and_validates()
+            test_progress_policy_metric_keys_are_representable_in_measurement_registry()
+            test_shortlisting_policy_catalog_v0_1_is_deprecated_non_executable_legacy_shape()
+            test_governance_forbid_weighted_heuristics_in_di_runtime_targets()
+            test_template_prerequisites_catalog_v0_1_loads_and_validates()
+            test_confidence_policy_catalog_loads_and_latest_loader_is_deterministic()
+            test_confidence_policy_catalog_non_weighted_language_and_keys()
+            test_molecule_header_confidence_model_non_weighted_neutral_missing()
+            test_molecule_header_prerequisite_blocker_sorting_deterministic()
+            test_molecule_header_risk_items_deterministic_and_neutral_unknown()
+            test_progress_hover_text_policy_key_ordering_and_explainability()
+            test_molecule_header_confidence_scaffold_no_snapshot_all_neutral()
+            test_confidence_component_derivation_missing_evidence_neutral()
+            test_confidence_component_derivation_deterministic_from_existing_artifacts()
+            test_interpretability_detail_items_ordering_deterministic()
+            test_confidence_scalar_non_weighted_counting_rules()
+            test_confidence_scalar_surface_rejects_weighting_language()
+            test_selection_semantics_version_constant()
+            test_policy_authoritative_required_gate_keys()
+            test_context_knob_branching_gate_outcomes_deterministic()
+            test_shortlisting_refusal_v04_extensions_deterministic()
+            test_tie_break_dimensions_v04_complete_and_deterministic()
+            test_scope_semantics_v04_deterministic()
+            test_template_registry_and_dependency_graph_deterministic()
+            test_shared_sub_assessments_pure_helpers()
+            test_sub_assessment_reproducibility_helper_key_shape_stable()
+            test_outcome_label_validation_helpers_deterministic()
+            test_shortlisting_reproducibility_from_soe_evidence_summary()
+            test_policy_blocker_taxonomy_and_experiment_suggestions()
+            test_nbe_uses_catalog_risk_mapping_only()
+            test_di_snapshot_ui_risk_flag_severity_rendering_deterministic()
+            test_di_run_view_toggle_ui_is_localstorage_only()
+            test_drift_plain_english_translation_deterministic()
+            test_di_web_latest_policy_selection_prefers_forward_immutable_forks()
+            test_policy_immutability_manifest_matches_policy_files()
+            test_policy_registry_manifest_matches_package_hashes()
+            test_policy_strict_versioned_path_resolution()
+            test_policy_registry_contains_forward_default_policy_hashes()
+            test_policy_hash_audit_report_deterministic()
+            test_risk_flag_enrichment_ordering_stable_with_medium_and_legacy_moderate()
+            test_policy_blocker_suggestions_mapping_key_order_stable()
+            test_policy_gate_lists_no_duplicates_and_stable_file_order()
+            test_policy_freeze_sidecar_covers_legacy_policy_files_without_mutating_json()
+            test_forward_policy_forks_use_medium_vocabulary_and_no_legacy_moderate()
+            test_ignore_reason_keys_allowed_set()
+            test_stable_json_dumps()
+            test_normalize_ignored_schema_compat()
+            test_soe_v0_2_contract_snapshot_shape_and_determinism()
+            test_molecule_scope_determinism()
+            test_baseline_cutoff_prevents_walk()
+            test_cross_version_snapshot_content_hash_stability()
+            test_di_error_output_top_level_key_parity()
+            test_di_error_output_parity_extension_gating_v03_vs_v04()
+            test_error_output_field_surface_guard_against_happy_path_drift()
+            test_di_error_output_parity_multiple_error_factories_defaults()
+            test_outcome_dataset_export_deterministic()
+            test_outcome_dataset_export_hash_field_enrichment_from_stored_snapshot_fields()
+            test_label_outcome_cli_outcome_event_date_parser_deterministic()
+            test_molecule_composition_hash_stability_after_helper_split()
+            test_yaml_engine_deprecation_warning_emits_only_on_use()
+            test_replay_policy_compat_catalog_loads_and_is_deterministic()
+            test_verify_snapshot_policy_resolution_metadata_default_strict()
+            test_compute_finalize_integrity_helper_deterministic()
+            test_comparability_policy_v0_1_scaffold_schema_and_ordering()
+            test_comparability_assessment_cited_items_are_sorted_deterministically()
+            test_v3_ranking_policy_scaffold_disabled_by_default_and_surface_deterministic()
+            test_v3_ranking_policy_v0_2_lexicographic_ladder_deterministic_and_non_weighted()
+            test_report_engine_v3_skeleton_fixed_schema_for_all_four_types()
+            test_molecule_report_v0_generator_fixed_structure_from_snapshot()
+            test_program_report_v0_generator_fixed_structure_uses_rollup_and_placeholders()
+            test_molecule_comparative_report_v0_ordering_and_disabled_ranking_surface()
+            test_program_comparative_report_v0_ordering_and_resource_placeholder()
+            test_reports_ui_templates_render_deterministic_structured_payload_surface()
+            test_reports_v3_policy_pin_bundle_deterministic_and_catalog_derived()
+            test_lineage_service_separates_evidence_policy_governance_changes_deterministically()
+            test_template_catalog_v0_1_schema_and_immutability_guardrails()
+            test_policy_upgrade_session_scaffold_requires_explicit_ack_and_deterministic_delta()
+            test_comparability_assessment_enforces_categorical_only_statuses()
+            test_comparability_pair_canonicalization_symmetry_and_duplicate_guards()
+            test_comparability_policy_rule_and_load_errors_deterministic()
+            test_comparability_effective_latest_asof_selector_and_warning_ordering()
+            test_attribution_presence_non_interference_for_report_payload_generation()
     except Exception as e:
         print(f"DI contract smoke FAILED: {e}")
         return 1
