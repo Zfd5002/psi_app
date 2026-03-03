@@ -34,3 +34,4 @@ overlay_file_list.txt
 psi_overlay_*
 psi_patch_*
 psi_code_snapshot_*
+_artifacts/
