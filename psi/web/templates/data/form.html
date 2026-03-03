@@ -4,6 +4,9 @@
 <div class="card">
   <h1>{% if record %}Edit Data Record{% else %}New Data Record{% endif %}</h1>
   <form id="dataForm" class="form" method="post" action="{% if record %}/data/{{ record.id }}/edit{% else %}/data/new{% endif %}" enctype="multipart/form-data">
+    <input type="hidden" name="action_intent" id="actionIntent" value="save" />
+    <input type="hidden" name="actor" value="scientist" />
+    <input type="hidden" name="return_to" value="{{ request.query_params.get('return_to') if request is defined and request.query_params is defined else '' }}" />
     <div class="grid cols-2">
       <div class="field">
         <label>Program</label>
@@ -71,7 +74,10 @@
         <div id="paramsFields"></div>
       </div>
       <div class="card" style="margin:0;">
-        <h3>Results</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <h3>Results</h3>
+          <button class="btn mini no-print" type="button" id="applyDefaultsBtn">Apply defaults to all rows</button>
+        </div>
         <div id="resultsFields"></div>
       </div>
     </div>
@@ -98,9 +104,14 @@
     {% endif %}
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button class="btn primary" type="submit">Save</button>
+      {# Scientist workflow controls for edit mode: save/cancel + approve/reject entry. #}
+      <button class="btn primary" type="submit" onclick="document.getElementById('actionIntent').value='save'">Save</button>
       {% if record %}
-        <a class="btn" href="/data/{{ record.id }}">Cancel</a>
+        <button class="btn primary" type="submit" onclick="document.getElementById('actionIntent').value='approve'">Approve</button>
+        <button class="btn" type="submit" onclick="document.getElementById('actionIntent').value='reject'">Reject</button>
+      {% endif %}
+      {% if record %}
+        <a class="btn" href="{{ request.query_params.get('return_to') if request is defined and request.query_params is defined and request.query_params.get('return_to') else ('/data/' ~ record.id) }}">Cancel</a>
       {% else %}
         <a class="btn" href="/data">Cancel</a>
       {% endif %}
@@ -153,7 +164,7 @@
     return null;
   }
 
-  function fieldInput(def, value){
+  function fieldInput(def, value, sectionName){
     const wrap = document.createElement('div');
     wrap.className = 'field';
     const lab = document.createElement('label');
@@ -179,6 +190,7 @@
     }
 
     el.dataset.key = def.key;
+    el.dataset.section = sectionName;
     el.value = value == null ? '' : String(value);
     if(def.required) el.required = true;
 
@@ -194,7 +206,7 @@
     return wrap;
   }
 
-  function renderFields(container, defs, existingObj){
+  function renderFields(container, defs, existingObj, sectionName){
     clear(container);
     if(!defs || defs.length === 0){
       const p = document.createElement('div');
@@ -205,7 +217,7 @@
     }
     defs.forEach(def => {
       const val = existingObj ? existingObj[def.key] : '';
-      container.appendChild(fieldInput(def, val));
+      container.appendChild(fieldInput(def, val, sectionName));
     });
   }
 
@@ -276,8 +288,43 @@
       return;
     }
 
-    renderFields(paramsFields, s.params_fields || [], pObj);
-    renderFields(resultsFields, s.results_fields || [], rObj);
+    renderFields(paramsFields, s.params_fields || [], pObj, "params");
+    renderFields(resultsFields, s.results_fields || [], rObj, "results");
+  }
+
+  function applyDefaultsToResults(){
+    const paramsInputs = Array.from(paramsFields.querySelectorAll('[data-key][data-section="params"]'));
+    const resultInputs = Array.from(resultsFields.querySelectorAll('[data-key][data-section="results"]'));
+    const paramByKey = {};
+    paramsInputs.forEach((el) => {
+      const k = String(el.dataset.key || "").trim();
+      const v = String(el.value || "").trim();
+      if (k && v) paramByKey[k] = v;
+    });
+    const aliases = {
+      "unit": ["units", "result_unit", "measurement_unit"],
+      "units": ["unit", "result_unit", "measurement_unit"],
+      "assay_group": ["assay", "assay_type"],
+      "condition": ["conditions"],
+      "matrix": ["sample_matrix"],
+    };
+    resultInputs.forEach((el) => {
+      const current = String(el.value || "").trim();
+      if (current) return;
+      const key = String(el.dataset.key || "").trim();
+      if (!key) return;
+      if (paramByKey[key]) {
+        el.value = paramByKey[key];
+        return;
+      }
+      const opts = aliases[key] || [];
+      for (const src of opts) {
+        if (paramByKey[src]) {
+          el.value = paramByKey[src];
+          return;
+        }
+      }
+    });
   }
 
   function collect(container){
@@ -371,6 +418,8 @@
   domainSel.addEventListener('change', populateDataTypes);
   dataTypeSel.addEventListener('change', populateMethods);
   methodSel.addEventListener('change', renderSchema);
+  const applyBtn = document.getElementById('applyDefaultsBtn');
+  if (applyBtn) applyBtn.addEventListener('click', applyDefaultsToResults);
 
   document.getElementById('dataForm').addEventListener('submit', (ev)=>{
     // If in raw mode, push raw JSON straight through

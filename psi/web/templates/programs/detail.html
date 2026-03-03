@@ -139,7 +139,7 @@
           <td class="muted">{{ row.preview_snippet }}</td>
           <td class="muted">{{ row.evidence_preview_short if row.evidence_preview_short is defined else "Not available" }}</td>
           <td class="no-print">
-            <form method="post" action="/data/{{ row.record_id }}/qc/approve" style="display:inline;">
+            <form method="post" action="{{ request.url_for('approve_record_qc', record_id=row.record_id) }}" style="display:inline;">
               <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}">
               <input type="hidden" name="actor" value="scientist">
               <button class="btn mini primary" type="submit">Approve</button>

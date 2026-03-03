@@ -1,3 +1,70 @@
+## 2026-03-03 — v1.3.0a124
+Why:
+- Resolve runtime test regression caused by repo drift where `data/form.html` lacked edit-mode `Approve`/`Reject` entry controls.
+
+What:
+- Confirmed parity:
+  - `psi_codex` passes `test_data_form_template_renders_save_cancel_approve_reject_for_edit`
+  - `psi_repo` fails the same test.
+- Root cause: `psi_repo/psi/web/templates/data/form.html` was behind `psi_codex` and only rendered `Save/Cancel`, while the test expects edit workflow controls (`Save/Cancel/Approve/Reject`).
+- Hotfix keeps intended scientist UX by preserving edit-mode buttons and hidden action intent fields in `data/form.html` (no behavior change to DI or routing).
+- Added a small template comment to lock the intent of those controls for maintainability.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/data/form.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DB schema/migration changes.
+- No DI/snapshot/hash/replay/ranking behavior changes.
+
+## 2026-03-03 — v1.3.0a123
+Why:
+- Hotfix program landing QC actions returning 404 for Approve/Reject entry actions.
+
+What:
+- Ensured QC bulk action routes are explicitly exposed on both canonical and alias paths:
+  - `POST /data/{record_id}/qc/approve`
+  - `POST /data/{record_id}/qc/reject`
+  - `POST /data-records/{record_id}/qc/approve` (alias)
+  - `POST /data-records/{record_id}/qc/reject` (alias)
+  - in `psi/web/routers/data_records.py` using existing bulk-QC service logic.
+- Updated templates to use `url_for()` instead of hardcoded strings:
+  - `psi/web/templates/programs/detail.html`
+  - `psi/web/templates/data/detail.html`
+- Added deterministic route existence regression test:
+  - `tests/test_data_record_qc_routes.py`
+- Updated template tests to provide deterministic `request.url_for` stubs:
+  - `tests/test_data_record_template_actions.py`
+  - `tests/test_program_review_queue.py`
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/data_records.py`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/data/detail.html`
+- `tests/test_data_record_qc_routes.py`
+- `tests/test_data_record_template_actions.py`
+- `tests/test_program_review_queue.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- No DB schema/migration changes.
+- No DI semantic/snapshot/hash/replay/ranking changes.
+
 ## 2026-03-03 — v1.3.0a122
 Why:
 - Hotfix mixed/legacy `data_measurements` schemas where both `metric_key` and required `name` exist.

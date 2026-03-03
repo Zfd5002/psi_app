@@ -150,6 +150,10 @@ def update_data(
     params_json: str = Form("{}"),
     results_json: str = Form("{}"),
     reason: str = Form(""),
+    action_intent: str = Form("save"),
+    actor: str = Form("scientist"),
+    qc_note: str = Form(""),
+    return_to: str = Form(""),
     files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     storage=Depends(get_storage_cfg),
@@ -183,7 +187,23 @@ def update_data(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    return RedirectResponse(url=f"/data/{rec.id}", status_code=303)
+    intent = str(action_intent or "save").strip().lower()
+    if intent in {"approve", "reject"}:
+        try:
+            svc.apply_bulk_qc_action_for_record(
+                db,
+                record_id=int(rec.id),
+                action=intent,
+                actor=(actor or "scientist"),
+                note=(qc_note or None),
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except KeyError:
+            raise HTTPException(404)
+
+    target = str(return_to or "").strip() or f"/data/{rec.id}"
+    return RedirectResponse(url=target, status_code=303)
 
 
 @router.get("/api/data_records", response_class=JSONResponse)
@@ -195,3 +215,53 @@ def api_data_records(
     db: Session = Depends(get_db),
 ):
     return svc.api_data_records(db, program_id=program_id, molecule_id=molecule_id, batch_id=batch_id, q=q)
+
+
+@router.post("/data/{record_id}/qc/approve", name="approve_record_qc")
+@router.post("/data-records/{record_id}/qc/approve", name="approve_record_qc_alias")
+def approve_record_qc(
+    record_id: int,
+    actor: str = Form("scientist"),
+    note: str = Form(""),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        svc.apply_bulk_qc_action_for_record(
+            db,
+            record_id=int(record_id),
+            action="approve",
+            actor=(actor or "scientist"),
+            note=(note or None),
+        )
+    except KeyError:
+        raise HTTPException(404)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    target = str(redirect_to or "").strip() or f"/data/{int(record_id)}"
+    return RedirectResponse(url=target, status_code=303)
+
+
+@router.post("/data/{record_id}/qc/reject", name="reject_record_qc")
+@router.post("/data-records/{record_id}/qc/reject", name="reject_record_qc_alias")
+def reject_record_qc(
+    record_id: int,
+    actor: str = Form("scientist"),
+    note: str = Form(""),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        svc.apply_bulk_qc_action_for_record(
+            db,
+            record_id=int(record_id),
+            action="reject",
+            actor=(actor or "scientist"),
+            note=(note or None),
+        )
+    except KeyError:
+        raise HTTPException(404)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    target = str(redirect_to or "").strip() or f"/data/{int(record_id)}"
+    return RedirectResponse(url=target, status_code=303)

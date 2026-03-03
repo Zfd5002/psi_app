@@ -33,12 +33,12 @@
 <h2>Extracted measurements</h2>
 <p class="muted">These rows are generated from Results/Parameters and used by the wide exporter. QC actions are append-only and attributed.</p>
 <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 10px 0;">
-  <form method="post" action="/data/{{ record.id }}/qc/approve" style="display:inline;">
+  <form method="post" action="{{ request.url_for('approve_record_qc', record_id=record.id) }}" style="display:inline;">
     <input type="hidden" name="redirect_to" value="/data/{{ record.id }}">
     <input type="hidden" name="actor" value="scientist">
     <button class="btn primary" type="submit">Approve entry</button>
   </form>
-  <form method="post" action="/data/{{ record.id }}/qc/reject" style="display:inline;">
+  <form method="post" action="{{ request.url_for('reject_record_qc', record_id=record.id) }}" style="display:inline;">
     <input type="hidden" name="redirect_to" value="/data/{{ record.id }}">
     <input type="hidden" name="actor" value="scientist">
     <button class="btn" type="submit">Reject entry</button>

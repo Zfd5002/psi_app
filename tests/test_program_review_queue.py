@@ -16,6 +16,17 @@ from psi.services.programs import build_program_review_queue
 from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
 
+class _Req:
+    query_params = {}
+
+    @staticmethod
+    def url_for(name: str, **path_params) -> str:
+        rid = int(path_params.get("record_id", 0))
+        if name == "approve_record_qc":
+            return f"/data/{rid}/qc/approve"
+        return "/"
+
+
 def _mkdb():
     eng = create_engine("sqlite:///:memory:", future=True)
     Base.metadata.create_all(bind=eng)
@@ -101,7 +112,7 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
         {"molecule_id": 3, "molecule_primary_id": "B-1", "molecule_title": "B", "records": [{"record_id": 12, "created_at": "2026-03-03T00:00:00", "batch_id": 6, "assay_key": "PK_PD/NONCOMP", "preview_snippet": "KD"}]},
     ]
     html = tpl.render(
-        request=SimpleNamespace(query_params={}),
+        request=_Req(),
         program=SimpleNamespace(id=1, name="P1", description=""),
         program_memberships_v3=[],
         all_molecules_for_membership=[],
