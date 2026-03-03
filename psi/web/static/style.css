@@ -238,6 +238,8 @@ body.pdf-mode .narrative-list{gap:3px}
 .chip-list{display:flex;flex-wrap:wrap;gap:6px}
 .chip-list .chip{margin:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word}
 .measurement-chip-list{align-items:flex-start}
+.table-scroll-safe{overflow-x:auto;max-width:100%}
+.table-scroll-safe .board-section-table{min-width:720px}
 .batch-summary{display:flex;flex-direction:column;gap:4px}
 .batch-id{font-weight:800;font-size:16px}
 .batch-headlines{display:flex;flex-wrap:wrap;gap:6px}

@@ -1,3 +1,40 @@
+## 2026-03-03 — v1.3.0b1
+Why:
+- Start b-series board template workstream with a deterministic, batch-aware molecule report layout for meeting-ready fact sheet + conclusions rendering.
+
+What:
+- Redesigned molecule board template `psi/web/templates/reports/board_molecule_v3.html` to render:
+  - Molecule fact sheet header
+  - Conclusions block (readiness, best batch, comparability, stability, blockers, governance/QC warnings, deterministic executive paragraph)
+  - Batch registry table
+  - Gate summary (best-batch gate matrix + per-batch snapshot)
+  - Experimental results fact sheet matrix (rows=metrics, cols=batches, deterministic ordering)
+  - Structured comparability block
+  - Risk & QC summary bullets
+  - Scientist Notes section with deterministic placeholder
+- Added display-only deterministic shaping in `psi/services/reports_v3.py`:
+  - `_build_molecule_board_display(...)` derives batch-aware board surfaces from existing report payload + existing snapshot/data-record data.
+  - No DI semantic changes and no report fingerprint/snapshot contract changes.
+  - `get_report_run_detail(...)` now injects `molecule_board_display` for template rendering.
+- Added minimal layout support for matrix overflow safety in print/web:
+  - `psi/web/static/style.css` (`.table-scroll-safe`).
+- Updated template regression coverage:
+  - `tests/test_board_molecule_sections_rendering.py` now asserts new section headings and deterministic metric ordering.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `psi/web/static/style.css`
+- `tests/test_board_molecule_sections_rendering.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
 ## 2026-03-03 — v1.3.0a130
 Why:
 - Eliminate comparability policy-source drift (`v0.1` vs latest) across assessment/effective-resolution/report surfaces for governance consistency.

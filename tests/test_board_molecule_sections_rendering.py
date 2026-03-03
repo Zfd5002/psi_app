@@ -14,38 +14,58 @@ def test_board_molecule_template_renders_key_v3_section_headings() -> None:
     env.filters["humanize_path_token"] = humanize_path_token
     tpl = env.get_template("reports/board_molecule_v3.html")
     html = tpl.render(
-        board_narrative={
-            "headline": "Molecule report for M1",
-            "status_rows": [],
-            "what_this_means": [],
-            "evidence_status": [],
-            "determinations": [],
-            "next_steps": [],
-        },
-        payload={
-            "sections": {
-                "mechanistic_evidence_map": {"used_by_metric": {"ec50": [1]}},
-                "risk_profile": {"risk_flags_enriched": [{"severity": "high", "key": "agg", "description": "Aggregation"}]},
-                "confidence_decomposition": {"confidence": {"overall": "medium"}, "state_of_evidence_summary": {"count": 2}},
-                "scientific_summary": {
-                    "status": "assessed",
-                    "domains": [
-                        {
-                            "domain": "Binding",
-                            "rows": [{"metric_key": "kd", "label": "KD", "value_display": "1 cited", "unit": "nM", "n": 1, "status": "present"}],
-                        }
-                    ],
-                },
-                "experimental_gaps": {"blockers": ["missing_pk"], "next_best_experiments": [{"label": "Run PK repeat"}]},
-                "reproducibility_appendix": {"policy_pins": {"a": "b"}, "measurement_keys": ["ec50"], "cited_snapshot_ids": [101]},
-            }
+        molecule_board_display={
+            "header": {
+                "molecule": "M1 (Mol 1)",
+                "program": "program_id=1",
+                "decision_template": "molecule_report",
+                "policy_version": "v0.2",
+                "snapshot_id": 101,
+                "generated_at": "2026-03-03T12:00:00",
+            },
+            "conclusions": {
+                "readiness_status": "ready",
+                "best_overall_batch": "B-002",
+                "comparability_status": "comparable_full",
+                "stability_status": "STABLE",
+                "blockers": ["missing_pk"],
+                "governance_warnings": ["none"],
+                "executive_paragraph": "Readiness is ready.",
+                "stability_rationale": ["Recent batch outcomes are not in conflict."],
+            },
+            "batch_registry": [
+                {"batch_id": 2, "batch_label": "B-002", "batch_date": "2026-02-02", "producer": "unknown", "purpose_notes": "pilot", "coverage_summary": "SEC, Assay"},
+                {"batch_id": 1, "batch_label": "B-001", "batch_date": "2026-02-01", "producer": "unknown", "purpose_notes": "screen", "coverage_summary": "SEC"},
+            ],
+            "gate_summary": {
+                "best_batch_rows": [{"gate_key": "G1", "status": "pass", "primary_evidence": "e1", "notes": "n1"}],
+                "per_batch_rows": [{"batch_label": "B-002", "overall": "ready", "fail_gates": [], "missing_gates": []}],
+            },
+            "fact_sheet": {
+                "batch_labels": ["B-002", "B-001"],
+                "metric_rows": [
+                    {"metric_key": "ec50", "metric_group": "Assay", "cells": ["12 nM", "not run"]},
+                    {"metric_key": "kd", "metric_group": "Assay", "cells": ["3 nM", "5 nM"]},
+                ],
+            },
+            "comparability": {
+                "effective_status": "comparable_full",
+                "resolved_status": "comparable_full",
+                "rule_id": "rule_comparable_full",
+                "as_of_basis": "2026-03-03T00:00:00",
+                "policy_ref": "v0.2",
+                "governance_warnings": [],
+            },
+            "risk_qc": {"bullets": ["Missing required metrics: pk_auc"]},
+            "scientist_notes": [{"author": "local-user", "timestamp": "2026-03-02T10:00:00", "scope": "B-002", "body": "Promising run."}],
         },
     )
-    assert "Mechanistic Evidence Map" in html
-    assert "Risk Profile" in html
-    assert "Confidence Decomposition" in html
-    assert "Scientific Summary" in html
-    assert "Binding" in html
-    assert "Experimental Gaps" in html
-    assert "Run PK repeat" in html
-    assert "Reproducibility Appendix" in html
+    assert "Molecule Fact Sheet Header" in html
+    assert "Conclusions" in html
+    assert "Batch Registry" in html
+    assert "Gate Summary" in html
+    assert "Experimental Results Fact Sheet" in html
+    assert "Comparability" in html
+    assert "Risk &amp; QC Summary" in html
+    assert "Scientist Notes" in html
+    assert html.find("Ec50") < html.find("Kd")

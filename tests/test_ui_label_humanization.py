@@ -32,15 +32,16 @@ def test_humanize_state_and_path_token_are_deterministic() -> None:
 def test_board_view_humanizes_known_snake_case_key() -> None:
     tpl = _env().get_template("reports/board_molecule_v3.html")
     html = tpl.render(
-        board_narrative={
-            "headline": "x",
-            "status_rows": [],
-            "what_this_means": [],
-            "evidence_status": [],
-            "determinations": [],
-            "next_steps": [],
+        molecule_board_display={
+            "header": {},
+            "conclusions": {},
+            "batch_registry": [],
+            "gate_summary": {},
+            "fact_sheet": {"batch_labels": ["B-001"], "metric_rows": [{"metric_key": "as_of_ts", "metric_group": "Other", "cells": ["x"]}]},
+            "comparability": {},
+            "risk_qc": {},
+            "scientist_notes": [],
         },
-        payload={"sections": {"mechanistic_evidence_map": {"as_of_ts": "2026-02-26"}}},
         policy_pin_summary=[],
         runtime_policy_versions={},
     )
