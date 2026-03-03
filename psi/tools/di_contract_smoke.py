@@ -4012,7 +4012,7 @@ def test_comparability_effective_latest_asof_selector_and_warning_ordering() -> 
     e = eff.get("effective") if isinstance(eff.get("effective"), dict) else {}
     _assert(str(e.get("status") or "") == "not_comparable", "effective comparability must select latest by (as_of desc, id desc)")
     cres = eff.get("category_resolution") if isinstance(eff.get("category_resolution"), dict) else {}
-    _assert(str(cres.get("resolved_status") or "") == "comparable", "category resolution should use policy-order status precedence deterministically")
+    _assert(str(cres.get("resolved_status") or "") == "comparable_full", "category resolution should use policy-order status precedence deterministically")
     _assert(list((eff.get("history_summary") or {}).keys()) == sorted((eff.get("history_summary") or {}).keys()), "history summary keys must be sorted deterministically")
     _assert((eff.get("governance_warnings") or []) == sorted((eff.get("governance_warnings") or []), key=lambda w: str(w.get("warning_code") or "")), "governance warnings must be deterministically ordered")
 

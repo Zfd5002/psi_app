@@ -14,20 +14,19 @@ from psi.core.di.policy import sha256_hex_of_canonical_json
 from psi.services.attribution import record_attribution_event
 
 _COMPARABILITY_POLICY_CACHE: dict[str, Any] | None = None
+_CANONICAL_COMPARABILITY_POLICY_FILE = "comparability_policy_v0_2.json"
 
 
 def _load_comparability_policy() -> dict[str, Any]:
     global _COMPARABILITY_POLICY_CACHE
     if isinstance(_COMPARABILITY_POLICY_CACHE, dict):
         return _COMPARABILITY_POLICY_CACHE
-    p = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs" / "comparability_policy_v0_1.json"
+    p = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs" / _CANONICAL_COMPARABILITY_POLICY_FILE
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except Exception as exc:
         raise ValueError("comparability_policy_load_error") from exc
-    if not isinstance(raw, dict):
-        raise ValueError("comparability_policy_load_error")
-    _COMPARABILITY_POLICY_CACHE = raw
+    _COMPARABILITY_POLICY_CACHE = _validate_comparability_policy(raw if isinstance(raw, dict) else {})
     return _COMPARABILITY_POLICY_CACHE
 
 
@@ -60,9 +59,47 @@ def _validate_comparability_policy(policy: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_comparability_policy_latest() -> dict[str, Any]:
-    p = Path(__file__).resolve().parents[1] / "core" / "di" / "catalogs" / "comparability_policy_v0_2.json"
-    raw = json.loads(p.read_text(encoding="utf-8"))
-    return _validate_comparability_policy(raw if isinstance(raw, dict) else {})
+    return _load_comparability_policy()
+
+
+def _normalize_status_to_policy(status: str) -> str:
+    norm = str(status or "").strip().lower()
+    mapping = {
+        "comparable": "comparable_full",
+        "comparable_full": "comparable_full",
+        "conditionally_comparable": "comparable_partial",
+        "comparable_partial": "comparable_partial",
+        "not_comparable": "not_comparable",
+        "not_assessed": "not_assessed",
+    }
+    return mapping.get(norm, norm)
+
+
+def _canonical_rule_id_for_policy(*, policy: dict[str, Any], status_norm: str, rule_id: str) -> str:
+    raw_rule_id = str(rule_id or "").strip()
+    rules = policy.get("rule_registry") if isinstance(policy.get("rule_registry"), list) else []
+    normalized_ids: list[str] = []
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        rid = str(rule.get("id") or rule.get("rule_id") or "").strip()
+        if rid:
+            normalized_ids.append(rid)
+    if raw_rule_id in normalized_ids:
+        return raw_rule_id
+    if raw_rule_id == "placeholder_not_assessed":
+        if "rule_not_assessed_default" in normalized_ids:
+            return "rule_not_assessed_default"
+        alias_by_status = {
+            "comparable_full": "rule_comparable_full",
+            "comparable_partial": "rule_comparable_partial",
+            "not_comparable": "rule_not_comparable",
+            "not_assessed": "rule_not_assessed_default",
+        }
+        aliased = alias_by_status.get(status_norm, "rule_not_assessed_default")
+        if aliased in normalized_ids:
+            return aliased
+    return raw_rule_id
 
 
 def _canonical_pair(
@@ -224,19 +261,27 @@ def create_comparability_assessment(
     cited_measurement_keys: list[str],
     cited_snapshot_ids: list[int],
     as_of: datetime,
-    policy_id: str = "comparability_policy_v0_1",
-    policy_version: str = "v0.1",
+    policy_id: str | None = None,
+    policy_version: str | None = None,
     policy_package_hash: str | None = None,
     allow_conflict_override: bool = False,
 ) -> ComparabilityAssessment:
     pol = _load_comparability_policy()
-    status_norm = str(status or "").strip().lower()
+    status_norm = _normalize_status_to_policy(status)
     allowed_statuses = [str(x).strip().lower() for x in (pol.get("allowed_statuses") or []) if str(x).strip()]
     resolved = resolve_comparability_category(statuses=[status_norm], allowed_statuses=allowed_statuses)
     if status_norm not in allowed_statuses or str(resolved.get("resolved_status") or "") != status_norm:
         raise ValueError("comparability_unknown_status")
     rules = pol.get("rule_registry") if isinstance(pol.get("rule_registry"), list) else []
-    rule_obj = next((r for r in rules if isinstance(r, dict) and str(r.get("rule_id") or "") == str(rule_id)), None)
+    canonical_rule_id = _canonical_rule_id_for_policy(policy=pol, status_norm=status_norm, rule_id=str(rule_id))
+    rule_obj = next(
+        (
+            r
+            for r in rules
+            if isinstance(r, dict) and str(r.get("id") or r.get("rule_id") or "") == canonical_rule_id
+        ),
+        None,
+    )
     if rule_obj is None:
         raise ValueError("comparability_unknown_rule_id")
     l_type, l_id, r_type, r_id = _canonical_pair(
@@ -261,7 +306,7 @@ def create_comparability_assessment(
         .filter(ComparabilityAssessment.left_scope_id == l_id)
         .filter(ComparabilityAssessment.right_scope_type == r_type)
         .filter(ComparabilityAssessment.right_scope_id == r_id)
-        .filter(ComparabilityAssessment.rule_id == str(rule_id))
+        .filter(ComparabilityAssessment.rule_id == canonical_rule_id)
         .filter(ComparabilityAssessment.as_of == as_of)
         .order_by(ComparabilityAssessment.id.asc())
         .all()
@@ -278,12 +323,12 @@ def create_comparability_assessment(
         right_scope_type=r_type,
         right_scope_id=r_id,
         status=status_norm,
-        rule_id=str(rule_id),
+        rule_id=canonical_rule_id,
         cited_measurement_keys_json=_stable_json(keys),
         cited_snapshot_ids_json=_stable_json(snaps),
         as_of=as_of,
-        policy_id=str(policy_id),
-        policy_version=str(policy_version),
+        policy_id=str(policy_id or pol.get("policy_id") or ""),
+        policy_version=str(policy_version or pol.get("policy_version") or ""),
         policy_package_hash=(str(policy_package_hash) if policy_package_hash else None),
         policy_semantics_hash=sha256_hex_of_canonical_json(pol),
         created_at=now_utc(),
@@ -364,6 +409,7 @@ def get_effective_comparability(
     right_scope_id: int,
     rule_id: str | None = None,
 ) -> dict[str, Any]:
+    pol = _load_comparability_policy()
     l_type, l_id, r_type, r_id = _canonical_pair(
         left_scope_type=left_scope_type,
         left_scope_id=left_scope_id,
@@ -378,7 +424,12 @@ def get_effective_comparability(
         .filter(ComparabilityAssessment.right_scope_id == r_id)
     )
     if str(rule_id or "").strip():
-        q = q.filter(ComparabilityAssessment.rule_id == str(rule_id))
+        canonical_rule_id = _canonical_rule_id_for_policy(
+            policy=pol,
+            status_norm="not_assessed",
+            rule_id=str(rule_id),
+        )
+        q = q.filter(ComparabilityAssessment.rule_id == canonical_rule_id)
     rows = q.order_by(ComparabilityAssessment.as_of.desc(), ComparabilityAssessment.id.desc()).all()
     if not rows:
         return {
@@ -427,8 +478,8 @@ def get_effective_comparability(
             "policy_semantics_hash": (str(effective.policy_semantics_hash) if effective.policy_semantics_hash else None),
         },
         "category_resolution": resolve_comparability_category(
-            statuses=[str(r.status or "") for r in rows],
-            allowed_statuses=[str(x).strip().lower() for x in ((_load_comparability_policy().get("allowed_statuses") or [])) if str(x).strip()],
+            statuses=[_normalize_status_to_policy(str(r.status or "")) for r in rows],
+            allowed_statuses=[str(x).strip().lower() for x in ((pol.get("allowed_statuses") or [])) if str(x).strip()],
             missing_data=False,
         ),
         "history_summary": {k: summary[k] for k in sorted(summary.keys())},

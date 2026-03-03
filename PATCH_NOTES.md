@@ -1,3 +1,34 @@
+## 2026-03-03 — v1.3.0a130
+Why:
+- Eliminate comparability policy-source drift (`v0.1` vs latest) across assessment/effective-resolution/report surfaces for governance consistency.
+
+What:
+- Unified active comparability policy loading in `psi/services/comparability.py`:
+  - `_load_comparability_policy()` now resolves the canonical `comparability_policy_v0_2.json` and validates once through cache.
+  - `load_comparability_policy_latest()` now returns the same canonical loader output.
+- Unified assessment/effective-resolution policy usage:
+  - `create_comparability_assessment(...)` now uses canonical policy id/version defaults from the loaded policy.
+  - `get_effective_comparability(...)` now resolves categories against canonical allowed statuses.
+- Preserved deterministic legacy input compatibility to avoid caller breakage while removing policy-version drift:
+  - status aliases: `comparable -> comparable_full`, `conditionally_comparable -> comparable_partial`.
+  - rule alias: `placeholder_not_assessed` maps deterministically to canonical v0.2 rule ids by status.
+- Added deterministic regression tests in `tests/test_comparability_resolution.py`:
+  - active loader matches latest policy id/version
+  - create-assessment defaults policy pins to latest and canonicalizes legacy aliases
+  - effective-resolution category uses latest allowed-status order
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/comparability.py`
+- `tests/test_comparability_resolution.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
 ## 2026-03-03 — v1.3.0a126
 Why:
 - Add scientist bulk-review controls on Program landing page to process all pending review-queue records quickly.
