@@ -32,6 +32,18 @@
 
 <h2>Extracted measurements</h2>
 <p class="muted">These rows are generated from Results/Parameters and used by the wide exporter. QC actions are append-only and attributed.</p>
+<div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 10px 0;">
+  <form method="post" action="/data/{{ record.id }}/qc/approve" style="display:inline;">
+    <input type="hidden" name="redirect_to" value="/data/{{ record.id }}">
+    <input type="hidden" name="actor" value="scientist">
+    <button class="btn primary" type="submit">Approve entry</button>
+  </form>
+  <form method="post" action="/data/{{ record.id }}/qc/reject" style="display:inline;">
+    <input type="hidden" name="redirect_to" value="/data/{{ record.id }}">
+    <input type="hidden" name="actor" value="scientist">
+    <button class="btn" type="submit">Reject entry</button>
+  </form>
+</div>
 
 {% if measurements and measurements|length %}
 <table class="table">
@@ -131,6 +143,31 @@
 {% else %}
   <p class="muted">No extracted measurements found for this record.</p>
 {% endif %}
+
+  <h2>Evidence Preview</h2>
+  {% set ep = evidence_preview if evidence_preview is defined and evidence_preview else {} %}
+  {% set ep_counts = ep.counts if ep is mapping and ep.counts is defined and ep.counts else {} %}
+  {% if ep and ep.rows is defined and ep.rows and ep.rows|length %}
+    <p class="muted">
+      Presentation-only preview from this entry vs latest DI snapshot{% if ep.latest_snapshot_id %} #{{ ep.latest_snapshot_id }}{% endif %}.
+      New: {{ ep_counts.new_vs_last_snapshot if ep_counts.new_vs_last_snapshot is defined else 0 }} ·
+      Already present: {{ ep_counts.already_present if ep_counts.already_present is defined else 0 }}
+    </p>
+    <table class="table compact">
+      <thead><tr><th>Domain</th><th>Metric</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in ep.rows %}
+          <tr>
+            <td>{{ row.domain }}</td>
+            <td>{{ row.label }}</td>
+            <td>{{ row.status_label }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No extracted measurements available for evidence preview.</p>
+  {% endif %}
 
 
   <h2>Notes</h2>

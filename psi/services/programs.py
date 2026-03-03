@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,9 @@ from psi.core.utils import model_to_dict, now_utc
 from psi.services.attribution import record_attribution_event
 from psi.services.di.snapshot_diff import compute_snapshot_diff_struct
 from psi.services.di.verify import verify_snapshot
+from psi.services.metric_catalog import metric_catalog_entry
+from psi.services.evidence_preview import build_record_evidence_preview
+from psi.web.ui_labels import humanize_key
 
 
 def list_programs(db: Session) -> list[Program]:
@@ -81,6 +85,7 @@ def get_program_detail(
         .order_by(AuditEvent.timestamp.desc())
         .all()
     )
+    review_queue = build_program_review_queue(db, program_id=program_id)
 
     # v1.2.9m: deterministic DI rollups (latest snapshot per molecule)
     all_snaps = (
@@ -393,9 +398,125 @@ def get_program_detail(
         "recent_data": recent_data,
         "recent_evidence": recent_evidence,
         "recent_decisions": recent_decisions,
+        "review_queue_by_molecule": review_queue,
         "di_dashboard": di_dashboard,
         "audits": audits,
-}
+    }
+
+
+def build_program_review_queue(db: Session, *, program_id: int) -> list[dict[str, Any]]:
+    rows = db.execute(
+        text(
+            """
+            SELECT
+              dr.id AS record_id,
+              dr.created_at AS created_at,
+              dr.batch_id AS batch_id,
+              dr.data_type AS data_type,
+              dr.method AS method,
+              dr.title AS title,
+              m.id AS molecule_id,
+              m.primary_id AS molecule_primary_id,
+              m.title AS molecule_title,
+              COUNT(dm.id) AS total_measurements,
+              SUM(CASE WHEN COALESCE(qc.status, 'unreviewed') = 'approved' THEN 1 ELSE 0 END) AS approved_measurements
+            FROM data_records dr
+            JOIN molecules m ON m.id = dr.molecule_id
+            LEFT JOIN data_measurements dm ON dm.data_record_id = dr.id
+            LEFT JOIN measurement_qc qc ON qc.measurement_id = dm.id
+            WHERE dr.program_id = :pid
+              AND dr.molecule_id IS NOT NULL
+            GROUP BY dr.id, dr.created_at, dr.batch_id, dr.data_type, dr.method, dr.title, m.id, m.primary_id, m.title
+            ORDER BY m.primary_id ASC, m.id ASC, dr.created_at DESC, dr.id DESC
+            """
+        ),
+        {"pid": int(program_id)},
+    ).mappings().all()
+    pending_rows = [
+        r
+        for r in rows
+        if int(r.get("total_measurements") or 0) == 0
+        or int(r.get("approved_measurements") or 0) < int(r.get("total_measurements") or 0)
+    ]
+    record_ids = [int(r.get("record_id")) for r in pending_rows]
+    metric_by_record: dict[int, list[str]] = {}
+    if record_ids:
+        bind_params = {f"rid{i}": int(rid) for i, rid in enumerate(sorted(set(record_ids)))}
+        in_clause = ", ".join(f":rid{i}" for i in range(len(bind_params)))
+        mrows = db.execute(
+            text(
+                f"""
+                SELECT dm.data_record_id AS record_id, dm.name AS metric_key
+                FROM data_measurements dm
+                WHERE dm.data_record_id IN ({in_clause})
+                ORDER BY dm.data_record_id ASC, dm.name ASC, dm.id ASC
+                """
+            ),
+            bind_params,
+        ).mappings().all()
+        seen: dict[tuple[int, str], bool] = {}
+        for mr in mrows:
+            rid = int(mr.get("record_id"))
+            mk = str(mr.get("metric_key") or "").strip()
+            if not mk:
+                continue
+            key = (rid, mk)
+            if key in seen:
+                continue
+            seen[key] = True
+            metric_by_record.setdefault(rid, []).append(mk)
+    grouped: dict[int, dict[str, Any]] = {}
+    latest_snapshot_cache: dict[int, dict[str, Any]] = {}
+    for r in pending_rows:
+        mid = int(r.get("molecule_id"))
+        grp = grouped.get(mid)
+        if grp is None:
+            grp = {
+                "molecule_id": mid,
+                "molecule_primary_id": str(r.get("molecule_primary_id") or ""),
+                "molecule_title": str(r.get("molecule_title") or ""),
+                "records": [],
+            }
+            grouped[mid] = grp
+        rid = int(r.get("record_id"))
+        metric_keys = metric_by_record.get(rid, [])
+        labels = [str(metric_catalog_entry(mk).get("label") or humanize_key(mk)) for mk in metric_keys]
+        preview = ", ".join(labels[:5]) if labels else "No extracted measurements"
+        ev_preview = build_record_evidence_preview(
+            db,
+            record_id=rid,
+            latest_snapshot_cache=latest_snapshot_cache,
+        )
+        ev_counts = ev_preview.get("counts") if isinstance(ev_preview.get("counts"), dict) else {}
+        ev_short = (
+            f"New: {int(ev_counts.get('new_vs_last_snapshot') or 0)} · "
+            f"Already present: {int(ev_counts.get('already_present') or 0)}"
+        )
+        grp["records"].append(
+            {
+                "record_id": rid,
+                "created_at": str(r.get("created_at") or ""),
+                "batch_id": (int(r.get("batch_id")) if r.get("batch_id") is not None else None),
+                "assay_key": f"{str(r.get('data_type') or '')}/{str(r.get('method') or '')}",
+                "preview_snippet": preview,
+                "evidence_preview_short": ev_short,
+                "evidence_preview": ev_preview,
+                "metric_keys": metric_keys,
+                "total_measurements": int(r.get("total_measurements") or 0),
+                "approved_measurements": int(r.get("approved_measurements") or 0),
+            }
+        )
+    out = [grouped[mid] for mid in sorted(grouped.keys(), key=lambda x: (str(grouped[x]["molecule_primary_id"]), int(x)))]
+    for g in out:
+        g["records"] = sorted(
+            [x for x in g.get("records", []) if isinstance(x, dict)],
+            key=lambda x: (
+                str(x.get("created_at") or ""),
+                int(x.get("record_id") or 0),
+            ),
+            reverse=True,
+        )
+    return out
 
 
 def create_program(db: Session, *, name: str, description: str = "") -> Program:

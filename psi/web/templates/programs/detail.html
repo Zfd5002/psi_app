@@ -118,6 +118,47 @@
     </div>
   </div>
 
+  <h2>Review data entries</h2>
+  <div class="muted">Pending entry queue grouped by molecule (QC not fully approved).</div>
+  {% for group in review_queue_by_molecule %}
+  <div class="card" style="margin-top:10px;">
+    <h3>
+      <a href="/molecules/{{ group.molecule_id }}">{{ group.molecule_primary_id }}</a>
+      <span class="muted">{{ group.molecule_title or '' }}</span>
+    </h3>
+    <table class="table mini">
+      <thead>
+        <tr><th>Created</th><th>Batch</th><th>Assay</th><th>Preview</th><th>Evidence preview</th><th class="no-print">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for row in group.records %}
+        <tr>
+          <td class="muted">{{ row.created_at }}</td>
+          <td class="muted">{{ row.batch_id if row.batch_id is not none else "—" }}</td>
+          <td>{{ row.assay_key|humanize_path_token }}</td>
+          <td class="muted">{{ row.preview_snippet }}</td>
+          <td class="muted">{{ row.evidence_preview_short if row.evidence_preview_short is defined else "Not available" }}</td>
+          <td class="no-print">
+            <form method="post" action="/data/{{ row.record_id }}/qc/approve" style="display:inline;">
+              <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}">
+              <input type="hidden" name="actor" value="scientist">
+              <button class="btn mini primary" type="submit">Approve</button>
+            </form>
+            <a class="btn mini" href="/data/{{ row.record_id }}/edit?return_to=/programs/{{ program.id }}">Edit entry</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">No pending entries.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card" style="margin-top:10px;">
+    <div class="muted">No pending entries.</div>
+  </div>
+  {% endfor %}
+
   <h2>DI portfolio status (latest snapshot per molecule)</h2>
   <div class="grid cols-3">
     <div class="card">

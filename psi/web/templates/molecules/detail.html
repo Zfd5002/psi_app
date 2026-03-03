@@ -527,6 +527,28 @@
 
 <h2 id="data">Data Records</h2>
 <p class="muted">Data records are now displayed batch-first above. Records without a batch appear under the <strong>Unassigned</strong> panel.</p>
+{% if pending_evidence_preview is defined and pending_evidence_preview and pending_evidence_preview|length %}
+  <div class="card" style="margin:10px 0;">
+    <h3 style="margin-top:0;">Pending Evidence Preview</h3>
+    <p class="muted">Presentation-only comparison of pending entry metrics against the latest DI snapshot for this molecule.</p>
+    <table class="table mini">
+      <thead><tr><th>Created</th><th>Entry</th><th>Assay</th><th>Evidence preview</th></tr></thead>
+      <tbody>
+        {% for row in pending_evidence_preview %}
+          <tr>
+            <td class="muted">{{ row.created_at }}</td>
+            <td><a href="/data/{{ row.record_id }}">{{ row.title }}</a></td>
+            <td>{{ row.assay_key|humanize_path_token }}</td>
+            <td class="muted">
+              New: {{ row.counts.new_vs_last_snapshot if row.counts is defined and row.counts.new_vs_last_snapshot is defined else 0 }} ·
+              Already present: {{ row.counts.already_present if row.counts is defined and row.counts.already_present is defined else 0 }}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
 <h2 id="evidence">Recent evidence</h2>
   <table class="table">
     <thead><tr><th>Evidence type</th><th>Domain</th><th>Strength</th><th>Summary</th></tr></thead>

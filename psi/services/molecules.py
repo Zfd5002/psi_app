@@ -36,6 +36,7 @@ from psi.services.computed import run_computed_properties, get_property_runs, ge
 from psi.services.domains import extract_domains_for_molecule
 from psi.services.numbering import get_numbering_artifacts_for_molecule
 from psi.services import qc as qc_svc
+from psi.services.evidence_preview import build_pending_evidence_preview_for_molecule
 from psi.core.reference_features import detect_pdl1_features
 from psi.core.deps import heavy_compute_available_for_molecule
 from psi.core.biochem import liability_sites
@@ -295,6 +296,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         .limit(50)
         .all()
     )
+    pending_evidence_preview = build_pending_evidence_preview_for_molecule(db, molecule_id=int(molecule_id))
 
     file_links = db.query(FileLink).filter(FileLink.entity_type == "Molecule", FileLink.entity_id == molecule_id).all()
     file_ids = [fl.file_id for fl in file_links]
@@ -397,6 +399,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "di_history": di_history,
         "molecule_header_model": molecule_header_model,
         "data_records": data_records,
+        "pending_evidence_preview": pending_evidence_preview,
         "evidence": evidence,
         "file_links": file_links,
         "files_by_id": files_by_id,

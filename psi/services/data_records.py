@@ -13,6 +13,7 @@ from psi.core.utils import model_to_dict, now_utc
 from psi.services.files import attach_files
 from psi.services.measurements import extract_measurements, upsert_measurements, upsert_measurements_force, list_measurements_for_record
 from psi.services import qc as qc_svc
+from psi.services.evidence_preview import build_record_evidence_preview
 
 
 def _infer_primary_result_text(results_json: str) -> str | None:
@@ -244,6 +245,11 @@ def update_data_record(
 
     params_s = _jsonish_to_str(params_json, default="{}")
     results_s = _jsonish_to_str(results_json, default="{}")
+    run_date_s = (run_date or "").strip() or None
+    if not run_date_s and (run_at or "").strip():
+        dt = _parse_run_at(run_at)
+        if dt is not None:
+            run_date_s = dt.date().isoformat()
 
     before = model_to_dict(rec)
     rec.program_id = program_id
@@ -254,7 +260,7 @@ def update_data_record(
     rec.method = method
     rec.title = title.strip()
     rec.notes = notes.strip() or None
-    run_date=run_date_s,
+    rec.run_date = run_date_s
     rec.params_json = params_s
     rec.results_json = results_s
     rec.raw_inputs_json = params_s
@@ -321,6 +327,7 @@ def get_data_record_detail(db: Session, record_id: int) -> dict:
         .order_by(AuditEvent.timestamp.desc())
         .all()
     )
+    evidence_preview = build_record_evidence_preview(db, record_id=int(record_id))
 
     return {
         "record": rec,
@@ -332,6 +339,7 @@ def get_data_record_detail(db: Session, record_id: int) -> dict:
         "file_links": file_links,
         "files_by_id": files_by_id,
         "audits": audits,
+        "evidence_preview": evidence_preview,
     }
 
 
@@ -380,4 +388,59 @@ def api_data_records(
             }
             for r in rows
         ]
+    }
+
+
+def apply_bulk_qc_action_for_record(
+    db: Session,
+    *,
+    record_id: int,
+    action: str,
+    actor: str,
+    note: str | None = None,
+) -> dict[str, Any]:
+    rec = get_data_record(db, int(record_id))
+    if rec is None:
+        raise KeyError("DataRecord not found")
+    action_n = str(action or "").strip().lower()
+    if action_n not in {"approve", "reject"}:
+        raise ValueError("Invalid bulk qc action")
+    actor_n = str(actor or "").strip()
+    if not actor_n:
+        raise ValueError("actor is required")
+
+    measurements = list_measurements_for_record(db, record_id=int(record_id))
+    mids = sorted(int(m.get("id")) for m in measurements if m.get("id") is not None)
+    qc_state = qc_svc.get_qc_state_for_measurements(db, mids)
+    target_status = ("approved" if action_n == "approve" else "rejected")
+    target_policy = ("include" if action_n == "approve" else "exclude_hard")
+
+    applied = 0
+    skipped = 0
+    for mid in mids:
+        current = qc_state.get(int(mid)) if isinstance(qc_state.get(int(mid)), dict) else {}
+        current_status = str(current.get("status") or "unreviewed")
+        current_policy = str(current.get("ignore_policy") or "include")
+        if current_status == target_status and current_policy == target_policy:
+            skipped += 1
+            continue
+        qc_svc.append_qc_event(
+            db,
+            measurement_id=int(mid),
+            record_id=int(record_id),
+            metric_key=None,
+            action=action_n,
+            actor=actor_n,
+            note=(note or None),
+            ignore_policy=target_policy,
+            clear_legacy_ignore=(action_n == "approve"),
+        )
+        applied += 1
+    db.commit()
+    return {
+        "record_id": int(record_id),
+        "measurement_count": len(mids),
+        "applied_count": int(applied),
+        "skipped_count": int(skipped),
+        "action": action_n,
     }

@@ -1,3 +1,169 @@
+## 2026-03-03 — v1.3.0a120
+Why:
+- Add scientist-facing Evidence Preview surfaces that feel automatic after entry capture while remaining read-only and DI-safe.
+
+What:
+- Added deterministic Evidence Preview service helper:
+  - `psi/services/evidence_preview.py`
+  - compares record `data_measurements.name` keys vs latest DI snapshot `used_by_metric` for the molecule.
+  - emits stable rows sorted by `domain -> label -> metric_key` with statuses:
+    - `New vs last snapshot`
+    - `Already present`
+- Wired record-level preview into data-record detail context:
+  - `psi/services/data_records.py::get_data_record_detail(...)` now includes `evidence_preview`.
+- Wired molecule-level pending preview:
+  - `psi/services/molecules.py::get_molecule_detail(...)` now includes `pending_evidence_preview`.
+  - `psi/web/templates/molecules/detail.html` renders compact pending preview counts per record.
+- Extended program review queue with short evidence preview:
+  - `psi/services/programs.py::build_program_review_queue(...)` now adds:
+    - `evidence_preview_short`
+    - `evidence_preview` (full derived payload for optional future rendering)
+  - `psi/web/templates/programs/detail.html` adds `Evidence preview` column.
+- Updated data-record detail template:
+  - `psi/web/templates/data/detail.html` now renders primary `Evidence Preview` section.
+- Added deterministic tests:
+  - `tests/test_evidence_preview.py`
+  - verifies ordering + new-vs-existing logic and pending-record filtering behavior.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/evidence_preview.py`
+- `psi/services/data_records.py`
+- `psi/services/molecules.py`
+- `psi/services/programs.py`
+- `psi/web/templates/data/detail.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_evidence_preview.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Presentation-only, read-only evidence comparison.
+- No DI semantic/policy/ranking/snapshot/hash/replay changes.
+- No DB schema/migration changes.
+
+## 2026-03-03 — v1.3.0a119
+Why:
+- Complete scientist edit workflow wiring (Save/Cancel/Approve/Reject) and add deterministic top-to-bottom form autofill helpers.
+
+What:
+- Fixed `update_data_record(...)` run-date handling in `psi/services/data_records.py`:
+  - derives `run_date` from `run_at` when needed (matching create path behavior).
+- Enhanced edit-form workflow wiring in `psi/web/templates/data/form.html`:
+  - hidden deterministic intent field (`action_intent`)
+  - explicit buttons: `Save`, `Cancel`, `Approve`, `Reject`
+  - `return_to` support retained for queue-driven navigation.
+- Added deterministic UI autofill helper in form JS:
+  - `Apply defaults to all rows` button
+  - copies top-section parameter defaults into result fields only when target is empty
+  - no server-side semantic changes.
+- Added/updated tests:
+  - `tests/test_data_record_bulk_qc.py` adds run-date derivation regression test
+  - `tests/test_data_record_template_actions.py` asserts new action/autofill controls render.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/data_records.py`
+- `psi/web/templates/data/form.html`
+- `tests/test_data_record_bulk_qc.py`
+- `tests/test_data_record_template_actions.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Workflow/UI improvements only; no DI semantic/snapshot/hash/replay changes.
+- No DB schema/migration changes.
+
+## 2026-03-03 — v1.3.0a118
+Why:
+- Add a deterministic scientist review queue on program landing pages so pending data records can be approved or edited per molecule.
+
+What:
+- Added service-layer queue builder in `psi/services/programs.py`:
+  - `build_program_review_queue(db, program_id=...)`
+  - groups pending records by molecule in stable order
+  - pending criteria: measurement QC not fully approved (or no extracted measurements)
+  - includes deterministic preview snippet built from record metric keys.
+- Integrated queue into program detail context:
+  - `get_program_detail(...): review_queue_by_molecule`
+- Updated `psi/web/templates/programs/detail.html` with new “Review data entries” section:
+  - grouped by molecule
+  - row fields: created, batch, assay key, preview snippet
+  - actions: `Approve` (bulk entry approve) and `Edit entry`.
+- Added deterministic tests:
+  - `tests/test_program_review_queue.py`
+  - validates queue grouping/filtering and template render ordering/action links.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Presentation/workflow layer only; no DI semantics/snapshot/hash/replay changes.
+- No DB schema/migration changes.
+
+## 2026-03-03 — v1.3.0a117
+Why:
+- Add one-click per-entry QC review actions for scientists while keeping existing per-measurement QC storage and semantics intact.
+
+What:
+- Added deterministic bulk QC service helper in `psi/services/data_records.py`:
+  - `apply_bulk_qc_action_for_record(...)`
+  - supports `approve` and `reject` across all measurements in a record
+  - idempotent behavior: already-target-state measurements are skipped (no-op)
+- Added data-record bulk QC endpoints in `psi/web/routers/data_records.py`:
+  - `POST /data/{id}/qc/approve`
+  - `POST /data/{id}/qc/reject`
+- Extended edit submission flow in `psi/web/routers/data_records.py`:
+  - supports `action_intent` values `save|approve|reject`
+  - `approve|reject` performs save then bulk QC action.
+- Updated templates:
+  - `psi/web/templates/data/detail.html` adds prominent per-entry `Approve entry` / `Reject entry` actions above measurement-level review.
+  - `psi/web/templates/data/form.html` adds `Save`, `Cancel`, `Approve`, `Reject` buttons for edit workflow wiring.
+- Added deterministic tests:
+  - `tests/test_data_record_bulk_qc.py`
+  - `tests/test_data_record_template_actions.py`
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/data_records.py`
+- `psi/web/routers/data_records.py`
+- `psi/web/templates/data/detail.html`
+- `psi/web/templates/data/form.html`
+- `tests/test_data_record_bulk_qc.py`
+- `tests/test_data_record_template_actions.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Uses existing QC actions/statuses only; no DI/replay/ranking/snapshot/hash behavior changes.
+- No DB schema/migration changes.
+
 ## 2026-03-03 — v1.3.0a116
 Why:
 - Surface the new additive molecule `scientific_summary` payload in board templates for meeting-ready scientific review.
