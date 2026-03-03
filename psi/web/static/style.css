@@ -93,6 +93,18 @@ body.pdf-mode .card{box-shadow:none;background:white;color:black;border-color:#d
 body.pdf-mode .grid.cols-2{grid-template-columns:1fr 1fr}
 body.pdf-mode .technical-panel{display:none !important}
 body.pdf-mode pre,body.pdf-mode code{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+body.pdf-mode .report-detail-page{padding:12px}
+body.pdf-mode .report-detail-header-row{margin-bottom:8px}
+body.pdf-mode h1{font-size:24px;line-height:1.25}
+body.pdf-mode h2{font-size:18px;line-height:1.3;margin:10px 0 6px}
+body.pdf-mode h3{font-size:15px;line-height:1.35}
+body.pdf-mode h4{font-size:13px;line-height:1.35}
+body.pdf-mode p,body.pdf-mode li,body.pdf-mode td,body.pdf-mode th{font-size:12px;line-height:1.45}
+body.pdf-mode .report-block,body.pdf-mode .report-section-card,body.pdf-mode .executive-header{break-inside:avoid;page-break-inside:avoid}
+body.pdf-mode table{table-layout:fixed;width:100%;margin:6px 0 8px}
+body.pdf-mode th,body.pdf-mode td{vertical-align:top;overflow-wrap:anywhere;word-break:break-word}
+body.pdf-mode ul,body.pdf-mode ol{margin:6px 0 8px 18px;padding:0}
+body.pdf-mode li{break-inside:avoid;page-break-inside:avoid}
 @media print{
   @page{size:auto;margin:12mm}
   .nav,.no-print{display:none !important}
@@ -102,6 +114,19 @@ body.pdf-mode pre,body.pdf-mode code{white-space:pre-wrap;overflow-wrap:anywhere
   a{color:#004C97}
   .grid.cols-2{grid-template-columns:1fr 1fr !important}
   pre,code{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+  .report-detail-page{padding:12px}
+  .report-detail-header-row{margin-bottom:8px}
+  h1{font-size:24px;line-height:1.25}
+  h2{font-size:18px;line-height:1.3;margin:10px 0 6px}
+  h3{font-size:15px;line-height:1.35}
+  h4{font-size:13px;line-height:1.35}
+  p,li,td,th{font-size:12px;line-height:1.45}
+  .report-block,.report-section-card,.executive-header{break-inside:avoid;page-break-inside:avoid}
+  .report-section-grid{display:block}
+  table{table-layout:fixed;width:100%;margin:6px 0 8px}
+  th,td{vertical-align:top;overflow-wrap:anywhere;word-break:break-word}
+  ul,ol{margin:6px 0 8px 18px;padding:0}
+  li{break-inside:avoid;page-break-inside:avoid}
 }
 
 /* Ruler labels: center multi-digit position numbers over residue columns */

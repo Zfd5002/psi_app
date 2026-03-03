@@ -7,7 +7,7 @@
 {% set next_steps = (n.next_steps if n.next_steps is defined and n.next_steps is iterable else []) %}
 
 <h2>Executive Summary</h2>
-<div class="card">
+<div class="card report-block report-section-card">
   <h3 style="margin-top:0;">{{ n.headline if n.headline is defined else "Not available" }}</h3>
   <div class="grid cols-2">
     <div>
@@ -36,7 +36,7 @@
 </div>
 
 <h2>Determinations</h2>
-<div class="grid cols-2">
+<div class="grid cols-2 report-section-grid">
   {% for det in det_rows %}
   {{ cards.render_determination_card(
     (det.title if det is mapping and det.title is defined else "Determination"),
@@ -52,12 +52,12 @@
     {}
   ) }}
   {% else %}
-  <div class="card">No determinations available.</div>
+  <div class="card report-block report-section-card">No determinations available.</div>
   {% endfor %}
 </div>
 
 <h2>Evidence</h2>
-<div class="card">
+<div class="card report-block report-section-card">
   <table>
     <tbody>
       {% for row in evidence_rows %}
@@ -70,7 +70,7 @@
 </div>
 
 <h2>Next steps</h2>
-<div class="card">
+<div class="card report-block report-section-card">
   <ul>
     {% for item in next_steps %}
     <li>{{ item }}</li>

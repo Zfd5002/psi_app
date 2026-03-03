@@ -1,3 +1,35 @@
+## 2026-03-02 — v1.3.0a90
+Why:
+- Improve board-first PDF export readability and print stability without changing report semantics.
+
+What:
+- Added print/PDF presentation polish in `psi/web/static/style.css`:
+  - break-avoid rules for key report blocks/cards/lists,
+  - improved wrap behavior for table and long text content,
+  - normalized print/PDF typography and spacing.
+- Added minimal report-template wrapper classes for targeted styling:
+  - `psi/web/templates/reports/detail.html`
+  - `psi/web/templates/reports/_board_narrative.html`
+- No changes to report ordering, payloads, routing, or logic.
+
+Files changed:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/_board_narrative.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+Guarantees:
+- Presentation-only patch.
+- No DI semantic/policy/ranking/hashing/replay changes.
+- No DB schema/migration changes.
+
 ## 2026-03-02 — v1.3.0a89
 Why:
 - Complete removal of the legacy compatibility shim for `v3_board_reports` so only the quarantined deprecated module remains.

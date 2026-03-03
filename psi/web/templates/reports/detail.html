@@ -3,14 +3,14 @@
 {% block content %}
 {% set payload_meta = (payload.metadata if payload is defined and payload.metadata is defined else {}) %}
 {% set is_pdf = (is_pdf if is_pdf is defined else false) %}
-<div class="card">
-  <div class="row" style="justify-content:space-between;align-items:center;">
+<div class="card report-detail-page">
+  <div class="row report-detail-header-row" style="justify-content:space-between;align-items:center;">
     <h1 style="margin:0;">Report #{{ report_run.id }}</h1>
     {% if not is_pdf %}
     <a class="btn no-print" href="/reports/{{ report_run.id }}?export=pdf">Export PDF</a>
     {% endif %}
   </div>
-  <div class="card executive-header" style="margin-top:8px;">
+  <div class="card executive-header report-block" style="margin-top:8px;">
     <h2 style="margin-top:0;">Executive Header</h2>
     <div class="grid cols-2">
       <div>
@@ -39,7 +39,7 @@
   </div>
   {% endif %}
 
-  <section id="report-board-panel" data-view-panel="board">
+  <section id="report-board-panel" class="report-board-panel" data-view-panel="board">
     {% include "reports/_board_narrative.html" %}
   </section>
 
