@@ -1,31 +1,32 @@
 <section id="board-molecule-v3" class="board-template board-template-molecule">
   {% set board = (molecule_board_display if molecule_board_display is defined and molecule_board_display is mapping else {}) %}
   {% set header = (board.header if board.header is defined and board.header is mapping else {}) %}
-  {% set conclusions = (board.conclusions if board.conclusions is defined and board.conclusions is mapping else {}) %}
+  {% set summary = (board.report_summary if board.report_summary is defined and board.report_summary is mapping else (board.conclusions if board.conclusions is defined and board.conclusions is mapping else {})) %}
   {% set batch_registry = (board.batch_registry if board.batch_registry is defined and board.batch_registry is iterable else []) %}
-  {% set gate_summary = (board.gate_summary if board.gate_summary is defined and board.gate_summary is mapping else {}) %}
-  {% set best_gate_rows = (gate_summary.best_batch_rows if gate_summary.best_batch_rows is defined and gate_summary.best_batch_rows is iterable else []) %}
-  {% set per_batch_rows = (gate_summary.per_batch_rows if gate_summary.per_batch_rows is defined and gate_summary.per_batch_rows is iterable else []) %}
   {% set fact_sheet = (board.fact_sheet if board.fact_sheet is defined and board.fact_sheet is mapping else {}) %}
   {% set fact_batches = (fact_sheet.batch_labels if fact_sheet.batch_labels is defined and fact_sheet.batch_labels is iterable else []) %}
   {% set fact_rows = (fact_sheet.metric_rows if fact_sheet.metric_rows is defined and fact_sheet.metric_rows is iterable else []) %}
-  {% set comparability = (board.comparability if board.comparability is defined and board.comparability is mapping else {}) %}
-  {% set risk_qc = (board.risk_qc if board.risk_qc is defined and board.risk_qc is mapping else {}) %}
+  {% set coverage = (board.coverage_summary if board.coverage_summary is defined and board.coverage_summary is mapping else {}) %}
+  {% set artifacts = (board.artifacts if board.artifacts is defined and board.artifacts is mapping else {}) %}
+  {% set artifact_items = (artifacts["items"] if artifacts is mapping and artifacts["items"] is defined and artifacts["items"] is iterable else []) %}
   {% set scientist_notes = (board.scientist_notes if board.scientist_notes is defined and board.scientist_notes is iterable else []) %}
 
   <h2 class="print-only">Molecule Board View</h2>
 
   <div class="card report-block report-section-card">
-    <h2 style="margin-top:0;">Molecule Fact Sheet Header</h2>
+    <h2 style="margin-top:0;">Molecule Header</h2>
     <div class="grid cols-2">
       <div>
         <div class="executive-kv-row"><strong>Molecule:</strong> <code>{{ header.molecule if header.molecule is defined and header.molecule else "unknown" }}</code></div>
         <div class="executive-kv-row"><strong>Program:</strong> <code>{{ header.program if header.program is defined and header.program else "unknown" }}</code></div>
-        <div class="executive-kv-row"><strong>Decision Template:</strong> <code>{{ header.decision_template if header.decision_template is defined and header.decision_template else "molecule_report" }}</code></div>
+        {% if header.modality is defined and header.modality %}
+        <div class="executive-kv-row"><strong>Modality:</strong> {{ header.modality }}</div>
+        {% endif %}
       </div>
       <div>
-        <div class="executive-kv-row"><strong>Policy Version:</strong> <code>{{ header.policy_version if header.policy_version is defined and header.policy_version else "unknown" }}</code></div>
-        <div class="executive-kv-row"><strong>Snapshot ID:</strong> <code>{{ header.snapshot_id if header.snapshot_id is defined and header.snapshot_id is not none else "unknown" }}</code></div>
+        {% if header.target is defined and header.target %}
+        <div class="executive-kv-row"><strong>Target:</strong> {{ header.target }}</div>
+        {% endif %}
         {% if header.generated_at is defined and header.generated_at %}
         <div class="executive-kv-row"><strong>Report Generated At:</strong> {{ header.generated_at }}</div>
         {% endif %}
@@ -34,45 +35,20 @@
   </div>
 
   <div class="card report-block report-section-card">
-    <h2 style="margin-top:0;">Conclusions</h2>
+    <h2 style="margin-top:0;">Report Summary</h2>
     <table class="board-section-table">
       <tbody>
-        <tr><th>Readiness Status</th><td>{{ (conclusions.readiness_status if conclusions.readiness_status is defined else "not_assessed")|humanize_state }}</td></tr>
-        <tr><th>Best Overall Batch</th><td>{{ conclusions.best_overall_batch if conclusions.best_overall_batch is defined and conclusions.best_overall_batch else "unknown" }}</td></tr>
-        <tr><th>Comparability Status</th><td>{{ (conclusions.comparability_status if conclusions.comparability_status is defined else "not_assessed")|humanize_state }}</td></tr>
-        {% if conclusions.confidence is defined and conclusions.confidence and conclusions.confidence != "Not available" %}
-        <tr><th>Confidence</th><td>{{ conclusions.confidence }}</td></tr>
-        {% endif %}
-        <tr><th>Stability Status</th><td>{{ conclusions.stability_status if conclusions.stability_status is defined and conclusions.stability_status else "INSUFFICIENT DATA" }}</td></tr>
+        <tr><th>Most Complete Batch (Coverage)</th><td>{{ summary.most_complete_batch if summary.most_complete_batch is defined and summary.most_complete_batch else "unknown" }}</td></tr>
+        <tr><th>Stability Status (Coverage)</th><td>{{ summary.stability_status if summary.stability_status is defined and summary.stability_status else "UNCOMPUTED" }}</td></tr>
+        <tr><th>Required Metrics Present (Top Batch)</th><td>{{ summary.top_required_present_count if summary.top_required_present_count is defined else 0 }}</td></tr>
+        <tr><th>Total Metrics Present (Top Batch)</th><td>{{ summary.top_total_present_count if summary.top_total_present_count is defined else 0 }}</td></tr>
       </tbody>
     </table>
-    <h3>Executive Interpretation</h3>
-    <p>{{ conclusions.executive_paragraph if conclusions.executive_paragraph is defined and conclusions.executive_paragraph else "No deterministic conclusion text available." }}</p>
-    <div class="grid cols-2">
-      <div>
-        <h3>Key Blockers / Missing Metrics</h3>
-        <ul class="narrative-list">
-          {% for item in (conclusions.blockers if conclusions.blockers is defined and conclusions.blockers is iterable else []) %}
-          <li>{{ item|humanize_state }}</li>
-          {% else %}
-          <li>None recorded.</li>
-          {% endfor %}
-        </ul>
-      </div>
-      <div>
-        <h3>Governance / QC Warnings</h3>
-        <ul class="narrative-list">
-          {% for item in (conclusions.governance_warnings if conclusions.governance_warnings is defined and conclusions.governance_warnings is iterable else []) %}
-          <li>{{ item|humanize_state }}</li>
-          {% else %}
-          <li>None recorded.</li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
+    <h3>Summary Narrative</h3>
+    <p>{{ summary.executive_paragraph if summary.executive_paragraph is defined and summary.executive_paragraph else "No summary text available." }}</p>
     <h3>Stability Rationale</h3>
     <ul class="narrative-list">
-      {% for item in (conclusions.stability_rationale if conclusions.stability_rationale is defined and conclusions.stability_rationale is iterable else []) %}
+      {% for item in (summary.stability_rationale if summary.stability_rationale is defined and summary.stability_rationale is iterable else []) %}
       <li>{{ item }}</li>
       {% else %}
       <li>No rationale available.</li>
@@ -109,58 +85,9 @@
   </div>
 
   <div class="card report-block report-section-card">
-    <h2 style="margin-top:0;">Gate Summary</h2>
-    <h3>Best-Batch Gate Matrix</h3>
-    <table class="board-section-table">
-      <thead><tr><th>Gate</th><th>Status</th><th>Primary Evidence</th><th>Notes</th></tr></thead>
-      <tbody>
-        {% for row in best_gate_rows %}
-        <tr>
-          <td>{{ row.gate_key if row is mapping and row.gate_key is defined else "unknown" }}</td>
-          <td>{{ (row.status if row is mapping and row.status is defined else "not_assessed")|humanize_state }}</td>
-          <td>{{ row.primary_evidence if row is mapping and row.primary_evidence is defined else "Not available" }}</td>
-          <td>{{ row.notes if row is mapping and row.notes is defined else "" }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4">No gate matrix available for the selected best batch.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    <h3>Per-Batch Gate Snapshot</h3>
-    <table class="board-section-table">
-      <thead><tr><th>Batch</th><th>Overall</th><th>Fail Gates</th><th>Missing Gates</th></tr></thead>
-      <tbody>
-        {% for row in per_batch_rows %}
-        <tr>
-          <td>{{ row.batch_label if row is mapping and row.batch_label is defined else "unknown" }}</td>
-          <td>{{ (row.overall if row is mapping and row.overall is defined else "not_assessed")|humanize_state }}</td>
-          <td>
-            {% if row is mapping and row.fail_gates is defined and row.fail_gates %}
-            {{ row.fail_gates|join(", ") }}
-            {% else %}
-            none
-            {% endif %}
-          </td>
-          <td>
-            {% if row is mapping and row.missing_gates is defined and row.missing_gates %}
-            {{ row.missing_gates|join(", ") }}
-            {% else %}
-            none
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4">No per-batch gate snapshot available.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="card report-block report-section-card">
     <h2 style="margin-top:0;">Experimental Results Fact Sheet</h2>
     <div class="table-scroll-safe">
-      <table class="board-section-table">
+      <table class="board-section-table fact-sheet-matrix">
         <thead>
           <tr>
             <th>Metric</th>
@@ -183,7 +110,7 @@
             {% endfor %}
           </tr>
           {% else %}
-          <tr><td colspan="{{ 1 + (fact_batches|length) }}">No batch metric matrix could be assembled from available payload/snapshots.</td></tr>
+          <tr><td colspan="{{ 1 + (fact_batches|length) }}">No batch metric matrix could be assembled from available report payload.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -191,34 +118,47 @@
   </div>
 
   <div class="card report-block report-section-card">
-    <h2 style="margin-top:0;">Comparability</h2>
+    <h2 style="margin-top:0;">Coverage Summary</h2>
     <table class="board-section-table">
       <tbody>
-        <tr><th>Effective Status</th><td>{{ comparability.effective_status if comparability.effective_status is defined else "Not assessed" }}</td></tr>
-        <tr><th>Category Resolution</th><td>{{ comparability.resolved_status if comparability.resolved_status is defined else "Not assessed" }}</td></tr>
-        <tr><th>As-Of Basis</th><td>{{ comparability.as_of_basis if comparability.as_of_basis is defined and comparability.as_of_basis else "unknown" }}</td></tr>
-        <tr><th>Policy Ref / Version</th><td>{{ comparability.policy_ref if comparability.policy_ref is defined and comparability.policy_ref else "unknown" }}</td></tr>
+        <tr><th>Batch Count</th><td>{{ coverage.batch_count if coverage.batch_count is defined else 0 }}</td></tr>
+        <tr><th>Record Count</th><td>{{ coverage.record_count if coverage.record_count is defined else 0 }}</td></tr>
+        <tr><th>Measurement Count</th><td>{{ coverage.measurement_count if coverage.measurement_count is defined else 0 }}</td></tr>
+        <tr><th>Required Metric Count</th><td>{{ coverage.required_metric_count if coverage.required_metric_count is defined else 0 }}</td></tr>
       </tbody>
     </table>
-    <h3>Governance Warnings</h3>
-    <ul class="narrative-list">
-      {% for item in (comparability.governance_warnings if comparability.governance_warnings is defined and comparability.governance_warnings is iterable else []) %}
-      <li>{{ item|humanize_state }}</li>
-      {% else %}
-      <li>None recorded.</li>
-      {% endfor %}
-    </ul>
   </div>
 
   <div class="card report-block report-section-card">
-    <h2 style="margin-top:0;">Risk &amp; QC Summary</h2>
-    <ul class="narrative-list">
-      {% for item in (risk_qc.bullets if risk_qc is mapping and risk_qc.bullets is defined and risk_qc.bullets is iterable else []) %}
-      <li>{{ item }}</li>
-      {% else %}
-      <li>No risk or QC summary available.</li>
-      {% endfor %}
-    </ul>
+    <h2 style="margin-top:0;">Artifacts</h2>
+    <table class="board-section-table">
+      <thead>
+        <tr><th>Type</th><th>Batch</th><th>Date</th><th>Label</th><th>Links</th></tr>
+      </thead>
+      <tbody>
+        {% for item in artifact_items %}
+        <tr>
+          <td>{{ item.artifact_type if item is mapping and item.artifact_type is defined else "OTHER" }}</td>
+          <td>{{ item.batch_label if item is mapping and item.batch_label is defined and item.batch_label else "unknown" }}</td>
+          <td>{{ item.created_at if item is mapping and item.created_at is defined and item.created_at else "unknown" }}</td>
+          <td>{{ item.title if item is mapping and item.title is defined else "artifact" }}</td>
+          <td>
+            {% if item is mapping and item.links is defined and item.links %}
+              {% for link in item.links %}
+                {% if link is mapping and link.url is defined and link.url %}
+                <a href="{{ link.url }}">{{ link.label if link.label is defined and link.label else "link" }}</a>{% if not loop.last %}, {% endif %}
+                {% endif %}
+              {% endfor %}
+            {% else %}
+            none
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">No artifacts available in this report payload.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 
   <div class="card report-block report-section-card">

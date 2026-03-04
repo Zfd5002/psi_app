@@ -106,20 +106,15 @@ def _cell_from_metric_refs(value: object) -> str:
 def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) -> dict[str, object]:
     sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
     identity = sections.get("identity_context") if isinstance(sections.get("identity_context"), dict) else {}
-    stage = sections.get("stage_determination") if isinstance(sections.get("stage_determination"), dict) else {}
-    drift = sections.get("drift_history") if isinstance(sections.get("drift_history"), dict) else {}
-    comp_det = drift.get("comparability_determination") if isinstance(drift.get("comparability_determination"), dict) else {}
-    repro = sections.get("reproducibility_appendix") if isinstance(sections.get("reproducibility_appendix"), dict) else {}
-    risk_profile = sections.get("risk_profile") if isinstance(sections.get("risk_profile"), dict) else {}
-    gaps = sections.get("experimental_gaps") if isinstance(sections.get("experimental_gaps"), dict) else {}
     fact = sections.get("fact_sheet") if isinstance(sections.get("fact_sheet"), dict) else {}
+    artifacts = sections.get("artifacts") if isinstance(sections.get("artifacts"), dict) else {}
     batch_registry = fact.get("batch_registry") if isinstance(fact.get("batch_registry"), list) else []
     matrix = fact.get("metric_matrix") if isinstance(fact.get("metric_matrix"), dict) else {}
     metrics_idx = fact.get("metrics_index") if isinstance(fact.get("metrics_index"), dict) else {}
     coverage = fact.get("coverage_summary") if isinstance(fact.get("coverage_summary"), dict) else {}
     best = fact.get("best_batch") if isinstance(fact.get("best_batch"), dict) else {}
     stability = fact.get("stability") if isinstance(fact.get("stability"), dict) else {}
-    gates_v1 = fact.get("gates_v1") if isinstance(fact.get("gates_v1"), dict) else {}
+    meta = fact.get("meta") if isinstance(fact.get("meta"), dict) else {}
 
     batch_cols = matrix.get("batch_columns") if isinstance(matrix.get("batch_columns"), list) else []
     matrix_rows = matrix.get("rows") if isinstance(matrix.get("rows"), list) else []
@@ -142,32 +137,6 @@ def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) 
                 "cells": [str((c.get("display") if isinstance(c, dict) else "") or "not run") for c in cells],
             }
         )
-
-    risk_flags = risk_profile.get("risk_flags_enriched") if isinstance(risk_profile.get("risk_flags_enriched"), list) else []
-    governance_warnings = repro.get("governance_red_flags") if isinstance(repro.get("governance_red_flags"), list) else []
-    missing_metrics = sorted(str(x) for x in (comp_det.get("missing_inputs", {}).get("required_measurement_keys_missing") if isinstance(comp_det.get("missing_inputs"), dict) else []) if str(x).strip())
-    risk_qc_bullets: list[str] = []
-    if missing_metrics:
-        risk_qc_bullets.append("Missing required metrics: " + ", ".join(missing_metrics))
-    if risk_flags:
-        ordered_flags = sorted(
-            [rf for rf in risk_flags if isinstance(rf, dict)],
-            key=lambda r: (str(r.get("severity") or ""), str(r.get("key") or "")),
-        )
-        risk_qc_bullets.append(
-            "Risk flags: "
-            + ", ".join(
-                f"{str(r.get('severity') or 'unknown').upper()}:{str(r.get('key') or 'unknown')}"
-                for r in ordered_flags
-            )
-        )
-    if governance_warnings:
-        risk_qc_bullets.append(
-            "Governance warnings: "
-            + ", ".join(sorted(str(w.get("flag_code") or "warning") for w in governance_warnings if isinstance(w, dict)))
-        )
-    if not risk_qc_bullets:
-        risk_qc_bullets.append("No major risk or QC warnings captured by this surface.")
 
     notes: list[dict[str, object]] = []
     normalized_batch_registry: list[dict[str, object]] = []
@@ -197,10 +166,6 @@ def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) 
             }
         )
 
-    readiness = str(stage.get("decision_state") or stage.get("readiness_state") or "not_assessed").strip() or "not_assessed"
-    blockers = [str(x).strip() for x in (gaps.get("blockers") if isinstance(gaps.get("blockers"), list) else []) if str(x).strip()]
-    comp_status = str(comp_det.get("category") or "not_assessed")
-    warnings_compact = sorted(str(w.get("flag_code") or "") for w in governance_warnings if isinstance(w, dict) and str(w.get("flag_code") or "").strip())
     best_label = "unknown"
     best_id = best.get("selected_batch_id")
     if best_id is not None:
@@ -208,62 +173,47 @@ def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) 
             if isinstance(br, dict) and br.get("batch_id") == best_id:
                 best_label = str(br.get("batch_label") or best_id)
                 break
+    coverage_rows = coverage.get("required_present_by_batch") if isinstance(coverage.get("required_present_by_batch"), list) else []
+    top_coverage = coverage_rows[0] if coverage_rows and isinstance(coverage_rows[0], dict) else {}
+    top_required = int(top_coverage.get("required_present_count") or 0)
+    top_total = int(top_coverage.get("total_present_count") or 0)
     executive_paragraph = (
-        f"Readiness is {readiness.replace('_', ' ')}; stability is {str(stability.get('status') or 'uncomputed').replace('_', ' ').lower()}; "
-        f"comparability is {comp_status.replace('_', ' ')}; "
-        + (("blockers include " + ", ".join(blockers[:3]) + "; ") if blockers else "no explicit blockers were recorded; ")
-        + (("governance warnings: " + ", ".join(warnings_compact[:3]) + ".") if warnings_compact else "no governance warnings were recorded.")
+        f"Most complete batch by measurement coverage is {best_label}. "
+        f"Coverage summary records {int(coverage.get('measurement_count') or 0)} measurements across "
+        f"{int(coverage.get('batch_count') or 0)} batches as of {str(meta.get('as_of') or '')}."
     )
 
     return {
         "header": {
             "molecule": _clean_board_text(identity.get("primary_id") or identity.get("title") or f"molecule_id={identity.get('molecule_id') or ''}"),
             "program": (f"program_id={identity.get('program_id')}" if identity.get("program_id") is not None else "unknown"),
-            "decision_template": _clean_board_text(payload.get("metadata", {}).get("report_type") if isinstance(payload.get("metadata"), dict) else row.report_type),
-            "policy_version": _clean_board_text(repro.get("catalog_versions", {}).get("comparability_policy") if isinstance(repro.get("catalog_versions"), dict) else "unknown"),
-            "snapshot_id": (int(identity.get("snapshot_id")) if str(identity.get("snapshot_id") or "").isdigit() else None),
+            "modality": _clean_board_text(identity.get("modality") or ""),
+            "target": _clean_board_text(identity.get("target") or ""),
             "generated_at": (row.created_at.isoformat() if row.created_at is not None else ""),
         },
-        "conclusions": {
-            "readiness_status": readiness,
-            "best_overall_batch": best_label,
-            "comparability_status": comp_status,
-            "confidence": _clean_board_text(sections.get("confidence_decomposition", {}).get("confidence", {}).get("overall") if isinstance(sections.get("confidence_decomposition"), dict) else ""),
+        "report_summary": {
+            "most_complete_batch": best_label,
             "stability_status": str(stability.get("status") or "uncomputed").upper(),
-            "blockers": blockers,
-            "governance_warnings": warnings_compact,
+            "top_required_present_count": top_required,
+            "top_total_present_count": top_total,
+            "executive_paragraph": _clean_board_text(executive_paragraph),
+            "stability_rationale": [str(x) for x in (stability.get("rationale") if isinstance(stability.get("rationale"), list) else []) if str(x).strip()],
+        },
+        "conclusions": {
+            "most_complete_batch": best_label,
+            "stability_status": str(stability.get("status") or "uncomputed").upper(),
+            "top_required_present_count": top_required,
+            "top_total_present_count": top_total,
             "executive_paragraph": _clean_board_text(executive_paragraph),
             "stability_rationale": [str(x) for x in (stability.get("rationale") if isinstance(stability.get("rationale"), list) else []) if str(x).strip()],
         },
         "batch_registry": normalized_batch_registry,
-        "gate_summary": {
-            "best_batch_rows": (
-                [r for r in gates_v1.get("best_batch_gate_matrix", []) if isinstance(r, dict)]
-                if isinstance(gates_v1.get("best_batch_gate_matrix"), list)
-                else []
-            ),
-            "per_batch_rows": (
-                [r for r in gates_v1.get("per_batch_gate_snapshot", []) if isinstance(r, dict)]
-                if isinstance(gates_v1.get("per_batch_gate_snapshot"), list)
-                else []
-            ),
-        },
         "fact_sheet": {
             "batch_labels": [str(c.get("batch_label") or "") for c in batch_cols if isinstance(c, dict)],
             "metric_rows": fact_rows,
         },
-        "comparability": {
-            "effective_status": _clean_board_text(comp_det.get("category") or "not_assessed"),
-            "resolved_status": _clean_board_text(comp_det.get("category") or "not_assessed"),
-            "rule_id": _clean_board_text(comp_det.get("rule_id") or "not_available"),
-            "as_of_basis": _clean_board_text(payload.get("metadata", {}).get("as_of") if isinstance(payload.get("metadata"), dict) else ""),
-            "policy_ref": _clean_board_text(repro.get("catalog_versions", {}).get("comparability_policy") if isinstance(repro.get("catalog_versions"), dict) else "unknown"),
-            "governance_warnings": warnings_compact,
-        },
-        "risk_qc": {
-            "bullets": risk_qc_bullets,
-            "coverage_summary": coverage,
-        },
+        "coverage_summary": coverage,
+        "artifacts": artifacts,
         "scientist_notes": notes,
     }
 

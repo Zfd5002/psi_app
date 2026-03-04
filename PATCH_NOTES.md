@@ -6780,6 +6780,186 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-03 — v1.3.0b15
+Intent:
+- Add explicit deterministic ranking tie-break contract fields and tie-break explanation schema metadata without changing ranking behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/ranking_policy_v0_2.json`
+- `psi/services/v3_ranking.py`
+
+Behavior:
+- Ranking policy v0.2 now explicitly carries `method.tie_break_contract.tie_break_keys` and `explanation_schema_version`.
+- `load_ranking_policy_v0_2()` now normalizes tie-break contract defaults deterministically and strips any unexpected `weights` key from method payload.
+- `build_ranking_surface()` tie-break explanations now include `schema_version` while preserving existing deterministic `keys` and `key_values`.
+
+Guardrails:
+- No DB migrations.
+- No DI semantic changes.
+- No ranking algorithm changes beyond deterministic contract metadata hardening.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b14
+Intent:
+- Fix codex/repo divergence after b13 by shipping an atomic overlay that includes the previously omitted report engine + aligned tests.
+
+Root cause:
+- Prior b13 overlay did not include `psi/services/report_engine.py` and several related test files, leaving repo runtime/tests on stale molecule report contract behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/services/reports_v3.py`
+- `tests/test_di_run_verify_and_report_pins.py`
+- `tests/test_scientific_summary_report.py`
+- `tests/test_v3_attribution_isolation.py`
+- `tests/test_v3_board_report_determinism.py`
+- `tests/test_v3_molecule_report_schema.py`
+- `tests/test_v3_ranking_tiebreak.py`
+- `tests/test_v3_report_contracts.py`
+- `tests/test_v3_report_engine_contracts.py`
+- `tests/test_v3_narrative_measurement_wiring.py`
+- `tests/test_molecule_report_evidence_only.py`
+- `tests/test_board_molecule_sections_rendering.py`
+- `tests/test_ui_label_humanization.py`
+- `psi/tools/di_contract_smoke.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+
+Behavior:
+- Molecule reports remain evidence-only (no DI sections reintroduced).
+- Molecule payload contract includes deterministic `reproducibility_appendix` scaffolding required by report engine/smoke checks.
+- Report display and tests are aligned to evidence-only molecule semantics and payload-driven rendering.
+- Overlay packaged atomically to avoid code/test skew between codex and runtime repo.
+
+Guardrails:
+- No DB migrations.
+- No DI semantic, snapshot contract, or fingerprinting changes.
+- No view-time report recompute introduced.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b13
+Intent:
+- Align molecule report contracts/tests with evidence-only payload semantics while preserving required `reproducibility_appendix` contract keys for engine/smoke compatibility.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/tools/di_contract_smoke.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `tests/test_board_molecule_sections_rendering.py`
+- `tests/test_molecule_report_evidence_only.py`
+- `tests/test_ui_label_humanization.py`
+- `tests/test_v3_narrative_measurement_wiring.py`
+- `tests/test_v3_report_contracts.py`
+- `tests/test_v3_report_engine_contracts.py`
+
+Behavior:
+- Molecule report section contract now consistently expects:
+  - `identity_context`
+  - `fact_sheet`
+  - `artifacts`
+  - `reproducibility_appendix`
+- Molecule `reproducibility_appendix` is evidence-only and deterministic; tests now validate `measurement_keys` from fact-sheet measurement coverage.
+- Board molecule template now binds summary fields from `report_summary` with backward-compatible fallback.
+- Smoke contract check now enforces `reproducibility_appendix` base keys for all report skeletons, including molecule reports.
+- Evidence-only tests updated to assert no DI sections while still requiring deterministic reproducibility appendix presence.
+
+Guardrails:
+- No DB schema changes.
+- No DI semantic, snapshot contract, hashing/fingerprint, or replay behavior changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b12
+Intent:
+- Add payload-persisted molecule report artifacts surface and render it payload-only in board view.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/services/reports_v3.py`
+- `psi/services/report_artifacts.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `tests/test_molecule_report_artifacts.py`
+- `tests/test_molecule_report_evidence_only.py`
+- `tests/test_board_molecule_sections_rendering.py`
+- `tests/test_v3_report_contracts.py`
+
+Behavior:
+- Added `sections.artifacts` to molecule report payload at write-time:
+  - schema: `{"schema_version":"v1","as_of":...,"items":[...]}`
+  - each item includes deterministic type, batch, record, timestamp, label, and internal links.
+- Added deterministic artifact assembler:
+  - `assemble_molecule_report_artifacts(db, molecule_id, as_of)`
+  - type ordering: `SEC`, `SDS_PAGE`, `ENDOTOXIN`, `OTHER`
+  - stable item ordering with explicit tie-breaks.
+- Molecule board now renders an “Artifacts” section from payload only (no view-time DB recompute).
+
+Tests:
+- Added:
+  - `test_molecule_report_persists_artifacts_section`
+  - `test_artifacts_ordering_deterministic`
+  - `test_artifacts_render_no_db_query_at_view_time`
+  - `test_artifacts_links_are_internal_and_stable`
+
+Guardrails:
+- No DI dependence for artifact rendering.
+- No schema migration, replay, hash/fingerprint, or policy semantic changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b11
+Intent:
+- Convert molecule reports to evidence-only payload/UI and fix Experimental Results header alignment.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `psi/services/reports_v3.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `psi/web/static/style.css`
+- `tests/test_board_molecule_sections_rendering.py`
+- `tests/test_molecule_report_evidence_only.py`
+- `tests/test_v3_report_contracts.py`
+- `tests/test_v3_report_engine_contracts.py`
+- `tests/test_v3_narrative_measurement_wiring.py`
+- `tests/test_v3_molecule_report_schema.py`
+- `tests/test_v3_board_report_determinism.py`
+- `tests/test_di_run_verify_and_report_pins.py`
+
+Behavior:
+- Molecule report generation now persists evidence-only sections:
+  - `identity_context`
+  - `fact_sheet`
+- Molecule report payload no longer persists DI-derived sections (readiness/gates/comparability/risk/reproducibility appendices).
+- Molecule board template now renders evidence-only sections and uses “Report Summary” wording.
+- Removed molecule snapshot coverage display in report detail executive header.
+- Experimental Results matrix now has a stable left-alignment hook (`.fact-sheet-matrix`) for header/body alignment.
+- Added evidence-only regression tests:
+  - `test_molecule_report_evidence_only_has_no_di_sections`
+  - `test_molecule_report_renders_without_snapshots`
+  - `test_molecule_report_board_template_no_di_strings`
+  - `test_experimental_results_header_alignment_hook_present`
+
+Guardrails:
+- Payload-rendering remains view-time DB independent for report content.
+- No DI route/helper removal, schema migration, replay, hash/fingerprint, or policy semantic changes.
+
+Gates:
+- PASS
+
 ## 2026-03-03 — v1.3.0b10
 Intent:
 - Harden run-governance coherence checks and pin-warning coverage without changing replay defaults.

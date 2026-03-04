@@ -72,15 +72,9 @@ def _build_fixture_db():
 def _required_sections(report_type: str) -> tuple[str, ...]:
     if report_type == REPORT_TYPE_MOLECULE:
         return (
+            "artifacts",
             "identity_context",
-            "stage_determination",
-            "confidence_decomposition",
-            "mechanistic_evidence_map",
-            "risk_profile",
-            "experimental_gaps",
-            "scientific_summary",
             "fact_sheet",
-            "drift_history",
             "reproducibility_appendix",
         )
     if report_type == REPORT_TYPE_PROGRAM:
@@ -141,15 +135,15 @@ def test_v3_report_contract_sections_and_canonical_serialization_stability():
             sections = payload.get("sections") if isinstance(payload, dict) else {}
             assert isinstance(sections, dict)
             expected = _required_sections(rt)
-            assert tuple(sections.keys()) == tuple(sorted(expected))
-            repro = sections.get("reproducibility_appendix") if isinstance(sections.get("reproducibility_appendix"), dict) else {}
+            assert set(sections.keys()) == set(expected)
             if rt == REPORT_TYPE_MOLECULE:
-                assert repro.get("measurement_keys") == ["ec50", "kd"]
                 fact = sections.get("fact_sheet") if isinstance(sections.get("fact_sheet"), dict) else {}
                 assert str(fact.get("schema_version") or "") == "v1"
             if rt == REPORT_TYPE_PROGRAM:
+                repro = sections.get("reproducibility_appendix") if isinstance(sections.get("reproducibility_appendix"), dict) else {}
                 assert repro.get("measurement_keys") == ["ec50", "kd"]
             if rt in {REPORT_TYPE_MOLECULE_COMPARATIVE, REPORT_TYPE_PROGRAM_COMPARATIVE}:
+                repro = sections.get("reproducibility_appendix") if isinstance(sections.get("reproducibility_appendix"), dict) else {}
                 catalog_versions = repro.get("catalog_versions") if isinstance(repro.get("catalog_versions"), dict) else {}
                 assert str(catalog_versions.get("comparability_policy") or "") == latest_comp_version
     finally:
@@ -157,7 +151,7 @@ def test_v3_report_contract_sections_and_canonical_serialization_stability():
         eng.dispose()
 
 
-def test_molecule_report_uses_governance_comparability_determination_only() -> None:
+def test_molecule_report_is_evidence_only_without_governance_comparability_sections() -> None:
     eng, db, m1, _m2, p1, _p2 = _build_fixture_db()
     try:
         as_of = datetime(2026, 2, 26, 2, 0, 0)
@@ -175,14 +169,14 @@ def test_molecule_report_uses_governance_comparability_determination_only() -> N
         )
         row = generate_molecule_report_v0(db, molecule_id=m1, as_of=as_of, policy_pins={"report_policy": "v0"})
         payload = load_report_run_payload(row)
-        det = (
-            payload.get("sections", {})
-            .get("drift_history", {})
-            .get("comparability_determination", {})
-        )
-        assert det.get("category") == "comparable_full"
-        assert det.get("rule_id") != "policy_no_match"
-        assert "comparable_partial" not in canonical_report_json(payload)
+        sections = payload.get("sections", {})
+        assert "drift_history" not in sections
+        assert "reproducibility_appendix" in sections
+        repro = sections.get("reproducibility_appendix") if isinstance(sections.get("reproducibility_appendix"), dict) else {}
+        assert isinstance(repro.get("policy_pins"), dict)
+        assert isinstance(repro.get("measurement_keys"), list)
+        assert isinstance(repro.get("governance_red_flags"), list)
+        assert "risk_profile" not in sections
     finally:
         db.close()
         eng.dispose()

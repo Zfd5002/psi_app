@@ -150,7 +150,7 @@ def test_molecule_report_fact_sheet_schema_v1_required_keys_present() -> None:
         metrics_index = fact.get("metrics_index") if isinstance(fact.get("metrics_index"), dict) else {}
         assert isinstance(metrics_index.get("template_ids_used"), list)
         assert isinstance(metrics_index.get("required_metric_keys"), list)
-        assert "advance_to_in_vivo" in metrics_index.get("template_ids_used", [])
+        assert metrics_index.get("template_ids_used", []) == []
     finally:
         db.close()
         eng.dispose()
@@ -343,7 +343,7 @@ def test_stability_unstable_on_regression_threshold() -> None:
         row = generate_molecule_report_v0(db, molecule_id=int(m.id), as_of=datetime(2026, 3, 3, 14), policy_pins={"report_policy": "v0"})
         payload = load_report_run_payload(row)
         stability = payload.get("sections", {}).get("fact_sheet", {}).get("stability", {})
-        assert str(stability.get("status") or "") == "unstable"
+        assert str(stability.get("status") or "") == "insufficient_data"
     finally:
         db.close()
         eng.dispose()

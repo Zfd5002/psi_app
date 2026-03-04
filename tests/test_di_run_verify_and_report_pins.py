@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from psi.core.models import Base, Batch, DecisionSnapshot, Molecule, Program
 from psi.core.utils import stable_json_dumps
 from psi.services.di.run_manifest import create_di_run_manifest, verify_di_run
-from psi.services.report_engine import generate_molecule_report_v0, load_report_run_payload
+from psi.services.report_engine import generate_molecule_report_v0, generate_program_report_v0, load_report_run_payload
 from psi.services.reports_v3 import get_v3_report_policy_pins
 
 
@@ -160,11 +160,11 @@ def test_missing_policy_pins_warning_only_when_expected() -> None:
             )
             db.commit()
 
-            full_row = generate_molecule_report_v0(
+            full_row = generate_program_report_v0(
                 db,
-                molecule_id=int(m.id),
+                program_id=int(p.id),
                 as_of=datetime(2026, 3, 3, 2, 0, 0),
-                policy_pins=get_v3_report_policy_pins("molecule_report"),
+                policy_pins=get_v3_report_policy_pins("program_report"),
             )
             full_payload = load_report_run_payload(full_row)
             full_flags = (
@@ -175,9 +175,9 @@ def test_missing_policy_pins_warning_only_when_expected() -> None:
             full_codes = sorted(str(x.get("flag_code") or "") for x in full_flags if isinstance(x, dict))
             assert "missing_policy_pins_or_hashes" not in full_codes
 
-            missing_row = generate_molecule_report_v0(
+            missing_row = generate_program_report_v0(
                 db,
-                molecule_id=int(m.id),
+                program_id=int(p.id),
                 as_of=datetime(2026, 3, 3, 2, 0, 0),
                 policy_pins={},
             )

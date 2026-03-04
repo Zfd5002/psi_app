@@ -34,7 +34,7 @@ def test_board_view_humanizes_known_snake_case_key() -> None:
     html = tpl.render(
         molecule_board_display={
             "header": {},
-            "conclusions": {},
+            "report_summary": {},
             "batch_registry": [],
             "gate_summary": {},
             "fact_sheet": {"batch_labels": ["B-001"], "metric_rows": [{"metric_key": "as_of_ts", "metric_group": "Other", "cells": ["x"]}]},

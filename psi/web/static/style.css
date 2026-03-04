@@ -240,6 +240,10 @@ body.pdf-mode .narrative-list{gap:3px}
 .measurement-chip-list{align-items:flex-start}
 .table-scroll-safe{overflow-x:auto;max-width:100%}
 .table-scroll-safe .board-section-table{min-width:720px}
+.fact-sheet-matrix th,
+.fact-sheet-matrix td{
+  text-align:left;
+}
 .batch-summary{display:flex;flex-direction:column;gap:4px}
 .batch-id{font-weight:800;font-size:16px}
 .batch-headlines{display:flex;flex-wrap:wrap;gap:6px}

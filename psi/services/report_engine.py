@@ -23,6 +23,7 @@ from psi.services.di.util import is_di_snapshot_record
 from psi.services.metric_catalog import metric_catalog_entry
 from psi.services.json_helpers import safe_json_dict
 from psi.services.fact_sheet import assemble_molecule_fact_sheet
+from psi.services.report_artifacts import assemble_molecule_report_artifacts
 
 REPORT_TYPE_MOLECULE = "molecule_report"
 REPORT_TYPE_PROGRAM = "program_report"
@@ -344,14 +345,8 @@ def _empty_sections_for_type(report_type: str) -> dict[str, Any]:
     if report_type == REPORT_TYPE_MOLECULE:
         return {
             "identity_context": {},
-            "stage_determination": {},
-            "confidence_decomposition": {},
-            "mechanistic_evidence_map": {},
-            "risk_profile": {},
-            "experimental_gaps": {},
-            "scientific_summary": {},
             "fact_sheet": {},
-            "drift_history": {},
+            "artifacts": {},
             "reproducibility_appendix": dict(repro_base),
         }
     if report_type == REPORT_TYPE_PROGRAM:
@@ -423,8 +418,13 @@ def validate_report_payload(*, report_type: str, payload: dict[str, Any]) -> Non
     if not isinstance(sections, dict):
         raise ValueError("payload.sections must be object")
     expected = _empty_sections_for_type(report_type)
-    if set(sections.keys()) != set(expected.keys()):
-        raise ValueError(f"payload.sections keys mismatch for {report_type}")
+    if report_type == REPORT_TYPE_MOLECULE:
+        required = {"identity_context", "fact_sheet", "artifacts", "reproducibility_appendix"}
+        if not required.issubset(set(sections.keys())):
+            raise ValueError(f"payload.sections missing required keys for {report_type}: {sorted(required)}")
+    else:
+        if set(sections.keys()) != set(expected.keys()):
+            raise ValueError(f"payload.sections keys mismatch for {report_type}")
 
 
 def create_report_request(
@@ -663,123 +663,59 @@ def generate_molecule_report_v0(
     mol = db.get(Molecule, int(molecule_id))
     if mol is None:
         raise KeyError("Molecule not found")
-    snap, out, _inn = _latest_di_snapshot_for_molecule_as_of(db, molecule_id=int(molecule_id), as_of=as_of)
     req = create_report_request(
         report_type=REPORT_TYPE_MOLECULE,
         subject_ids=[int(molecule_id)],
         as_of=as_of,
         policy_pins=policy_pins,
-        snapshot_coverage=([int(snap.id)] if snap is not None else []),
+        snapshot_coverage=[],
     )
     payload = build_report_payload(req)
     sections = payload["sections"]
-    readiness = out.get("readiness") if isinstance(out.get("readiness"), dict) else {}
-    soe = out.get("state_of_evidence") if isinstance(out.get("state_of_evidence"), dict) else {}
-    comparability = out.get("comparability") if isinstance(out.get("comparability"), dict) else {}
-    risk_flags = out.get("risk_flags_enriched") if isinstance(out.get("risk_flags_enriched"), list) else []
-    drift = out.get("drift") if isinstance(out.get("drift"), dict) else {}
-    blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
-    governance_comp_rows = list_comparability_assessments(db, scope_type="molecule", scope_id=int(molecule_id))
-    comp_status_candidates = [
-        _map_governance_status_to_policy_status(str(r.get("status") or ""))
-        for r in governance_comp_rows
-        if isinstance(r, dict)
-    ]
-    comp_snapshot_ids = sorted(
-        {
-            int(sid)
-            for r in governance_comp_rows
-            if isinstance(r, dict)
-            for sid in (r.get("cited_snapshot_ids") or [])
-            if str(sid).strip().isdigit()
-        }
-    )
-    comp_measurement_keys = sorted(
-        {
-            str(k).strip()
-            for r in governance_comp_rows
-            if isinstance(r, dict)
-            for k in (r.get("cited_measurement_keys") or [])
-            if str(k).strip()
-        }
-    )
-    used_by_metric = out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {}
-    determination = derive_comparability_determination(
-        statuses=(comp_status_candidates if comp_status_candidates else ["not_assessed"]),
-        measurement_keys=comp_measurement_keys,
-        snapshot_ids=comp_snapshot_ids,
-        missing_data=(len(governance_comp_rows) == 0),
-    )
 
     sections["identity_context"] = {
         "molecule_id": int(mol.id),
         "program_id": int(mol.program_id),
         "primary_id": str(mol.primary_id or ""),
         "title": str(mol.title or ""),
-        "snapshot_id": (int(snap.id) if snap is not None else None),
-        "snapshot_created_at": (snap.created_at.isoformat() if snap is not None and snap.created_at else None),
+        "modality": str(getattr(mol, "molecule_format", "") or ""),
+        "target": "",
     }
-    sections["stage_determination"] = {
-        "decision_state": str(out.get("decision_state") or ""),
-        "readiness_state": str(readiness.get("state") or ""),
-        "gates": out.get("gates") if isinstance(out.get("gates"), list) else [],
-    }
-    sections["confidence_decomposition"] = {
-        "confidence": out.get("confidence") if isinstance(out.get("confidence"), dict) else {},
-        "state_of_evidence_summary": soe.get("summary") if isinstance(soe.get("summary"), dict) else {},
-    }
-    sections["mechanistic_evidence_map"] = {
-        "used_by_metric": out.get("used_by_metric") if isinstance(out.get("used_by_metric"), dict) else {},
-        "mechanism": soe.get("mechanism") if isinstance(soe.get("mechanism"), dict) else {},
-    }
-    sections["risk_profile"] = {
-        "risk_flags_enriched": sorted(
-            [rf for rf in risk_flags if isinstance(rf, dict)],
-            key=lambda r: (str(r.get("severity") or ""), str(r.get("key") or "")),
-        )
-    }
-    sections["experimental_gaps"] = {
-        "blockers": blockers,
-        "next_best_experiments": out.get("next_best_experiments") if isinstance(out.get("next_best_experiments"), list) else [],
-    }
-    sections["drift_history"] = {
-        "drift": drift,
-        "comparability_summary": comparability.get("summary") if isinstance(comparability.get("summary"), dict) else {},
-        "comparability_determination": determination,
-    }
-    sections["scientific_summary"] = _build_scientific_summary(used_by_metric=used_by_metric)
-    template_ids_used = [str(snap.decision_key or "").strip()] if snap is not None and str(snap.decision_key or "").strip() else []
+    template_ids_used: list[str] = []
     sections["fact_sheet"] = assemble_molecule_fact_sheet(
         db,
         molecule_id=int(molecule_id),
         as_of=as_of,
         template_ids_used=template_ids_used,
         policy_pins=policy_pins,
-        snapshot_output=out,
+        snapshot_output={},
     )
-    sections["fact_sheet"]["gates_v1"] = _build_fact_sheet_gates_v1(
+    sections["artifacts"] = assemble_molecule_report_artifacts(
         db,
+        molecule_id=int(molecule_id),
         as_of=as_of,
-        decision_key=(template_ids_used[0] if template_ids_used else str(out.get("decision_key") or "advance_to_in_vivo")),
-        fact_sheet=(sections["fact_sheet"] if isinstance(sections.get("fact_sheet"), dict) else {}),
+    )
+    matrix_rows = (
+        sections.get("fact_sheet", {}).get("metric_matrix", {}).get("rows")
+        if isinstance(sections.get("fact_sheet"), dict)
+        else []
+    )
+    measurement_keys = sorted(
+        {
+            str(r.get("metric_key") or "").strip()
+            for r in (matrix_rows if isinstance(matrix_rows, list) else [])
+            if isinstance(r, dict) and str(r.get("metric_key") or "").strip()
+        }
     )
     sections["reproducibility_appendix"] = {
-        "policy_pins": _sorted_dict(dict(policy_pins or {})),
-        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.2"), "ranking_policy": "v0.2"},
-        "cited_snapshot_ids": ([int(snap.id)] if snap is not None else []),
-        "measurement_keys": sorted(str(k) for k in used_by_metric.keys() if str(k).strip()),
-        "inputs_summary": {"entity_ids": [int(mol.id)], "as_of": as_of.isoformat(), "snapshot_count": (1 if snap is not None else 0)},
-        "state_of_evidence": soe,
-        "snapshot_provenance": out.get("di_snapshot_provenance") if isinstance(out.get("di_snapshot_provenance"), dict) else {},
-        "comparability_determination": determination,
+        "schema_version": "v1",
+        "policy_pins": {},
+        "catalog_versions": {},
+        "cited_snapshot_ids": [],
+        "inputs_summary": {"entity_ids": [int(mol.id)], "as_of": as_of.isoformat(), "snapshot_count": 0},
+        "measurement_keys": measurement_keys,
+        "governance_red_flags": [],
     }
-    suggestions = _derive_v3_next_best_experiments(
-        report_type=REPORT_TYPE_MOLECULE,
-        decision_state=str(out.get("decision_state") or ""),
-    )
-    if suggestions.get("status") == "assessed":
-        sections["experimental_gaps"]["next_best_experiments"] = suggestions.get("items") if isinstance(suggestions.get("items"), list) else []
-    sections["reproducibility_appendix"]["governance_red_flags"] = _derive_governance_red_flags(db, req=req, sections=sections)
     validate_report_payload(report_type=REPORT_TYPE_MOLECULE, payload=payload)
     return persist_report_run(db, req=req, payload=payload)
 

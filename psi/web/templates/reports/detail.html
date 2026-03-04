@@ -21,7 +21,9 @@
       <div class="executive-header-col">
         <div class="executive-kv-row"><strong>As Of:</strong> {{ report_run.as_of }}</div>
         <div class="executive-kv-row"><strong>Created:</strong> {{ report_run.created_at }}</div>
+        {% if report_run.report_type != "molecule_report" %}
         <div class="executive-kv-row"><strong>Snapshot Coverage:</strong> <code>{{ snapshot_coverage }}</code></div>
+        {% endif %}
       </div>
     </div>
     <div class="mini muted executive-meta-line" style="margin-top:10px;">

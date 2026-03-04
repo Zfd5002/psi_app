@@ -17,7 +17,7 @@ def _mkdb():
     return eng, SessionTmp
 
 
-def test_molecule_scientific_summary_is_deterministic_and_sorted() -> None:
+def test_molecule_report_omits_scientific_summary_in_evidence_only_mode() -> None:
     eng, SessionTmp = _mkdb()
     try:
         db = SessionTmp()
@@ -63,14 +63,8 @@ def test_molecule_scientific_summary_is_deterministic_and_sorted() -> None:
                 policy_pins={"report_policy": "v0"},
             )
             payload = load_report_run_payload(run)
-            summary = payload.get("sections", {}).get("scientific_summary", {})
-            assert summary.get("status") == "assessed"
-            domains = summary.get("domains") if isinstance(summary.get("domains"), list) else []
-            assert [str(d.get("domain") or "") for d in domains] == ["Binding", "Developability", "Potency"]
-            first_domain_rows = domains[0].get("rows") if isinstance(domains[0].get("rows"), list) else []
-            assert [str(r.get("metric_key") or "") for r in first_domain_rows] == ["kd"]
-            potency_rows = domains[2].get("rows") if isinstance(domains[2].get("rows"), list) else []
-            assert [str(r.get("label") or "") for r in potency_rows] == ["EC50"]
+            sections = payload.get("sections", {})
+            assert "scientific_summary" not in sections
         finally:
             db.close()
     finally:

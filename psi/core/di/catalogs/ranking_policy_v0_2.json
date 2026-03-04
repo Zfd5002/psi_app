@@ -20,7 +20,17 @@
     "tie_break_keys": [
       "stable_sort_key",
       "entity_id"
-    ]
+    ],
+    "tie_break_contract": {
+      "deterministic_only": true,
+      "tie_break_keys": [
+        "stable_sort_key",
+        "entity_id"
+      ],
+      "explanation_schema_version": "v1",
+      "numeric_scoring_allowed": false,
+      "description": "Tie-break uses explicit key order only; no numeric scoring."
+    }
   },
   "criteria_registry": [
     {

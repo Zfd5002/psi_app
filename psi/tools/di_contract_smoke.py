@@ -3068,9 +3068,9 @@ def test_molecule_report_v0_generator_fixed_structure_from_snapshot() -> None:
         eng.dispose()
     meta = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
-    _assert(meta.get("snapshot_coverage") == [snap_id], "molecule report should cite snapshot coverage deterministically")
+    _assert(meta.get("snapshot_coverage") == [], "molecule report should omit snapshot coverage in evidence-only mode")
     _assert(isinstance(sections.get("identity_context"), dict), "molecule report identity_context must be present")
-    _assert(str(((sections.get("stage_determination") or {}).get("decision_state") or "")) == "ready", "molecule report stage_determination should reflect snapshot")
+    _assert("stage_determination" not in sections, "molecule report should omit DI stage_determination in evidence-only mode")
 
 
 def test_program_report_v0_generator_fixed_structure_uses_rollup_and_placeholders() -> None:
