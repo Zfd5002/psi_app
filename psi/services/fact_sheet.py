@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from psi.core.measurement_schema import measurement_cols
 from psi.core.di.catalog import load_template_prerequisites_latest
-from psi.services.metric_catalog import metric_catalog_entry, metric_group_for_key
+from psi.services.metric_catalog import metric_catalog_entry, metric_group_for_key, metric_group_sort_key, normalize_metric_key
 
 _STABILITY_MIN_BATCHES_WITH_REQUIRED = 2
 _STABILITY_MAX_REGRESSION_REQUIRED_PRESENT = 2
@@ -138,7 +138,7 @@ def _resolve_required_metric_keys(*, template_ids_used: list[str], snapshot_outp
         for key in ("required_metrics", "required_metrics_base"):
             vals = gate.get(key) if isinstance(gate.get(key), list) else []
             for mk in vals:
-                s = _norm_str(mk)
+                s = normalize_metric_key(_norm_str(mk))
                 if s:
                     required.add(s)
     return sorted(required)
@@ -437,7 +437,8 @@ def assemble_molecule_fact_sheet(
                     "id": int(r["id"]),
                     "record_id": rid,
                     "batch_id": record_by_id.get(rid, {}).get("batch_id"),
-                    "metric_key": _norm_str(r["metric_key"]),
+                    "metric_key": normalize_metric_key(_norm_str(r["metric_key"])),
+                    "raw_metric_key": _norm_str(r["metric_key"]),
                     "value_num": r["value_num"],
                     "value_text": r["value_text"],
                     "unit": r["unit"],
@@ -466,7 +467,7 @@ def assemble_molecule_fact_sheet(
     grouped: dict[tuple[int | None, str], list[dict[str, Any]]] = defaultdict(list)
     observed_metric_keys: set[str] = set()
     for m in measurements:
-        mk = _norm_str(m.get("metric_key"))
+        mk = normalize_metric_key(_norm_str(m.get("metric_key")))
         if not mk:
             continue
         observed_metric_keys.add(mk)
@@ -589,12 +590,12 @@ def assemble_molecule_fact_sheet(
         latest = recs[0] if recs else {}
         metric_keys = sorted(
             {
-                _norm_str(m.get("metric_key"))
+                normalize_metric_key(_norm_str(m.get("metric_key")))
                 for m in measurements
-                if m.get("batch_id") == bid and _norm_str(m.get("metric_key"))
+                if m.get("batch_id") == bid and normalize_metric_key(_norm_str(m.get("metric_key")))
             }
         )
-        coverage_groups = sorted({metric_group_for_key(mk) for mk in metric_keys})
+        coverage_groups = sorted({metric_group_for_key(mk) for mk in metric_keys}, key=metric_group_sort_key)
         batch_registry.append(
             {
                 "batch_id": bid,

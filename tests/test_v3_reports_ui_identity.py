@@ -5,8 +5,10 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from psi.core.models import Base, Molecule, Program
+from psi.core.models import Base, Molecule, Program, ReportRun
+from psi.services.report_engine import canonical_report_json
 from psi.services.reports_v3 import build_report_identity_summary
+from psi.services.reports_v3 import get_report_run_detail
 from psi.web.routers.reports import report_options_molecules, report_options_programs
 
 
@@ -125,6 +127,63 @@ def test_report_option_endpoints_are_stable_and_filtered() -> None:
             molecules = report_options_molecules(program_id=int(p1.id), db=db)
             assert [x["primary_id"] for x in molecules] == ["A", "B"]
             assert all(int(x["program_id"]) == int(p1.id) for x in molecules)
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_report_detail_exposes_canonical_measurement_citation_mapping() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            p = Program(name="Program A", created_at=datetime(2026, 2, 26, 0, 0, 0), updated_at=datetime(2026, 2, 26, 0, 0, 0))
+            db.add(p)
+            db.flush()
+            m = Molecule(program_id=int(p.id), primary_id="M1", title="Mol 1", created_at=datetime(2026, 2, 26, 0, 0, 0), updated_at=datetime(2026, 2, 26, 0, 0, 0))
+            db.add(m)
+            db.flush()
+            payload = {
+                "metadata": {
+                    "report_type": "molecule_report",
+                    "subject_ids": [int(m.id)],
+                    "as_of": "2026-02-26T00:00:00",
+                    "policy_pins": {},
+                    "snapshot_coverage": [],
+                },
+                "sections": {
+                    "identity_context": {"molecule_id": int(m.id), "primary_id": "M1", "title": "Mol 1"},
+                    "fact_sheet": {},
+                    "artifacts": {},
+                    "reproducibility_appendix": {},
+                    "comparability_surface": {
+                        "assessments": [
+                            {"cited_measurement_keys": ["hmw_percent", "hmw_pct"], "cited_snapshot_ids": []}
+                        ]
+                    },
+                },
+            }
+            row = ReportRun(
+                report_type="molecule_report",
+                subject_ids_json=canonical_report_json([int(m.id)]),
+                as_of=datetime(2026, 2, 26, 0, 0, 0),
+                policy_pins_json=canonical_report_json({}),
+                snapshot_coverage_json=canonical_report_json([]),
+                payload_json=canonical_report_json(payload),
+                created_at=datetime(2026, 2, 26, 0, 0, 0),
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+
+            ctx = get_report_run_detail(db, int(row.id))
+            assert ctx["measurement_key_citations"] == ["hmw_pct", "hmw_percent"]
+            assert ctx["measurement_key_citations_display"] == ["hmw_pct"]
+            assert ctx["measurement_key_citation_map"] == [
+                {"raw_key": "hmw_pct", "canonical_key": "hmw_pct"},
+                {"raw_key": "hmw_percent", "canonical_key": "hmw_pct"},
+            ]
         finally:
             db.close()
     finally:

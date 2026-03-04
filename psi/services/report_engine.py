@@ -18,7 +18,7 @@ from psi.services.comparability import derive_comparability_determination, list_
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 from psi.services.policy_upgrade import run_semantic_action_with_ack_guard
 from psi.services.program_rollups import build_program_rollup
-from psi.services.v3_ranking import build_ranking_surface, load_ranking_policy_v0_1
+from psi.services.v3_ranking import build_ranking_surface, load_ranking_policy_latest
 from psi.services.di.util import is_di_snapshot_record
 from psi.services.metric_catalog import metric_catalog_entry
 from psi.services.json_helpers import safe_json_dict
@@ -911,7 +911,7 @@ def generate_molecule_comparative_report_v0(
         else {"status": "not_assessed", "assessments": [], "placeholder_reason": "no_molecule_comparability_assessments"}
     )
     sections["drift_comparison"] = {"rows": [{"molecule_id": r["molecule_id"], "drift": r["drift"]} for r in rows]}
-    ranking_policy = load_ranking_policy_v0_1()
+    ranking_policy = load_ranking_policy_latest()
     rank_entities = [
         {
             "entity_type": "molecule",
@@ -931,7 +931,11 @@ def generate_molecule_comparative_report_v0(
     sections["ranking_surface"] = build_ranking_surface(entities=rank_entities, policy=ranking_policy)
     sections["reproducibility_appendix"] = {
         "policy_pins": _sorted_dict(dict(policy_pins or {})),
-        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.1"), "ranking_policy": "v0.2"},
+        "catalog_versions": {
+            "template_catalog": "v0.1",
+            "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.1"),
+            "ranking_policy": str(ranking_policy.get("policy_version") or "v0.2"),
+        },
         "cited_snapshot_ids": sorted(set(snapshot_cov)),
         "inputs_summary": {"entity_ids": mids, "as_of": as_of.isoformat(), "snapshot_count": len(sorted(set(snapshot_cov)))},
         "rows": [{"molecule_id": r["molecule_id"], "snapshot_id": r["snapshot_id"]} for r in rows],
@@ -988,7 +992,7 @@ def generate_program_comparative_report_v0(
         if comp_list
         else {"status": "not_assessed", "assessments": [], "placeholder_reason": "no_program_comparability_assessments"}
     )
-    ranking_policy = load_ranking_policy_v0_1()
+    ranking_policy = load_ranking_policy_latest()
     rank_entities = [
         {
             "entity_type": "program",
@@ -1002,7 +1006,11 @@ def generate_program_comparative_report_v0(
     sections["resource_implications"] = {"status": "not_assessed", "policy_derived_fields_only": True, "rows": []}
     sections["reproducibility_appendix"] = {
         "policy_pins": _sorted_dict(dict(policy_pins or {})),
-        "catalog_versions": {"template_catalog": "v0.1", "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.1"), "ranking_policy": "v0.2"},
+        "catalog_versions": {
+            "template_catalog": "v0.1",
+            "comparability_policy": str(load_comparability_policy_latest().get("policy_version") or "v0.1"),
+            "ranking_policy": str(ranking_policy.get("policy_version") or "v0.2"),
+        },
         "cited_snapshot_ids": sorted(set(snapshot_cov)),
         "inputs_summary": {"entity_ids": pids, "as_of": as_of.isoformat(), "snapshot_count": len(sorted(set(snapshot_cov)))},
         "rows": [{"program_id": r["program_id"], "molecule_count": r["molecule_count"]} for r in rows],

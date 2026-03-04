@@ -8426,3 +8426,232 @@ Behavior:
 
 Gates:
 - PASS
+
+## 2026-03-03 — v1.3.0b35
+Intent:
+- Keep governance/technical payload panel hidden by default on scientist-facing report detail view.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+- `tests/test_molecule_report_evidence_only.py`
+
+Behavior:
+- Removed JavaScript that forced report technical panel visibility in normal mode.
+- Board panel remains visible by default.
+- Added regression assertions that report detail keeps technical panel hidden (`aria-hidden="true"`) and no longer contains script-based unhide behavior.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b36
+Intent:
+- Add explicit governance-mode toggle on report detail while keeping scientist mode default.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+- `tests/test_molecule_report_evidence_only.py`
+
+Behavior:
+- Added `Governance` toggle button in non-PDF report detail header.
+- Added localStorage-backed mode switch (`psi.view.report_detail_mode`) to show/hide technical panel intentionally.
+- Scientist mode remains default and technical panel stays hidden unless toggled.
+- Added PDF-mode test assertion that governance toggle is not rendered in export mode.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b37
+Intent:
+- Make technical audit markup explicitly governance-only and keep it out of PDF render path.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/templates/reports/_technical_audit.html`
+- `tests/test_molecule_report_evidence_only.py`
+
+Behavior:
+- Added governance root marker (`data-report-panel=\"governance\"`) and muted banner in technical audit partial.
+- Report detail now omits technical panel include entirely in PDF mode.
+- Added assertions that governance panel markup appears in non-PDF render and is absent in PDF render.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b38
+Intent:
+- Align comparative ranking policy execution with pinned policy version to remove governance drift.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/report_engine.py`
+- `tests/test_v3_report_contracts.py`
+
+Behavior:
+- Comparative report generation now uses `load_ranking_policy_latest()` instead of `v0.1` hard-loading.
+- Reproducibility appendix `catalog_versions.ranking_policy` now reflects the effective ranking policy version used for ranking surface generation.
+- Added regression test asserting comparative ranking surface policy version and appendix version match pinned ranking policy version.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b39
+Intent:
+- Strengthen comparative ranking determinism transparency while keeping scientist surface unchanged.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/_technical_audit.html`
+- `tests/test_v3_report_contracts.py`
+
+Behavior:
+- Added governance-only technical audit block showing comparative ranking tie-break contract (`tie_break_keys`, policy version, deterministic note).
+- Added deterministic comparative ranking test verifying identical entity ordering across reversed subject input and tie-break explanation keys.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b40
+Intent:
+- Align CI workflow gates with required PSI V3 verification commands.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `.github/workflows/ci.yml`
+
+Behavior:
+- Added `python -m psi.tools.db_schema_sanity` step in CI after DI contract smoke.
+- Added `python -m psi.tools.di_replay_regression --limit 5` step in CI after schema sanity.
+- Preserved existing compile/pytest/di_contract_smoke sequence.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b41
+Intent:
+- Add read-time canonical metric key normalization scaffold for deterministic alias handling.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/metric_catalog.py`
+- `psi/services/fact_sheet.py`
+- `tests/test_metric_catalog.py`
+- `tests/test_v3_molecule_report_schema.py`
+
+Behavior:
+- Added `normalize_metric_key()` and deterministic alias map in metric catalog layer.
+- Fact sheet assembly now normalizes measurement and required metric keys before grouping/ordering, collapsing aliases into canonical rows.
+- Added unit tests for alias normalization and report-schema test ensuring alias/canonical duplicates render as a single canonical metric row.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b42
+Intent:
+- Harden metric group taxonomy and deterministic group ordering to reduce `Other` dominance in report surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/metric_catalog.py`
+- `psi/services/fact_sheet.py`
+- `tests/test_metric_catalog.py`
+
+Behavior:
+- Expanded curated metric metadata with stronger domain/group assignments (Expression, Purity/SEC, Binding, Functional, Endotoxin, PK, In Vivo).
+- Added deterministic group-order contract helper (`metric_group_sort_key`) and applied it to fact-sheet batch coverage summaries.
+- Added tests for group mapping and stable group sort order.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b43
+Intent:
+- Harden unit metadata and display behavior for canonical metric rendering with conservative handling of variable-unit metrics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/data/metric_catalog_v1.json`
+- `psi/services/metric_catalog.py`
+- `tests/test_metric_catalog.py`
+- `tests/test_v3_molecule_report_schema.py`
+
+Behavior:
+- Updated metric catalog entry for `ec50` to avoid implied canonical unit when measurement unit is missing.
+- Kept canonical units for deterministic metrics (e.g., `kd_nM` remains `nM`).
+- Added tests ensuring variable-unit metrics remain unit-conservative and fact-sheet display does not invent a unit for `ec50` when source measurement has no unit.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b44
+Intent:
+- Preserve raw measurement-key citation traceability while deduplicating scientist-facing metric display to canonical keys.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/templates/reports/_technical_audit.html`
+- `tests/test_v3_reports_ui_identity.py`
+
+Behavior:
+- Report detail context now includes:
+  - `measurement_key_citations` (raw keys),
+  - `measurement_key_citations_display` (canonical deduped keys),
+  - `measurement_key_citation_map` (raw→canonical rows).
+- Technical audit panel now renders canonical citation display and raw-to-canonical mapping for governance tracing.
+- Added test verifying deterministic citation mapping for alias keys.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b45
+Intent:
+- Add governance guardrails against weighted heuristics in ranking/comparative Python paths and update V3 status documentation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_no_weighted_heuristics.py`
+- `docs/DI_V3_STATUS_v1.3.0b23.md`
+
+Behavior:
+- Added deterministic static audit test that checks ranking/comparative functions for banned weighted-heuristic inline patterns.
+- Added b45 addendum to V3 status doc describing the new guard scope and intent.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b46
+Intent:
+- Contain legacy YAML rules execution under an explicit compatibility module with governance-only messaging.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/legacy_yaml_compat.py`
+- `psi/services/decisions.py`
+- `psi/services/evidence.py`
+- `psi/web/routers/data_records.py`
+- `psi/web/templates/reports/_technical_audit.html`
+- `tests/test_legacy_yaml_compat.py`
+
+Behavior:
+- Added `psi/services/legacy_yaml_compat.py` wrappers for legacy YAML rule load/run calls.
+- Updated legacy YAML call sites to use compatibility wrappers (containment approach; no DI snapshot semantic changes).
+- Added governance-panel note clarifying legacy YAML path non-interference with DI snapshot semantics.
+- Added startup compatibility test and legacy wrapper round-trip test.
+
+Gates:
+- PASS

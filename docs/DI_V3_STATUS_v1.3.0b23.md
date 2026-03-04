@@ -38,3 +38,11 @@ Source charter: `docs/DI_MISSION_AND_ROADMAP_V3.md` (Status LOCKED, V3 line `1.3
 
 ## Notes
 - This checkpoint is documentation-only and does not alter DI semantics, schema, or replay behavior.
+
+## b45 Addendum (No-Weighted-Heuristics Guard)
+- Added focused static guard test at `tests/test_no_weighted_heuristics.py`.
+- Scope is intentionally narrow to ranking/comparative generation functions:
+  - `psi/services/v3_ranking.py::build_ranking_surface`
+  - `psi/services/report_engine.py::generate_molecule_comparative_report_v0`
+  - `psi/services/report_engine.py::generate_program_comparative_report_v0`
+- The guard fails if banned weighted-heuristic markers appear inline in those paths, preserving policy-as-data governance constraints.

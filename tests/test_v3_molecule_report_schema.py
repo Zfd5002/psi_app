@@ -493,3 +493,123 @@ def test_fact_sheet_ordering_invariants() -> None:
     finally:
         db.close()
         eng.dispose()
+
+
+def test_fact_sheet_metric_aliases_collapse_to_single_canonical_metric_row() -> None:
+    eng, SessionTmp = _mkdb()
+    db = SessionTmp()
+    try:
+        p = Program(name="P", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+        db.add(p)
+        db.flush()
+        m = Molecule(program_id=int(p.id), primary_id="M-ALIAS", title="Mol Alias", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+        db.add(m)
+        db.flush()
+        b = Batch(molecule_id=int(m.id), batch_id="B1", title="Batch 1", created_at=datetime(2026, 3, 3, 8), updated_at=datetime(2026, 3, 3, 8))
+        db.add(b)
+        db.flush()
+        r = DataRecord(
+            program_id=int(p.id),
+            molecule_id=int(m.id),
+            batch_id=int(b.id),
+            domain="d",
+            data_type="t",
+            method="m",
+            title="R",
+            notes="n",
+            run_date="2026-03-03",
+            created_at=datetime(2026, 3, 3, 9),
+            updated_at=datetime(2026, 3, 3, 9),
+        )
+        db.add(r)
+        db.flush()
+        db.execute(
+            text(
+                """
+                INSERT INTO data_measurements
+                (data_record_id, metric_key, name, value_num, value_text, unit, qc_flag, ignore_for_model, created_at)
+                VALUES
+                (:rid, 'hmw_percent', 'hmw_percent', 2.2, NULL, '%', 'approved', 0, '2026-03-03T09:00:00'),
+                (:rid, 'hmw_pct', 'hmw_pct', 2.1, NULL, '%', 'approved', 0, '2026-03-03T09:01:00')
+                """
+            ),
+            {"rid": int(r.id)},
+        )
+        db.commit()
+        row = generate_molecule_report_v0(
+            db,
+            molecule_id=int(m.id),
+            as_of=datetime(2026, 3, 3, 10),
+            policy_pins={"report_policy": "v0"},
+        )
+        payload = load_report_run_payload(row)
+        rows = (
+            payload.get("sections", {})
+            .get("fact_sheet", {})
+            .get("metric_matrix", {})
+            .get("rows", [])
+        )
+        keys = [str((x or {}).get("metric_key") or "") for x in rows if isinstance(x, dict)]
+        assert keys.count("hmw_pct") == 1
+        assert "hmw_percent" not in keys
+    finally:
+        db.close()
+        eng.dispose()
+
+
+def test_fact_sheet_ec50_without_measurement_unit_does_not_imply_catalog_unit() -> None:
+    eng, SessionTmp = _mkdb()
+    db = SessionTmp()
+    try:
+        p = Program(name="P", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+        db.add(p)
+        db.flush()
+        m = Molecule(program_id=int(p.id), primary_id="M-EC50", title="Mol EC50", created_at=datetime(2026, 3, 3), updated_at=datetime(2026, 3, 3))
+        db.add(m)
+        db.flush()
+        b = Batch(molecule_id=int(m.id), batch_id="B1", title="Batch 1", created_at=datetime(2026, 3, 3, 8), updated_at=datetime(2026, 3, 3, 8))
+        db.add(b)
+        db.flush()
+        r = DataRecord(
+            program_id=int(p.id),
+            molecule_id=int(m.id),
+            batch_id=int(b.id),
+            domain="d",
+            data_type="t",
+            method="m",
+            title="R",
+            notes="n",
+            run_date="2026-03-03",
+            created_at=datetime(2026, 3, 3, 9),
+            updated_at=datetime(2026, 3, 3, 9),
+        )
+        db.add(r)
+        db.flush()
+        db.execute(
+            text(
+                """
+                INSERT INTO data_measurements
+                (data_record_id, metric_key, name, value_num, value_text, unit, qc_flag, ignore_for_model, created_at)
+                VALUES
+                (:rid, 'ec50', 'ec50', 12.3, NULL, '', 'approved', 0, '2026-03-03T09:00:00')
+                """
+            ),
+            {"rid": int(r.id)},
+        )
+        db.commit()
+        row = generate_molecule_report_v0(
+            db,
+            molecule_id=int(m.id),
+            as_of=datetime(2026, 3, 3, 10),
+            policy_pins={"report_policy": "v0"},
+        )
+        payload = load_report_run_payload(row)
+        rows = payload.get("sections", {}).get("fact_sheet", {}).get("metric_matrix", {}).get("rows", [])
+        ec50_rows = [x for x in rows if isinstance(x, dict) and str(x.get("metric_key") or "") == "ec50"]
+        assert len(ec50_rows) == 1
+        cells = ec50_rows[0].get("cells") if isinstance(ec50_rows[0].get("cells"), list) else []
+        assert cells
+        assert str(cells[0].get("display") or "") == "12.3"
+    finally:
+        db.close()
+        eng.dispose()

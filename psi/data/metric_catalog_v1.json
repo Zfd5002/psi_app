@@ -4,8 +4,8 @@
   "metrics": {
     "ec50": {
       "label": "EC50",
-      "domain": "Potency",
-      "unit": "nM",
+      "domain": "Functional",
+      "unit": "",
       "sort_order": 10
     },
     "kd": {

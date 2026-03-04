@@ -18,6 +18,7 @@ from psi.services.report_engine import (
 )
 from psi.services.policy_upgrade import get_unacknowledged_upgrade_warnings
 from psi.services.comparability import load_comparability_policy_latest
+from psi.services.metric_catalog import normalize_metric_key
 from psi.services.v3_ranking import load_ranking_policy_latest
 
 _HEX64_RE = re.compile(r"\b[a-f0-9]{64}\b", flags=re.IGNORECASE)
@@ -548,6 +549,21 @@ def get_report_run_detail(db: Session, report_run_id: int) -> dict:
         subject_ids=[int(x) for x in subject_ids if str(x).strip().isdigit()],
         snapshot_coverage=[int(x) for x in snapshot_cov if str(x).strip().isdigit()],
     )
+    measurement_key_citations = sorted(measurement_keys)
+    measurement_key_citation_map = [
+        {
+            "raw_key": str(k),
+            "canonical_key": str(normalize_metric_key(str(k))),
+        }
+        for k in measurement_key_citations
+    ]
+    measurement_key_citations_display = sorted(
+        {
+            str(row_obj.get("canonical_key") or "").strip()
+            for row_obj in measurement_key_citation_map
+            if isinstance(row_obj, dict) and str(row_obj.get("canonical_key") or "").strip()
+        }
+    )
     return {
         "report_run": row,
         "payload": payload,
@@ -558,7 +574,9 @@ def get_report_run_detail(db: Session, report_run_id: int) -> dict:
         "policy_pin_summary": policy_pin_summary,
         "runtime_policy_versions": _runtime_policy_versions_display(),
         "rule_ids": sorted(rule_ids),
-        "measurement_key_citations": sorted(measurement_keys),
+        "measurement_key_citations": measurement_key_citations,
+        "measurement_key_citations_display": measurement_key_citations_display,
+        "measurement_key_citation_map": measurement_key_citation_map,
         "evidence_snapshot_refs": sorted(snapshot_refs),
         "snapshot_coverage": snapshot_cov,
         "governance_warnings": get_unacknowledged_upgrade_warnings(db, current_policy_pins=policy_pins),

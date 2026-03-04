@@ -2,6 +2,9 @@
 {% set metadata = (payload.metadata if payload is defined and payload.metadata is defined else {}) %}
 {% set identity = (sections.identity_context if sections is mapping and sections.identity_context is defined else {}) %}
 
+<div data-report-panel="governance">
+<p class="mini muted">Governance-only details (hidden by default).</p>
+<p class="mini muted">Legacy YAML compatibility paths (if used) are isolated for historical parity and do not alter DI snapshot semantics.</p>
 <h2>Governance Payload Detail</h2>
 <div class="card">
   <h3 style="margin-top:0;">Reproducibility & Fingerprints</h3>
@@ -18,6 +21,10 @@
 
   <h3>Measurement Key Citations</h3>
   <pre style="white-space:pre-wrap;">{{ (measurement_key_citations if measurement_key_citations is defined else []) | tojson(indent=2) }}</pre>
+  <h4>Canonical Measurement Keys (Display)</h4>
+  <pre style="white-space:pre-wrap;">{{ (measurement_key_citations_display if measurement_key_citations_display is defined else []) | tojson(indent=2) }}</pre>
+  <h4>Raw → Canonical Mapping</h4>
+  <pre style="white-space:pre-wrap;">{{ (measurement_key_citation_map if measurement_key_citation_map is defined else []) | tojson(indent=2) }}</pre>
 
   <h3>Evidence Snapshot References</h3>
   <pre style="white-space:pre-wrap;">{{ (evidence_snapshot_refs if evidence_snapshot_refs is defined else []) | tojson(indent=2) }}</pre>
@@ -32,6 +39,16 @@
   "evidence_summary": {{ ((evidence_snapshot_refs if evidence_snapshot_refs is defined and evidence_snapshot_refs else "missing") | tojson(indent=2)) }}
 }</pre>
 
+  {% set ranking = (sections.ranking_surface if sections is mapping and sections.ranking_surface is defined and sections.ranking_surface is mapping else {}) %}
+  {% if ranking %}
+  <h3>Comparative Ranking Tie-Break Contract</h3>
+  <pre style="white-space:pre-wrap;">{{ {
+  "tie_break_keys": (ranking.tie_break_keys if ranking.tie_break_keys is defined else []),
+  "policy_version": (ranking.policy_version if ranking.policy_version is defined else ""),
+  "deterministic_note": "Ordering is deterministic and traceable via tie_break_explanation on ranking entities."
+} | tojson(indent=2) }}</pre>
+  {% endif %}
+
   <details>
     <summary>Show raw sections</summary>
     {% for section_name, section_value in (sections or {}).items() %}
@@ -41,4 +58,5 @@
       <p class="muted">No sections.</p>
     {% endfor %}
   </details>
+</div>
 </div>

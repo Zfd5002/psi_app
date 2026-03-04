@@ -37,3 +37,8 @@ jobs:
       - name: DI contract smoke
         run: python -m psi.tools.di_contract_smoke
 
+      - name: DB schema sanity
+        run: python -m psi.tools.db_schema_sanity
+
+      - name: DI replay regression
+        run: python -m psi.tools.di_replay_regression --limit 5

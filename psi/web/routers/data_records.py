@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from psi.core.decision_engine import load_rules
+from psi.services.legacy_yaml_compat import load_rules_legacy_yaml
 from psi.services import data_records as svc
 from psi.web.deps import get_db, get_rules_path, get_storage_cfg, get_templates
 
@@ -36,7 +36,7 @@ def new_data(
 ):
     templates = get_templates(request)
     base = svc.get_form_context(db)
-    rules = load_rules(str(rules_path))
+    rules = load_rules_legacy_yaml(str(rules_path))
     domains = list(rules["domains"].keys())
     domain_evidence_types = {}
     for d in domains:
@@ -127,7 +127,7 @@ def edit_data(record_id: int, request: Request, db: Session = Depends(get_db), r
     if not rec:
         raise HTTPException(404)
     base = svc.get_form_context(db)
-    rules = load_rules(str(rules_path))
+    rules = load_rules_legacy_yaml(str(rules_path))
     domains = list(rules["domains"].keys())
     return templates.TemplateResponse(
         "data/form.html",

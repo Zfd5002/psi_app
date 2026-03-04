@@ -8,7 +8,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
-from psi.core.decision_engine import load_rules, run_decision
+from psi.services.legacy_yaml_compat import load_rules_legacy_yaml, run_decision_legacy_yaml
 from psi.core.models import (
     Batch,
     DataRecord,
@@ -292,7 +292,7 @@ def get_decision_new_context(db: Session, rules_path: str) -> dict:
     programs = db.query(Program).order_by(Program.name.asc()).all()
     molecules = db.query(Molecule).order_by(Molecule.primary_id.asc()).all()
     batches = db.query(Batch).order_by(Batch.created_at.desc()).all()
-    rules = load_rules(rules_path)
+    rules = load_rules_legacy_yaml(rules_path)
     decision_keys = list(rules.get("decisions", {}).keys())
 
     return {
@@ -317,7 +317,7 @@ def run_and_snapshot(
     if not assumptions_ack:
         raise ValueError("Must acknowledge assumptions")
 
-    rules = load_rules(rules_path)
+    rules = load_rules_legacy_yaml(rules_path)
     if decision_key not in rules.get("decisions", {}):
         raise ValueError("Invalid decision")
 
@@ -337,7 +337,7 @@ def run_and_snapshot(
         q = q.filter(Evidence.molecule_id.is_(None), Evidence.batch_id.is_(None))
 
     evidence = q.all()
-    result = run_decision(rules, decision_key, evidence)
+    result = run_decision_legacy_yaml(rules, decision_key, evidence)
 
 
 

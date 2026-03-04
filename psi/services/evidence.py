@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
-from psi.core.decision_engine import load_rules
+from psi.services.legacy_yaml_compat import load_rules_legacy_yaml
 from psi.core.models import AuditEvent, Batch, DataRecord, Evidence, EvidenceCitation, Molecule, Program
 from psi.core.registry import get_allowed_data_sources_for_evidence, normalize_data_type_method
 from psi.core.utils import model_to_dict, now_utc
@@ -176,7 +176,7 @@ def update_evidence(
 
 def get_evidence_form_context(db: Session, rules_path: str) -> dict:
     ctx = get_form_context(db)
-    rules = load_rules(rules_path)
+    rules = load_rules_legacy_yaml(rules_path)
     domains = list(rules["domains"].keys())
     domain_evidence_types = {}
     for d in domains:

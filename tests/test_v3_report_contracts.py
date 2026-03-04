@@ -264,6 +264,78 @@ def test_molecule_comparative_ranking_marks_high_risk_only_when_present() -> Non
         eng.dispose()
 
 
+def test_molecule_comparative_ranking_policy_pin_matches_effective_surface_version() -> None:
+    eng, db, m1, m2, _p1, _p2 = _build_fixture_db()
+    try:
+        as_of = datetime(2026, 2, 26, 2, 0, 0)
+        pins = get_v3_report_policy_pins("molecule_comparative_report")
+        row = generate_molecule_comparative_report_v0(
+            db,
+            molecule_ids=[m1, m2],
+            as_of=as_of,
+            policy_pins=pins,
+        )
+        payload = load_report_run_payload(row)
+        sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
+        ranking = sections.get("ranking_surface") if isinstance(sections.get("ranking_surface"), dict) else {}
+        repro = (
+            sections.get("reproducibility_appendix")
+            if isinstance(sections.get("reproducibility_appendix"), dict)
+            else {}
+        )
+        catalog_versions = repro.get("catalog_versions") if isinstance(repro.get("catalog_versions"), dict) else {}
+        pinned_rank = pins.get("ranking_policy") if isinstance(pins.get("ranking_policy"), dict) else {}
+        pinned_version = str(pinned_rank.get("policy_version") or "")
+        assert str(ranking.get("policy_version") or "") == pinned_version
+        assert str(catalog_versions.get("ranking_policy") or "") == pinned_version
+    finally:
+        db.close()
+        eng.dispose()
+
+
+def test_molecule_comparative_ranking_order_is_deterministic_across_subject_input_order() -> None:
+    eng, db, m1, m2, _p1, _p2 = _build_fixture_db()
+    try:
+        as_of = datetime(2026, 2, 26, 2, 0, 0)
+        pins = get_v3_report_policy_pins("molecule_comparative_report")
+        row_a = generate_molecule_comparative_report_v0(
+            db,
+            molecule_ids=[m1, m2],
+            as_of=as_of,
+            policy_pins=pins,
+        )
+        row_b = generate_molecule_comparative_report_v0(
+            db,
+            molecule_ids=[m2, m1],
+            as_of=as_of,
+            policy_pins=pins,
+        )
+        p_a = load_report_run_payload(row_a)
+        p_b = load_report_run_payload(row_b)
+        r_a = (
+            p_a.get("sections", {}).get("ranking_surface", {}).get("entities", [])
+            if isinstance(p_a.get("sections", {}).get("ranking_surface", {}), dict)
+            else []
+        )
+        r_b = (
+            p_b.get("sections", {}).get("ranking_surface", {}).get("entities", [])
+            if isinstance(p_b.get("sections", {}).get("ranking_surface", {}), dict)
+            else []
+        )
+        ids_a = [int(x.get("entity_id")) for x in r_a if isinstance(x, dict) and x.get("entity_id") is not None]
+        ids_b = [int(x.get("entity_id")) for x in r_b if isinstance(x, dict) and x.get("entity_id") is not None]
+        assert ids_a == ids_b
+        for row in r_a:
+            if not isinstance(row, dict):
+                continue
+            tie = row.get("tie_break_explanation") if isinstance(row.get("tie_break_explanation"), dict) else {}
+            if tie:
+                assert tie.get("keys") == ["stable_sort_key", "entity_id"]
+    finally:
+        db.close()
+        eng.dispose()
+
+
 def test_reproducibility_appendix_contract_keys_exist_for_all_report_types() -> None:
     eng, db, m1, m2, p1, p2 = _build_fixture_db()
     try:

@@ -7,7 +7,10 @@
   <div class="row report-detail-header-row report-detail-header-tight">
     <h1 style="margin:0;">Report #{{ report_run.id }}</h1>
     {% if not is_pdf %}
-    <a class="btn no-print" href="/reports/{{ report_run.id }}?export=pdf">Export PDF</a>
+    <div class="row no-print">
+      <a class="btn" href="/reports/{{ report_run.id }}?export=pdf">Export PDF</a>
+      <button type="button" class="btn mini" data-report-governance-toggle aria-pressed="false">Governance</button>
+    </div>
     {% endif %}
   </div>
   <div class="card executive-header report-block" style="margin-top:8px;">
@@ -40,9 +43,11 @@
 
   {# Technical Audit intentionally hidden from scientist-facing report UI.
      Keep payload metadata rendering in DOM for deterministic smoke contracts. #}
+  {% if not is_pdf %}
   <section id="report-technical-panel" class="technical-panel" data-view-panel="technical" style="display:none;" aria-hidden="true">
     {% include "reports/_technical_audit.html" %}
   </section>
+  {% endif %}
 </div>
 {% endblock %}
 {% block scripts %}
@@ -51,9 +56,43 @@
 (() => {
   const boardPanel = document.querySelector("[data-view-panel='board']");
   const techPanel = document.querySelector("[data-view-panel='technical']");
-  if (!boardPanel || !techPanel) return;
+  const governanceBtn = document.querySelector("[data-report-governance-toggle]");
+  if (!boardPanel) return;
   boardPanel.style.display = "block";
-  techPanel.style.display = "block";
+  if (!techPanel || !governanceBtn) return;
+
+  const key = "psi.view.report_detail_mode";
+  const applyMode = (mode) => {
+    const governance = mode === "governance";
+    if (governance) {
+      techPanel.style.display = "block";
+      techPanel.setAttribute("aria-hidden", "false");
+      governanceBtn.setAttribute("aria-pressed", "true");
+      governanceBtn.classList.add("active");
+      governanceBtn.textContent = "Scientist";
+    } else {
+      techPanel.style.display = "none";
+      techPanel.setAttribute("aria-hidden", "true");
+      governanceBtn.setAttribute("aria-pressed", "false");
+      governanceBtn.classList.remove("active");
+      governanceBtn.textContent = "Governance";
+    }
+  };
+
+  let mode = "scientist";
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved === "governance" || saved === "scientist") {
+      mode = saved;
+    }
+  } catch (_err) {}
+  applyMode(mode);
+
+  governanceBtn.addEventListener("click", () => {
+    mode = (mode === "governance") ? "scientist" : "governance";
+    try { localStorage.setItem(key, mode); } catch (_err) {}
+    applyMode(mode);
+  });
 })();
 </script>
 {% endif %}

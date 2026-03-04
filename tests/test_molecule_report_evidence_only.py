@@ -206,6 +206,40 @@ def test_report_detail_hides_technical_audit_label_for_scientist_view() -> None:
         )
         assert "Technical Audit" not in html
         assert "Structured Report Payload" in html
+        assert 'aria-hidden="true"' in html
+        assert 'const key = "psi.view.report_detail_mode";' in html
+        assert 'techPanel.style.display = "block";' in html
+        assert "data-report-governance-toggle" in html
+        assert 'data-report-panel="governance"' in html
+    finally:
+        db.close()
+        eng.dispose()
+
+
+def test_report_detail_governance_toggle_hidden_in_pdf_mode() -> None:
+    eng, db, row, payload = _seed_and_generate_without_snapshots()
+    try:
+        board = build_molecule_board_display_from_payload(row=row, payload=payload)
+        tpl = _env().get_template("reports/detail.html")
+        html = tpl.render(
+            report_run=SimpleNamespace(id=int(row.id), report_type="molecule_report", as_of=row.as_of, created_at=row.created_at),
+            payload=payload,
+            subject_ids=[1],
+            snapshot_coverage=[],
+            identity_summary="EX-INT-012 (Molecule 15)",
+            board_template_name="reports/board_molecule_v3.html",
+            board_narrative={},
+            molecule_board_display=board,
+            is_pdf=True,
+            policy_pin_summary=[],
+            governance_warnings=[],
+            rule_ids=[],
+            measurement_key_citations=[],
+            evidence_snapshot_refs=[],
+        )
+        assert "data-report-governance-toggle" not in html
+        assert "Governance Payload Detail" not in html
+        assert 'data-report-panel="governance"' not in html
     finally:
         db.close()
         eng.dispose()
