@@ -4,7 +4,7 @@
 {% set payload_meta = (payload.metadata if payload is defined and payload.metadata is defined else {}) %}
 {% set is_pdf = (is_pdf if is_pdf is defined else false) %}
 <div class="card report-detail-page">
-  <div class="row report-detail-header-row" style="justify-content:space-between;align-items:center;">
+  <div class="row report-detail-header-row report-detail-header-tight">
     <h1 style="margin:0;">Report #{{ report_run.id }}</h1>
     {% if not is_pdf %}
     <a class="btn no-print" href="/reports/{{ report_run.id }}?export=pdf">Export PDF</a>
@@ -16,7 +16,7 @@
       <div class="executive-header-col">
         <div class="executive-kv-row"><strong>Identity:</strong> <code>{{ identity_summary if identity_summary is defined else "missing" }}</code></div>
         <div class="executive-kv-row"><strong>Type:</strong> <code>{{ report_run.report_type }}</code></div>
-        <div class="executive-kv-row"><strong>Subjects:</strong> <code>{{ subject_ids }}</code></div>
+        <div class="executive-kv-row"><strong>{{ "Subject" if report_run.report_type == "molecule_report" else "Subjects" }}:</strong> <code>{{ subject_ids }}</code></div>
       </div>
       <div class="executive-header-col">
         <div class="executive-kv-row"><strong>As Of:</strong> {{ report_run.as_of }}</div>
@@ -26,7 +26,7 @@
         {% endif %}
       </div>
     </div>
-    <div class="mini muted executive-meta-line" style="margin-top:10px;">
+    <div class="mini muted executive-meta-line report-schema-line">
       schema:
       <code>{{ (payload.schema_id if payload is defined and payload.schema_id is defined else "missing") }}</code>
       · report_type:

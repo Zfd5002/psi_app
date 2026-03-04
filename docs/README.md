@@ -1,0 +1,11 @@
+# PSI Docs Index
+
+## DI Governance Roadmaps
+- [DI Mission and Roadmap V3](DI_MISSION_AND_ROADMAP_V3.md)
+- [DI Mission and Roadmap V2](DI_MISSION_AND_ROADMAP_v2.md)
+
+## V3 Status / Governance Notes
+- [DI V3 Status (v1.3.0b23)](DI_V3_STATUS_v1.3.0b23.md)
+- [DI V3 Governance Notes](DI_V3_GOVERNANCE_NOTES.md)
+- [DI Constitution](DI_CONSTITUTION.md)
+- [DI Snapshot Contract](DI_SNAPSHOT_CONTRACT.md)

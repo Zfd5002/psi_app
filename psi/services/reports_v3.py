@@ -103,6 +103,12 @@ def _cell_from_metric_refs(value: object) -> str:
     return f"{len(refs)} cited"
 
 
+def _artifact_type_rank(value: object) -> tuple[int, str]:
+    t = str(value or "OTHER").strip().upper()
+    order = {"SEC": 0, "SDS_PAGE": 1, "ENDOTOXIN": 2, "OTHER": 3}
+    return (order.get(t, 99), t)
+
+
 def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) -> dict[str, object]:
     sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
     identity = sections.get("identity_context") if isinstance(sections.get("identity_context"), dict) else {}
@@ -182,11 +188,22 @@ def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) 
         f"Coverage summary records {int(coverage.get('measurement_count') or 0)} measurements across "
         f"{int(coverage.get('batch_count') or 0)} batches as of {str(meta.get('as_of') or '')}."
     )
+    artifact_items = artifacts.get("items") if isinstance(artifacts.get("items"), list) else []
+    sorted_artifacts = sorted(
+        [x for x in artifact_items if isinstance(x, dict)],
+        key=lambda a: (
+            _artifact_type_rank(a.get("artifact_type")),
+            str(a.get("batch_label") or ""),
+            str(a.get("created_at") or ""),
+            int(a.get("data_record_id") or 0),
+            str(a.get("title") or ""),
+        ),
+    )
 
     return {
         "header": {
             "molecule": _clean_board_text(identity.get("primary_id") or identity.get("title") or f"molecule_id={identity.get('molecule_id') or ''}"),
-            "program": (f"program_id={identity.get('program_id')}" if identity.get("program_id") is not None else "unknown"),
+            "program": (f"program_id={identity.get('program_id')}" if identity.get("program_id") is not None else "Not available"),
             "modality": _clean_board_text(identity.get("modality") or ""),
             "target": _clean_board_text(identity.get("target") or ""),
             "generated_at": (row.created_at.isoformat() if row.created_at is not None else ""),
@@ -214,6 +231,9 @@ def build_molecule_board_display_from_payload(*, row: ReportRun, payload: dict) 
         },
         "coverage_summary": coverage,
         "artifacts": artifacts,
+        "artifacts_ui": {
+            "items_sorted": sorted_artifacts,
+        },
         "scientist_notes": notes,
     }
 

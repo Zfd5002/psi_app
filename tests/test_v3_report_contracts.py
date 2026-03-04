@@ -264,6 +264,34 @@ def test_molecule_comparative_ranking_marks_high_risk_only_when_present() -> Non
         eng.dispose()
 
 
+def test_reproducibility_appendix_contract_keys_exist_for_all_report_types() -> None:
+    eng, db, m1, m2, p1, p2 = _build_fixture_db()
+    try:
+        as_of = datetime(2026, 2, 26, 2, 0, 0)
+        runs = [
+            generate_molecule_report_v0(db, molecule_id=m1, as_of=as_of, policy_pins={"report_policy": "v0"}),
+            generate_program_report_v0(db, program_id=p1, as_of=as_of, policy_pins={"report_policy": "v0"}),
+            generate_molecule_comparative_report_v0(db, molecule_ids=[m1, m2], as_of=as_of, policy_pins={"report_policy": "v0"}),
+            generate_program_comparative_report_v0(db, program_ids=[p1, p2], as_of=as_of, policy_pins={"report_policy": "v0"}),
+        ]
+        for run in runs:
+            payload = load_report_run_payload(run)
+            sections = payload.get("sections") if isinstance(payload.get("sections"), dict) else {}
+            repro = sections.get("reproducibility_appendix") if isinstance(sections.get("reproducibility_appendix"), dict) else {}
+            for k in ("policy_pins", "catalog_versions", "cited_snapshot_ids", "inputs_summary"):
+                assert k in repro
+            assert isinstance(repro.get("policy_pins"), dict)
+            assert isinstance(repro.get("cited_snapshot_ids"), list)
+            assert isinstance(repro.get("inputs_summary"), dict)
+            if str(payload.get("metadata", {}).get("report_type") or "") == REPORT_TYPE_MOLECULE:
+                assert isinstance(repro.get("measurement_keys"), list)
+                assert repro.get("measurement_keys") == sorted(repro.get("measurement_keys"))
+                assert isinstance(repro.get("governance_red_flags"), list)
+    finally:
+        db.close()
+        eng.dispose()
+
+
 def test_molecule_comparative_report_policy_pins_use_latest_comparability_version() -> None:
     eng, db, m1, m2, _p1, _p2 = _build_fixture_db()
     try:

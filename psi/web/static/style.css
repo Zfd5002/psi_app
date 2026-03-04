@@ -61,12 +61,22 @@ textarea{min-height:110px;resize:vertical}
 .executive-kv-row{line-height:1.4}
 .executive-kv-row code{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
 .executive-meta-line{line-height:1.35}
+.report-detail-header-tight{justify-content:space-between;align-items:center;row-gap:8px}
+.report-schema-line{margin-top:10px}
 .executive-summary-card{padding-top:14px}
 .executive-headline{line-height:1.3}
 .narrative-list{margin:8px 0 6px 20px;padding:0;display:grid;gap:4px}
 .narrative-list-tight{gap:3px}
 .board-section-table{width:100%;table-layout:fixed}
 .board-section-table th,.board-section-table td{overflow-wrap:anywhere;word-break:break-word;vertical-align:top}
+.report-page table th,
+.report-detail-page table th,
+.board-template table th,
+#upgrade-board-panel table th,
+#ladder-board-panel table th,
+.lineage-packet table th{
+  text-align:left;
+}
 
 /* --- Sequence-aligned feature tracks (molecule detail) --- */
 .seq-scroll{margin-top:10px;overflow-x:hidden;padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(7,13,24,.55);max-width:100%;min-width:0;width:100%}
@@ -240,10 +250,6 @@ body.pdf-mode .narrative-list{gap:3px}
 .measurement-chip-list{align-items:flex-start}
 .table-scroll-safe{overflow-x:auto;max-width:100%}
 .table-scroll-safe .board-section-table{min-width:720px}
-.fact-sheet-matrix th,
-.fact-sheet-matrix td{
-  text-align:left;
-}
 .batch-summary{display:flex;flex-direction:column;gap:4px}
 .batch-id{font-weight:800;font-size:16px}
 .batch-headlines{display:flex;flex-wrap:wrap;gap:6px}

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from psi.services.report_engine import (
     REPORT_TYPES,
+    _compute_report_fingerprint,
     _order_molecule_comparative_rows,
     _order_program_comparative_rows,
     build_report_payload,
@@ -92,3 +93,53 @@ def test_comparative_row_ordering_contracts_are_deterministic():
     assert [x["molecule_id"] for x in m1] == [x["molecule_id"] for x in m2]
     assert [x["program_id"] for x in p1] == [10, 20]
     assert [x["program_id"] for x in p1] == [x["program_id"] for x in p2]
+
+
+def test_report_fingerprint_stable_for_equivalent_dict_key_order() -> None:
+    payload_a = {
+        "metadata": {
+            "report_type": "molecule_report",
+            "subject_ids": [1],
+            "as_of": "2026-02-26T00:00:00",
+            "policy_pins": {"b": 2, "a": 1},
+            "snapshot_coverage": [],
+        },
+        "sections": {
+            "identity_context": {"primary_id": "M-1", "molecule_id": 1},
+            "fact_sheet": {"schema_version": "v1"},
+            "artifacts": {"schema_version": "v1", "items": []},
+            "reproducibility_appendix": {"policy_pins": {}, "catalog_versions": {}, "cited_snapshot_ids": [], "inputs_summary": {}},
+        },
+    }
+    payload_b = {
+        "sections": {
+            "artifacts": {"items": [], "schema_version": "v1"},
+            "reproducibility_appendix": {"catalog_versions": {}, "inputs_summary": {}, "policy_pins": {}, "cited_snapshot_ids": []},
+            "fact_sheet": {"schema_version": "v1"},
+            "identity_context": {"molecule_id": 1, "primary_id": "M-1"},
+        },
+        "metadata": {
+            "snapshot_coverage": [],
+            "policy_pins": {"a": 1, "b": 2},
+            "as_of": "2026-02-26T00:00:00",
+            "subject_ids": [1],
+            "report_type": "molecule_report",
+        },
+    }
+    assert canonical_report_json(payload_a) == canonical_report_json(payload_b)
+    assert _compute_report_fingerprint(payload_a) == _compute_report_fingerprint(payload_b)
+
+
+def test_report_fingerprint_deterministic_with_reproducibility_appendix_present() -> None:
+    req = create_report_request(
+        report_type="molecule_report",
+        subject_ids=[1],
+        as_of=datetime(2026, 2, 26, 0, 0, 0),
+        policy_pins={"report_policy": "v0"},
+        snapshot_coverage=[],
+    )
+    p1 = build_report_payload(req)
+    p2 = build_report_payload(req)
+    p1["sections"]["reproducibility_appendix"]["measurement_keys"] = ["ec50", "kd"]
+    p2["sections"]["reproducibility_appendix"]["measurement_keys"] = ["ec50", "kd"]
+    assert _compute_report_fingerprint(p1) == _compute_report_fingerprint(p2)

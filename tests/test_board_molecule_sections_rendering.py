@@ -49,7 +49,7 @@ def test_board_molecule_template_renders_key_v3_section_headings() -> None:
             "scientist_notes": [{"author": "local-user", "timestamp": "2026-03-02T10:00:00", "scope": "B-002", "body": "Promising run."}],
         },
     )
-    assert "Molecule Header" in html
+    assert "Molecule Overview" in html
     assert "Report Summary" in html
     assert "Batch Registry" in html
     assert "Experimental Results Fact Sheet" in html

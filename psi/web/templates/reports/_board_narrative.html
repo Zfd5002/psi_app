@@ -11,7 +11,7 @@
 {% set pin_rows = (policy_pin_summary if policy_pin_summary is defined and policy_pin_summary is iterable else []) %}
 {% set runtime_versions = (runtime_policy_versions if runtime_policy_versions is defined and runtime_policy_versions is mapping else {}) %}
 
-<h2>Executive Summary</h2>
+<h2>Executive Snapshot</h2>
 <div class="card report-block report-section-card executive-summary-card">
   <h3 class="executive-headline" style="margin-top:0;">{{ n.headline if n.headline is defined else "Not available" }}</h3>
   <div class="grid cols-2">
@@ -28,7 +28,7 @@
       </table>
     </div>
     <div>
-      <h4>What this means</h4>
+      <h4>Interpretation</h4>
       <ul class="narrative-list narrative-list-tight">
         {% for item in meaning_rows %}
         <li>{{ item }}</li>
@@ -77,7 +77,7 @@
   {% endfor %}
 </div>
 
-<h2>Evidence</h2>
+<h2>Evidence Status</h2>
 <div class="card report-block report-section-card">
   <table>
     <tbody>
@@ -91,12 +91,12 @@
         <td>
           {% if appendix_measurement_keys and appendix_measurement_keys|length %}
           <div class="chip-list measurement-chip-list">
-            {% for mk in appendix_measurement_keys %}
-            <span class="chip">{{ mk }}</span>
+            {% for mk in appendix_measurement_keys|sort %}
+            <span class="chip">{{ mk|humanize_key }}</span>
             {% endfor %}
           </div>
           {% else %}
-          None
+          No cited measurements in this report.
           {% endif %}
         </td>
       </tr>
@@ -104,13 +104,13 @@
   </table>
 </div>
 
-<h2>Next steps</h2>
+<h2>Recommended Next Steps</h2>
 <div class="card report-block report-section-card">
   <ul class="narrative-list">
     {% for item in next_steps %}
     <li>{{ item }}</li>
     {% else %}
-    <li>None.</li>
+    <li>No next steps provided by this report.</li>
     {% endfor %}
   </ul>
 </div>

@@ -6780,6 +6780,220 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-03 — v1.3.0b27
+Intent:
+- Final verification checkpoint for b16-b27 chain with deterministic gate confirmation and overlay-safe packaging consistency.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+
+Behavior:
+- No runtime logic changes in this patch.
+- Finalized chain version marker and recorded gate verification status.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b26
+Intent:
+- Clean up redundant report CSS hooks and keep report table alignment rules consolidated.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+
+Behavior:
+- Removed redundant `.fact-sheet-matrix` text-alignment hook now superseded by report-scoped table-header alignment rules.
+- No non-report page behavior changes.
+- No payload or service changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b25
+Intent:
+- Tighten report detail header layout and molecule-specific header wording using template/CSS-only adjustments.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+- `psi/web/static/style.css`
+
+Behavior:
+- Added dedicated report header layout class to remove inline spacing behavior and keep consistent header alignment.
+- Header label now uses `Subject` for molecule reports and `Subjects` for other report types.
+- Kept molecule-specific hiding of snapshot coverage unchanged.
+- No payload or routing behavior changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b24
+Intent:
+- Add minimal docs index links for V3 roadmap/status navigation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/README.md`
+
+Behavior:
+- Added `docs/README.md` with links to V3 mission charter and the new V3 status checkpoint doc.
+- Documentation-only patch; no runtime code changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b23
+Intent:
+- Add V3 roadmap checkpoint status document comparing charter requirements to implemented code surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/DI_V3_STATUS_v1.3.0b23.md`
+
+Behavior:
+- Added a documentation-only status checkpoint grounded in `docs/DI_MISSION_AND_ROADMAP_V3.md` and current code modules.
+- Included implemented vs partial areas, risks, and next recommended patch themes.
+- No runtime behavior, DI semantics, or schema changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b22
+Intent:
+- Add strict payload-only enforcement tests for report rendering paths (molecule + comparative surface).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_report_payload_only_rendering.py`
+
+Behavior:
+- Added a molecule board payload-only render test that validates output without any DB access.
+- Added a comparative identity summary payload-only test using a NoQuery session guard to ensure no view-time query path is needed for molecule-comparative identity rendering.
+- No runtime report generation or routing behavior changed.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b21
+Intent:
+- Strengthen reproducibility appendix schema contract tests across all V3 report types.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_report_contracts.py`
+
+Behavior:
+- Added an explicit contract test asserting `reproducibility_appendix` required base keys for molecule, program, molecule comparative, and program comparative reports.
+- Added molecule-specific assertions for deterministic `measurement_keys` ordering and `governance_red_flags` list presence.
+- No runtime report generation behavior changed.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b20
+Intent:
+- Harden report-engine deterministic serialization/fingerprint invariants with targeted tests.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_v3_report_engine_contracts.py`
+
+Behavior:
+- Added a deterministic fingerprint test proving equivalent payload dict key ordering yields identical canonical JSON and fingerprint.
+- Added a deterministic fingerprint test for molecule payloads with reproducibility appendix present and measurement key citations.
+- No report engine runtime behavior changed.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b19
+Intent:
+- Polish board narrative panel microcopy and measurement-key presentation (template-only).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/_board_narrative.html`
+
+Behavior:
+- Renamed headings for readability: Executive Snapshot, Evidence Status, Recommended Next Steps.
+- Narrative “What this means” heading updated to “Interpretation”.
+- Measurement key chips now render deterministically sorted and humanized.
+- Empty-state phrasing updated to clearer scientist-facing language.
+- No payload generation changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b18
+Intent:
+- Improve artifacts board readability with deterministic grouping and compact link UX (payload-only rendering).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+
+Behavior:
+- Artifacts are deterministically sorted for display (artifact type + stable secondary keys) in board display shaping.
+- Molecule board artifacts section now renders grouped sub-tables by artifact type.
+- Added a small UI-only “Copy all artifact links” button using existing rendered links; no server/DB dependency.
+- No report payload schema changes and no view-time DB query changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b17
+Intent:
+- Polish molecule board readability (header/summary microcopy and empty states) without changing report semantics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/reports_v3.py`
+- `psi/web/templates/reports/board_molecule_v3.html`
+- `tests/test_board_molecule_sections_rendering.py`
+
+Behavior:
+- Molecule board header renamed to **Molecule Overview** and default labels now use `Not available` phrasing.
+- Report summary and table empty states are clearer and scientist-friendly (e.g., “No artifacts linked yet.”).
+- Display fallback for missing program identity in molecule board builder normalized to `Not available`.
+- No payload changes; no view-time query changes.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b16
+Intent:
+- Apply global report table-header alignment polish so report/lineage table headings are left-aligned consistently.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/reports/list.html`
+- `psi/web/templates/reports/new.html`
+- `psi/web/templates/lineage/program_detail.html`
+- `psi/web/templates/lineage/portfolio_detail.html`
+
+Behavior:
+- Added report-scoped CSS that left-aligns `<th>` across report detail, report board templates, upgrade/ladder board panels, and lineage packets.
+- Added minimal wrapper classes (`report-page`, `lineage-packet`) to allow scoped styling without affecting unrelated pages.
+- No payload generation changes.
+
+Gates:
+- PASS
+
 ## 2026-03-03 — v1.3.0b15
 Intent:
 - Add explicit deterministic ranking tie-break contract fields and tie-break explanation schema metadata without changing ranking behavior.
