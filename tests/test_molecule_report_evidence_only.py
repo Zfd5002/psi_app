@@ -181,3 +181,31 @@ def test_experimental_results_header_alignment_hook_present() -> None:
         }
     )
     assert "fact-sheet-matrix" in html
+
+
+def test_report_detail_hides_technical_audit_label_for_scientist_view() -> None:
+    eng, db, row, payload = _seed_and_generate_without_snapshots()
+    try:
+        board = build_molecule_board_display_from_payload(row=row, payload=payload)
+        tpl = _env().get_template("reports/detail.html")
+        html = tpl.render(
+            report_run=SimpleNamespace(id=int(row.id), report_type="molecule_report", as_of=row.as_of, created_at=row.created_at),
+            payload=payload,
+            subject_ids=[1],
+            snapshot_coverage=[],
+            identity_summary="EX-INT-012 (Molecule 15)",
+            board_template_name="reports/board_molecule_v3.html",
+            board_narrative={},
+            molecule_board_display=board,
+            is_pdf=False,
+            policy_pin_summary=[],
+            governance_warnings=[],
+            rule_ids=[],
+            measurement_key_citations=[],
+            evidence_snapshot_refs=[],
+        )
+        assert "Technical Audit" not in html
+        assert "Structured Report Payload" in html
+    finally:
+        db.close()
+        eng.dispose()

@@ -87,8 +87,14 @@
       "scalar_rule_id": "molecule_header_confidence_scalar.v0_1",
       "scalar_state": "green"
     },
-    "progress_hover_text": "satisfied=expression_present,pk_screen_present,purification_present,in_vivo_ready,scaleup_ready; not_yet=basic_qc_present,endotoxin_present,functional_assay_present",
+    "progress_hover_text": "satisfied=expression_present,purification_present,pk_screen_present,in_vivo_ready,scaleup_ready; not_yet=basic_qc_present,functional_assay_present,endotoxin_present",
     "progress_milestones": [
+      {
+        "key": "expression_present",
+        "kind": "early",
+        "label": "expression present",
+        "satisfied": true
+      },
       {
         "key": "basic_qc_present",
         "kind": "early",
@@ -96,15 +102,9 @@
         "satisfied": false
       },
       {
-        "key": "endotoxin_present",
+        "key": "purification_present",
         "kind": "early",
-        "label": "endotoxin present",
-        "satisfied": false
-      },
-      {
-        "key": "expression_present",
-        "kind": "early",
-        "label": "expression present",
+        "label": "purification present",
         "satisfied": true
       },
       {
@@ -114,15 +114,15 @@
         "satisfied": false
       },
       {
+        "key": "endotoxin_present",
+        "kind": "early",
+        "label": "endotoxin present",
+        "satisfied": false
+      },
+      {
         "key": "pk_screen_present",
         "kind": "early",
         "label": "pk screen present",
-        "satisfied": true
-      },
-      {
-        "key": "purification_present",
-        "kind": "early",
-        "label": "purification present",
         "satisfied": true
       },
       {

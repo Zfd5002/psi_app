@@ -8296,3 +8296,133 @@ Guardrails:
 
 Gates:
 - PASS
+
+## 2026-03-03 — v1.3.0b28
+Intent:
+- Add deterministic, stage-sequenced metric ordering contract for molecule fact sheets.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/fact_sheet.py`
+
+Behavior:
+- Introduced canonical metric stage order list and index map in `fact_sheet.py`.
+- Replaced simple `required + alpha(observed)` ordering with deterministic ordering:
+  - preserve `required_metric_keys` priority only when snapshot gate requirements are present
+  - then canonical stage-sequenced metrics
+  - then remaining observed metrics alphabetically.
+- Preserved existing payload shape and deterministic batch/measurement selection rules.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b29
+Intent:
+- Add deterministic fact-sheet unit fallback chain for numeric cell display.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/fact_sheet.py`
+- `tests/test_v3_molecule_report_schema.py`
+
+Behavior:
+- `_display_value` now uses fallback order for numeric cells:
+  1. measurement unit
+  2. metric catalog unit
+  3. deterministic suffix-map fallback
+  4. blank
+- Added deterministic suffix fallback map in `fact_sheet.py`.
+- Added unit fallback test for unknown metric suffix `_pct`.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b30
+Intent:
+- Harden scientist-facing metric metadata via curated deterministic catalog overrides.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/metric_catalog.py`
+- `tests/test_metric_catalog.py`
+
+Behavior:
+- Added explicit curated fallback entries (labels/domains/units/sort_order) for selected expression, assay, endotoxin, PK/PD, and in vivo metrics.
+- Existing catalog-backed entries remain unchanged.
+- Unknown keys still use deterministic humanized fallback.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b31
+Intent:
+- Make progress milestone rendering use an explicit deterministic stage order (including late endotoxin placement).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecule_header.py`
+- `tests/test_molecule_header_model.py`
+- `tests/fixtures/molecule_header_model_lock_v1.json`
+
+Behavior:
+- Replaced early milestone key iteration from plain sorted keys to explicit ordered sequence with deterministic sorted fallback for unknown keys.
+- Kept milestone semantics unchanged.
+- Added progress milestone ordering test and updated lock fixture accordingly.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b32
+Intent:
+- Align progress policy catalog milestone key order with explicit stage sequence (ordering-only).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/di/catalogs/progress_policy_v0_2.json`
+
+Behavior:
+- Reordered `early_milestones` keys to match stage display sequence:
+  `expression_present`, `basic_qc_present`, `purification_present`, `functional_assay_present`, `endotoxin_present`, `pk_screen_present`.
+- No metric requirements or policy semantics changed.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b33
+Intent:
+- Hide Technical Audit section from scientist-facing report detail UI (template-only change).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/detail.html`
+
+Behavior:
+- Removed technical audit panel include from report detail page.
+- Left backend report detail context generation unchanged to preserve governance/debug surfaces.
+
+Gates:
+- PASS
+
+## 2026-03-03 — v1.3.0b34
+Intent:
+- Add/align deterministic tests for metric ordering, unit fallback, milestone order, and technical-audit hide behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/_technical_audit.html`
+- `tests/test_molecule_report_evidence_only.py`
+
+Behavior:
+- Updated hidden technical panel heading label to non-scientist-facing wording.
+- Added report-detail rendering test asserting `"Technical Audit"` is not shown in scientist view while structured payload block remains rendered for contracts.
+- b28-b33 tests already added for fact-sheet ordering, unit fallback, and milestone sequence remain in place.
+
+Gates:
+- PASS

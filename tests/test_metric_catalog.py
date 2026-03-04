@@ -22,3 +22,10 @@ def test_metric_catalog_entry_fallback_is_stable() -> None:
         "sort_order": 9999,
         "notes": "",
     }
+
+
+def test_metric_catalog_curated_overrides_for_known_metrics() -> None:
+    entry = metric_catalog_entry("time_to_onset_days")
+    assert entry["label"] == "Time to Onset"
+    assert entry["domain"] == "In Vivo"
+    assert entry["unit"] == "days"

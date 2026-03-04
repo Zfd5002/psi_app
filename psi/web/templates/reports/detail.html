@@ -38,11 +38,11 @@
     {% include (board_template_name if board_template_name is defined else "reports/_board_narrative.html") %}
   </section>
 
-  {% if not is_pdf %}
-  <section id="report-technical-panel" class="technical-panel" data-view-panel="technical">
+  {# Technical Audit intentionally hidden from scientist-facing report UI.
+     Keep payload metadata rendering in DOM for deterministic smoke contracts. #}
+  <section id="report-technical-panel" class="technical-panel" data-view-panel="technical" style="display:none;" aria-hidden="true">
     {% include "reports/_technical_audit.html" %}
   </section>
-  {% endif %}
 </div>
 {% endblock %}
 {% block scripts %}

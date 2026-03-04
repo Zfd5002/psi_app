@@ -94,3 +94,17 @@ def test_build_molecule_header_model_lock_fixture(monkeypatch):
         ],
     }
     assert locked == payload.get("expected")
+
+
+def test_molecule_header_early_milestones_follow_explicit_display_order(monkeypatch):
+    monkeypatch.setattr(
+        mh,
+        "_query_molecule_metric_keys_present",
+        lambda db, molecule_id: ["expr_yield_mgL", "value_eu_ml", "pk_t12_h"],
+    )
+    model = mh._build_molecule_header_model(db=None, molecule_id=999, di_rows_chrono=[])
+    keys = [str(m.get("key") or "") for m in (model.get("progress_milestones") or []) if isinstance(m, dict) and str(m.get("kind") or "") == "early"]
+    assert keys[:3] == ["expression_present", "basic_qc_present", "purification_present"]
+    assert "endotoxin_present" in keys
+    assert "pk_screen_present" in keys
+    assert keys.index("endotoxin_present") < keys.index("pk_screen_present")

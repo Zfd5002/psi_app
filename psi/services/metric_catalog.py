@@ -7,6 +7,24 @@ from typing import Any
 
 from psi.web.ui_labels import humanize_key
 
+_CURATED_METRIC_OVERRIDES: dict[str, dict[str, Any]] = {
+    "titer_mg_l": {"label": "Titer", "domain": "Expression", "unit": "mg/L", "sort_order": 120},
+    "expr_yield_mgL": {"label": "Expression Yield", "domain": "Expression", "unit": "mg/L", "sort_order": 110},
+    "total_yield_mg": {"label": "Total Yield", "domain": "Expression", "unit": "mg", "sort_order": 130},
+    "viability_percent": {"label": "Viability", "domain": "Expression", "unit": "%", "sort_order": 140},
+    "kd_nM": {"label": "KD", "domain": "Assay", "unit": "nM", "sort_order": 420},
+    "percent_killing": {"label": "Percent Killing", "domain": "Assay", "unit": "%", "sort_order": 430},
+    "internalization_t1_2_h": {"label": "Internalization t1/2", "domain": "Assay", "unit": "h", "sort_order": 440},
+    "surface_expression_pct_24h": {"label": "Surface Expression (24h)", "domain": "Assay", "unit": "%", "sort_order": 450},
+    "value_eu_ml": {"label": "Endotoxin Value", "domain": "Endotoxin", "unit": "EU/mL", "sort_order": 340},
+    "limit_eu_ml": {"label": "Endotoxin Limit", "domain": "Endotoxin", "unit": "EU/mL", "sort_order": 341},
+    "cmax_ug_ml": {"label": "Cmax", "domain": "PK/PD", "unit": "ug/mL", "sort_order": 520},
+    "auc": {"label": "AUC", "domain": "PK/PD", "unit": "", "sort_order": 530},
+    "half_life_days": {"label": "Half-life", "domain": "PK/PD", "unit": "days", "sort_order": 510},
+    "diabetes_incidence_pct": {"label": "Diabetes Incidence", "domain": "In Vivo", "unit": "%", "sort_order": 610},
+    "time_to_onset_days": {"label": "Time to Onset", "domain": "In Vivo", "unit": "days", "sort_order": 620},
+}
+
 
 def _catalog_path() -> Path:
     return Path(__file__).resolve().parents[1] / "data" / "metric_catalog_v1.json"
@@ -49,6 +67,15 @@ def metric_catalog_entry(metric_key: str) -> dict[str, Any]:
     entry = metrics.get(key) if isinstance(metrics.get(key), dict) else None
     if entry is not None:
         return dict(entry)
+    curated = _CURATED_METRIC_OVERRIDES.get(key)
+    if isinstance(curated, dict):
+        return {
+            "label": str(curated.get("label") or humanize_key(key)),
+            "domain": str(curated.get("domain") or "Other"),
+            "unit": str(curated.get("unit") or ""),
+            "sort_order": int(curated.get("sort_order") or 9999),
+            "notes": str(curated.get("notes") or ""),
+        }
     return {
         "label": humanize_key(key),
         "domain": "Other",

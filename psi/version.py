@@ -1,1 +1,1 @@
-PSI_VERSION = "v1.3.0b27"
+PSI_VERSION = "v1.3.0b34"

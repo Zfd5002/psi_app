@@ -14,14 +14,74 @@ from psi.services.metric_catalog import metric_catalog_entry, metric_group_for_k
 _STABILITY_MIN_BATCHES_WITH_REQUIRED = 2
 _STABILITY_MAX_REGRESSION_REQUIRED_PRESENT = 2
 
+# Canonical display order for molecule fact-sheet metrics.
+# Contract: render known discovery-stage metrics in this sequence,
+# then render any remaining observed metrics alphabetically.
+_CANONICAL_METRIC_STAGE_ORDER: list[str] = [
+    "expr_yield_mgL",
+    "titer_mg_l",
+    "titer_g_l",
+    "total_yield_mg",
+    "viability_percent",
+    "purity_percent",
+    "purity_pct",
+    "monomer_pct",
+    "monomer_percent",
+    "hmw_pct",
+    "hmw_percent",
+    "lmw_pct",
+    "lmw_percent",
+    "aggregation_pct",
+    "value_eu_ml",
+    "limit_eu_ml",
+    "percent_killing",
+    "ec50",
+    "kd_nM",
+    "internalization_t1_2_h",
+    "surface_expression_pct_24h",
+    "half_life_days",
+    "auc",
+    "cmax_ug_ml",
+    "diabetes_incidence_pct",
+    "time_to_onset_days",
+]
+_CANONICAL_METRIC_ORDER_INDEX = {
+    key: idx for idx, key in enumerate(_CANONICAL_METRIC_STAGE_ORDER)
+}
+_SUFFIX_UNIT_FALLBACKS: dict[str, str] = {
+    "_pct": "%",
+    "_percent": "%",
+    "_mg_l": "mg/L",
+    "_g_l": "g/L",
+    "_eu_ml": "EU/mL",
+    "_nm": "nM",
+    "_ug_ml": "ug/mL",
+    "_days": "days",
+    "_h": "h",
+}
+
 
 def _norm_str(v: object) -> str:
     return str(v or "").strip()
 
 
-def _display_value(*, value_num: object, value_text: object, unit: object) -> str:
+def _fallback_unit_for_metric_key(metric_key: str) -> str:
+    mk = _norm_str(metric_key).lower()
+    if not mk:
+        return ""
+    for suffix, unit in sorted(_SUFFIX_UNIT_FALLBACKS.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if mk.endswith(suffix):
+            return unit
+    return ""
+
+
+def _display_value(*, value_num: object, value_text: object, unit: object, metric_key: str) -> str:
     if value_num is not None and _norm_str(value_num):
         u = _norm_str(unit)
+        if not u:
+            u = _norm_str(metric_catalog_entry(metric_key).get("unit"))
+        if not u:
+            u = _fallback_unit_for_metric_key(metric_key)
         return f"{value_num}{(' ' + u) if u else ''}".strip()
     txt = _norm_str(value_text)
     if txt:
@@ -82,6 +142,36 @@ def _resolve_required_metric_keys(*, template_ids_used: list[str], snapshot_outp
                 if s:
                     required.add(s)
     return sorted(required)
+
+
+def _ordered_metric_keys(
+    *,
+    observed_metric_keys: set[str],
+    required_metric_keys: list[str],
+    preserve_required_priority: bool,
+) -> list[str]:
+    observed = sorted({_norm_str(k) for k in observed_metric_keys if _norm_str(k)})
+    if not observed:
+        return []
+    required = [_norm_str(k) for k in required_metric_keys if _norm_str(k)]
+    required_unique = _ordered_unique(required)
+    seen: set[str] = set()
+    out: list[str] = []
+    if preserve_required_priority:
+        for mk in required_unique:
+            if mk in observed and mk not in seen:
+                seen.add(mk)
+                out.append(mk)
+    remaining = [mk for mk in observed if mk not in seen]
+    ordered_remaining = sorted(
+        remaining,
+        key=lambda mk: (
+            _CANONICAL_METRIC_ORDER_INDEX.get(mk, 10_000),
+            mk,
+        ),
+    )
+    out.extend(ordered_remaining)
+    return out
 
 
 def _compute_best_batch(
@@ -383,7 +473,22 @@ def assemble_molecule_fact_sheet(
         grouped[(m.get("batch_id"), mk)].append(m)
 
     required_set = set(required_metric_keys)
-    ordered_metrics = list(required_metric_keys) + sorted([k for k in observed_metric_keys if k not in required_set])
+    has_snapshot_gate_requirements = False
+    gates_obj = out_snap.get("gates")
+    if isinstance(gates_obj, list):
+        for gate in gates_obj:
+            if not isinstance(gate, dict):
+                continue
+            req_vals = gate.get("required_metrics") if isinstance(gate.get("required_metrics"), list) else []
+            req_base_vals = gate.get("required_metrics_base") if isinstance(gate.get("required_metrics_base"), list) else []
+            if req_vals or req_base_vals:
+                has_snapshot_gate_requirements = True
+                break
+    ordered_metrics = _ordered_metric_keys(
+        observed_metric_keys=observed_metric_keys,
+        required_metric_keys=required_metric_keys,
+        preserve_required_priority=has_snapshot_gate_requirements,
+    )
 
     metric_descriptors = []
     matrix_rows = []
@@ -446,6 +551,7 @@ def assemble_molecule_fact_sheet(
                     value_num=selected.get("value_num"),
                     value_text=selected.get("value_text"),
                     unit=selected.get("unit"),
+                    metric_key=mk,
                 )
                 measurement_id = int(selected["id"])
                 record_id = int(selected["record_id"])

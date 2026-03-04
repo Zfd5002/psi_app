@@ -2,7 +2,7 @@
 {% set metadata = (payload.metadata if payload is defined and payload.metadata is defined else {}) %}
 {% set identity = (sections.identity_context if sections is mapping and sections.identity_context is defined else {}) %}
 
-<h2>Technical Audit</h2>
+<h2>Governance Payload Detail</h2>
 <div class="card">
   <h3 style="margin-top:0;">Reproducibility & Fingerprints</h3>
   <pre style="white-space:pre-wrap;">{{ metadata | tojson(indent=2) }}</pre>

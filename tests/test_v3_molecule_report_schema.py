@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from psi.core.models import Base, Batch, DataRecord, DecisionSnapshot, Molecule, Program
 from psi.core.utils import stable_json_dumps
+from psi.services.fact_sheet import _display_value
 from psi.services.report_engine import canonical_report_json, generate_molecule_report_v0, load_report_run_payload
 
 
@@ -173,6 +174,16 @@ def test_molecule_report_fact_sheet_cell_uses_resolved_value_and_unit_not_n_cite
     finally:
         db.close()
         eng.dispose()
+
+
+def test_fact_sheet_display_value_uses_suffix_unit_fallback_when_no_measurement_or_catalog_unit() -> None:
+    shown = _display_value(
+        value_num=12.0,
+        value_text=None,
+        unit="",
+        metric_key="custom_signal_pct",
+    )
+    assert shown == "12.0 %"
 
 
 def test_payload_deterministic_on_repeat_generation() -> None:

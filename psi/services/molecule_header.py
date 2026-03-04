@@ -10,6 +10,29 @@ from psi.core.measurement_schema import measurement_cols
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
 from psi.services.di.util import heavy_compute_banner_text, is_heavy_compute_enabled
 
+_EARLY_MILESTONE_DISPLAY_ORDER: list[str] = [
+    "expression_present",
+    "basic_qc_present",
+    "purification_present",
+    "functional_assay_present",
+    "mechanism_present",
+    "endotoxin_present",
+    "pk_screen_present",
+]
+
+
+def _ordered_milestone_keys(raw_keys: list[str], preferred_order: list[str]) -> list[str]:
+    preferred_rank = {k: i for i, k in enumerate(preferred_order)}
+    normalized = sorted({str(k).strip() for k in raw_keys if str(k).strip()})
+    return sorted(
+        normalized,
+        key=lambda k: (
+            0 if k in preferred_rank else 1,
+            preferred_rank.get(k, 10_000),
+            k,
+        ),
+    )
+
 
 def _query_molecule_metric_keys_present(db: Session, *, molecule_id: int) -> list[str]:
     cols = measurement_cols(db)
@@ -522,7 +545,7 @@ def _build_molecule_header_model(
     )
 
     milestones: list[dict[str, Any]] = []
-    for key in sorted([str(k) for k in early.keys()]):
+    for key in _ordered_milestone_keys([str(k) for k in early.keys()], _EARLY_MILESTONE_DISPLAY_ORDER):
         metrics = [str(x) for x in (early.get(key) or []) if str(x).strip()]
         present = sorted([m for m in metrics if m in measurement_keys_present])
         missing = sorted([m for m in metrics if m not in measurement_keys_present])
@@ -535,7 +558,7 @@ def _build_molecule_header_model(
                 "detail": {"required_metrics": metrics, "present_metrics": present, "missing_metrics": missing},
             }
         )
-    for key in sorted([str(k) for k in di_m.keys()]):
+    for key in _ordered_milestone_keys([str(k) for k in di_m.keys()], []):
         template_key = str(di_m.get(key) or "").strip()
         is_ready_raw = bool(latest_pass_by_template.get(template_key))
         # Sort prerequisite template keys explicitly to keep UI advisories stable.
