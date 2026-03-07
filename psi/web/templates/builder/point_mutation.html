@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Builder Point Mutation | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Builder: Point Mutation</h1>
+  <p class="muted">Preview-first mutation flow. Select a parent molecule to begin.</p>
+  <form method="post" action="/builder/point-mutation/draft">
+    {% set selected_parent = (form_data.parent_molecule_id if form_data is defined and form_data.parent_molecule_id is defined else None) %}
+    <label>Parent molecule</label>
+    <select name="parent_molecule_id">
+      {% for m in molecules %}
+      <option value="{{ m.id }}" {% if selected_parent is not none and (m.id == selected_parent) %}selected{% endif %}>{{ m.primary_id }}{% if m.title %} — {{ m.title }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <label>New primary ID</label>
+    <input type="text" name="new_primary_id" value="{{ form_data.new_primary_id if form_data is defined and form_data.new_primary_id is defined else '' }}" />
+    <label>New title</label>
+    <input type="text" name="new_title" value="{{ form_data.new_title if form_data is defined and form_data.new_title is defined else '' }}" />
+    <label>Target component</label>
+    <input type="text" name="component" value="{{ form_data.component if form_data is defined and form_data.component is defined else 'HC1' }}" />
+    <label>Mutations</label>
+    <input type="text" name="mutations" placeholder="e.g. S32A N54Q" value="{{ form_data.mutations if form_data is defined and form_data.mutations is defined else '' }}" />
+    <label>Rationale</label>
+    <input type="text" name="rationale" value="{{ form_data.rationale if form_data is defined and form_data.rationale is defined else '' }}" />
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button class="btn primary" type="submit">Build draft</button>
+      <a class="btn" href="/builder">Back to Builder Home</a>
+    </div>
+  </form>
+
+  {% if draft is defined and draft %}
+  <h3 style="margin-top:12px;">Draft Preview</h3>
+  {% if draft.errors %}
+  <div class="card" style="border-color:#c62828;background:#fff8f8;">
+    <div><b>Draft has validation errors</b></div>
+    <ul>
+      {% for err in draft.errors %}
+      <li>{{ err }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% else %}
+  {% if draft.warnings %}
+  <div class="card" style="border-color:#ef6c00;background:#fff8ef;">
+    <div><b>Draft warnings</b></div>
+    <ul>
+      {% for warn in draft.warnings %}
+      <li>{{ warn }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <div class="mini muted">Parent: {{ draft.parent_primary_id }} · Derivation: {{ draft.derivation_type|humanize_state }}</div>
+  {% if draft.preview_rows %}
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Before</th><th>After</th><th>Mutations</th></tr></thead>
+    <tbody>
+      {% for row in draft.preview_rows %}
+      <tr>
+        <td>{{ row.component }}</td>
+        <td><code>{{ row.before }}</code></td>
+        <td><code>{{ row.after }}</code></td>
+        <td class="muted">{{ row.mutations }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Sequence</th></tr></thead>
+    <tbody>
+      {% for role, seq in (draft.components.items()|list|sort) %}
+      <tr><td>{{ role }}</td><td><code>{{ seq }}</code></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/builder/point-mutation/create">
+    <input type="hidden" name="parent_molecule_id" value="{{ draft.parent_molecule_id }}" />
+    <input type="hidden" name="new_primary_id" value="{{ draft.new_primary_id }}" />
+    <input type="hidden" name="new_title" value="{{ draft.new_title }}" />
+    <input type="hidden" name="component" value="{{ form_data.component if form_data is defined and form_data.component is defined else '' }}" />
+    <input type="hidden" name="mutations" value="{{ form_data.mutations if form_data is defined and form_data.mutations is defined else '' }}" />
+    <input type="hidden" name="rationale" value="{{ form_data.rationale if form_data is defined and form_data.rationale is defined else '' }}" />
+    <button class="btn primary" type="submit">Create molecule from draft</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

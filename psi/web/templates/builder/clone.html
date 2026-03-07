@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Builder Clone | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Builder: Clone Molecule</h1>
+  <p class="muted">Preview-first clone flow. Select a parent molecule to build a draft.</p>
+  <form method="post" action="/builder/clone/draft">
+    <label>Parent molecule</label>
+    <select name="parent_molecule_id">
+      {% set selected_parent = (form_data.parent_molecule_id if form_data is defined and form_data.parent_molecule_id is defined else None) %}
+      {% for m in molecules %}
+      <option value="{{ m.id }}" {% if selected_parent is not none and (m.id == selected_parent) %}selected{% endif %}>{{ m.primary_id }}{% if m.title %} — {{ m.title }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <label>New primary ID</label>
+    <input type="text" name="new_primary_id" value="{{ form_data.new_primary_id if form_data is defined and form_data.new_primary_id is defined else '' }}" />
+    <label>New title</label>
+    <input type="text" name="new_title" value="{{ form_data.new_title if form_data is defined and form_data.new_title is defined else '' }}" />
+    <label>Rationale</label>
+    <input type="text" name="rationale" value="{{ form_data.rationale if form_data is defined and form_data.rationale is defined else '' }}" />
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button class="btn primary" type="submit">Build draft</button>
+      <a class="btn" href="/builder">Back to Builder Home</a>
+    </div>
+  </form>
+
+  {% if draft is defined and draft %}
+  <h3 style="margin-top:12px;">Draft Preview</h3>
+  {% if draft.errors %}
+  <div class="card" style="border-color:#c62828;">
+    <div><b>Draft has validation errors</b></div>
+    <ul>
+      {% for err in draft.errors %}
+      <li>{{ err }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% else %}
+  <div class="mini muted">Parent: {{ draft.parent_primary_id }} · Derivation: {{ draft.derivation_type|humanize_state }}</div>
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Sequence</th></tr></thead>
+    <tbody>
+      {% for role, seq in (draft.components.items()|list|sort) %}
+      <tr><td>{{ role }}</td><td><code>{{ seq }}</code></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/builder/clone/create">
+    <input type="hidden" name="parent_molecule_id" value="{{ draft.parent_molecule_id }}" />
+    <input type="hidden" name="new_primary_id" value="{{ draft.new_primary_id }}" />
+    <input type="hidden" name="new_title" value="{{ draft.new_title }}" />
+    <input type="hidden" name="rationale" value="{{ form_data.rationale if form_data is defined and form_data.rationale is defined else '' }}" />
+    <button class="btn primary" type="submit">Create molecule from draft</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

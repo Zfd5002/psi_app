@@ -13,6 +13,7 @@ from psi.extensions import load_extensions
 from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 from psi.web.routers import (
     batches,
+    builder,
     decisions,
     di,
     evidence,
@@ -74,6 +75,7 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
 
     # include routers
     app.include_router(programs.router)
+    app.include_router(builder.router)
     app.include_router(portfolios.router)
     app.include_router(reports.router)
     app.include_router(lineage.router)

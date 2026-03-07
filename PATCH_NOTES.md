@@ -6780,6 +6780,174 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-07 — v1.3.0b67
+Intent:
+- Finalize builder phase-1 docs and regression hardening for non-interference guarantees.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/README.md`
+- `docs/BUILDER_PHASE1_v1.3.0b67.md`
+- `tests/test_builder_service.py`
+
+Behavior:
+- Added builder phase-1 documentation defining scope, safety invariants, determinism rules, and next safe steps.
+- Added regression assertion that builder creation does not create DI snapshots or program memberships.
+- Kept builder subsystem outside Programs while preserving existing molecule/program/DI flows.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b66
+Intent:
+- Improve builder preview UX and strengthen invalid-draft safety messaging.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/web/templates/builder/point_mutation.html`
+- `tests/test_builder_service.py`
+- `tests/test_builder_router.py`
+
+Behavior:
+- Added `preview_rows` to mutation drafts for explicit before/after mutation summaries.
+- Point mutation preview now renders clear validation errors, warnings, and before/after mutation table.
+- Save action remains gated behind valid draft path; invalid drafts continue to block creation.
+- Added tests for preview row generation and template rendering of before/after mutation summary.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b65
+Intent:
+- Persist additive builder derivation provenance for parent→child molecule creation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/services/builder.py`
+- `tests/test_builder_service.py`
+
+Behavior:
+- Added additive `molecule_derivations` table model for parent/child provenance.
+- Builder create now records deterministic derivation rows with `derivation_type`, summary, and canonical `edit_payload_json`.
+- Added tests asserting provenance persistence for clone and point-mutation flows.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b64
+Intent:
+- Implement full point-mutation builder flow (draft + validation + create).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/point_mutation.html`
+- `tests/test_builder_service.py`
+- `tests/test_builder_router.py`
+
+Behavior:
+- `build_molecule_draft(...)` now supports `point_mutation` mode with deterministic operation parsing and WT residue validation.
+- Added point mutation draft/build endpoint (`POST /builder/point-mutation/draft`) and create endpoint (`POST /builder/point-mutation/create`).
+- Point mutation UI now provides preview-before-save and displays validation errors without partial writes.
+- Added service and router tests for successful mutation flow and invalid WT mismatch handling.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b63
+Intent:
+- Add deterministic point-mutation parsing and pure mutation ops for builder workflows.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder_ops.py`
+- `psi/services/builder_validation.py`
+- `tests/test_builder_point_mutation_ops.py`
+
+Behavior:
+- Added mutation token parser supporting deterministic multi-token input (`S32A N54Q`, comma/space/semicolon separators).
+- Added pure mutation application with WT residue checks, range checks, and explicit error reporting.
+- Added validation helpers for target component existence and non-empty mutation sets.
+- Added unit tests for parse, duplicate-position errors, deterministic apply, and mismatch handling.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b62
+Intent:
+- Implement clone molecule builder flow with deterministic preview-before-save behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/clone.html`
+- `tests/test_builder_service.py`
+- `tests/test_builder_router.py`
+
+Behavior:
+- Added clone draft build endpoint (`POST /builder/clone/draft`) and explicit create endpoint (`POST /builder/clone/create`).
+- Builder clone UI now collects inputs, renders draft validation/errors, previews component sequences, and enables confirm-save only from draft.
+- `create_molecule_from_draft(...)` now persists a new molecule from draft components deterministically without mutating parent.
+- Added regression tests for clone flow routes/template and parent-unchanged child creation.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b61
+Intent:
+- Add standalone Builder router and landing surface outside Programs.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/app.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/base.html`
+- `psi/web/templates/builder/index.html`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `tests/test_builder_router.py`
+
+Behavior:
+- Added top-level `/builder` route with standalone landing page and deterministic molecule list.
+- Added scaffold routes `/builder/clone` and `/builder/point-mutation` for builder workflows.
+- Added Builder top-nav entry, keeping builder concerns separate from Programs.
+- Added focused router/template tests.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b60
+Intent:
+- Introduce standalone Molecule Builder service foundation with explicit draft/build and create boundaries.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/services/builder_ops.py`
+- `psi/services/builder_validation.py`
+- `tests/test_builder_service.py`
+
+Behavior:
+- Added typed builder contracts: `MoleculeBuildSpec`, `MoleculeDraft`, `MoleculeCreateMeta`.
+- Added `build_molecule_draft(...)` for deterministic, read-only draft construction.
+- Added `create_molecule_from_draft(...)` for explicit persistence of a new molecule only.
+- Added service tests for read-only draft behavior, parent immutability, and no-write on invalid drafts.
+
+Gates:
+- PASS
+
 ## 2026-03-07 — v1.3.0b59
 Intent:
 - Hotfix program detail runtime SQL to match live `data_measurements` schema and prevent `/programs/{id}` OperationalError.

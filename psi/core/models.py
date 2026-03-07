@@ -65,6 +65,18 @@ class Molecule(Base):
     property_runs = relationship("PropertyRun", back_populates="molecule", cascade="all, delete-orphan")
     program_memberships = relationship("ProgramMembership", back_populates="molecule", cascade="all, delete-orphan")
     program_statuses = relationship("ProgramMoleculeStatus", back_populates="molecule", cascade="all, delete-orphan")
+    derivations_as_parent = relationship(
+        "MoleculeDerivation",
+        foreign_keys="MoleculeDerivation.parent_molecule_id",
+        back_populates="parent_molecule",
+        cascade="all, delete-orphan",
+    )
+    derivations_as_child = relationship(
+        "MoleculeDerivation",
+        foreign_keys="MoleculeDerivation.child_molecule_id",
+        back_populates="child_molecule",
+        cascade="all, delete-orphan",
+    )
 
 
 class Portfolio(Base):
@@ -112,6 +124,21 @@ class ProgramMoleculeStatus(Base):
 
     program = relationship("Program", back_populates="molecule_statuses")
     molecule = relationship("Molecule", back_populates="program_statuses")
+
+
+class MoleculeDerivation(Base):
+    __tablename__ = "molecule_derivations"
+
+    id = Column(Integer, primary_key=True)
+    parent_molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=False, index=True)
+    child_molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=False, index=True)
+    derivation_type = Column(Text, nullable=False)
+    summary = Column(Text, nullable=True)
+    edit_payload_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    parent_molecule = relationship("Molecule", foreign_keys=[parent_molecule_id], back_populates="derivations_as_parent")
+    child_molecule = relationship("Molecule", foreign_keys=[child_molecule_id], back_populates="derivations_as_child")
 
 
 class PortfolioMembership(Base):

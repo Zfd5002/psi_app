@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Molecule Builder | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Molecule Builder</h1>
+  <p class="muted">
+    Standalone engineering workspace for deterministic molecule derivation.
+    Builder flows do not execute DI, create decisions, or attach molecules to programs.
+  </p>
+
+  <div class="grid cols-2">
+    <div class="card">
+      <h3>Clone Molecule</h3>
+      <p class="mini muted">Create a draft from an existing molecule, review, then save as a new molecule.</p>
+      <a class="btn" href="/builder/clone">Open clone flow</a>
+    </div>
+    <div class="card">
+      <h3>Point Mutation</h3>
+      <p class="mini muted">Apply explicit residue edits to a parent molecule in a preview-first flow.</p>
+      <a class="btn" href="/builder/point-mutation">Open point mutation flow</a>
+    </div>
+  </div>
+
+  <h3 style="margin-top:12px;">Available parent molecules</h3>
+  <table class="table mini">
+    <thead>
+      <tr>
+        <th>Molecule</th>
+        <th>Title</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in molecules %}
+      <tr>
+        <td><a href="/molecules/{{ m.id }}">{{ m.primary_id }}</a></td>
+        <td class="muted">{{ m.title or "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="2" class="muted">No molecules available.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
