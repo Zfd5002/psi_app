@@ -22,6 +22,7 @@ from psi.core.models import (
     OutcomeLabel,
 )
 from psi.services.insight_engine import build_insight_bundle
+from psi.services.dev_board import invalidate_program_board_cache
 
 from psi.core.utils import json_dumps_compact, model_to_dict, now_utc, stable_json_dumps
 
@@ -422,6 +423,7 @@ def run_and_snapshot(
 
     record_audit(db, entity_type="DecisionSnapshot", entity_id=snap.id, action="create", before=None, after=model_to_dict(snap))
     db.commit()
+    invalidate_program_board_cache(program_id=int(program_id))
 
     return snap
 
@@ -486,6 +488,7 @@ def create_snapshot_freeze(
 
     record_audit(db, entity_type="DecisionSnapshot", entity_id=snap.id, action="create_freeze", before=None, after=model_to_dict(snap))
     db.commit()
+    invalidate_program_board_cache(program_id=int(program_id))
     return snap
 
 

@@ -6780,6 +6780,291 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-07 — v1.3.0c30
+Intent:
+- Development Board performance pass for larger program sizes.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `tests/test_dev_board.py`
+
+Behavior:
+- Replaced per-molecule trend queries with one bulk trend query per program.
+- Board now computes per-card trend signals from preloaded per-program metric series.
+- Added regression coverage confirming trend signal derivation (`improving`) from bulk path.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c29
+Intent:
+- Add Development Board top summary panel.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Added Program Summary panel with group counts:
+  - Ready
+  - Failed
+  - Missing data
+  - Not evaluated
+- Added template assertions for summary panel/count rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c28
+Intent:
+- Add Development Board search by molecule ID.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Added `q` query parameter to board route and deterministic server-side filtering by `primary_id`.
+- Added search form to board UI and kept filter links query-preserving.
+- Added template assertions for search controls.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c27
+Intent:
+- Add Development Board status filters.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Added query-param filters (`all|ready|failed|missing`) to board route.
+- Added filter controls to board UI.
+- Filtered server-side board group rendering deterministically.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c26
+Intent:
+- Add card-level warning flags on Development Board.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_dev_board.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board cards now derive warnings from insight/trend signals:
+  - `confirmation recommended`
+  - `conflicting evidence`
+  - `instability risk`
+- Warning chips are rendered per card in deterministic order.
+- Added test assertions for warning fields and warning chip rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c25
+Intent:
+- Add builder shortcuts on Development Board cards.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Added `Create variant` shortcut to Builder point-mutation flow with parent preselection.
+- Added `Open sequence editor` shortcut to molecule detail editor anchor.
+- Added template assertions for both shortcut links.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c24
+Intent:
+- Add card-level experiment shortcuts on Development Board.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Added `Add missing measurement` and `Run suggested experiment` shortcut buttons per card.
+- Shortcuts prefill `/data/new` with `program_id`, `molecule_id`, and metric-based method/title hints.
+- Added template assertions for shortcut render and route payload fields.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c23
+Intent:
+- Add card-level navigation on Development Board molecule cards.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board cards now expose `data-card-link` and click-through behavior to molecule detail.
+- Link clicks inside cards remain native and are not overridden.
+- Added template assertion for card-link attribute.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c22
+Intent:
+- Add deterministic trend indicators to Development Board cards.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_dev_board.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board service now derives per-card trend signal (`improving|declining|stable`) from trend-service output.
+- Board cards now display trend chips (`▲ improving`, `▼ declining`, `■ stable`).
+- Added test coverage for trend-signal presence in service and UI render.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c21
+Intent:
+- Implement Molecule Development Board card layout details.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board cards now show molecule identity, interpreted status, and top blocking reason text.
+- Kept deterministic card ordering and link behavior.
+- Added template assertion for rendered status text.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c20
+Intent:
+- Add navigation path from program detail to Development Board.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added `View Development Board` button linking to `/programs/{id}/board` in Program Drill-down controls.
+- Added template regression assertions for board navigation link.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c19
+Intent:
+- Build Development Board UI scaffold sections for scientist operations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board sections now render as explicit section blocks with stable IDs and per-group counts.
+- Added deterministic card placeholder row style for upcoming card enrichments.
+- Added template coverage for section IDs/count rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c18
+Intent:
+- Add lightweight per-program Development Board caching with explicit invalidation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/services/data_records.py`
+- `psi/services/decisions.py`
+- `psi/services/di/runner.py`
+- `tests/test_dev_board.py`
+
+Behavior:
+- Added in-process program board cache and `invalidate_program_board_cache()` helper.
+- Invalidation now fires when data records are created/updated and when snapshots are created via legacy and DI paths.
+- Added cache behavior test covering cache hit and invalidation refresh.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c17
+Intent:
+- Add Development Board route surface under programs.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_route.py`
+
+Behavior:
+- Added `GET /programs/{program_id}/board` rendering a dedicated development-board page.
+- Added initial board template with READY/FAILED/MISSING/NOT EVALUATED sections.
+- Added route test verifying board page renders expected sections.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c16
+Intent:
+- Introduce Molecule Development Board service model and deterministic grouping logic.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `tests/test_dev_board.py`
+
+Behavior:
+- Added `build_development_board(program_id)` that groups molecule cards into `ready`, `failed`, `missing_data`, and `not_evaluated` from latest DI snapshot interpretation.
+- Added deterministic sort/order for board cards and group output.
+- Added service test covering grouping behavior.
+
+Gates:
+- PASS
+
 ## 2026-03-07 — v1.3.0c15
 Intent:
 - Add bulk-import UI and two-step validate/confirm flow.

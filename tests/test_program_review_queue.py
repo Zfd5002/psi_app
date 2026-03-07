@@ -240,6 +240,8 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
     assert "✓" in html
     assert "Suggested Next Experiments" in html
     assert "Program Drill-down" in html
+    assert "/programs/1/board" in html
+    assert "View Development Board" in html
     assert "/reports/new?report_type=program_report&subject_ids=1" in html
     assert 'id="record-11"' in html
     assert "psi_program_review_scroll_y" in html

@@ -23,6 +23,7 @@ from psi.services.di.error_output import build_di_error_output_payload
 from psi.services.di.integrity import compute_decision_output_hash, compute_decision_output_hash_v2, compute_evidence_fingerprint, compute_snapshot_content_hash
 from psi.services.di.templates.registry import resolve_template_entry
 from psi.services.di.util import value_functions_enforcement_reason
+from psi.services.dev_board import invalidate_program_board_cache
 from psi.version import PSI_VERSION
 
 
@@ -797,6 +798,7 @@ def run_di(db: Session, *, di_input: DIInput, policy_path: Path) -> Dict[str, An
         db.rollback()
         raise
     db.refresh(snap)
+    invalidate_program_board_cache(program_id=int(program_id))
 
     return {"snapshot_id": snap.id, "output": out}
 

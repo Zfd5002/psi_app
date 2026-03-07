@@ -14,6 +14,7 @@ from psi.services.files import attach_files
 from psi.services.measurements import extract_measurements, upsert_measurements, upsert_measurements_force, list_measurements_for_record
 from psi.services import qc as qc_svc
 from psi.services.evidence_preview import build_record_evidence_preview
+from psi.services.dev_board import invalidate_program_board_cache
 
 
 def _infer_primary_result_text(results_json: str) -> str | None:
@@ -208,6 +209,7 @@ def create_data_record(
         reason=reason,
     )
     db.commit()
+    invalidate_program_board_cache(program_id=int(program_id))
     return rec
 
 
@@ -296,6 +298,7 @@ def update_data_record(
         reason=reason or None,
     )
     db.commit()
+    invalidate_program_board_cache(program_id=int(program_id))
     return rec
 
 

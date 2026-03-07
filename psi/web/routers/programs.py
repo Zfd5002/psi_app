@@ -8,6 +8,7 @@ from psi.core.models import Molecule
 from psi.web.deps import get_db, get_templates
 from psi.services import programs as svc
 from psi.services import data_records as data_records_svc
+from psi.services import dev_board as dev_board_svc
 
 router = APIRouter()
 
@@ -50,6 +51,52 @@ def program_detail(program_id: int, request: Request, db: Session = Depends(get_
         raise HTTPException(404)
     ctx["request"] = request
     return templates.TemplateResponse("programs/detail.html", ctx)
+
+
+@router.get("/programs/{program_id}/board", response_class=HTMLResponse)
+def program_development_board(program_id: int, request: Request, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    program = svc.get_program(db, int(program_id))
+    if not program:
+        raise HTTPException(404)
+    board = dev_board_svc.build_development_board(db, program_id=int(program_id))
+    board_filter = str(request.query_params.get("filter") or "all").strip().lower()
+    allowed = {"all", "ready", "failed", "missing"}
+    if board_filter not in allowed:
+        board_filter = "all"
+    if board_filter != "all":
+        filt_map = {"ready": "ready", "failed": "failed", "missing": "missing_data"}
+        keep = filt_map.get(board_filter, "")
+        groups = board.get("groups") if isinstance(board, dict) else {}
+        if isinstance(groups, dict):
+            board = {
+                **board,
+                "groups": {
+                    "ready": list(groups.get("ready") or []) if keep == "ready" else [],
+                    "failed": list(groups.get("failed") or []) if keep == "failed" else [],
+                    "missing_data": list(groups.get("missing_data") or []) if keep == "missing_data" else [],
+                    "not_evaluated": [],
+                },
+            }
+    q = str(request.query_params.get("q") or "").strip().lower()
+    if q:
+        groups = board.get("groups") if isinstance(board, dict) else {}
+        if isinstance(groups, dict):
+            board = {
+                **board,
+                "groups": {
+                    k: [
+                        row
+                        for row in (groups.get(k) or [])
+                        if isinstance(row, dict) and q in str(row.get("primary_id") or "").lower()
+                    ]
+                    for k in ("ready", "failed", "missing_data", "not_evaluated")
+                },
+            }
+    return templates.TemplateResponse(
+        "programs/board.html",
+        {"request": request, "program": program, "board": board, "board_filter": board_filter, "board_query": q},
+    )
 
 
 @router.get("/programs/{program_id}/edit", response_class=HTMLResponse)
