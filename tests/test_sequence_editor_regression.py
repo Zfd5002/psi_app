@@ -53,5 +53,11 @@ def test_sequence_editor_modules_remain_builder_only() -> None:
     for tok in forbidden:
         assert tok not in py_text
         assert tok not in js_text
+    assert "seq_component_select" in js_text
+    assert "getSelectedComponentRole" in js_text
     assert "seq_to_builder_mutations" in js_text
     assert "seq_to_variant_mutation_tokens" in js_text
+    assert 'toBuilderMutations.value = ""' in js_text
+    assert 'toBuilderSubmit.disabled = true' in js_text
+    assert 'toVariantMutationTokens.value = ""' in js_text
+    assert 'toVariantSubmit.disabled = true' in js_text

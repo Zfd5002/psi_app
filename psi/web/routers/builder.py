@@ -16,16 +16,47 @@ from psi.services.builder import (
     create_variant_set_from_draft,
     create_molecule_from_draft,
 )
+from psi.services.sequence_editor import normalize_mutation_queue
 from psi.services.builder_ops import (
     build_fc_panel_members,
     build_kih_panel_members,
     build_mutation_panel_members,
     build_scaffold_panel_members,
 )
-from psi.core.models import BuilderVariantSet, BuilderVariantSetMember, Molecule, MoleculeDerivation, Program
+from psi.core.models import BuilderVariantSet, BuilderVariantSetMember, Molecule, MoleculeComponent, MoleculeDerivation, Program
 from psi.web.deps import get_db, get_templates
 
 router = APIRouter()
+
+
+def _normalize_builder_mutations(
+    db: Session,
+    *,
+    parent_molecule_id: int,
+    component_role: str,
+    mutation_text: str,
+) -> tuple[str, list[str]]:
+    comp = (
+        db.query(MoleculeComponent)
+        .filter(
+            MoleculeComponent.molecule_id == int(parent_molecule_id),
+            MoleculeComponent.role == str(component_role),
+        )
+        .order_by(MoleculeComponent.id.asc())
+        .first()
+    )
+    if comp is None:
+        return str(mutation_text or "").strip(), [f"Unknown component: {component_role}"]
+    queue, errors = normalize_mutation_queue(
+        component_role=str(component_role),
+        parent_sequence=str(comp.fasta or ""),
+        clicked_mutations=[],
+        direct_notation_text=str(mutation_text or ""),
+    )
+    canonical = " ".join(
+        [f"{str(q.get('from') or '')}{int(q.get('position') or 0)}{str(q.get('to') or '')}" for q in queue]
+    )
+    return canonical, list(errors)
 
 
 def _builder_parent_selection(db: Session) -> tuple[list[Program], dict[int, list[dict[str, object]]]]:
@@ -252,6 +283,7 @@ async def builder_variant_set_build_draft(request: Request, db: Session = Depend
     naming_base = str(form.get("naming_base") or "").strip()
     rationale = str(form.get("rationale") or "").strip()
     mutation_tokens = str(form.get("mutation_tokens") or "").strip()
+    queued_component = str(form.get("queued_component") or "").strip()
     include_pairs = str(form.get("include_pair_combinations") or "").strip() in {"1", "on", "true", "True"}
     explicit_combos = str(form.get("explicit_combos") or "").strip()
     fc_presets = str(form.get("fc_presets") or "").strip()
@@ -269,6 +301,16 @@ async def builder_variant_set_build_draft(request: Request, db: Session = Depend
     }
     members: list[dict[str, object]] = []
     if family_type == "mutation_panel":
+        mutation_validation_errors: list[str] = []
+        if queued_component:
+            mutation_tokens, mutation_validation_errors = _normalize_builder_mutations(
+                db,
+                parent_molecule_id=parent_molecule_id,
+                component_role=queued_component,
+                mutation_text=mutation_tokens,
+            )
+        else:
+            mutation_validation_errors = []
         members = build_mutation_panel_members(
             mutation_tokens_text=mutation_tokens,
             include_pair_combinations=include_pairs,
@@ -316,6 +358,8 @@ async def builder_variant_set_build_draft(request: Request, db: Session = Depend
                 "naming_base": naming_base,
                 "rationale": rationale,
                 "mutation_tokens": mutation_tokens,
+                "queued_component": queued_component,
+                "mutation_validation_errors": mutation_validation_errors if family_type == "mutation_panel" else [],
                 "include_pair_combinations": include_pairs,
                 "explicit_combos": explicit_combos,
                 "fc_presets": fc_presets,
@@ -339,6 +383,7 @@ async def builder_variant_set_create(request: Request, db: Session = Depends(get
     naming_base = str(form.get("naming_base") or "").strip()
     rationale = str(form.get("rationale") or "").strip()
     mutation_tokens = str(form.get("mutation_tokens") or "").strip()
+    queued_component = str(form.get("queued_component") or "").strip()
     include_pairs = str(form.get("include_pair_combinations") or "").strip() in {"1", "on", "true", "True"}
     explicit_combos = str(form.get("explicit_combos") or "").strip()
     fc_presets = str(form.get("fc_presets") or "").strip()
@@ -356,6 +401,13 @@ async def builder_variant_set_create(request: Request, db: Session = Depends(get
     }
     members: list[dict[str, object]] = []
     if family_type == "mutation_panel":
+        if queued_component:
+            mutation_tokens, _ = _normalize_builder_mutations(
+                db,
+                parent_molecule_id=parent_molecule_id,
+                component_role=queued_component,
+                mutation_text=mutation_tokens,
+            )
         members = build_mutation_panel_members(
             mutation_tokens_text=mutation_tokens,
             include_pair_combinations=include_pairs,
@@ -501,7 +553,20 @@ async def builder_point_mutation_build_draft(request: Request, db: Session = Dep
     new_title = str(form.get("new_title") or "").strip()
     rationale = str(form.get("rationale") or "").strip()
     component = str(form.get("component") or "").strip()
-    mutations = str(form.get("mutations") or "").strip()
+    mutations_raw = str(form.get("mutations") or "").strip()
+    queue_origin = str(form.get("queue_origin") or "").strip()
+    source_primary_id = str(form.get("source_primary_id") or "").strip()
+    queued_component = str(form.get("queued_component") or "").strip()
+    queued_mutation_tokens = str(form.get("queued_mutation_tokens") or "").strip()
+    queued_mutation_count = int(form.get("queued_mutation_count") or 0)
+    mutations, mutation_validation_errors = _normalize_builder_mutations(
+        db,
+        parent_molecule_id=parent_molecule_id,
+        component_role=component,
+        mutation_text=mutations_raw,
+    )
+    if not mutations:
+        mutations = mutations_raw
     draft = build_molecule_draft(
         db,
         MoleculeBuildSpec(
@@ -532,6 +597,12 @@ async def builder_point_mutation_build_draft(request: Request, db: Session = Dep
                 "rationale": rationale,
                 "component": component,
                 "mutations": mutations,
+                "queue_origin": queue_origin,
+                "source_primary_id": source_primary_id,
+                "queued_component": queued_component,
+                "queued_mutation_tokens": queued_mutation_tokens,
+                "queued_mutation_count": queued_mutation_count,
+                "mutation_validation_errors": mutation_validation_errors,
             },
             "error": "",
         },
@@ -546,7 +617,15 @@ async def builder_point_mutation_create(request: Request, db: Session = Depends(
     new_title = str(form.get("new_title") or "").strip()
     rationale = str(form.get("rationale") or "").strip()
     component = str(form.get("component") or "").strip()
-    mutations = str(form.get("mutations") or "").strip()
+    mutations_raw = str(form.get("mutations") or "").strip()
+    mutations, _ = _normalize_builder_mutations(
+        db,
+        parent_molecule_id=parent_molecule_id,
+        component_role=component,
+        mutation_text=mutations_raw,
+    )
+    if not mutations:
+        mutations = mutations_raw
     draft = build_molecule_draft(
         db,
         MoleculeBuildSpec(

@@ -140,3 +140,44 @@ def test_builder_point_mutation_template_hides_create_when_draft_invalid() -> No
     )
     assert "Draft has validation errors" in html
     assert 'action="/builder/point-mutation/create"' not in html
+
+
+def test_builder_point_mutation_template_shows_sequence_editor_handoff_context() -> None:
+    tpl = _env().get_template("builder/point_mutation.html")
+    html = tpl.render(
+        request=SimpleNamespace(),
+        molecules=[SimpleNamespace(id=11, primary_id="M-11", title="Mol11")],
+        parent_programs=[],
+        parent_molecules_by_program={},
+        parent_molecules_by_program_json="{}",
+        draft=None,
+        form_data={
+            "queue_origin": "sequence_editor",
+            "source_primary_id": "M-11",
+            "queued_component": "HC1",
+            "queued_mutation_count": 2,
+            "queued_mutation_tokens": "S2A N4Q",
+        },
+        error="",
+    )
+    assert "Sequence editor handoff" in html
+    assert "Source molecule: M-11" in html
+    assert "Component: HC1" in html
+    assert "Mutation count: 2" in html
+    assert "Tokens: S2A N4Q" in html
+
+
+def test_builder_point_mutation_template_shows_mutation_normalization_notes() -> None:
+    tpl = _env().get_template("builder/point_mutation.html")
+    html = tpl.render(
+        request=SimpleNamespace(),
+        molecules=[SimpleNamespace(id=11, primary_id="M-11", title="Mol11")],
+        parent_programs=[],
+        parent_molecules_by_program={},
+        parent_molecules_by_program_json="{}",
+        draft=None,
+        form_data={"mutation_validation_errors": ["WT mismatch at 2: expected T, found S"]},
+        error="",
+    )
+    assert "Mutation normalization notes" in html
+    assert "WT mismatch at 2: expected T, found S" in html

@@ -9672,3 +9672,107 @@ Behavior:
 
 Gates:
 - PASS
+
+## 2026-03-07 — v1.3.0b99
+Intent:
+- Harden sequence-editor handoff state so builder actions cannot carry stale queue payloads.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Fixed queue rendering flow so handoff synchronization always runs, including empty-queue state.
+- Empty or mixed-component queue now deterministically clears/disabled handoff payloads and buttons.
+- Added inline handoff hints to explain why actions are disabled and when they are ready.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b100
+Intent:
+- Make sequence-editor direct-entry and preview behavior explicitly component-aware.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_sequence_editor_regression.py`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Added explicit target component selector in the sequence editor control panel.
+- Direct notation parsing and assignment now target the selected component instead of implicit first component.
+- Preview/diff now renders for the selected component deterministically.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b101
+Intent:
+- Strengthen scientist-facing bridge from sequence edits into Builder draft workflows.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_builder_router.py`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Promoted Builder draft handoff to clear primary CTA and clarified sequence-editor guidance text.
+- Added queue context payload fields (source molecule, component, mutation count, tokens) to Builder handoff.
+- Builder point-mutation draft page now displays sequence-editor handoff context when present.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b102
+Intent:
+- Align sequence-editor handoff validation with backend mutation normalization semantics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/builder/variant_set.html`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_builder_router.py`
+- `tests/test_builder_variant_set_router.py`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Added server-side mutation normalization helper at builder handoff boundary using `sequence_editor.normalize_mutation_queue`.
+- Point-mutation and mutation-panel draft flows now canonicalize incoming mutation tokens per component when context is available.
+- Added UI notes surfaces for normalization errors/warnings in builder draft templates.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b103
+Intent:
+- Add end-to-end handoff tests and phase documentation for actionable sequence-editor workflows.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/SEQUENCE_EDITOR_WORKFLOW_v1.3.0b103.md`
+- `tests/test_sequence_editor_handoff_routes.py`
+- `tests/test_sequence_editor_regression.py`
+
+Behavior:
+- Added route-level tests validating sequence-editor payload handoff into builder point-mutation and variant-set draft routes.
+- Added regression assertions for disabled-state payload clearing hooks in sequence-editor JS.
+- Added workflow documentation defining supported sequence-editor-to-builder behaviors.
+
+Gates:
+- PASS

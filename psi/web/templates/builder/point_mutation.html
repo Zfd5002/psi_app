@@ -4,6 +4,25 @@
 <div class="card">
   <h1>Builder: Point Mutation</h1>
   <p class="muted">Preview-first mutation flow. Select a parent molecule to begin.</p>
+  {% if form_data is defined and form_data.queue_origin is defined and form_data.queue_origin == "sequence_editor" %}
+  <div class="card mini" style="margin:8px 0;background:#f7fbff;">
+    <b>Sequence editor handoff</b>
+    <div class="muted">Source molecule: {{ form_data.source_primary_id if form_data.source_primary_id is defined and form_data.source_primary_id else "unknown" }}</div>
+    <div class="muted">Component: {{ form_data.queued_component if form_data.queued_component is defined and form_data.queued_component else "unknown" }}</div>
+    <div class="muted">Mutation count: {{ form_data.queued_mutation_count if form_data.queued_mutation_count is defined else 0 }}</div>
+    <div class="muted">Tokens: {{ form_data.queued_mutation_tokens if form_data.queued_mutation_tokens is defined and form_data.queued_mutation_tokens else "none" }}</div>
+  </div>
+  {% endif %}
+  {% if form_data is defined and form_data.mutation_validation_errors is defined and form_data.mutation_validation_errors %}
+  <div class="card mini" style="margin:8px 0;border-color:#ef6c00;background:#fff8ef;">
+    <b>Mutation normalization notes</b>
+    <ul>
+      {% for err in form_data.mutation_validation_errors %}
+      <li>{{ err }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   <label>Find parent molecule</label>
   <input id="builder_parent_search" type="text" placeholder="Search by primary ID or title" autocomplete="off" />
   <div id="builder_parent_search_results" class="mini muted" style="margin:4px 0 8px 0;"></div>

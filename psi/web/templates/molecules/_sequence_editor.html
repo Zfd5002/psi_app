@@ -1,11 +1,18 @@
 <div class="card" id="sequence_editor_panel">
   <h2 style="margin-top:0;">Sequence Editor</h2>
   <p class="muted mini">Region-aware residue view for deterministic mutation planning. This panel does not mutate stored molecules.</p>
+  <p class="mini">Queue mutations here, then create a new derived molecule draft. Existing molecules are never changed in place.</p>
   <div class="card" style="margin:8px 0;">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
       <b>Mutation Queue</b>
       <button type="button" class="btn mini" id="seq_queue_clear">Clear all</button>
     </div>
+    <label style="margin-top:8px;">Target component</label>
+    <select id="seq_component_select">
+      {% for comp in (sequence_editor_annotations if sequence_editor_annotations is defined else []) %}
+      <option value="{{ comp.component_role }}">{{ comp.component_role }}</option>
+      {% endfor %}
+    </select>
     <ul id="seq_mutation_queue" class="clean mini" style="margin-top:6px;"></ul>
     <label style="margin-top:8px;">Direct mutation notation</label>
     <input type="text" id="seq_direct_mutations" placeholder="Y52A, S56A" />
@@ -28,9 +35,15 @@
       <input type="hidden" name="new_title" value="{{ ((molecule.title or molecule.primary_id) ~ ' edit') if molecule is defined else '' }}" />
       <input type="hidden" name="component" id="seq_to_builder_component" value="HC1" />
       <input type="hidden" name="mutations" id="seq_to_builder_mutations" value="" />
+      <input type="hidden" name="queue_origin" value="sequence_editor" />
+      <input type="hidden" name="source_primary_id" value="{{ molecule.primary_id if molecule is defined else '' }}" />
+      <input type="hidden" name="queued_component" id="seq_to_builder_queued_component" value="" />
+      <input type="hidden" name="queued_mutation_count" id="seq_to_builder_mutation_count" value="0" />
+      <input type="hidden" name="queued_mutation_tokens" id="seq_to_builder_mutation_tokens" value="" />
       <input type="hidden" name="rationale" value="sequence editor queued mutations" />
-      <button type="submit" class="btn primary" id="seq_to_builder_submit">Preview variant in Builder</button>
+      <button type="submit" class="btn primary" id="seq_to_builder_submit">Build draft from queued mutations</button>
     </form>
+    <div class="mini muted" id="seq_to_builder_hint" style="margin-top:4px;">Queue mutations to enable Builder draft handoff.</div>
     <form method="post" action="/builder/variant-set/draft" id="seq_to_variant_set_form" style="margin-top:8px;">
       <input type="hidden" name="parent_molecule_id" value="{{ molecule.id if molecule is defined else '' }}" />
       <input type="hidden" name="family_type" value="mutation_panel" />
@@ -38,14 +51,16 @@
       <input type="hidden" name="naming_base" value="{{ molecule.primary_id if molecule is defined else 'variant' }}" />
       <input type="hidden" name="rationale" value="sequence editor queued mutations" />
       <input type="hidden" name="mutation_tokens" id="seq_to_variant_mutation_tokens" value="" />
+      <input type="hidden" name="queued_component" id="seq_to_variant_component" value="" />
       <input type="hidden" name="include_pair_combinations" id="seq_to_variant_include_pairs" value="0" />
       <input type="hidden" name="explicit_combos" id="seq_to_variant_explicit_combos" value="" />
       <label class="mini muted" style="display:block;margin:6px 0 4px;">Variant set options</label>
       <label class="mini"><input type="checkbox" id="seq_to_variant_include_full_combo" checked /> Include full queued combination</label>
       <div style="margin-top:6px;">
-        <button type="submit" class="btn mini" id="seq_to_variant_submit">Seed Variant Set from queue</button>
+        <button type="submit" class="btn mini" id="seq_to_variant_submit">Seed Variant Set draft</button>
       </div>
     </form>
+    <div class="mini muted" id="seq_to_variant_hint" style="margin-top:4px;">Queue mutations to enable Variant Set handoff.</div>
   </div>
   {% for comp in (sequence_editor_annotations if sequence_editor_annotations is defined else []) %}
   <div class="card" style="margin-top:8px;">

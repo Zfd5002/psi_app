@@ -44,6 +44,14 @@
     <h3 style="margin-top:10px;">Mutation Panel Inputs</h3>
     <label>Mutation tokens</label>
     <input type="text" name="mutation_tokens" placeholder="N54Q M101L" value="{{ form_data.mutation_tokens if form_data is defined and form_data.mutation_tokens is defined else '' }}" />
+    <input type="hidden" name="queued_component" value="{{ form_data.queued_component if form_data is defined and form_data.queued_component is defined else '' }}" />
+    {% if form_data is defined and form_data.mutation_validation_errors is defined and form_data.mutation_validation_errors %}
+    <div class="mini" style="margin-top:4px;color:#b26a00;">
+      {% for err in form_data.mutation_validation_errors %}
+      <div>{{ err }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
     <label style="display:flex;gap:6px;align-items:center;">
       <input type="checkbox" name="include_pair_combinations" {% if form_data is defined and form_data.include_pair_combinations %}checked{% endif %} />
       Include pair combinations

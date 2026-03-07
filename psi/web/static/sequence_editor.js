@@ -6,6 +6,7 @@
     var tip = byId("sequence_editor_tooltip");
     if (!panel || !tip) return;
     var residues = Array.prototype.slice.call(panel.querySelectorAll(".seq-residue"));
+    var componentSelect = byId("seq_component_select");
     var queueRoot = byId("seq_mutation_queue");
     var queueClear = byId("seq_queue_clear");
     var directInput = byId("seq_direct_mutations");
@@ -18,13 +19,27 @@
     var previewChanged = byId("seq_preview_changed_positions");
     var toBuilderComponent = byId("seq_to_builder_component");
     var toBuilderMutations = byId("seq_to_builder_mutations");
+    var toBuilderQueuedComponent = byId("seq_to_builder_queued_component");
+    var toBuilderMutationCount = byId("seq_to_builder_mutation_count");
+    var toBuilderMutationTokens = byId("seq_to_builder_mutation_tokens");
     var toBuilderSubmit = byId("seq_to_builder_submit");
+    var toBuilderHint = byId("seq_to_builder_hint");
     var toVariantMutationTokens = byId("seq_to_variant_mutation_tokens");
+    var toVariantComponent = byId("seq_to_variant_component");
     var toVariantIncludePairs = byId("seq_to_variant_include_pairs");
     var toVariantExplicitCombos = byId("seq_to_variant_explicit_combos");
     var toVariantIncludeFullCombo = byId("seq_to_variant_include_full_combo");
     var toVariantSubmit = byId("seq_to_variant_submit");
+    var toVariantHint = byId("seq_to_variant_hint");
     var queue = [];
+    function firstComponentRole() {
+      var firstTrack = panel.querySelector(".sequence-editor-track");
+      return firstTrack ? safe(firstTrack.getAttribute("data-component-role")) : "";
+    }
+    function getSelectedComponentRole() {
+      if (componentSelect && safe(componentSelect.value)) return safe(componentSelect.value);
+      return firstComponentRole();
+    }
     function queueSortKey(r) {
       return safe(r.component_role) + ":" + Number(r.position || 0);
     }
@@ -39,30 +54,31 @@
         liEmpty.className = "muted";
         liEmpty.textContent = "No queued mutations.";
         queueRoot.appendChild(liEmpty);
-        return;
       }
-      for (var i = 0; i < ordered.length; i += 1) {
-        var row = ordered[i];
-        var li = document.createElement("li");
-        li.style.display = "flex";
-        li.style.gap = "8px";
-        li.style.alignItems = "center";
-        li.style.justifyContent = "space-between";
-        var txt = document.createElement("span");
-        txt.textContent = safe(row.component_role) + " " + safe(row.from) + safe(row.position) + safe(row.to);
-        var btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "btn mini";
-        btn.textContent = "Remove";
-        btn.setAttribute("data-k", queueSortKey(row));
-        btn.addEventListener("click", function (ev) {
-          var k = safe(ev.currentTarget.getAttribute("data-k"));
-          queue = queue.filter(function (q) { return queueSortKey(q) !== k; });
-          renderQueue();
-        });
-        li.appendChild(txt);
-        li.appendChild(btn);
-        queueRoot.appendChild(li);
+      if (ordered.length) {
+        for (var i = 0; i < ordered.length; i += 1) {
+          var row = ordered[i];
+          var li = document.createElement("li");
+          li.style.display = "flex";
+          li.style.gap = "8px";
+          li.style.alignItems = "center";
+          li.style.justifyContent = "space-between";
+          var txt = document.createElement("span");
+          txt.textContent = safe(row.component_role) + " " + safe(row.from) + safe(row.position) + safe(row.to);
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn mini";
+          btn.textContent = "Remove";
+          btn.setAttribute("data-k", queueSortKey(row));
+          btn.addEventListener("click", function (ev) {
+            var k = safe(ev.currentTarget.getAttribute("data-k"));
+            queue = queue.filter(function (q) { return queueSortKey(q) !== k; });
+            renderQueue();
+          });
+          li.appendChild(txt);
+          li.appendChild(btn);
+          queueRoot.appendChild(li);
+        }
       }
       syncBuilderHandoff(ordered);
     }
@@ -73,7 +89,11 @@
       });
       if (!ordered.length) {
         toBuilderMutations.value = "";
+        if (toBuilderQueuedComponent) toBuilderQueuedComponent.value = "";
+        if (toBuilderMutationCount) toBuilderMutationCount.value = "0";
+        if (toBuilderMutationTokens) toBuilderMutationTokens.value = "";
         toBuilderSubmit.disabled = true;
+        if (toBuilderHint) toBuilderHint.textContent = "No queued mutations yet.";
         syncVariantSetHandoff([], true);
         return;
       }
@@ -82,26 +102,41 @@
       var toks = ordered.map(function (r) { return safe(r.from) + String(r.position) + safe(r.to); });
       if (!sameComponent) {
         toBuilderMutations.value = "";
+        if (toBuilderQueuedComponent) toBuilderQueuedComponent.value = "";
+        if (toBuilderMutationCount) toBuilderMutationCount.value = "0";
+        if (toBuilderMutationTokens) toBuilderMutationTokens.value = "";
         toBuilderSubmit.disabled = true;
+        if (toBuilderHint) toBuilderHint.textContent = "Queued edits span multiple components. Use one component to build a single variant draft.";
         syncVariantSetHandoff(ordered, false);
         return;
       }
       toBuilderComponent.value = component || "HC1";
       toBuilderMutations.value = toks.join(" ");
+      if (toBuilderQueuedComponent) toBuilderQueuedComponent.value = component || "HC1";
+      if (toBuilderMutationCount) toBuilderMutationCount.value = String(toks.length);
+      if (toBuilderMutationTokens) toBuilderMutationTokens.value = toks.join(" ");
       toBuilderSubmit.disabled = false;
+      if (toBuilderHint) toBuilderHint.textContent = "Ready to preview a derived Builder draft from queued mutations.";
       syncVariantSetHandoff(ordered, sameComponent);
     }
     function syncVariantSetHandoff(ordered, sameComponent) {
       if (!toVariantMutationTokens || !toVariantIncludePairs || !toVariantExplicitCombos || !toVariantSubmit) return;
       if (!ordered.length || !sameComponent) {
         toVariantMutationTokens.value = "";
+        if (toVariantComponent) toVariantComponent.value = "";
         toVariantIncludePairs.value = "0";
         toVariantExplicitCombos.value = "";
         toVariantSubmit.disabled = true;
+        if (toVariantHint) {
+          toVariantHint.textContent = ordered.length
+            ? "Queued edits span multiple components. Variant set seed expects one component."
+            : "No queued mutations yet.";
+        }
         return;
       }
       var toks = ordered.map(function (r) { return safe(r.from) + String(r.position) + safe(r.to); });
       toVariantMutationTokens.value = toks.join(" ");
+      if (toVariantComponent) toVariantComponent.value = safe(ordered[0].component_role);
       toVariantIncludePairs.value = "0";
       if (toVariantIncludeFullCombo && toVariantIncludeFullCombo.checked && toks.length > 1) {
         toVariantExplicitCombos.value = toks.join("+");
@@ -109,14 +144,15 @@
         toVariantExplicitCombos.value = "";
       }
       toVariantSubmit.disabled = false;
+      if (toVariantHint) toVariantHint.textContent = "Ready to seed a mutation-panel variant set from queued mutations.";
     }
     function buildPreview() {
-      var firstTrack = panel.querySelector(".sequence-editor-track");
-      if (!firstTrack) return;
-      var componentRole = safe(firstTrack.getAttribute("data-component-role"));
+      var componentRole = getSelectedComponentRole();
+      if (!componentRole) return;
       var residuesForComponent = residues.filter(function (r) {
         return safe(r.getAttribute("data-component-role")) === componentRole;
       });
+      if (!residuesForComponent.length) return;
       var original = residuesForComponent.map(function (r) { return safe(r.getAttribute("data-aa")).toUpperCase(); }).join("");
       var chars = original.split("");
       var errs = [];
@@ -230,8 +266,8 @@
         if (!directInput) return;
         var parsed = parseDirect(directInput.value || "");
         var errs = parsed.errors.slice();
-        var firstResidue = panel.querySelector(".seq-residue");
-        var componentRole = firstResidue ? safe(firstResidue.getAttribute("data-component-role")) : "";
+        var componentRole = getSelectedComponentRole();
+        var firstResidue = panel.querySelector('.seq-residue[data-component-role="' + componentRole + '"]');
         var componentId = firstResidue ? Number(firstResidue.getAttribute("data-component-id") || "0") : 0;
         for (var i3 = 0; i3 < parsed.rows.length; i3 += 1) {
           var row = parsed.rows[i3];
@@ -269,6 +305,13 @@
         var component = ordered.length ? safe(ordered[0].component_role) : "";
         var sameComponent = ordered.every(function (r) { return safe(r.component_role) === component; });
         syncVariantSetHandoff(ordered, sameComponent);
+      });
+    }
+    if (componentSelect) {
+      if (!safe(componentSelect.value)) componentSelect.value = firstComponentRole();
+      componentSelect.addEventListener("change", function () {
+        if (directErrors) directErrors.textContent = "";
+        buildPreview();
       });
     }
     renderQueue();

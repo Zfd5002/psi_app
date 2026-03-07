@@ -48,6 +48,7 @@ def test_builder_variant_set_template_renders_family_type_selector() -> None:
     )
     assert "Family type" in html
     assert 'name="family_type"' in html
+    assert 'name="queued_component"' in html
     assert "mutation_panel" in html
     assert "scaffold_panel" in html
 

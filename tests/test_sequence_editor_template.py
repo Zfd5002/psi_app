@@ -33,12 +33,19 @@ def test_sequence_editor_partial_renders_interactive_residues() -> None:
     assert 'data-region="VH"' in html
     assert 'id="seq_mutation_queue"' in html
     assert 'id="seq_queue_clear"' in html
+    assert 'id="seq_component_select"' in html
     assert 'id="seq_direct_mutations"' in html
     assert 'id="seq_direct_apply"' in html
     assert 'id="seq_preview_original"' in html
     assert 'id="seq_preview_edited"' in html
     assert 'action="/builder/point-mutation/draft"' in html
     assert 'id="seq_to_builder_mutations"' in html
+    assert 'id="seq_to_builder_mutation_count"' in html
+    assert 'id="seq_to_builder_mutation_tokens"' in html
+    assert "Build draft from queued mutations" in html
     assert 'action="/builder/variant-set/draft"' in html
     assert 'id="seq_to_variant_mutation_tokens"' in html
+    assert 'id="seq_to_variant_component"' in html
     assert 'id="seq_to_variant_explicit_combos"' in html
+    assert 'id="seq_to_builder_hint"' in html
+    assert 'id="seq_to_variant_hint"' in html
