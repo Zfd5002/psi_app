@@ -36,6 +36,17 @@ PROGRAM_MOLECULE_ROLES: tuple[str, ...] = (
     "archived",
 )
 
+PROGRAM_EVIDENCE_ROWS_SQL = """
+            SELECT
+              dr.molecule_id AS molecule_id,
+              dm.metric_key AS metric_key
+            FROM data_records dr
+            JOIN data_measurements dm ON dm.data_record_id = dr.id
+            WHERE dr.program_id = :pid
+              AND dr.molecule_id IS NOT NULL
+            ORDER BY dr.molecule_id ASC, dm.metric_key ASC, dm.id ASC
+            """
+
 
 def _normalize_program_molecule_role(role: str | None) -> str:
     r = str(role or "").strip().lower()
@@ -448,21 +459,7 @@ def get_program_detail(
             }
         )
     metric_coverage = sorted(metric_coverage, key=lambda r: (-int(r.get("missing_count") or 0), str(r.get("metric_key") or "")))
-    evidence_rows = db.execute(
-        text(
-            """
-            SELECT
-              dr.molecule_id AS molecule_id,
-              COALESCE(dm.metric_key, dm.name) AS metric_key
-            FROM data_records dr
-            JOIN data_measurements dm ON dm.data_record_id = dr.id
-            WHERE dr.program_id = :pid
-              AND dr.molecule_id IS NOT NULL
-            ORDER BY dr.molecule_id ASC, COALESCE(dm.metric_key, dm.name) ASC, dm.id ASC
-            """
-        ),
-        {"pid": int(program_id)},
-    ).mappings().all()
+    evidence_rows = db.execute(text(PROGRAM_EVIDENCE_ROWS_SQL), {"pid": int(program_id)}).mappings().all()
     group_to_mols: dict[str, set[int]] = {}
     group_to_keys: dict[str, set[str]] = {}
     mol_to_groups: dict[int, set[str]] = {}

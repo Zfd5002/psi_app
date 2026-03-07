@@ -6780,6 +6780,23 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-07 — v1.3.0b59
+Intent:
+- Hotfix program detail runtime SQL to match live `data_measurements` schema and prevent `/programs/{id}` OperationalError.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Replaced program evidence query fallback `COALESCE(dm.metric_key, dm.name)` with canonical `dm.metric_key` only.
+- Added a regression test asserting the active program evidence SQL does not reference `dm.name`.
+
+Gates:
+- PASS
+
 ## 2026-03-07 — v1.3.0b58
 Intent:
 - Finalize Program-centric PSI phase 1 with status documentation and regression hardening checks.

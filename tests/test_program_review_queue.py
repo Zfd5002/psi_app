@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from psi.core.db import ensure_schema
 from psi.core.models import Base, Batch, Molecule, Program
 from psi.services.data_records import apply_bulk_qc_action_for_record, create_data_record
-from psi.services.programs import build_program_review_queue
+from psi.services.programs import PROGRAM_EVIDENCE_ROWS_SQL, build_program_review_queue
 from psi.web.routers import programs as programs_router
 from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
@@ -346,6 +346,13 @@ def test_program_review_bulk_routes_exist() -> None:
     assert ("/programs/{program_id}/review/approve-all", ("POST",)) in route_keys
     assert ("/programs/{program_id}/review/reject-all", ("POST",)) in route_keys
     assert ("/programs/{program_id}/molecules/{molecule_id}/role", ("POST",)) in route_keys
+
+
+def test_program_evidence_query_uses_metric_key_only() -> None:
+    sql = str(PROGRAM_EVIDENCE_ROWS_SQL)
+    assert "dm.metric_key" in sql
+    assert "dm.name" not in sql
+    assert "COALESCE(dm.metric_key, dm.name)" not in sql
 
 
 def test_program_review_approve_all_endpoint_processes_pending_queue() -> None:
