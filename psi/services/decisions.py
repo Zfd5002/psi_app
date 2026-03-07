@@ -21,6 +21,7 @@ from psi.core.models import (
     Program,
     OutcomeLabel,
 )
+from psi.services.insight_engine import build_insight_bundle
 
 from psi.core.utils import json_dumps_compact, model_to_dict, now_utc, stable_json_dumps
 
@@ -540,6 +541,7 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
     inputs = json.loads(snap.inputs_json) if snap.inputs_json else {}
 
     is_di = _detect_is_di(snap, inputs, output)
+    di_insight_bundle = build_insight_bundle(output) if is_di else None
 
     outcomes = (
         db.query(OutcomeLabel)
@@ -593,6 +595,7 @@ def get_snapshot_detail(db: Session, snap_id: int) -> dict:
         "inputs": inputs,
         "di_snapshot_provenance": (_di_snapshot_provenance_view_model(output=output, inputs=inputs) if is_di else None),
         "di_snapshot_ui": (_di_snapshot_ui_view_model(output=output, outcomes=outcomes) if is_di else None),
+        "di_insight_bundle": di_insight_bundle,
         "is_di": is_di,
         "evidence": evidence,
         "citations": citations,

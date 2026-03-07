@@ -6780,6 +6780,212 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-07 — v1.3.0c15
+Intent:
+- Add bulk-import UI and two-step validate/confirm flow.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/data_records.py`
+- `psi/web/templates/data/list.html`
+- `psi/web/templates/data/bulk_import.html`
+- `tests/test_bulk_import_template.py`
+
+Behavior:
+- Added `/data/bulk-import` page with paste, validation, error preview, and explicit confirm import step.
+- Confirm import creates data records through existing `create_data_record()` path.
+- Added data list navigation link to bulk import.
+- Added template regression tests for bulk-import route surface and form actions.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c14
+Intent:
+- Add deterministic bulk-import validation service (no writes until confirmation).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/bulk_import.py`
+- `tests/test_bulk_import.py`
+
+Behavior:
+- Added parser for pasted bulk-import tables with strict header contract.
+- Added row validator resolving molecule/batch references and assay defaults per metric key.
+- Validation output is deterministic and separates valid rows from error rows.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c13
+Intent:
+- Add trend-signal interpretation using Insight Engine surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/insight_engine.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_insight_engine.py`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- Added `summarize_trend_signals()` for deterministic improving/declining/stable classification.
+- Molecule detail now renders trend insight chips above chart cards.
+- Added service and template regression coverage for trend signals.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c12
+Intent:
+- Add molecule trend chart surface from deterministic trend aggregation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- Molecule detail now includes `molecule_trends` context from `build_molecule_trends()`.
+- Added scientist-facing “Trend Signals” panel with lightweight deterministic SVG sparklines via vanilla JS.
+- Added template regression assertions for trend panel rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c11
+Intent:
+- Add deterministic trend aggregation service for key scientist metrics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trends.py`
+- `tests/test_trends.py`
+
+Behavior:
+- Added `build_molecule_trends()` for deterministic per-molecule time-series over `monomer_pct`, `kd_nM`, and `value_eu_ml`.
+- Added aggregation test covering stable output shape and ordering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c10
+Intent:
+- Harden decision-to-experiment bridge actions for scope-safe routing.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/decisions/_di_snapshot.html`
+- `tests/test_decision_insight_summary.py`
+
+Behavior:
+- Experiment bridge buttons now render only when both `program_id` and `molecule_id` exist on snapshot scope.
+- Added explicit fallback guidance text when scope IDs are unavailable.
+- Added template regression coverage for the scope-ID requirement path.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c9
+Intent:
+- Enrich evidence-breakdown payload detail for decision interpretation surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/insight_engine.py`
+- `tests/test_insight_engine.py`
+
+Behavior:
+- Missing-evidence entries now retain deterministic detail fields (`classification`, `required_threshold`, `batch`, `observed_value`) for richer decision breakdown rendering.
+- Added regression assertion for missing-evidence classification field.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c8
+Intent:
+- Promote Insight Engine narrative to decision-page header surface.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/decisions/detail.html`
+- `psi/web/templates/decisions/_di_snapshot.html`
+- `tests/test_decision_insight_summary.py`
+
+Behavior:
+- Decision detail header now includes DI decision-summary text when InsightBundle is available.
+- Added deterministic evidence breakdown and experiment-bridge sections in DI snapshot rendering.
+- Added template regression coverage for evidence breakdown and bridge links.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c7
+Intent:
+- Fulfill scientist/governance mode split for molecule interpretation surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/static/style.css`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- Added governance payload model for molecule insight surfaces (policy refs, snapshot hash, gate statuses).
+- Added governance-only “Insight Governance Detail” panel and scientist-only Next Steps panel.
+- Molecule view-mode toggle now drives both header and panel visibility.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c6
+Intent:
+- Expand molecule Next Steps with explicit blocking evidence details.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- Added blocking evidence detail table with metric, observed value, required threshold, and batch.
+- Added regression assertions for blocking detail render.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c5
+Intent:
+- Add molecule-level scientist-facing Next Steps panel from the Insight Engine.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- Molecule detail context now builds a deterministic `molecule_insight_bundle` from the latest DI snapshot output.
+- Molecule detail template now renders “What This Molecule Needs Next” with status, blocking issues, missing evidence, and suggested experiments.
+- Added template regression assertions for panel render.
+
+Gates:
+- PASS
+
 ## 2026-03-07 — v1.3.0b76
 Intent:
 - Improve CDR graft preview to show explicit before/after reconstruction details.
@@ -9773,6 +9979,79 @@ Behavior:
 - Added route-level tests validating sequence-editor payload handoff into builder point-mutation and variant-set draft routes.
 - Added regression assertions for disabled-state payload clearing hooks in sequence-editor JS.
 - Added workflow documentation defining supported sequence-editor-to-builder behaviors.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c1
+Intent:
+- Add Scientist Interpretation Layer foundation with deterministic insight bundle generation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/insight_engine.py`
+- `tests/test_insight_engine.py`
+
+Behavior:
+- Added `build_insight_bundle(snapshot, ...)` as the single deterministic DI interpretation entrypoint.
+- Bundle now includes molecule status, blocking issues, missing/failing evidence, and recommended experiments.
+- Added unit tests for nested snapshot handling and deterministic missing/failing extraction.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c2
+Intent:
+- Extend Insight Engine with deterministic evidence classification surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/insight_engine.py`
+- `tests/test_insight_engine.py`
+
+Behavior:
+- Added strongest supporting/blocking evidence ranking surfaces from gate outcomes and used evidence.
+- Added deterministic missing-evidence ranking and bundle-level decision summary generation.
+- Added coverage tests for supporting/blocking evidence ordering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c3
+Intent:
+- Add policy expectation extraction for scientist-facing interpretation surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/insight_engine.py`
+- `tests/test_insight_engine.py`
+
+Behavior:
+- Added `extract_policy_expectations(policy)` to emit simplified threshold/requirement expectations.
+- Expectation text now uses metric catalog labels/units for scientist readability.
+- Added deterministic expectation extraction tests.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c4
+Intent:
+- Wire Insight Engine narrative into DI decision detail surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/decisions.py`
+- `psi/web/templates/decisions/_di_snapshot.html`
+- `tests/test_decision_insight_summary.py`
+
+Behavior:
+- DI decision detail context now includes `di_insight_bundle` from the Insight Engine.
+- Added top-level “Decision Summary” narrative block to DI snapshot template.
+- Added service test confirming DI snapshot detail includes deterministic narrative text.
 
 Gates:
 - PASS

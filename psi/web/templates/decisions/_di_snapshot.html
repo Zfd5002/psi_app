@@ -27,6 +27,66 @@
   {% include "decisions/_di_verification.html" %}
 {% endif %}
 
+{% set ib = di_insight_bundle if di_insight_bundle is defined and di_insight_bundle else {} %}
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Decision Summary</h2>
+  <div>{{ ib.decision_summary if ib is mapping and ib.decision_summary is defined and ib.decision_summary else "No scientist summary available." }}</div>
+  <div class="muted mini" style="margin-top:6px;">Interpretation layer output; does not change DI policy or snapshot semantics.</div>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Evidence Breakdown</h2>
+  <div class="grid cols-3" style="gap:12px;">
+    <div>
+      <div class="muted mini">Strongest supporting evidence</div>
+      <ul class="clean" style="margin-top:4px;">
+        {% for row in (ib.strongest_supporting_evidence if ib is mapping and ib.strongest_supporting_evidence is defined else []) %}
+          <li><b>{{ row.metric_key if row.metric_key is defined else "—" }}</b>{% if row.observed_value is defined and row.observed_value is not none %} · {{ row.observed_value }}{% endif %}</li>
+        {% else %}
+          <li class="muted">No supporting evidence captured.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div>
+      <div class="muted mini">Strongest blocking evidence</div>
+      <ul class="clean" style="margin-top:4px;">
+        {% for row in (ib.strongest_blocking_evidence if ib is mapping and ib.strongest_blocking_evidence is defined else []) %}
+          <li><b>{{ row.metric_key if row.metric_key is defined else "—" }}</b>{% if row.required_threshold is defined and row.required_threshold %} · {{ row.required_threshold }}{% endif %}</li>
+        {% else %}
+          <li class="muted">No blocking evidence captured.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div>
+      <div class="muted mini">Missing evidence</div>
+      <ul class="clean" style="margin-top:4px;">
+        {% for row in (ib.missing_evidence if ib is mapping and ib.missing_evidence is defined else []) %}
+          <li>{{ row.metric_key if row.metric_key is defined else "—" }}</li>
+        {% else %}
+          <li class="muted">No missing evidence captured.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="card no-print" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Decision to Experiment Bridge</h2>
+  <div class="muted mini">Create data-entry tasks directly from interpretation output.</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+    {% if snap.program_id and snap.molecule_id %}
+      {% for row in (ib.missing_evidence if ib is mapping and ib.missing_evidence is defined else []) %}
+        <a class="btn" href="/data/new?program_id={{ snap.program_id }}&molecule_id={{ snap.molecule_id }}&title=Add%20{{ row.metric_key if row.metric_key is defined else '' }}%20measurement&method={{ row.metric_key if row.metric_key is defined else '' }}">Add Missing Data: {{ row.metric_key if row.metric_key is defined else "" }}</a>
+      {% endfor %}
+      {% for row in (ib.recommended_experiments if ib is mapping and ib.recommended_experiments is defined else []) %}
+        <a class="btn primary" href="/data/new?program_id={{ snap.program_id }}&molecule_id={{ snap.molecule_id }}&title={{ (row.suggested_assay if row.suggested_assay is defined else 'Suggested experiment')|replace(' ','%20') }}&method={{ row.metric_key if row.metric_key is defined else '' }}">Create Suggested Experiment: {{ row.metric_key if row.metric_key is defined else "" }}</a>
+      {% endfor %}
+    {% else %}
+      <span class="muted">Bridge actions require both program_id and molecule_id in the snapshot scope.</span>
+    {% endif %}
+  </div>
+</div>
+
 {% set snap_prov = di_snapshot_provenance if di_snapshot_provenance is defined and di_snapshot_provenance else {} %}
 <div class="card" style="margin-top:12px;">
   <h2 style="margin-top:0;">Snapshot provenance</h2>

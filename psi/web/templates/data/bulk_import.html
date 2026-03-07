@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Bulk Import | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Bulk Data Import</h1>
+  <p class="muted">Paste rows as CSV or TSV with header: <code>molecule,batch,metric,value,unit</code>.</p>
+
+  {% if imported_count is not none %}
+    <div class="notice"><b>Import complete.</b> {{ imported_count }} row(s) created.</div>
+  {% elif message %}
+    <div class="muted">{{ message }}</div>
+  {% endif %}
+
+  <form method="post" action="/data/bulk-import">
+    <input type="hidden" name="action" value="validate" />
+    <div class="field">
+      <label>Pasted table</label>
+      <textarea name="pasted_text" rows="10" placeholder="molecule,batch,metric,value,unit&#10;M-001,B-01,monomer_pct,88,%">{{ pasted_text or "" }}</textarea>
+    </div>
+    <button class="btn primary" type="submit">Validate rows</button>
+  </form>
+
+  {% if errors and errors|length %}
+    <h2 style="margin-top:14px;">Validation Errors</h2>
+    <table class="table compact">
+      <thead><tr><th>Row</th><th>Error</th></tr></thead>
+      <tbody>
+        {% for e in errors %}
+          <tr><td>{{ e.row_num if e.row_num is defined else "?" }}</td><td>{{ e.error if e.error is defined else "unknown" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if validated_rows and validated_rows|length %}
+    <h2 style="margin-top:14px;">Validated Rows</h2>
+    <table class="table compact">
+      <thead><tr><th>Row</th><th>Molecule</th><th>Batch</th><th>Metric</th><th>Value</th><th>Unit</th></tr></thead>
+      <tbody>
+        {% for r in validated_rows %}
+          <tr>
+            <td>{{ r.row_num }}</td>
+            <td>{{ r.molecule_id }}</td>
+            <td>{{ r.batch_label }}</td>
+            <td>{{ r.metric_key }}</td>
+            <td>{{ r.value_num }}</td>
+            <td>{{ r.unit }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="/data/bulk-import" style="margin-top:10px;">
+      <input type="hidden" name="action" value="import" />
+      <input type="hidden" name="validated_json" value="{{ validated_json }}" />
+      <button class="btn primary" type="submit">Confirm import</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

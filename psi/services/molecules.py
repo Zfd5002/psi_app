@@ -54,6 +54,8 @@ from psi.services.molecule_viewer import (
     domain_instances_by_component,
 )
 from psi.services.sequence_annotation import annotate_sequence_for_editor
+from psi.services.insight_engine import build_insight_bundle, summarize_trend_signals
+from psi.services.trends import build_molecule_trends
 
 
 def _pack_segments(segments: list[dict]) -> list[list[dict]]:
@@ -275,6 +277,47 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         di_rows_chrono=_tmp_sorted,
     )
 
+    latest_di_snapshot = _tmp_sorted[-1] if _tmp_sorted else None
+    latest_di_output = (
+        latest_di_snapshot.get("_out")
+        if isinstance(latest_di_snapshot, dict) and isinstance(latest_di_snapshot.get("_out"), dict)
+        else {}
+    )
+    molecule_insight_bundle = build_insight_bundle(latest_di_output if latest_di_output else None)
+    latest_policy = latest_di_output.get("policy") if isinstance(latest_di_output.get("policy"), dict) else {}
+    latest_integrity = (
+        latest_di_output.get("provenance", {}).get("integrity")
+        if isinstance(latest_di_output.get("provenance"), dict)
+        and isinstance(latest_di_output.get("provenance", {}).get("integrity"), dict)
+        else {}
+    )
+    latest_gate_outcomes = (
+        latest_di_output.get("gate_outcomes")
+        if isinstance(latest_di_output.get("gate_outcomes"), dict)
+        else {}
+    )
+    molecule_insight_governance = {
+        "policy_name": str(latest_policy.get("policy_name") or latest_policy.get("name") or ""),
+        "policy_version": str(latest_policy.get("policy_version") or latest_policy.get("version") or ""),
+        "policy_semantics_hash": str(latest_policy.get("policy_semantics_hash") or ""),
+        "snapshot_content_hash": str(latest_integrity.get("snapshot_content_hash") or ""),
+        "gate_outcomes": [
+            {"gate_key": str(k), "status": str((latest_gate_outcomes.get(k) or {}).get("status") or "")}
+            for k in sorted(str(x) for x in latest_gate_outcomes.keys())
+        ],
+    }
+    molecule_insight_source = {
+        "snapshot_id": int(latest_di_snapshot.get("snapshot_id") or 0)
+        if isinstance(latest_di_snapshot, dict) and latest_di_snapshot.get("snapshot_id") is not None
+        else None,
+        "decision_key": str(latest_di_snapshot.get("decision_key") or "")
+        if isinstance(latest_di_snapshot, dict)
+        else "",
+        "created_at": str(latest_di_snapshot.get("created_at") or "")
+        if isinstance(latest_di_snapshot, dict)
+        else "",
+    }
+
     # Final display ordering: newest first.
     di_history: list[dict[str, Any]] = []
     for row in sorted(_tmp_sorted, key=lambda r: (r.get("created_at") or "", int(r.get("snapshot_id") or 0)), reverse=True):
@@ -436,12 +479,17 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         domain_instances=domain_instances,
         numbering_maps=numbering_maps,
     )
+    molecule_trends = build_molecule_trends(db, molecule_id=int(molecule_id))
+    molecule_trend_insights = summarize_trend_signals(molecule_trends)
 
     return {
         "molecule": m,
         "batches": batches,
         "di_history": di_history,
         "molecule_header_model": molecule_header_model,
+        "molecule_insight_bundle": molecule_insight_bundle,
+        "molecule_insight_governance": molecule_insight_governance,
+        "molecule_insight_source": molecule_insight_source,
         "data_records": data_records,
         "pending_evidence_preview": pending_evidence_preview,
         "lineage_parent": parent_lineage,
@@ -461,6 +509,8 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "feature_tracks": feature_tracks,
         "viewer_v2_components": viewer_v2_components,
         "sequence_editor_annotations": sequence_editor_annotations,
+        "molecule_trends": molecule_trends,
+        "molecule_trend_insights": molecule_trend_insights,
         "pdl1_allowed_mismatches": int(pdl1_allowed_mismatches or 0),
         "property_runs": runs,
         "latest_run": latest_run,

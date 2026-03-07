@@ -22,6 +22,9 @@
         {% endif %}
       </div>
       <div class="muted">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
+      {% if is_di and di_insight_bundle is defined and di_insight_bundle and di_insight_bundle.decision_summary is defined and di_insight_bundle.decision_summary %}
+        <div style="margin-top:8px;"><b>Decision summary:</b> {{ di_insight_bundle.decision_summary }}</div>
+      {% endif %}
       <div class="muted" style="margin-top:4px;">
         Engine:
         {% if is_di %}

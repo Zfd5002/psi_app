@@ -268,6 +268,8 @@ body.pdf-mode .narrative-list{gap:3px}
 .molecule-header-banner.is-on { background:rgba(241,196,15,.14); border-color:rgba(243,156,18,.35); }
 .molecule-header-grid { display:grid; grid-template-columns:1.2fr 1fr; gap:12px; margin-top:10px; }
 .molecule-header[data-view-mode="scientist"] [data-governance-panel] { display:none; }
+.molecule-page[data-view-mode="scientist"] [data-molecule-mode-panel="governance"] { display:none; }
+.molecule-page[data-view-mode="governance"] [data-molecule-mode-panel="scientist"] { display:none; }
 .molecule-confidence-summary { margin-top:6px; display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; border:1px solid rgba(0,0,0,.12); font-weight:700; font-size:12px; }
 .molecule-confidence-summary.state-green { background:rgba(46,204,113,.14); border-color:rgba(39,174,96,.35); }
 .molecule-confidence-summary.state-amber { background:rgba(241,196,15,.16); border-color:rgba(243,156,18,.35); }

@@ -145,6 +145,33 @@ def test_molecule_detail_template_renders_lineage_panel() -> None:
         numbering_payload={},
         pdl1_allowed_mismatches=0,
         sequence_editor_annotations=[],
+        molecule_insight_bundle={
+            "molecule_status": "blocked",
+            "blocking_issues": [{"gate_key": "sec_gate", "status": "fail"}],
+            "missing_evidence": [{"metric_key": "kd_nM"}],
+            "recommended_experiments": [{"suggested_assay": "Add measurement for kd_nM"}],
+            "strongest_blocking_evidence": [
+                {
+                    "metric_key": "monomer_pct",
+                    "observed_value": 72.0,
+                    "required_threshold": "Monomer >= 85 %",
+                    "batch": "B-1",
+                }
+            ],
+        },
+        molecule_insight_source={"snapshot_id": 12, "decision_key": "advance_to_in_vivo", "created_at": "2026-03-07"},
+        molecule_insight_governance={
+            "policy_name": "readiness_policy",
+            "policy_version": "v0.2",
+            "policy_semantics_hash": "abc123",
+            "snapshot_content_hash": "def456",
+            "gate_outcomes": [{"gate_key": "sec_gate", "status": "fail"}],
+        },
+        molecule_trends={
+            "metric_keys": ["monomer_pct"],
+            "series": {"monomer_pct": [{"value": 82.0}, {"value": 85.0}]},
+        },
+        molecule_trend_insights=[{"metric_key": "monomer_pct", "signal": "improving"}],
     )
     assert "Lineage" in html
     assert "Parent molecule" in html
@@ -153,3 +180,12 @@ def test_molecule_detail_template_renders_lineage_panel() -> None:
     assert "M-11" in html
     assert "sequence_editor_tooltip" in html
     assert "/static/sequence_editor.js" in html
+    assert "What This Molecule Needs Next" in html
+    assert "Add measurement for kd_nM" in html
+    assert "Blocking evidence detail" in html
+    assert "Monomer &gt;= 85 %" in html or "Monomer >= 85 %" in html
+    assert "Insight Governance Detail" in html
+    assert "Gate outcomes" in html
+    assert "Trend Signals" in html
+    assert "trend-sparkline" in html
+    assert "monomer_pct: improving" in html

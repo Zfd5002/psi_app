@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from psi.services.legacy_yaml_compat import load_rules_legacy_yaml
 from psi.services import data_records as svc
+from psi.services import bulk_import as bulk_import_svc
 from psi.web.deps import get_db, get_rules_path, get_storage_cfg, get_templates
 
 router = APIRouter()
@@ -19,6 +21,87 @@ def list_data(request: Request, db: Session = Depends(get_db)):
     ctx = svc.list_data_records(db)
     ctx["request"] = request
     return templates.TemplateResponse("data/list.html", ctx)
+
+
+@router.get("/data/bulk-import", response_class=HTMLResponse)
+def bulk_import_page(request: Request):
+    templates = get_templates(request)
+    return templates.TemplateResponse(
+        "data/bulk_import.html",
+        {
+            "request": request,
+            "pasted_text": "",
+            "validated_rows": [],
+            "errors": [],
+            "validated_json": "[]",
+            "imported_count": None,
+        },
+    )
+
+
+@router.post("/data/bulk-import", response_class=HTMLResponse)
+def bulk_import_submit(
+    request: Request,
+    action: str = Form("validate"),
+    pasted_text: str = Form(""),
+    validated_json: str = Form("[]"),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    action_key = str(action or "validate").strip().lower()
+    parsed_rows = []
+    validated_rows = []
+    errors = []
+    imported_count: int | None = None
+    message = ""
+    if action_key == "import":
+        try:
+            validated_rows = [x for x in json.loads(validated_json or "[]") if isinstance(x, dict)]
+        except Exception:
+            validated_rows = []
+        for row in validated_rows:
+            metric_key = str(row.get("metric_key") or "")
+            value_num = row.get("value_num")
+            unit = str(row.get("unit") or "")
+            svc.create_data_record(
+                db,
+                program_id=int(row.get("program_id")),
+                molecule_id=int(row.get("molecule_id")),
+                batch_id=int(row.get("batch_id")),
+                domain=str(row.get("domain") or "Other"),
+                data_type=str(row.get("data_type") or "Other"),
+                method=str(row.get("method") or metric_key or "Unknown"),
+                title=str(row.get("title") or f"Bulk import {metric_key}"),
+                notes="bulk import",
+                run_date="",
+                params_json={},
+                results_json={metric_key: value_num, "unit": unit} if metric_key else {"value_num": value_num, "unit": unit},
+            )
+        imported_count = len(validated_rows)
+        message = f"Imported {imported_count} rows."
+    else:
+        try:
+            parsed_rows = bulk_import_svc.parse_bulk_import_rows(pasted_text)
+            res = bulk_import_svc.validate_bulk_import_rows(db, parsed_rows=parsed_rows)
+            validated_rows = list(res.get("validated_rows") or [])
+            errors = list(res.get("errors") or [])
+            if not validated_rows and not errors:
+                message = "No rows detected."
+        except ValueError as e:
+            errors = [{"row_num": 1, "error": str(e)}]
+
+    return templates.TemplateResponse(
+        "data/bulk_import.html",
+        {
+            "request": request,
+            "pasted_text": pasted_text,
+            "validated_rows": validated_rows,
+            "errors": errors,
+            "validated_json": json.dumps(validated_rows, sort_keys=True),
+            "imported_count": imported_count,
+            "message": message,
+        },
+    )
 
 
 @router.get("/data/new", response_class=HTMLResponse)

@@ -2,7 +2,7 @@
 {% block title %}{{ molecule.primary_id }} | PSI{% endblock %}
 {% block content %}
 {% set mh = molecule_header_model if molecule_header_model is defined and molecule_header_model else {} %}
-<div class="card">
+<div class="card molecule-page" data-view-mode="scientist">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
     <div>
       <h1>{{ molecule.primary_id }}</h1>
@@ -247,6 +247,128 @@
   </div>
 
   {% include "molecules/_sequence_editor.html" %}
+
+  {% set ib = molecule_insight_bundle if molecule_insight_bundle is defined and molecule_insight_bundle else {} %}
+  <div class="card" style="margin-top:12px;" data-molecule-mode-panel="scientist">
+    <h2 style="margin-top:0;">What This Molecule Needs Next</h2>
+    <div class="muted mini" style="margin-bottom:8px;">Interpretation layer output; DI semantics and snapshots remain unchanged.</div>
+    <div><b>Status:</b> {{ (ib.molecule_status if ib is mapping and ib.molecule_status is defined and ib.molecule_status else "not_assessed")|humanize_state }}</div>
+
+    <div style="margin-top:10px;">
+      <div class="muted mini">Blocking issues</div>
+      <ul class="clean" style="margin-top:4px;">
+        {% for row in (ib.blocking_issues if ib is mapping and ib.blocking_issues is defined else []) %}
+          <li><b>{{ row.gate_key if row.gate_key is defined and row.gate_key else "unspecified_gate" }}</b> · {{ row.status if row.status is defined else "unknown" }}</li>
+        {% else %}
+          <li class="muted">No active blocking issues detected.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div class="muted mini">Blocking evidence detail</div>
+      <table class="table compact" style="margin-top:4px;">
+        <thead><tr><th>Metric</th><th>Observed</th><th>Required</th><th>Batch</th></tr></thead>
+        <tbody>
+          {% for row in (ib.strongest_blocking_evidence if ib is mapping and ib.strongest_blocking_evidence is defined else []) %}
+            <tr>
+              <td><b>{{ row.metric_key if row.metric_key is defined else "—" }}</b></td>
+              <td>{{ row.observed_value if row.observed_value is defined and row.observed_value is not none else "not measured" }}</td>
+              <td>{{ row.required_threshold if row.required_threshold is defined and row.required_threshold else "not specified" }}</td>
+              <td>{{ row.batch if row.batch is defined and row.batch else "unknown" }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="muted">No blocking evidence details available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div class="muted mini">Missing evidence</div>
+      <ul class="clean" style="margin-top:4px;">
+        {% for row in (ib.missing_evidence if ib is mapping and ib.missing_evidence is defined else []) %}
+          <li>{{ row.metric_key if row.metric_key is defined else "" }}</li>
+        {% else %}
+          <li class="muted">No missing evidence signals detected.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div class="muted mini">Suggested experiments</div>
+      <ul class="clean" style="margin-top:4px;">
+        {% for row in (ib.recommended_experiments if ib is mapping and ib.recommended_experiments is defined else []) %}
+          <li>{{ row.suggested_assay if row.suggested_assay is defined else "" }}</li>
+        {% else %}
+          <li class="muted">No immediate experiment suggestions available.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  {% set ibg = molecule_insight_governance if molecule_insight_governance is defined and molecule_insight_governance else {} %}
+  {% set ibs = molecule_insight_source if molecule_insight_source is defined and molecule_insight_source else {} %}
+  <div class="card" style="margin-top:12px;" data-molecule-mode-panel="governance">
+    <h2 style="margin-top:0;">Insight Governance Detail</h2>
+    <div class="muted mini">Governance mode only: policy/snapshot provenance for scientist interpretation surfaces.</div>
+    <div class="grid cols-2" style="margin-top:8px;gap:12px;">
+      <div>
+        <div><b>Snapshot ID:</b> {{ ibs.snapshot_id if ibs is mapping and ibs.snapshot_id is defined and ibs.snapshot_id else "—" }}</div>
+        <div><b>Decision key:</b> {{ ibs.decision_key if ibs is mapping and ibs.decision_key is defined and ibs.decision_key else "—" }}</div>
+        <div><b>Created at:</b> {{ ibs.created_at if ibs is mapping and ibs.created_at is defined and ibs.created_at else "—" }}</div>
+      </div>
+      <div>
+        <div><b>Policy:</b> {{ ibg.policy_name if ibg is mapping and ibg.policy_name is defined and ibg.policy_name else "—" }}</div>
+        <div><b>Version:</b> {{ ibg.policy_version if ibg is mapping and ibg.policy_version is defined and ibg.policy_version else "—" }}</div>
+        <div><b>Policy hash:</b> {{ ibg.policy_semantics_hash if ibg is mapping and ibg.policy_semantics_hash is defined and ibg.policy_semantics_hash else "—" }}</div>
+        <div><b>Snapshot hash:</b> {{ ibg.snapshot_content_hash if ibg is mapping and ibg.snapshot_content_hash is defined and ibg.snapshot_content_hash else "—" }}</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="muted mini">Gate outcomes</div>
+      <table class="table compact" style="margin-top:4px;">
+        <thead><tr><th>Gate</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for row in (ibg.gate_outcomes if ibg is mapping and ibg.gate_outcomes is defined else []) %}
+            <tr><td>{{ row.gate_key if row.gate_key is defined else "—" }}</td><td>{{ row.status if row.status is defined and row.status else "unknown" }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">No gate outcomes available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% set mt = molecule_trends if molecule_trends is defined and molecule_trends else {"metric_keys": [], "series": {}} %}
+  <div class="card" style="margin-top:12px;" data-molecule-mode-panel="scientist">
+    <h2 style="margin-top:0;">Trend Signals</h2>
+    <div class="muted mini">UI-only trend view from recorded measurements; no DI or policy semantics are changed.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+      {% for row in (molecule_trend_insights if molecule_trend_insights is defined else []) %}
+        <span class="chip">{{ row.metric_key if row.metric_key is defined else '' }}: {{ row.signal if row.signal is defined else 'stable' }}</span>
+      {% endfor %}
+    </div>
+    <div class="grid cols-3" style="margin-top:8px;gap:10px;">
+      {% for mk in (mt.metric_keys if mt is mapping and mt.metric_keys is defined else []) %}
+        {% set pts = ((mt.series[mk]) if mt is mapping and mt.series is defined and mk in mt.series else []) %}
+        <div class="card" style="padding:8px;">
+          <div><b>{{ mk|humanize_path_token }}</b></div>
+          <div class="muted mini">n={{ pts|length }}</div>
+          <svg class="trend-sparkline" data-trend-key="{{ mk }}" width="220" height="48" viewBox="0 0 220 48" role="img" aria-label="{{ mk }} trend"></svg>
+          <div class="muted mini">
+            {% if pts and pts|length %}
+              latest={{ (pts[-1].value if pts[-1].value is defined else 'n/a') }}
+            {% else %}
+              no time-series points
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="muted">No trend metrics available.</div>
+      {% endfor %}
+    </div>
+  </div>
 
   <div class="tabs no-print">
     <a class="tab active" href="#batches">Batches</a>
@@ -1364,14 +1486,16 @@
 <script>
   (function () {
     var root = document.querySelector(".molecule-header");
-    if (!root) return;
+    var page = document.querySelector(".molecule-page");
+    if (!root && !page) return;
     var btnSci = document.getElementById("mh_view_scientist");
     var btnGov = document.getElementById("mh_view_governance");
     if (!btnSci || !btnGov) return;
     var storageKey = "psi.molecule.detail.view_mode";
     function setMode(mode) {
       var m = (mode === "governance") ? "governance" : "scientist";
-      root.setAttribute("data-view-mode", m);
+      if (root) root.setAttribute("data-view-mode", m);
+      if (page) page.setAttribute("data-view-mode", m);
       btnSci.classList.toggle("primary", m === "scientist");
       btnGov.classList.toggle("primary", m === "governance");
       try { localStorage.setItem(storageKey, m); } catch (e) {}
@@ -1390,6 +1514,39 @@
 <script src="/static/sequence_editor.js"></script>
 <script>
 (function(){
+  const trendData = {{ (molecule_trends if molecule_trends is defined and molecule_trends else {"metric_keys": [], "series": {}})|tojson }};
+  function renderTrendSparkline(svg, points){
+    if(!svg) return;
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    if(!Array.isArray(points) || points.length === 0){
+      return;
+    }
+    const values = points.map(p => Number(p.value)).filter(v => Number.isFinite(v));
+    if(values.length === 0) return;
+    const min = Math.min.apply(null, values);
+    const max = Math.max.apply(null, values);
+    const span = (max - min) || 1;
+    const w = 220, h = 48;
+    const xStep = values.length > 1 ? (w - 8) / (values.length - 1) : 1;
+    const coords = values.map((v, i) => {
+      const x = 4 + (i * xStep);
+      const y = 44 - ((v - min) / span) * 40;
+      return `${x},${y}`;
+    }).join(" ");
+    const ns = "http://www.w3.org/2000/svg";
+    const poly = document.createElementNS(ns, "polyline");
+    poly.setAttribute("points", coords);
+    poly.setAttribute("fill", "none");
+    poly.setAttribute("stroke", "#2c7be5");
+    poly.setAttribute("stroke-width", "2");
+    svg.appendChild(poly);
+  }
+  document.querySelectorAll(".trend-sparkline").forEach((svg) => {
+    const mk = String(svg.getAttribute("data-trend-key") || "");
+    const pts = trendData && trendData.series ? trendData.series[mk] : [];
+    renderTrendSparkline(svg, pts);
+  });
+
   const highlightSelections = new Map();
   const MANUAL_HIGHLIGHT_KEY = "__manual__";
 
