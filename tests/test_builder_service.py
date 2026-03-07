@@ -204,6 +204,11 @@ def test_build_point_mutation_draft_applies_mutation_and_create_child() -> None:
             assert len(draft.preview_rows) == 1
             assert draft.preview_rows[0]["before"] == "MSGN"
             assert draft.preview_rows[0]["after"] == "MAGQ"
+            assert len(draft.changed_residues) == 2
+            assert draft.changed_residues[0]["component"] == "HC1"
+            assert draft.changed_residues[0]["position"] == "2"
+            assert draft.changed_residues[0]["from"] == "S"
+            assert draft.changed_residues[0]["to"] == "A"
             child = create_molecule_from_draft(db, draft, MoleculeCreateMeta(actor="tester"))
             child_components = {
                 str(c.role): str(c.fasta or "")

@@ -77,6 +77,7 @@ class Molecule(Base):
         back_populates="child_molecule",
         cascade="all, delete-orphan",
     )
+    variant_set_memberships = relationship("BuilderVariantSetMember", back_populates="molecule", cascade="all, delete-orphan")
 
 
 class Portfolio(Base):
@@ -139,6 +140,40 @@ class MoleculeDerivation(Base):
 
     parent_molecule = relationship("Molecule", foreign_keys=[parent_molecule_id], back_populates="derivations_as_parent")
     child_molecule = relationship("Molecule", foreign_keys=[child_molecule_id], back_populates="derivations_as_child")
+
+
+class BuilderVariantSet(Base):
+    __tablename__ = "builder_variant_sets"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, nullable=False)
+    builder_mode = Column(Text, nullable=False)
+    summary = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=True)
+    spec_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    members = relationship("BuilderVariantSetMember", back_populates="variant_set", cascade="all, delete-orphan")
+
+
+class BuilderVariantSetMember(Base):
+    __tablename__ = "builder_variant_set_members"
+    __table_args__ = (
+        UniqueConstraint("variant_set_id", "sort_index", name="uq_builder_variant_set_member_sort"),
+        Index("ix_builder_variant_set_member_variant_set_id", "variant_set_id"),
+        Index("ix_builder_variant_set_member_molecule_id", "molecule_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    variant_set_id = Column(Integer, ForeignKey("builder_variant_sets.id"), nullable=False)
+    molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=False)
+    sort_index = Column(Integer, nullable=False, default=0)
+    member_label = Column(Text, nullable=False)
+    member_summary = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    variant_set = relationship("BuilderVariantSet", back_populates="members")
+    molecule = relationship("Molecule", back_populates="variant_set_memberships")
 
 
 class PortfolioMembership(Base):

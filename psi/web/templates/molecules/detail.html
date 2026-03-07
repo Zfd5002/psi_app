@@ -211,6 +211,41 @@
     </div>
   </div>
 
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Lineage</h2>
+    {% if lineage_parent %}
+      <div style="margin-bottom:8px;">
+        <div class="muted mini">Parent molecule</div>
+        <div>
+          <a href="/molecules/{{ lineage_parent.molecule_id }}"><strong>{{ lineage_parent.primary_id }}</strong></a>
+          {% if lineage_parent.title %}<span class="muted"> — {{ lineage_parent.title }}</span>{% endif %}
+        </div>
+        <div class="muted mini">
+          {{ lineage_parent.derivation_type|humanize_state }}{% if lineage_parent.summary %} · {{ lineage_parent.summary }}{% endif %}
+        </div>
+      </div>
+    {% else %}
+      <div class="muted">No parent molecule recorded.</div>
+    {% endif %}
+
+    <div style="margin-top:10px;">
+      <div class="muted mini">Child molecules</div>
+      {% if lineage_children %}
+        <ul class="clean" style="margin-top:6px;">
+          {% for child in lineage_children %}
+            <li>
+              <a href="/molecules/{{ child.molecule_id }}"><strong>{{ child.primary_id }}</strong></a>
+              {% if child.title %}<span class="muted"> — {{ child.title }}</span>{% endif %}
+              <span class="muted mini"> · {{ child.derivation_type|humanize_state }}{% if child.summary %} · {{ child.summary }}{% endif %}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="muted">No child molecules recorded.</div>
+      {% endif %}
+    </div>
+  </div>
+
   <div class="tabs no-print">
     <a class="tab active" href="#batches">Batches</a>
     <a class="tab" href="#di_history">Decisions</a>

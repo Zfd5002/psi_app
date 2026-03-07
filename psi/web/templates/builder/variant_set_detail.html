@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Variant Set {{ variant_set.id }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Variant Family Review</h1>
+  <div class="mini muted">Builder campaign detail (standalone from Programs/DI).</div>
+  <div style="margin-top:8px;">
+    <div><b>Name:</b> {{ variant_set.name }}</div>
+    <div><b>Family type:</b> {{ variant_set.builder_mode|humanize_state }}</div>
+    <div><b>Summary:</b> {{ variant_set.summary or "—" }}</div>
+    <div><b>Rationale:</b> {{ variant_set.rationale or "—" }}</div>
+    <div><b>Created at:</b> {{ variant_set.created_at }}</div>
+  </div>
+
+  <h3 style="margin-top:12px;">Ordered members</h3>
+  <table class="table mini">
+    <thead><tr><th>#</th><th>Member</th><th>Molecule</th><th>Parent</th><th>Derivation</th><th>Summary</th></tr></thead>
+    <tbody>
+      {% for row in members %}
+      <tr>
+        <td>{{ row.sort_index }}</td>
+        <td>{{ row.member_label }}</td>
+        <td><a href="/molecules/{{ row.molecule_id }}"><code>{{ row.primary_id }}</code></a>{% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}</td>
+        <td class="muted">{{ row.parent_primary_id or "—" }}</td>
+        <td>{{ row.derivation_type|humanize_state if row.derivation_type else "—" }}</td>
+        <td class="muted">{{ row.member_summary or "—" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">No members recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

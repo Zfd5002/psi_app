@@ -6780,6 +6780,189 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-07 — v1.3.0b76
+Intent:
+- Improve CDR graft preview to show explicit before/after reconstruction details.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/web/templates/builder/cdr_builder.html`
+- `tests/test_builder_cdr_template.py`
+
+Behavior:
+- CDR graft drafts now emit HC/LC preview rows with inserted CDR labels.
+- Added explicit warning banner: “Sequence reconstructed from CDRs using scaffold”.
+- CDR builder preview now renders before/after panel with inserted CDR context.
+- Added template test coverage for reconstruction preview surfaces.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b75
+Intent:
+- Add dedicated CDR-only builder UI flow with draft preview.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/index.html`
+- `psi/web/templates/builder/cdr_builder.html`
+- `tests/test_builder_router.py`
+- `tests/test_builder_cdr_template.py`
+
+Behavior:
+- Added `/builder/cdr-builder` and `/builder/cdr-builder/draft` routes.
+- Added CDR builder page with CDR inputs, framework settings, and deterministic draft preview rendering.
+- Linked CDR builder from builder landing page.
+- Added focused route/template coverage.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b74
+Intent:
+- Add scaffold framework engine foundations for CDR graft builder mode.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/services/builder_ops.py`
+- `tests/test_builder_scaffold.py`
+
+Behavior:
+- Added framework scaffold presets and `apply_cdr_graft()` pure operation.
+- Added numbering/light-chain validation (`kabat`, `chothia`, `imgt`; `kappa`/`lambda`).
+- Wired `cdr_graft` mode in draft builder with deterministic operation payload and preview support.
+- Added scaffold operation and draft validation tests.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b73
+Intent:
+- Add deterministic KIH operations for builder drafts.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/services/builder_ops.py`
+- `psi/services/builder_validation.py`
+- `tests/test_builder_kih_ops.py`
+- `tests/test_builder_modes.py`
+
+Behavior:
+- Added pure KIH operations: `apply_kih_knob`, `apply_kih_hole`, `remove_kih`.
+- Added `kih_toggle` draft handling with explicit action validation and HC1 requirement checks.
+- Added preview row output for KIH draft mutations and focused KIH operation tests.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b72
+Intent:
+- Add deterministic Fc swap operation support to builder draft construction.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/services/builder_ops.py`
+- `psi/services/builder_validation.py`
+- `tests/test_builder_fc_swap.py`
+
+Behavior:
+- Added Fc presets (`human_igg1`, `mouse_igg2a`, `fab_no_fc`) and pure `apply_fc_swap()` op.
+- Added Fc swap validation requiring heavy-chain context (`HC1`).
+- `fc_swap` draft mode now applies preset at draft-build time with preview row summary.
+- Added focused Fc swap unit and draft tests.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b71
+Intent:
+- Expand builder mode contracts to include future engineering modes.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `tests/test_builder_modes.py`
+
+Behavior:
+- Builder now recognizes `cdr_graft`, `fc_swap`, and `kih_toggle` in `MoleculeBuildSpec.mode`.
+- Added deterministic mode recognition test coverage for expanded modes.
+- No UI behavior change yet for new modes.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b70
+Intent:
+- Polish builder parent-selection UX with recent selections, clear/switch controls, and selected-parent summary.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `tests/test_builder_router_parent_selector.py`
+
+Behavior:
+- Added selected parent summary card on clone and point-mutation forms.
+- Added “Clear selection” control to reset current program/molecule selection.
+- Added recent parent memory (localStorage, deterministic capped list of 5) and display.
+- Kept preview-before-save flow unchanged.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b69
+Intent:
+- Add global builder molecule search autocomplete endpoint and UI hooks.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `tests/test_builder_router.py`
+- `tests/test_builder_search.py`
+
+Behavior:
+- Added `/builder/search_molecules?q=` endpoint returning deterministic JSON suggestions (`id`, `primary_id`, `title`, `program_name`), limited to 10.
+- Added search inputs and lightweight autocomplete result rendering in clone and point-mutation pages.
+- Added tests for route presence and bounded search output contract.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b68
+Intent:
+- Redesign builder parent selection with deterministic Program → Molecule cascading selectors.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `tests/test_builder_router_parent_selector.py`
+
+Behavior:
+- Builder clone and point-mutation forms now provide a program dropdown and a molecule dropdown filtered by selected program.
+- Added deterministic parent-selection payloads (`parent_programs`, `parent_molecules_by_program`) and client-side cascade rendering.
+- Added focused template tests for cascade selector presence.
+
+Gates:
+- PASS
+
 ## 2026-03-07 — v1.3.0b67
 Intent:
 - Finalize builder phase-1 docs and regression hardening for non-interference guarantees.
@@ -9058,6 +9241,259 @@ Changed files:
 Behavior:
 - Added Program Drill-down quick links for molecules, data records, evidence, decisions, and one-click program report generation.
 - Navigation remains deterministic and route-only (no semantic changes).
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b77
+Intent:
+- Add a deterministic molecule lineage panel to molecule detail (parent + children) using builder provenance.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- `get_molecule_detail()` now emits `lineage_parent` and `lineage_children` from `molecule_derivations` with deterministic ordering.
+- Molecule detail page now renders a dedicated Lineage card with parent and child molecule links plus derivation type/summary.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b78
+Intent:
+- Improve builder preview/validation ergonomics with deterministic diff visibility while preserving strict preview-before-save behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/builder/cdr_builder.html`
+- `tests/test_builder_service.py`
+- `tests/test_builder_scaffold.py`
+- `tests/test_builder_cdr_template.py`
+- `tests/test_builder_router.py`
+
+Behavior:
+- Drafts now include explicit `assumptions` and `changed_residues` surfaces derived deterministically from before/after sequences.
+- Point mutation and CDR builder previews now render warnings, assumptions, sequence diff view, and changed-residue tables.
+- Invalid drafts remain non-creatable; added coverage ensures create actions are hidden when draft errors exist.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b79
+Intent:
+- Document Builder Phase 2 and harden regression coverage for builder non-interference guarantees.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/BUILDER_PHASE2_v1.3.0b79.md`
+- `docs/README.md`
+- `tests/test_builder_non_interference.py`
+
+Behavior:
+- Added Builder Phase 2 architecture/safety documentation and indexed it from docs.
+- Added regression test proving builder create has no side effects on programs, DI snapshots, report runs, or batches.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b80
+Intent:
+- Add additive Variant Set persistence foundation for Builder Phase 3.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/services/builder.py`
+- `tests/test_builder_variant_set_models.py`
+
+Behavior:
+- Added additive tables/models: `builder_variant_sets` and `builder_variant_set_members`.
+- Added deterministic persistence helpers in builder service for variant set row creation and ordered member insertion.
+- Added tests covering table persistence and deterministic membership ordering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b81
+Intent:
+- Add Variant Set Builder service API boundary with deterministic draft/create flow.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder.py`
+- `tests/test_builder_variant_set_service.py`
+
+Behavior:
+- Added API types: `VariantSetBuildSpec`, `VariantSetDraft`, `VariantSetCreateMeta`, `VariantSetCreateResult`.
+- Added `build_variant_set_draft()` and `create_variant_set_from_draft()` with deterministic member ordering and naming.
+- Added service tests for deterministic draft ordering and persisted set/member creation.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b82
+Intent:
+- Add standalone Variant Set Builder route and landing page scaffold.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/index.html`
+- `psi/web/templates/builder/variant_set.html`
+- `tests/test_builder_variant_set_router.py`
+
+Behavior:
+- Added `/builder/variant-set` and `/builder/variant-set/draft` routes.
+- Added Variant Set Builder entry point on builder index and initial family-type selection UI.
+- Added route/template coverage tests for variant set builder surface.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b83
+Intent:
+- Implement mutation panel variant-family generation with deterministic preview naming/order.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder_ops.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/variant_set.html`
+- `tests/test_builder_variant_set_router.py`
+- `tests/test_builder_variant_set_mutation_panel.py`
+
+Behavior:
+- Added deterministic mutation-panel member generator supporting singles, pair combinations, and explicit combos.
+- Variant Set draft route now builds mutation-panel members from user inputs and renders ordered draft preview rows.
+- Added tests validating member generation and deterministic naming (e.g., `M_104_N4Q_G3L`).
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b84
+Intent:
+- Add Fc/format panel variant-family generation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder_ops.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/variant_set.html`
+- `tests/test_builder_variant_set_fc_panel.py`
+
+Behavior:
+- Added deterministic Fc panel member generator for `human_igg1`, `mouse_igg2a`, `fab_no_fc`.
+- Variant set draft route now supports `fc_panel` with configurable presets input.
+- Added tests for deterministic preset ordering and valid fc_panel variant draft generation.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b85
+Intent:
+- Add KIH panel variant-family generation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder_ops.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/variant_set.html`
+- `tests/test_builder_variant_set_kih_panel.py`
+
+Behavior:
+- Added deterministic KIH panel member generator (`off`, `on_knob`, `on_hole`) mapped to existing KIH actions.
+- Variant set draft route now supports `kih_panel` from explicit KIH presets input.
+- Added tests for default KIH panel members and valid KIH panel variant draft generation.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b86
+Intent:
+- Add scaffold comparison family generation for shared CDR inputs across multiple frameworks.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/builder_ops.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/variant_set.html`
+- `tests/test_builder_variant_set_scaffold_panel.py`
+
+Behavior:
+- Added scaffold panel member generator producing deterministic `cdr_graft` members from selected scaffold presets.
+- Added additional framework preset and scaffold-family inputs on variant set page (scaffolds, chain type, numbering, CDR inputs).
+- Scaffold panel drafts now produce reconstructed-from-CDR member summaries and deterministic ordering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b87
+Intent:
+- Add variant family draft review + save-all confirmation surface.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/variant_set.html`
+- `tests/test_builder_variant_set_router.py`
+
+Behavior:
+- Added `/builder/variant-set/create` save endpoint that rebuilds draft deterministically and refuses invalid families.
+- Variant set preview now acts as campaign review surface with save-all confirmation when draft is valid.
+- Template tests now assert save action is hidden for invalid drafts.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b88
+Intent:
+- Add persisted variant-family review surface after save.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/variant_set_detail.html`
+- `tests/test_builder_variant_set_router.py`
+
+Behavior:
+- Added `/builder/variant-sets/{variant_set_id}` detail route for campaign/family review.
+- Save flow now redirects to family detail page with ordered member listing and parent/derivation context.
+- Added template/route tests for family detail rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b89
+Intent:
+- Finalize Builder Phase 3 documentation and regression hardening.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/BUILDER_PHASE3_v1.3.0b89.md`
+- `docs/README.md`
+- `tests/test_builder_variant_set_regression.py`
+
+Behavior:
+- Added Builder Phase 3 documentation covering variant set architecture, controlled generation scope, and safety boundaries.
+- Added regression tests for no program/DI/report/batch coupling, parent immutability, deterministic member/save ordering, and invalid-draft no-write behavior.
 
 Gates:
 - PASS

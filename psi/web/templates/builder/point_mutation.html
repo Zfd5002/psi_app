@@ -4,10 +4,22 @@
 <div class="card">
   <h1>Builder: Point Mutation</h1>
   <p class="muted">Preview-first mutation flow. Select a parent molecule to begin.</p>
+  <label>Find parent molecule</label>
+  <input id="builder_parent_search" type="text" placeholder="Search by primary ID or title" autocomplete="off" />
+  <div id="builder_parent_search_results" class="mini muted" style="margin:4px 0 8px 0;"></div>
+  <div id="builder_recent_parents" class="mini muted" style="margin:4px 0 8px 0;"></div>
   <form method="post" action="/builder/point-mutation/draft">
+    {% set selected_program = (form_data.parent_program_id if form_data is defined and form_data.parent_program_id is defined else None) %}
     {% set selected_parent = (form_data.parent_molecule_id if form_data is defined and form_data.parent_molecule_id is defined else None) %}
+    <label>Program</label>
+    <select id="builder_parent_program" name="parent_program_id" data-selected-program="{{ selected_program if selected_program is not none else '' }}">
+      <option value="">Select program</option>
+      {% for p in (parent_programs if parent_programs is defined else []) %}
+      <option value="{{ p.id }}" {% if selected_program is not none and (p.id == selected_program) %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
     <label>Parent molecule</label>
-    <select name="parent_molecule_id">
+    <select id="builder_parent_molecule" name="parent_molecule_id" data-selected-parent="{{ selected_parent if selected_parent is not none else '' }}">
       {% for m in molecules %}
       <option value="{{ m.id }}" {% if selected_parent is not none and (m.id == selected_parent) %}selected{% endif %}>{{ m.primary_id }}{% if m.title %} — {{ m.title }}{% endif %}</option>
       {% endfor %}
@@ -24,9 +36,11 @@
     <input type="text" name="rationale" value="{{ form_data.rationale if form_data is defined and form_data.rationale is defined else '' }}" />
     <div style="margin-top:8px;display:flex;gap:8px;">
       <button class="btn primary" type="submit">Build draft</button>
+      <button class="btn" type="button" id="builder_clear_selection">Clear selection</button>
       <a class="btn" href="/builder">Back to Builder Home</a>
     </div>
   </form>
+  <div id="builder_selected_parent_card" class="card mini" style="margin-top:8px;display:none;"></div>
 
   {% if draft is defined and draft %}
   <h3 style="margin-top:12px;">Draft Preview</h3>
@@ -50,6 +64,16 @@
     </ul>
   </div>
   {% endif %}
+  {% if draft.assumptions %}
+  <div class="card" style="border-color:#607d8b;background:#f7fbff;">
+    <div><b>Draft assumptions</b></div>
+    <ul>
+      {% for item in draft.assumptions %}
+      <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   <div class="mini muted">Parent: {{ draft.parent_primary_id }} · Derivation: {{ draft.derivation_type|humanize_state }}</div>
   {% if draft.preview_rows %}
   <table class="table mini">
@@ -61,6 +85,38 @@
         <td><code>{{ row.before }}</code></td>
         <td><code>{{ row.after }}</code></td>
         <td class="muted">{{ row.mutations }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h4>Sequence diff view</h4>
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Diff summary</th></tr></thead>
+    <tbody>
+      {% for row in draft.preview_rows %}
+      <tr>
+        <td>{{ row.component }}</td>
+        <td>
+          <code>{{ row.before }}</code>
+          <span class="muted">→</span>
+          <code>{{ row.after }}</code>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if draft.changed_residues %}
+  <h4>Changed residues</h4>
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Position</th><th>From</th><th>To</th></tr></thead>
+    <tbody>
+      {% for c in draft.changed_residues %}
+      <tr>
+        <td>{{ c.component }}</td>
+        <td>{{ c.position }}</td>
+        <td><code>{{ c.from }}</code></td>
+        <td><code>{{ c.to }}</code></td>
       </tr>
       {% endfor %}
     </tbody>
@@ -86,4 +142,111 @@
   {% endif %}
   {% endif %}
 </div>
+<script>
+(function () {
+  var byProgram = JSON.parse('{{ (parent_molecules_by_program_json if parent_molecules_by_program_json is defined else "{}")|safe }}');
+  var programSelect = document.getElementById("builder_parent_program");
+  var moleculeSelect = document.getElementById("builder_parent_molecule");
+  if (!programSelect || !moleculeSelect) return;
+  function renderMolecules() {
+    var pid = String(programSelect.value || "");
+    var selected = String(moleculeSelect.getAttribute("data-selected-parent") || "");
+    var rows = byProgram[pid] || [];
+    moleculeSelect.innerHTML = "";
+    for (var i = 0; i < rows.length; i += 1) {
+      var row = rows[i];
+      var opt = document.createElement("option");
+      opt.value = String(row.id);
+      var t = String(row.primary_id || "");
+      if (row.title) t += " — " + String(row.title);
+      opt.textContent = t;
+      if (selected && String(row.id) === selected) opt.selected = true;
+      moleculeSelect.appendChild(opt);
+    }
+  }
+  if (!programSelect.value) {
+    var keys = Object.keys(byProgram).sort(function (a, b) { return Number(a) - Number(b); });
+    if (keys.length) programSelect.value = keys[0];
+  }
+  renderMolecules();
+  function renderSelectedSummary() {
+    var idx = moleculeSelect.selectedIndex;
+    var card = document.getElementById("builder_selected_parent_card");
+    if (!card || idx < 0) return;
+    var opt = moleculeSelect.options[idx];
+    card.style.display = "block";
+    card.textContent = "Selected parent: " + String(opt.text || "");
+  }
+  renderSelectedSummary();
+  moleculeSelect.addEventListener("change", renderSelectedSummary);
+  programSelect.addEventListener("change", function () {
+    moleculeSelect.setAttribute("data-selected-parent", "");
+    renderMolecules();
+    renderSelectedSummary();
+  });
+  var clearBtn = document.getElementById("builder_clear_selection");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", function () {
+      programSelect.value = "";
+      moleculeSelect.innerHTML = "";
+      moleculeSelect.setAttribute("data-selected-parent", "");
+      var card = document.getElementById("builder_selected_parent_card");
+      if (card) card.style.display = "none";
+    });
+  }
+
+  var searchInput = document.getElementById("builder_parent_search");
+  var searchResults = document.getElementById("builder_parent_search_results");
+  var recentDiv = document.getElementById("builder_recent_parents");
+  var REC_KEY = "psi_builder_recent_parents";
+  function updateRecent(row) {
+    if (!recentDiv || !row) return;
+    var arr = [];
+    try { arr = JSON.parse(localStorage.getItem(REC_KEY) || "[]"); } catch (e) { arr = []; }
+    var next = [{ id: row.id, label: row.label }].concat(arr.filter(function (x) { return String(x.id) !== String(row.id); })).slice(0, 5);
+    try { localStorage.setItem(REC_KEY, JSON.stringify(next)); } catch (e) {}
+    recentDiv.textContent = "Recent parents: " + next.map(function (x) { return x.label; }).join(" | ");
+  }
+  function renderRecent() {
+    if (!recentDiv) return;
+    var arr = [];
+    try { arr = JSON.parse(localStorage.getItem(REC_KEY) || "[]"); } catch (e) { arr = []; }
+    if (!arr.length) { recentDiv.textContent = "Recent parents: none"; return; }
+    recentDiv.textContent = "Recent parents: " + arr.map(function (x) { return x.label; }).join(" | ");
+  }
+  renderRecent();
+  moleculeSelect.addEventListener("change", function () {
+    var idx = moleculeSelect.selectedIndex;
+    if (idx >= 0) {
+      updateRecent({ id: moleculeSelect.options[idx].value, label: moleculeSelect.options[idx].text });
+    }
+  });
+  if (searchInput && searchResults) {
+    searchInput.addEventListener("input", function () {
+      var q = String(searchInput.value || "").trim();
+      if (!q) {
+        searchResults.textContent = "";
+        return;
+      }
+      fetch("/builder/search_molecules?q=" + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (rows) {
+          if (!Array.isArray(rows) || rows.length === 0) {
+            searchResults.textContent = "No matches.";
+            return;
+          }
+          var lines = [];
+          for (var i = 0; i < rows.length; i += 1) {
+            var row = rows[i];
+            lines.push((row.primary_id || "") + (row.title ? " — " + row.title : "") + " (" + (row.program_name || "") + ")");
+          }
+          searchResults.textContent = lines.join(" | ");
+        })
+        .catch(function () {
+          searchResults.textContent = "Search unavailable.";
+        });
+    });
+  }
+})();
+</script>
 {% endblock %}

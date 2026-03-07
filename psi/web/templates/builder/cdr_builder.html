@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Builder CDR Builder | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Builder: CDR Scaffold Builder</h1>
+  <p class="muted">Construct a draft molecule from CDR inputs and scaffold assumptions. Draft preview only in this phase.</p>
+  <form method="post" action="/builder/cdr-builder/draft">
+    {% set selected_program = (form_data.parent_program_id if form_data is defined and form_data.parent_program_id is defined else None) %}
+    {% set selected_parent = (form_data.parent_molecule_id if form_data is defined and form_data.parent_molecule_id is defined else None) %}
+    <label>Program</label>
+    <select id="builder_parent_program" name="parent_program_id">
+      <option value="">Select program</option>
+      {% for p in (parent_programs if parent_programs is defined else []) %}
+      <option value="{{ p.id }}" {% if selected_program is not none and (p.id == selected_program) %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <label>Template molecule</label>
+    <select id="builder_parent_molecule" name="parent_molecule_id" data-selected-parent="{{ selected_parent if selected_parent is not none else '' }}"></select>
+    <label>New primary ID</label>
+    <input type="text" name="new_primary_id" value="{{ form_data.new_primary_id if form_data is defined and form_data.new_primary_id is defined else '' }}" />
+    <label>New title</label>
+    <input type="text" name="new_title" value="{{ form_data.new_title if form_data is defined and form_data.new_title is defined else '' }}" />
+    <label>Framework preset</label>
+    <input type="text" name="framework_preset" value="{{ form_data.framework_preset if form_data is defined and form_data.framework_preset is defined else 'human_vh3_vk1' }}" />
+    <label>Light chain type</label>
+    <select name="light_chain_type">
+      {% set lct = form_data.light_chain_type if form_data is defined and form_data.light_chain_type is defined else "kappa" %}
+      <option value="kappa" {% if lct == "kappa" %}selected{% endif %}>kappa</option>
+      <option value="lambda" {% if lct == "lambda" %}selected{% endif %}>lambda</option>
+    </select>
+    <label>Numbering scheme</label>
+    <select name="numbering_scheme">
+      {% set ns = form_data.numbering_scheme if form_data is defined and form_data.numbering_scheme is defined else "kabat" %}
+      <option value="kabat" {% if ns == "kabat" %}selected{% endif %}>kabat</option>
+      <option value="chothia" {% if ns == "chothia" %}selected{% endif %}>chothia</option>
+      <option value="imgt" {% if ns == "imgt" %}selected{% endif %}>imgt</option>
+    </select>
+    <label>HCDR1</label><input type="text" name="HCDR1" value="{{ form_data.HCDR1 if form_data is defined and form_data.HCDR1 is defined else '' }}" />
+    <label>HCDR2</label><input type="text" name="HCDR2" value="{{ form_data.HCDR2 if form_data is defined and form_data.HCDR2 is defined else '' }}" />
+    <label>HCDR3</label><input type="text" name="HCDR3" value="{{ form_data.HCDR3 if form_data is defined and form_data.HCDR3 is defined else '' }}" />
+    <label>LCDR1</label><input type="text" name="LCDR1" value="{{ form_data.LCDR1 if form_data is defined and form_data.LCDR1 is defined else '' }}" />
+    <label>LCDR2</label><input type="text" name="LCDR2" value="{{ form_data.LCDR2 if form_data is defined and form_data.LCDR2 is defined else '' }}" />
+    <label>LCDR3</label><input type="text" name="LCDR3" value="{{ form_data.LCDR3 if form_data is defined and form_data.LCDR3 is defined else '' }}" />
+    <label>Rationale</label><input type="text" name="rationale" value="{{ form_data.rationale if form_data is defined and form_data.rationale is defined else '' }}" />
+    <button class="btn primary" type="submit">Build CDR draft</button>
+  </form>
+
+  {% if draft is defined and draft %}
+  <h3 style="margin-top:12px;">CDR Draft Preview</h3>
+  {% if draft.errors %}
+  <div class="card" style="border-color:#c62828;background:#fff8f8;">
+    <div><b>Draft has validation errors</b></div>
+    <ul>{% for err in draft.errors %}<li>{{ err }}</li>{% endfor %}</ul>
+  </div>
+  {% else %}
+  <div class="card" style="border-color:#ef6c00;background:#fff8ef;">
+    <b>Sequence reconstructed from CDRs using scaffold</b>
+    <div class="mini muted">Framework assumptions are applied deterministically from preset + numbering scheme.</div>
+  </div>
+  {% if draft.assumptions %}
+  <div class="card" style="border-color:#607d8b;background:#f7fbff;">
+    <div><b>Assumptions</b></div>
+    <ul>{% for item in draft.assumptions %}<li>{{ item }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if draft.warnings %}
+  <div class="card" style="border-color:#ef6c00;background:#fff8ef;">
+    <div><b>Warnings</b></div>
+    <ul>{% for warn in draft.warnings %}<li>{{ warn }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if draft.preview_rows %}
+  <h4>Before / After</h4>
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Before</th><th>After</th><th>Inserted CDRs</th></tr></thead>
+    <tbody>
+      {% for row in draft.preview_rows %}
+      <tr>
+        <td>{{ row.component }}</td>
+        <td><code>{{ row.before }}</code></td>
+        <td><code>{{ row.after }}</code></td>
+        <td class="muted">{{ row.mutations }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h4>Sequence diff view</h4>
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Diff summary</th></tr></thead>
+    <tbody>
+      {% for row in draft.preview_rows %}
+      <tr>
+        <td>{{ row.component }}</td>
+        <td><code>{{ row.before }}</code> <span class="muted">→</span> <code>{{ row.after }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if draft.changed_residues %}
+  <h4>Changed residues</h4>
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Position</th><th>From</th><th>To</th></tr></thead>
+    <tbody>
+      {% for c in draft.changed_residues %}
+      <tr>
+        <td>{{ c.component }}</td>
+        <td>{{ c.position }}</td>
+        <td><code>{{ c.from }}</code></td>
+        <td><code>{{ c.to }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <table class="table mini">
+    <thead><tr><th>Component</th><th>Sequence</th></tr></thead>
+    <tbody>{% for role, seq in (draft.components.items()|list|sort) %}<tr><td>{{ role }}</td><td><code>{{ seq }}</code></td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+  {% endif %}
+</div>
+<script>
+(function () {
+  var byProgram = JSON.parse('{{ (parent_molecules_by_program_json if parent_molecules_by_program_json is defined else "{}")|safe }}');
+  var programSelect = document.getElementById("builder_parent_program");
+  var moleculeSelect = document.getElementById("builder_parent_molecule");
+  if (!programSelect || !moleculeSelect) return;
+  function renderMolecules() {
+    var pid = String(programSelect.value || "");
+    var selected = String(moleculeSelect.getAttribute("data-selected-parent") || "");
+    var rows = byProgram[pid] || [];
+    moleculeSelect.innerHTML = "";
+    for (var i = 0; i < rows.length; i += 1) {
+      var row = rows[i];
+      var opt = document.createElement("option");
+      opt.value = String(row.id);
+      opt.textContent = (row.primary_id || "") + (row.title ? " — " + row.title : "");
+      if (selected && String(row.id) === selected) opt.selected = true;
+      moleculeSelect.appendChild(opt);
+    }
+  }
+  if (!programSelect.value) {
+    var keys = Object.keys(byProgram).sort(function (a, b) { return Number(a) - Number(b); });
+    if (keys.length) programSelect.value = keys[0];
+  }
+  renderMolecules();
+  programSelect.addEventListener("change", function () {
+    moleculeSelect.setAttribute("data-selected-parent", "");
+    renderMolecules();
+  });
+})();
+</script>
+{% endblock %}

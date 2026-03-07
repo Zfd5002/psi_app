@@ -36,3 +36,17 @@ def validate_point_mutations_not_empty(mutations: list[PointMutation]) -> list[s
     if mutations:
         return []
     return ["At least one valid point mutation is required."]
+
+
+def validate_heavy_chain_for_fc_swap(*, available_components: Iterable[str]) -> list[str]:
+    available = {str(c or "").strip() for c in available_components}
+    if "HC1" in available:
+        return []
+    return ["Heavy chain HC1 is required for Fc swap."]
+
+
+def validate_heavy_chain_for_kih(*, available_components: Iterable[str]) -> list[str]:
+    available = {str(c or "").strip() for c in available_components}
+    if "HC1" in available:
+        return []
+    return ["Heavy chain HC1 is required for KIH operation."]

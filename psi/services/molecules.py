@@ -19,6 +19,7 @@ from psi.core.models import (
     File as StoredFile,
     FileLink,
     Molecule,
+    MoleculeDerivation,
     Program,
     MoleculeComponent,
     DomainInstance,
@@ -298,6 +299,43 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     )
     pending_evidence_preview = build_pending_evidence_preview_for_molecule(db, molecule_id=int(molecule_id))
 
+    parent_row = (
+        db.query(MoleculeDerivation, Molecule)
+        .join(Molecule, Molecule.id == MoleculeDerivation.parent_molecule_id)
+        .filter(MoleculeDerivation.child_molecule_id == int(molecule_id))
+        .order_by(MoleculeDerivation.created_at.desc(), MoleculeDerivation.id.desc())
+        .first()
+    )
+    parent_lineage: dict[str, Any] | None = None
+    if parent_row is not None:
+        deriv, parent_molecule = parent_row
+        parent_lineage = {
+            "molecule_id": int(parent_molecule.id),
+            "primary_id": str(parent_molecule.primary_id or ""),
+            "title": str(parent_molecule.title or ""),
+            "derivation_type": str(deriv.derivation_type or ""),
+            "summary": str(deriv.summary or ""),
+        }
+
+    child_rows = (
+        db.query(MoleculeDerivation, Molecule)
+        .join(Molecule, Molecule.id == MoleculeDerivation.child_molecule_id)
+        .filter(MoleculeDerivation.parent_molecule_id == int(molecule_id))
+        .order_by(MoleculeDerivation.created_at.desc(), MoleculeDerivation.id.desc(), Molecule.id.desc())
+        .all()
+    )
+    child_lineage: list[dict[str, Any]] = []
+    for deriv, child_molecule in child_rows:
+        child_lineage.append(
+            {
+                "molecule_id": int(child_molecule.id),
+                "primary_id": str(child_molecule.primary_id or ""),
+                "title": str(child_molecule.title or ""),
+                "derivation_type": str(deriv.derivation_type or ""),
+                "summary": str(deriv.summary or ""),
+            }
+        )
+
     file_links = db.query(FileLink).filter(FileLink.entity_type == "Molecule", FileLink.entity_id == molecule_id).all()
     file_ids = [fl.file_id for fl in file_links]
     files = db.query(StoredFile).filter(StoredFile.id.in_(file_ids)).all() if file_ids else []
@@ -400,6 +438,8 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "molecule_header_model": molecule_header_model,
         "data_records": data_records,
         "pending_evidence_preview": pending_evidence_preview,
+        "lineage_parent": parent_lineage,
+        "lineage_children": child_lineage,
         "evidence": evidence,
         "file_links": file_links,
         "files_by_id": files_by_id,

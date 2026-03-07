@@ -13,3 +13,5 @@
 
 ## Builder
 - [Molecule Builder Phase 1 (v1.3.0b67)](BUILDER_PHASE1_v1.3.0b67.md)
+- [Molecule Builder Phase 2 (v1.3.0b79)](BUILDER_PHASE2_v1.3.0b79.md)
+- [Molecule Builder Phase 3 (v1.3.0b89)](BUILDER_PHASE3_v1.3.0b89.md)

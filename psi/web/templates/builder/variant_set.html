@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Builder Variant Set | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Builder: Variant Set Builder</h1>
+  <p class="muted">Design a controlled, deterministic family of variants before saving any molecules.</p>
+
+  <form method="post" action="/builder/variant-set/draft">
+    {% set selected_program = (form_data.parent_program_id if form_data is defined and form_data.parent_program_id is defined else None) %}
+    {% set selected_parent = (form_data.parent_molecule_id if form_data is defined and form_data.parent_molecule_id is defined else None) %}
+    {% set selected_family = (form_data.family_type if form_data is defined and form_data.family_type is defined else "mutation_panel") %}
+    <label>Family type</label>
+    <select name="family_type">
+      <option value="mutation_panel" {% if selected_family == "mutation_panel" %}selected{% endif %}>Mutation panel</option>
+      <option value="fc_panel" {% if selected_family == "fc_panel" %}selected{% endif %}>Fc / format panel</option>
+      <option value="kih_panel" {% if selected_family == "kih_panel" %}selected{% endif %}>KIH panel</option>
+      <option value="scaffold_panel" {% if selected_family == "scaffold_panel" %}selected{% endif %}>Scaffold comparison panel</option>
+    </select>
+
+    <label>Program</label>
+    <select id="builder_parent_program" name="parent_program_id" data-selected-program="{{ selected_program if selected_program is not none else '' }}">
+      <option value="">Select program</option>
+      {% for p in (parent_programs if parent_programs is defined else []) %}
+      <option value="{{ p.id }}" {% if selected_program is not none and (p.id == selected_program) %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Parent/template molecule</label>
+    <select id="builder_parent_molecule" name="parent_molecule_id" data-selected-parent="{{ selected_parent if selected_parent is not none else '' }}">
+      {% for m in molecules %}
+      <option value="{{ m.id }}" {% if selected_parent is not none and (m.id == selected_parent) %}selected{% endif %}>{{ m.primary_id }}{% if m.title %} — {{ m.title }}{% endif %}</option>
+      {% endfor %}
+    </select>
+
+    <label>Variant set name</label>
+    <input type="text" name="set_name" value="{{ form_data.set_name if form_data is defined and form_data.set_name is defined else '' }}" />
+
+    <label>Naming base</label>
+    <input type="text" name="naming_base" value="{{ form_data.naming_base if form_data is defined and form_data.naming_base is defined else '' }}" />
+
+    <label>Rationale</label>
+    <input type="text" name="rationale" value="{{ form_data.rationale if form_data is defined and form_data.rationale is defined else '' }}" />
+
+    <h3 style="margin-top:10px;">Mutation Panel Inputs</h3>
+    <label>Mutation tokens</label>
+    <input type="text" name="mutation_tokens" placeholder="N54Q M101L" value="{{ form_data.mutation_tokens if form_data is defined and form_data.mutation_tokens is defined else '' }}" />
+    <label style="display:flex;gap:6px;align-items:center;">
+      <input type="checkbox" name="include_pair_combinations" {% if form_data is defined and form_data.include_pair_combinations %}checked{% endif %} />
+      Include pair combinations
+    </label>
+    <label>Explicit combinations</label>
+    <input type="text" name="explicit_combos" placeholder="N54Q+M101L;N54Q+M88L" value="{{ form_data.explicit_combos if form_data is defined and form_data.explicit_combos is defined else '' }}" />
+
+    <h3 style="margin-top:10px;">Fc / Format Panel Inputs</h3>
+    <label>Fc presets</label>
+    <input type="text" name="fc_presets" placeholder="human_igg1, mouse_igg2a, fab_no_fc" value="{{ form_data.fc_presets if form_data is defined and form_data.fc_presets is defined else '' }}" />
+
+    <h3 style="margin-top:10px;">KIH Panel Inputs</h3>
+    <label>KIH presets</label>
+    <input type="text" name="kih_presets" placeholder="off, on_knob, on_hole" value="{{ form_data.kih_presets if form_data is defined and form_data.kih_presets is defined else '' }}" />
+
+    <h3 style="margin-top:10px;">Scaffold Comparison Inputs</h3>
+    <label>Scaffold presets</label>
+    <input type="text" name="scaffold_presets" placeholder="human_vh3_vk1, human_vh1_vk1" value="{{ form_data.scaffold_presets if form_data is defined and form_data.scaffold_presets is defined else '' }}" />
+    <label>Light chain type</label>
+    {% set lct = form_data.light_chain_type if form_data is defined and form_data.light_chain_type is defined else "kappa" %}
+    <select name="light_chain_type">
+      <option value="kappa" {% if lct == "kappa" %}selected{% endif %}>kappa</option>
+      <option value="lambda" {% if lct == "lambda" %}selected{% endif %}>lambda</option>
+    </select>
+    <label>Numbering scheme</label>
+    {% set ns = form_data.numbering_scheme if form_data is defined and form_data.numbering_scheme is defined else "kabat" %}
+    <select name="numbering_scheme">
+      <option value="kabat" {% if ns == "kabat" %}selected{% endif %}>kabat</option>
+      <option value="chothia" {% if ns == "chothia" %}selected{% endif %}>chothia</option>
+      <option value="imgt" {% if ns == "imgt" %}selected{% endif %}>imgt</option>
+    </select>
+    <label>HCDR1</label><input type="text" name="HCDR1" value="{{ form_data.HCDR1 if form_data is defined and form_data.HCDR1 is defined else '' }}" />
+    <label>HCDR2</label><input type="text" name="HCDR2" value="{{ form_data.HCDR2 if form_data is defined and form_data.HCDR2 is defined else '' }}" />
+    <label>HCDR3</label><input type="text" name="HCDR3" value="{{ form_data.HCDR3 if form_data is defined and form_data.HCDR3 is defined else '' }}" />
+    <label>LCDR1</label><input type="text" name="LCDR1" value="{{ form_data.LCDR1 if form_data is defined and form_data.LCDR1 is defined else '' }}" />
+    <label>LCDR2</label><input type="text" name="LCDR2" value="{{ form_data.LCDR2 if form_data is defined and form_data.LCDR2 is defined else '' }}" />
+    <label>LCDR3</label><input type="text" name="LCDR3" value="{{ form_data.LCDR3 if form_data is defined and form_data.LCDR3 is defined else '' }}" />
+
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button class="btn primary" type="submit">Build variant set draft</button>
+      <a class="btn" href="/builder">Back to Builder Home</a>
+    </div>
+  </form>
+
+  {% if draft is defined and draft %}
+  <h3 style="margin-top:12px;">Variant Set Draft Preview</h3>
+  {% if draft.errors %}
+  <div class="card" style="border-color:#c62828;background:#fff8f8;">
+    <div><b>Draft has validation errors</b></div>
+    <ul>{% for err in draft.errors %}<li>{{ err }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if draft.warnings %}
+  <div class="card" style="border-color:#ef6c00;background:#fff8ef;">
+    <div><b>Draft warnings</b></div>
+    <ul>{% for warn in draft.warnings %}<li>{{ warn }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  <div class="mini muted">Set: {{ draft.set_name }} · Family type: {{ draft.family_type|humanize_state }}</div>
+  <table class="table mini">
+    <thead><tr><th>#</th><th>Member</th><th>Primary ID</th><th>Summary</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for member in draft.members %}
+      <tr>
+        <td>{{ member.sort_index }}</td>
+        <td>{{ member.member_label }}</td>
+        <td><code>{{ member.molecule_spec.new_primary_id }}</code></td>
+        <td class="muted">{{ member.member_summary }}</td>
+        <td>{% if member.molecule_draft.is_valid %}<span class="chip">valid</span>{% else %}<span class="chip">invalid</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if draft.is_valid and draft.members %}
+  <h4>Save all members</h4>
+  <p class="muted mini">This will create all listed child molecules in deterministic order and record a variant-set campaign.</p>
+  <form method="post" action="/builder/variant-set/create">
+    <input type="hidden" name="family_type" value="{{ form_data.family_type if form_data is defined and form_data.family_type is defined else '' }}" />
+    <input type="hidden" name="parent_molecule_id" value="{{ form_data.parent_molecule_id if form_data is defined and form_data.parent_molecule_id is defined else '' }}" />
+    <input type="hidden" name="set_name" value="{{ form_data.set_name if form_data is defined and form_data.set_name is defined else '' }}" />
+    <input type="hidden" name="naming_base" value="{{ form_data.naming_base if form_data is defined and form_data.naming_base is defined else '' }}" />
+    <input type="hidden" name="rationale" value="{{ form_data.rationale if form_data is defined and form_data.rationale is defined else '' }}" />
+    <input type="hidden" name="mutation_tokens" value="{{ form_data.mutation_tokens if form_data is defined and form_data.mutation_tokens is defined else '' }}" />
+    <input type="hidden" name="explicit_combos" value="{{ form_data.explicit_combos if form_data is defined and form_data.explicit_combos is defined else '' }}" />
+    <input type="hidden" name="fc_presets" value="{{ form_data.fc_presets if form_data is defined and form_data.fc_presets is defined else '' }}" />
+    <input type="hidden" name="kih_presets" value="{{ form_data.kih_presets if form_data is defined and form_data.kih_presets is defined else '' }}" />
+    <input type="hidden" name="scaffold_presets" value="{{ form_data.scaffold_presets if form_data is defined and form_data.scaffold_presets is defined else '' }}" />
+    <input type="hidden" name="light_chain_type" value="{{ form_data.light_chain_type if form_data is defined and form_data.light_chain_type is defined else '' }}" />
+    <input type="hidden" name="numbering_scheme" value="{{ form_data.numbering_scheme if form_data is defined and form_data.numbering_scheme is defined else '' }}" />
+    <input type="hidden" name="HCDR1" value="{{ form_data.HCDR1 if form_data is defined and form_data.HCDR1 is defined else '' }}" />
+    <input type="hidden" name="HCDR2" value="{{ form_data.HCDR2 if form_data is defined and form_data.HCDR2 is defined else '' }}" />
+    <input type="hidden" name="HCDR3" value="{{ form_data.HCDR3 if form_data is defined and form_data.HCDR3 is defined else '' }}" />
+    <input type="hidden" name="LCDR1" value="{{ form_data.LCDR1 if form_data is defined and form_data.LCDR1 is defined else '' }}" />
+    <input type="hidden" name="LCDR2" value="{{ form_data.LCDR2 if form_data is defined and form_data.LCDR2 is defined else '' }}" />
+    <input type="hidden" name="LCDR3" value="{{ form_data.LCDR3 if form_data is defined and form_data.LCDR3 is defined else '' }}" />
+    {% if form_data is defined and form_data.include_pair_combinations %}
+    <input type="hidden" name="include_pair_combinations" value="1" />
+    {% endif %}
+    <button class="btn primary" type="submit">Save variant family</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</div>
+<script>
+(function () {
+  var byProgram = JSON.parse('{{ (parent_molecules_by_program_json if parent_molecules_by_program_json is defined else "{}")|safe }}');
+  var programSelect = document.getElementById("builder_parent_program");
+  var moleculeSelect = document.getElementById("builder_parent_molecule");
+  if (!programSelect || !moleculeSelect) return;
+  function renderMolecules() {
+    var pid = String(programSelect.value || "");
+    var selected = String(moleculeSelect.getAttribute("data-selected-parent") || "");
+    var rows = byProgram[pid] || [];
+    moleculeSelect.innerHTML = "";
+    for (var i = 0; i < rows.length; i += 1) {
+      var row = rows[i];
+      var opt = document.createElement("option");
+      opt.value = String(row.id);
+      var t = String(row.primary_id || "");
+      if (row.title) t += " — " + String(row.title);
+      opt.textContent = t;
+      if (selected && String(row.id) === selected) opt.selected = true;
+      moleculeSelect.appendChild(opt);
+    }
+  }
+  if (!programSelect.value) {
+    var keys = Object.keys(byProgram).sort(function (a, b) { return Number(a) - Number(b); });
+    if (keys.length) programSelect.value = keys[0];
+  }
+  renderMolecules();
+  programSelect.addEventListener("change", function () {
+    moleculeSelect.setAttribute("data-selected-parent", "");
+    renderMolecules();
+  });
+})();
+</script>
+{% endblock %}
