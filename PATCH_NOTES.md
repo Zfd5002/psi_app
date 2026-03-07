@@ -9497,3 +9497,178 @@ Behavior:
 
 Gates:
 - PASS
+
+## 2026-03-07 — v1.3.0b90
+Intent:
+- Add deterministic region-aware sequence annotation foundation for sequence editor workflows.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/sequence_annotation.py`
+- `tests/test_sequence_annotation.py`
+
+Behavior:
+- Added `annotate_sequence_for_editor()` to produce per-residue annotation payloads (component, position, AA, region, numbering label).
+- Deterministic ordering by component role/id and residue position.
+- Added unit tests for structure correctness and repeat-call determinism.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b91
+Intent:
+- Add reusable sequence editor render partial and wire annotation context into molecule detail.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Molecule detail now includes `sequence_editor_annotations` generated deterministically from components/domains/numbering maps.
+- Added `_sequence_editor.html` partial with per-residue interactive spans and stable data attributes.
+- Added template test validating interactive residue render attributes.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b92
+Intent:
+- Add residue hover metadata tooltip behavior for sequence editor.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- Added hover tooltip for `.seq-residue` elements showing component, residue position, region, and numbering label.
+- Wired sequence editor JS into molecule detail page scripts block.
+- Added render assertion coverage for tooltip container and script include.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b93
+Intent:
+- Add click-to-mutate interaction and local mutation queue UI.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Added mutation queue panel with remove and clear-all actions.
+- Clicking residues now prompts for target AA and queues deterministic mutation entries keyed by component/position.
+- Queue list is always rendered in deterministic order.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b94
+Intent:
+- Add direct mutation notation parsing + WT validation foundation and unify with queue representation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/sequence_editor.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_sequence_editor_service.py`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Added backend parser/normalizer (`parse_mutation_notation`, `normalize_mutation_queue`) with WT mismatch validation.
+- Added direct notation input UI and apply action that feeds the same local queue shape as click edits.
+- Added deterministic service tests for parsing/sorting/WT mismatch handling.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b95
+Intent:
+- Add deterministic sequence preview/diff panel for queued mutations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/sequence_editor.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_sequence_editor_service.py`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Added `build_sequence_preview()` service to derive edited sequence, changed positions, and validation errors without mutating stored molecules.
+- Sequence editor UI now renders live original/edited preview and changed-position summary from queue state.
+- Added service and template tests for preview/diff surfaces.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b96
+Intent:
+- Integrate sequence editor queue with Builder single-variant draft flow.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Added sequence-editor handoff form posting to `/builder/point-mutation/draft` with queued mutation tokens.
+- JS now synchronizes deterministic queue state into hidden Builder form fields and enforces single-component handoff.
+- Added template assertion coverage for Builder handoff controls.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b97
+Intent:
+- Integrate sequence editor queue with Variant Set Builder seeding flow.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/sequence_editor.js`
+- `psi/web/templates/molecules/_sequence_editor.html`
+- `tests/test_sequence_editor_template.py`
+
+Behavior:
+- Added sequence-editor handoff form posting to `/builder/variant-set/draft` with deterministic `mutation_panel` inputs.
+- JS now synchronizes queue tokens into variant-set fields and optionally emits an explicit full-combination token group.
+- Added template assertions for variant-set handoff controls.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b98
+Intent:
+- Add sequence editor phase documentation and safety-focused regression hardening.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/SEQUENCE_EDITOR_PHASE1_v1.3.0b98.md`
+- `tests/test_sequence_editor_regression.py`
+
+Behavior:
+- Added Phase 1 sequence editor architecture/safety documentation.
+- Added deterministic regression tests for queue ordering and pure non-mutating preview behavior.
+- Added static coupling guard test ensuring sequence editor modules remain outside Program/DI/Report paths.
+
+Gates:
+- PASS

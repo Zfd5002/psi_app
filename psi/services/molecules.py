@@ -53,6 +53,7 @@ from psi.services.molecule_viewer import (
     build_viewer_v2_components,
     domain_instances_by_component,
 )
+from psi.services.sequence_annotation import annotate_sequence_for_editor
 
 
 def _pack_segments(segments: list[dict]) -> list[list[dict]]:
@@ -430,6 +431,11 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
         pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
     )
+    sequence_editor_annotations = annotate_sequence_for_editor(
+        components=components,
+        domain_instances=domain_instances,
+        numbering_maps=numbering_maps,
+    )
 
     return {
         "molecule": m,
@@ -454,6 +460,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "numbering_maps": numbering_maps,
         "feature_tracks": feature_tracks,
         "viewer_v2_components": viewer_v2_components,
+        "sequence_editor_annotations": sequence_editor_annotations,
         "pdl1_allowed_mismatches": int(pdl1_allowed_mismatches or 0),
         "property_runs": runs,
         "latest_run": latest_run,

@@ -246,6 +246,8 @@
     </div>
   </div>
 
+  {% include "molecules/_sequence_editor.html" %}
+
   <div class="tabs no-print">
     <a class="tab active" href="#batches">Batches</a>
     <a class="tab" href="#di_history">Decisions</a>
@@ -1384,6 +1386,8 @@
 {% endblock %}
 
 {% block scripts %}
+{{ super() }}
+<script src="/static/sequence_editor.js"></script>
 <script>
 (function(){
   const highlightSelections = new Map();

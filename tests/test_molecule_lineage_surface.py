@@ -144,9 +144,12 @@ def test_molecule_detail_template_renders_lineage_panel() -> None:
         numbering_maps={},
         numbering_payload={},
         pdl1_allowed_mismatches=0,
+        sequence_editor_annotations=[],
     )
     assert "Lineage" in html
     assert "Parent molecule" in html
     assert "Child molecules" in html
     assert "M-9" in html
     assert "M-11" in html
+    assert "sequence_editor_tooltip" in html
+    assert "/static/sequence_editor.js" in html

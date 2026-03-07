@@ -1,0 +1,73 @@
+<div class="card" id="sequence_editor_panel">
+  <h2 style="margin-top:0;">Sequence Editor</h2>
+  <p class="muted mini">Region-aware residue view for deterministic mutation planning. This panel does not mutate stored molecules.</p>
+  <div class="card" style="margin:8px 0;">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+      <b>Mutation Queue</b>
+      <button type="button" class="btn mini" id="seq_queue_clear">Clear all</button>
+    </div>
+    <ul id="seq_mutation_queue" class="clean mini" style="margin-top:6px;"></ul>
+    <label style="margin-top:8px;">Direct mutation notation</label>
+    <input type="text" id="seq_direct_mutations" placeholder="Y52A, S56A" />
+    <button type="button" class="btn mini" id="seq_direct_apply" style="margin-top:6px;">Add from notation</button>
+    <div id="seq_direct_errors" class="mini muted" style="margin-top:6px;"></div>
+  </div>
+  <div class="card" style="margin:8px 0;">
+    <b>Preview / Diff</b>
+    <div class="mini muted" id="seq_preview_meta">No preview yet.</div>
+    <div class="mini" id="seq_preview_errors" style="margin-top:6px;"></div>
+    <div style="margin-top:6px;"><span class="muted mini">Original</span><br/><code id="seq_preview_original"></code></div>
+    <div style="margin-top:6px;"><span class="muted mini">Edited</span><br/><code id="seq_preview_edited"></code></div>
+    <div style="margin-top:6px;" class="mini muted" id="seq_preview_changed_positions"></div>
+  </div>
+  <div class="card" style="margin:8px 0;">
+    <b>Builder handoff</b>
+    <form method="post" action="/builder/point-mutation/draft" id="seq_to_builder_form" style="margin-top:6px;">
+      <input type="hidden" name="parent_molecule_id" value="{{ molecule.id if molecule is defined else '' }}" />
+      <input type="hidden" name="new_primary_id" value="{{ (molecule.primary_id ~ '_edit') if molecule is defined else '' }}" />
+      <input type="hidden" name="new_title" value="{{ ((molecule.title or molecule.primary_id) ~ ' edit') if molecule is defined else '' }}" />
+      <input type="hidden" name="component" id="seq_to_builder_component" value="HC1" />
+      <input type="hidden" name="mutations" id="seq_to_builder_mutations" value="" />
+      <input type="hidden" name="rationale" value="sequence editor queued mutations" />
+      <button type="submit" class="btn primary" id="seq_to_builder_submit">Preview variant in Builder</button>
+    </form>
+    <form method="post" action="/builder/variant-set/draft" id="seq_to_variant_set_form" style="margin-top:8px;">
+      <input type="hidden" name="parent_molecule_id" value="{{ molecule.id if molecule is defined else '' }}" />
+      <input type="hidden" name="family_type" value="mutation_panel" />
+      <input type="hidden" name="set_name" value="{{ ((molecule.primary_id if molecule is defined else 'molecule') ~ ' sequence edit panel') }}" />
+      <input type="hidden" name="naming_base" value="{{ molecule.primary_id if molecule is defined else 'variant' }}" />
+      <input type="hidden" name="rationale" value="sequence editor queued mutations" />
+      <input type="hidden" name="mutation_tokens" id="seq_to_variant_mutation_tokens" value="" />
+      <input type="hidden" name="include_pair_combinations" id="seq_to_variant_include_pairs" value="0" />
+      <input type="hidden" name="explicit_combos" id="seq_to_variant_explicit_combos" value="" />
+      <label class="mini muted" style="display:block;margin:6px 0 4px;">Variant set options</label>
+      <label class="mini"><input type="checkbox" id="seq_to_variant_include_full_combo" checked /> Include full queued combination</label>
+      <div style="margin-top:6px;">
+        <button type="submit" class="btn mini" id="seq_to_variant_submit">Seed Variant Set from queue</button>
+      </div>
+    </form>
+  </div>
+  {% for comp in (sequence_editor_annotations if sequence_editor_annotations is defined else []) %}
+  <div class="card" style="margin-top:8px;">
+    <div><b>{{ comp.component_role }}</b> <span class="muted mini">({{ comp.sequence_length }} aa)</span></div>
+    <div class="sequence-editor-track" data-component-role="{{ comp.component_role }}" data-component-id="{{ comp.component_id }}" style="margin-top:6px;line-height:1.8;font-family:monospace;">
+      {% for r in comp.residues %}
+      <span
+        class="seq-residue"
+        data-component-role="{{ r.component_role }}"
+        data-component-id="{{ r.component_id }}"
+        data-position="{{ r.position }}"
+        data-aa="{{ r.aa }}"
+        data-region="{{ r.region }}"
+        data-numbering="{{ r.numbering_label }}"
+        style="display:inline-block;min-width:14px;text-align:center;cursor:pointer;"
+      >{{ r.aa }}</span>
+      {% if loop.index % 25 == 0 %}<br/>{% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div class="muted">No structured components available for sequence editing.</div>
+  {% endfor %}
+  <div id="sequence_editor_tooltip" class="mini" style="display:none;position:fixed;z-index:60;background:#fff;border:1px solid rgba(0,0,0,.15);border-radius:4px;padding:6px;max-width:260px;pointer-events:none;"></div>
+</div>
