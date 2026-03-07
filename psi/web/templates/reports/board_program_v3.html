@@ -4,6 +4,12 @@
 
   {% set sections = (payload.sections if payload is defined and payload.sections is defined and payload.sections is mapping else {}) %}
   {% set rows = (sections.molecule_overview_table.rows if sections.molecule_overview_table is defined and sections.molecule_overview_table is mapping and sections.molecule_overview_table.rows is defined and sections.molecule_overview_table.rows is iterable else []) %}
+  {% set stage = (sections.stage_determination if sections.stage_determination is defined and sections.stage_determination is mapping else {}) %}
+  {% set risk = (sections.risk_landscape if sections.risk_landscape is defined and sections.risk_landscape is mapping else {}) %}
+  {% set nbe = (sections.next_best_experiments if sections.next_best_experiments is defined and sections.next_best_experiments is mapping else {}) %}
+  {% set comp = (sections.cross_molecule_comparability if sections.cross_molecule_comparability is defined and sections.cross_molecule_comparability is mapping else {}) %}
+  {% set repro = (sections.reproducibility_appendix if sections.reproducibility_appendix is defined and sections.reproducibility_appendix is mapping else {}) %}
+
   {% set ns = namespace(total=0, ready=0, blocked=0, not_assessed=0, high_risk=0) %}
   {% for row in rows %}
     {% if row is mapping %}
@@ -16,6 +22,115 @@
     {% endif %}
   {% endfor %}
 
+  <div class="card report-block report-section-card">
+    <h2 style="margin-top:0;">Executive Summary</h2>
+    <p>
+      Program review includes {{ ns.total }} molecules. Ready: {{ ns.ready }}, blocked/failed: {{ ns.blocked }}, not assessed: {{ ns.not_assessed }}.
+      High-severity risk present in {{ ns.high_risk }} molecules.
+    </p>
+  </div>
+
+  <div class="card report-block report-section-card">
+    <h2 style="margin-top:0;">Program Context</h2>
+    <table class="board-section-table">
+      <tbody>
+        <tr><th>Program posture</th><td>{{ stage.program_posture.posture_state if stage.program_posture is defined and stage.program_posture is mapping and stage.program_posture.posture_state is defined else "Not assessed" }}</td></tr>
+        <tr><th>Molecule count</th><td>{{ ns.total }}</td></tr>
+        <tr><th>Comparability status</th><td>{{ comp.status if comp.status is defined else "Not assessed" }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card report-block report-section-card">
+    <h2 style="margin-top:0;">Current Candidate Set</h2>
+    <table class="board-section-table">
+      <thead><tr><th>Molecule</th><th>Stage</th><th>Candidate bucket</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.primary_id if row is mapping and row.primary_id is defined else ("molecule_id=" ~ row.molecule_id if row is mapping and row.molecule_id is defined else "unknown") }}</td>
+          <td>{{ row.stage|humanize_state if row is mapping and row.stage is defined else "Not assessed" }}</td>
+          <td>
+            {% set st = (row.stage|string|lower if row is mapping and row.stage is defined else "not_assessed") %}
+            {% if st == "ready" %}active contender{% elif st in ["blocked","failed"] %}watchlist{% else %}needs evidence{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">No molecule overview rows available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card report-block report-section-card">
+    <h2 style="margin-top:0;">Evidence Overview</h2>
+    <table class="board-section-table">
+      <thead><tr><th>Molecule</th><th>High risk present</th><th>Stage</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.primary_id if row is mapping and row.primary_id is defined else ("molecule_id=" ~ row.molecule_id if row is mapping and row.molecule_id is defined else "unknown") }}</td>
+          <td>{% if row is mapping and row.high_severity_risk_present is defined and row.high_severity_risk_present %}yes{% else %}no{% endif %}</td>
+          <td>{{ row.stage|humanize_state if row is mapping and row.stage is defined else "Not assessed" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">No evidence overview rows available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card report-block report-section-card">
+    <h2 style="margin-top:0;">Program Risks</h2>
+    <ul class="narrative-list">
+      {% if ns.high_risk > 0 %}
+      <li>High-severity risk signals are present in {{ ns.high_risk }} molecules.</li>
+      {% else %}
+      <li>No high-severity risk signals are present in the payload.</li>
+      {% endif %}
+      {% if ns.blocked > 0 %}
+      <li>{{ ns.blocked }} molecules are blocked/failed and require unblock evidence.</li>
+      {% endif %}
+      {% if risk.blockers is defined and risk.blockers %}
+      <li>Risk landscape blockers are present in `risk_landscape.blockers`.</li>
+      {% endif %}
+    </ul>
+  </div>
+
+  <div class="card report-block report-section-card">
+    <h2 style="margin-top:0;">Recommended Next Experiments</h2>
+    <ul class="narrative-list">
+      {% for item in (nbe.items if nbe.items is defined and nbe.items is iterable else []) %}
+      <li>{{ item.label if item is mapping and item.label is defined and item.label else (item.suggestion_key if item is mapping and item.suggestion_key is defined else item) }}</li>
+      {% else %}
+      <li>No next-best experiments provided by this payload.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="card report-block report-section-card">
+    <h2 style="margin-top:0;">Decision Framing / Recommendation</h2>
+    <p>
+      {% if ns.ready > 0 and ns.blocked == 0 %}
+      Program has ready candidates with no blocked molecules in this payload window.
+      {% elif ns.ready > 0 %}
+      Program has ready candidates, but blocked molecules remain and should be triaged.
+      {% else %}
+      No ready candidates currently; prioritize evidence closure and risk resolution.
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="card report-block report-section-card">
+    <h2 style="margin-top:0;">Evidence Appendix</h2>
+    <table class="board-section-table">
+      <tbody>
+        <tr><th>Cited snapshot ids</th><td>{{ repro.cited_snapshot_ids if repro.cited_snapshot_ids is defined else [] }}</td></tr>
+        <tr><th>Measurement keys</th><td>{{ repro.measurement_keys if repro.measurement_keys is defined else [] }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <h2>Portfolio Posture Summary <span class="mini muted">(display-only derived section)</span></h2>
   <div class="card report-block report-section-card">
     <table class="board-section-table">
@@ -27,23 +142,5 @@
         <tr><th>High severity risk present</th><td>{{ ns.high_risk }}</td></tr>
       </tbody>
     </table>
-  </div>
-
-  <h2>Resource Implications <span class="mini muted">(display-only derived section)</span></h2>
-  <div class="card report-block report-section-card">
-    <ul class="narrative-list">
-      {% if ns.high_risk > 0 %}
-      <li>High-risk signals are present; consider additional characterization work before advancing.</li>
-      {% else %}
-      <li>No high-severity risk signals are captured in this report payload.</li>
-      {% endif %}
-      {% if ns.blocked > 0 %}
-      <li>Blocked/failed stages exist; prioritize unblock experiments for those molecules.</li>
-      {% elif ns.ready > 0 %}
-      <li>Ready molecules exist; plan resource allocation for the next governed stage checks.</li>
-      {% else %}
-      <li>No molecules are currently stage-ready in this payload snapshot.</li>
-      {% endif %}
-    </ul>
   </div>
 </section>

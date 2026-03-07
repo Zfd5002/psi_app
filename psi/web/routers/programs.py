@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from psi.core.models import Molecule
 from psi.web.deps import get_db, get_templates
 from psi.services import programs as svc
 from psi.services import data_records as data_records_svc
@@ -113,6 +114,32 @@ def remove_program_membership(
         svc.remove_program_membership(db, membership_id=membership_id)
     except KeyError:
         raise HTTPException(404)
+    return RedirectResponse(url=f"/programs/{program_id}", status_code=303)
+
+
+@router.post("/programs/{program_id}/molecules/{molecule_id}/role")
+def update_program_molecule_role(
+    program_id: int,
+    molecule_id: int,
+    role: str = Form("active"),
+    rationale: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    p = svc.get_program(db, program_id)
+    if not p:
+        raise HTTPException(404)
+    m = db.get(Molecule, int(molecule_id))
+    if m is None:
+        raise HTTPException(404)
+    if int(m.program_id) != int(program_id):
+        raise HTTPException(status_code=400, detail="molecule_not_in_program")
+    svc.upsert_program_molecule_status(
+        db,
+        program_id=int(program_id),
+        molecule_id=int(molecule_id),
+        role=role,
+        rationale=rationale,
+    )
     return RedirectResponse(url=f"/programs/{program_id}", status_code=303)
 
 

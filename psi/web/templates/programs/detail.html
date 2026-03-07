@@ -19,19 +19,96 @@
   </div>
 
   <h2 id="overview">Program dashboard</h2>
+  {% set pd = (program_dashboard if program_dashboard is defined and program_dashboard is mapping else {}) %}
+  <div class="grid cols-3">
+    <div class="card">
+      <div class="muted">Program Molecules</div>
+      <div style="font-size:28px;font-weight:700;">{{ pd.molecule_count if pd.molecule_count is defined else 0 }}</div>
+      <div class="mini muted">Active contenders: {{ pd.active_contender_count if pd.active_contender_count is defined else 0 }}</div>
+    </div>
+    <div class="card">
+      <div class="muted">Program Posture</div>
+      <div style="font-size:28px;font-weight:700;">{{ pd.posture_label if pd.posture_label is defined else "UNKNOWN" }}</div>
+      <div class="mini muted">Pending entries: {{ pd.pending_entry_count if pd.pending_entry_count is defined else 0 }}</div>
+    </div>
+    <div class="card">
+      <div class="muted">Candidate Roles</div>
+      <div class="mini">Lead: {{ (pd.role_counts.lead if pd.role_counts is defined and pd.role_counts.lead is defined else 0) }} · Backup: {{ (pd.role_counts.backup if pd.role_counts is defined and pd.role_counts.backup is defined else 0) }}</div>
+      <div class="mini">Active: {{ (pd.role_counts.active if pd.role_counts is defined and pd.role_counts.active is defined else 0) }} · Watchlist: {{ (pd.role_counts.watchlist if pd.role_counts is defined and pd.role_counts.watchlist is defined else 0) }}</div>
+      <div class="mini">Deprioritized: {{ (pd.role_counts.deprioritized if pd.role_counts is defined and pd.role_counts.deprioritized is defined else 0) }} · Archived: {{ (pd.role_counts.archived if pd.role_counts is defined and pd.role_counts.archived is defined else 0) }}</div>
+    </div>
+  </div>
+  <div class="grid cols-2" style="margin-top:10px;">
+    <div class="card">
+      <div class="muted">Program progress (UI-only)</div>
+      <div style="height:10px;background:#e7eaef;border-radius:999px;overflow:hidden;margin-top:6px;">
+        <div style="height:10px;background:#2f7d32;width:{{ pd.progress_percent if pd.progress_percent is defined else 0 }}%;"></div>
+      </div>
+      <div class="mini muted" style="margin-top:4px;">{{ pd.progress_percent if pd.progress_percent is defined else 0 }}% · {{ pd.progress_label if pd.progress_label is defined else "early" }}</div>
+      <div class="mini muted">{{ pd.progress_basis if pd.progress_basis is defined else "" }}</div>
+    </div>
+    <div class="card">
+      <div class="muted">Program confidence (UI-only)</div>
+      <div style="height:10px;background:#e7eaef;border-radius:999px;overflow:hidden;margin-top:6px;">
+        <div style="height:10px;background:#1565c0;width:{{ pd.confidence_percent if pd.confidence_percent is defined else 0 }}%;"></div>
+      </div>
+      <div class="mini muted" style="margin-top:4px;">{{ pd.confidence_percent if pd.confidence_percent is defined else 0 }}% · {{ pd.confidence_label if pd.confidence_label is defined else "low" }}</div>
+      <div class="mini muted">{{ pd.confidence_basis if pd.confidence_basis is defined else "" }}</div>
+    </div>
+  </div>
+  <h3>Program Drill-down</h3>
+  <div class="row no-print" style="gap:8px;flex-wrap:wrap;">
+    <a class="btn mini" href="/molecules?program_id={{ program.id }}">Program molecules</a>
+    <a class="btn mini" href="/data?program_id={{ program.id }}">Program data records</a>
+    <a class="btn mini" href="/evidence?program_id={{ program.id }}">Program evidence</a>
+    <a class="btn mini" href="/decisions?program_id={{ program.id }}">Program decisions</a>
+    <a class="btn mini" href="/reports/new?report_type=program_report&subject_ids={{ program.id }}">Generate program report</a>
+  </div>
+  {% set cs = (candidate_set if candidate_set is defined and candidate_set is mapping else {}) %}
+  <h3>Candidate Set</h3>
+  <div class="grid cols-3">
+    {% for role_name in ["lead", "backup", "active", "watchlist", "deprioritized", "archived"] %}
+    {% set items = (cs[role_name] if cs is mapping and cs[role_name] is defined and cs[role_name] is iterable else []) %}
+    <div class="card">
+      <div class="muted" style="margin-bottom:6px;">{{ role_name|humanize_state }}</div>
+      <ul style="margin:0;padding-left:16px;">
+        {% for item in items %}
+        <li>
+          <a href="/molecules/{{ item.molecule_id }}">{{ item.primary_id }}</a>
+          {% if item.title %}<span class="muted"> {{ item.title }}</span>{% endif %}
+          {% if item.rationale %}<div class="mini muted">{{ item.rationale }}</div>{% endif %}
+        </li>
+        {% else %}
+        <li class="muted">None assigned.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
   <h3>V3 Governance Membership (molecules)</h3>
   <div class="muted">Deterministic order: <code>(sort_index, membership_id)</code>. This is additive governance membership and does not change DI snapshot semantics.</div>
   <table class="table mini" style="margin-top:8px;">
     <thead>
-      <tr><th>sort_index</th><th>molecule</th><th>owner program</th><th class="no-print">Actions</th></tr>
+      <tr><th>sort_index</th><th>molecule</th><th>program role</th><th>role rationale</th><th>owner program</th><th class="no-print">Actions</th></tr>
     </thead>
     <tbody>
       {% for row in program_memberships_v3 %}
       <tr>
         <td class="muted">{{ row.sort_index }}</td>
         <td><a href="/molecules/{{ row.molecule_id }}">{{ row.primary_id }}</a> <span class="muted">{{ row.title or '' }}</span></td>
+        <td><span class="chip">{{ row.candidate_role|humanize_state }}</span></td>
+        <td class="muted">{{ row.candidate_role_rationale or "Not assessed by this surface." }}</td>
         <td class="muted">{{ row.owner_program_id if row.owner_program_id is not none else '—' }}</td>
         <td class="no-print">
+          <form method="post" action="/programs/{{ program.id }}/molecules/{{ row.molecule_id }}/role" style="display:inline-flex;gap:6px;align-items:center;margin-right:8px;flex-wrap:wrap;">
+            <select name="role">
+              {% for role_opt in (program_molecule_role_options if program_molecule_role_options is defined else ["lead","backup","active","watchlist","deprioritized","archived"]) %}
+              <option value="{{ role_opt }}" {% if role_opt == row.candidate_role %}selected{% endif %}>{{ role_opt|humanize_state }}</option>
+              {% endfor %}
+            </select>
+            <input name="rationale" type="text" value="{{ row.candidate_role_rationale or '' }}" placeholder="brief rationale" style="min-width:180px;" />
+            <button class="btn mini" type="submit">Set role</button>
+          </form>
           <form method="post" action="/programs/{{ program.id }}/memberships/{{ row.membership_id }}/sort" style="display:inline-flex;gap:6px;align-items:center;margin-right:8px;">
             <input name="sort_index" type="number" value="{{ row.sort_index }}" style="width:90px;" />
             <button class="btn" type="submit">Update sort</button>
@@ -42,10 +119,91 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="muted">No V3 program memberships yet.</td></tr>
+      <tr><td colspan="6" class="muted">No V3 program memberships yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  <h3>Molecule Status Board</h3>
+  {% set msb = (program_molecule_status_board if program_molecule_status_board is defined and program_molecule_status_board is iterable else []) %}
+  <table class="table mini">
+    <thead>
+      <tr>
+        <th>Molecule</th>
+        <th>Program role</th>
+        <th>Status</th>
+        <th>Key blocker</th>
+        <th>Last evidence update</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in msb %}
+      <tr>
+        <td><a href="/molecules/{{ row.molecule_id }}">{{ row.primary_id }}</a>{% if row.title %} <span class="muted">{{ row.title }}</span>{% endif %}</td>
+        <td>{{ row.role|humanize_state }}</td>
+        <td>{{ row.readiness_state|humanize_state }}</td>
+        <td>{{ (row.key_blocker|humanize_key) if row.key_blocker else "None recorded" }}</td>
+        <td class="muted">{{ row.latest_evidence_update if row.latest_evidence_update else "Not available" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No molecule status rows available.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h3>Program Evidence Summary</h3>
+  {% set pes = (program_evidence_summary if program_evidence_summary is defined and program_evidence_summary is iterable else []) %}
+  <table class="table mini">
+    <thead>
+      <tr><th>Evidence Category</th><th>Molecules Covered</th><th>Metric Keys Observed</th></tr>
+    </thead>
+    <tbody>
+      {% for row in pes %}
+      <tr>
+        <td>{{ row.group }}</td>
+        <td class="muted">{{ row.molecule_coverage_count }}</td>
+        <td class="muted">{{ row.metric_key_count }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No categorized evidence available yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h3>Program Evidence Map</h3>
+  {% set pem = (program_evidence_matrix if program_evidence_matrix is defined and program_evidence_matrix is mapping else {}) %}
+  {% set pem_groups = (pem.groups if pem.groups is defined and pem.groups is iterable else []) %}
+  {% set pem_rows = (pem.rows if pem.rows is defined and pem.rows is iterable else []) %}
+  <div class="table-scroll-safe">
+    <table class="table mini">
+      <thead>
+        <tr>
+          <th>Molecule</th>
+          {% for grp in pem_groups %}
+          <th>{{ grp }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pem_rows %}
+        <tr>
+          <td><a href="/molecules/{{ row.molecule_id }}">{{ row.primary_id }}</a>{% if row.title %} <span class="muted">{{ row.title }}</span>{% endif %}</td>
+          {% for cell in (row.cells if row.cells is defined and row.cells is iterable else []) %}
+          <td>{% if cell.present %}✓{% else %}<span class="muted">—</span>{% endif %}</td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 1 + (pem_groups|length) }}" class="muted">No program evidence map rows available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <h3>Suggested Next Experiments</h3>
+  {% set pse = (program_suggested_experiments if program_suggested_experiments is defined and program_suggested_experiments is iterable else []) %}
+  <ul>
+    {% for item in pse %}
+    <li>{{ item }}</li>
+    {% else %}
+    <li class="muted">No suggested next experiments available.</li>
+    {% endfor %}
+  </ul>
   <form method="post" action="/programs/{{ program.id }}/memberships/add" class="no-print" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;">
     <label>
       <div class="muted">Molecule</div>
@@ -177,6 +335,12 @@
   </div>
   {% endfor %}
 
+  <div class="no-print" style="margin-top:12px;">
+    <button class="btn mini" type="button" id="toggle-governance-program">Show governance details</button>
+    <span class="mini muted" style="margin-left:8px;">Governance details are hidden by default on scientist surfaces.</span>
+  </div>
+
+  <div id="program-governance-panel" data-program-governance-panel="true" style="display:none;" aria-hidden="true">
   <h2>DI portfolio status (latest snapshot per molecule)</h2>
   <div class="grid cols-3">
     <div class="card">
@@ -445,6 +609,8 @@
     </table>
   </div>
 
+  </div>
+
   <h2 id="audit">Audit</h2>
 {% include "partials/audit_table.html" %}
 </div>
@@ -484,6 +650,39 @@
       }
       sessionStorage.removeItem(KEY_REC);
       sessionStorage.removeItem(KEY_Y);
+    } catch (_err) {}
+  });
+})();
+</script>
+<script>
+(function () {
+  var KEY_MODE = "psi_program_detail_mode";
+  var panel = document.getElementById("program-governance-panel");
+  var button = document.getElementById("toggle-governance-program");
+  if (!panel || !button) {
+    return;
+  }
+
+  function applyMode(mode) {
+    var governance = mode === "governance";
+    panel.style.display = governance ? "block" : "none";
+    panel.setAttribute("aria-hidden", governance ? "false" : "true");
+    button.textContent = governance ? "Hide governance details" : "Show governance details";
+  }
+
+  var mode = "scientist";
+  try {
+    mode = localStorage.getItem(KEY_MODE) || "scientist";
+  } catch (_err) {
+    mode = "scientist";
+  }
+  applyMode(mode);
+
+  button.addEventListener("click", function () {
+    var next = panel.style.display === "none" ? "governance" : "scientist";
+    applyMode(next);
+    try {
+      localStorage.setItem(KEY_MODE, next);
     } catch (_err) {}
   });
 })();

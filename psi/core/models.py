@@ -26,6 +26,7 @@ class Program(Base):
     evidence = relationship("Evidence", back_populates="program", cascade="all, delete-orphan")
     decisions = relationship("DecisionSnapshot", back_populates="program", cascade="all, delete-orphan")
     memberships = relationship("ProgramMembership", back_populates="program", cascade="all, delete-orphan")
+    molecule_statuses = relationship("ProgramMoleculeStatus", back_populates="program", cascade="all, delete-orphan")
     portfolio_memberships = relationship("PortfolioMembership", back_populates="program", cascade="all, delete-orphan")
 
 
@@ -63,6 +64,7 @@ class Molecule(Base):
     components = relationship("MoleculeComponent", back_populates="molecule", cascade="all, delete-orphan")
     property_runs = relationship("PropertyRun", back_populates="molecule", cascade="all, delete-orphan")
     program_memberships = relationship("ProgramMembership", back_populates="molecule", cascade="all, delete-orphan")
+    program_statuses = relationship("ProgramMoleculeStatus", back_populates="molecule", cascade="all, delete-orphan")
 
 
 class Portfolio(Base):
@@ -92,6 +94,24 @@ class ProgramMembership(Base):
 
     program = relationship("Program", back_populates="memberships")
     molecule = relationship("Molecule", back_populates="program_memberships")
+
+
+class ProgramMoleculeStatus(Base):
+    __tablename__ = "program_molecule_status"
+    __table_args__ = (
+        UniqueConstraint("program_id", "molecule_id", name="uq_program_molecule_status_program_molecule"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    program_id = Column(Integer, ForeignKey("programs.id"), nullable=False, index=True)
+    molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=False, index=True)
+    role = Column(Text, nullable=False, default="active")
+    rationale = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    program = relationship("Program", back_populates="molecule_statuses")
+    molecule = relationship("Molecule", back_populates="program_statuses")
 
 
 class PortfolioMembership(Base):

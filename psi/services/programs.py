@@ -8,14 +8,98 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from psi.core.audit import record_audit
-from psi.core.models import AuditEvent, Batch, DataRecord, DecisionSnapshot, Evidence, Molecule, Program, ProgramMembership
+from psi.core.models import (
+    AuditEvent,
+    Batch,
+    DataRecord,
+    DecisionSnapshot,
+    Evidence,
+    Molecule,
+    Program,
+    ProgramMembership,
+    ProgramMoleculeStatus,
+)
 from psi.core.utils import model_to_dict, now_utc
 from psi.services.attribution import record_attribution_event
 from psi.services.di.snapshot_diff import compute_snapshot_diff_struct
 from psi.services.di.verify import verify_snapshot
-from psi.services.metric_catalog import metric_catalog_entry
+from psi.services.metric_catalog import metric_catalog_entry, metric_group_for_key, metric_group_sort_key
 from psi.services.evidence_preview import build_record_evidence_preview
 from psi.web.ui_labels import humanize_key
+
+PROGRAM_MOLECULE_ROLES: tuple[str, ...] = (
+    "lead",
+    "backup",
+    "active",
+    "watchlist",
+    "deprioritized",
+    "archived",
+)
+
+
+def _normalize_program_molecule_role(role: str | None) -> str:
+    r = str(role or "").strip().lower()
+    return r if r in PROGRAM_MOLECULE_ROLES else "active"
+
+
+def list_program_molecule_statuses(db: Session, *, program_id: int) -> list[ProgramMoleculeStatus]:
+    return (
+        db.query(ProgramMoleculeStatus)
+        .filter(ProgramMoleculeStatus.program_id == int(program_id))
+        .order_by(ProgramMoleculeStatus.molecule_id.asc(), ProgramMoleculeStatus.id.asc())
+        .all()
+    )
+
+
+def upsert_program_molecule_status(
+    db: Session,
+    *,
+    program_id: int,
+    molecule_id: int,
+    role: str,
+    rationale: str = "",
+) -> ProgramMoleculeStatus:
+    row = (
+        db.query(ProgramMoleculeStatus)
+        .filter(
+            ProgramMoleculeStatus.program_id == int(program_id),
+            ProgramMoleculeStatus.molecule_id == int(molecule_id),
+        )
+        .order_by(ProgramMoleculeStatus.id.asc())
+        .first()
+    )
+    norm_role = _normalize_program_molecule_role(role)
+    norm_rationale = str(rationale or "").strip()
+    if row is None:
+        row = ProgramMoleculeStatus(
+            program_id=int(program_id),
+            molecule_id=int(molecule_id),
+            role=norm_role,
+            rationale=norm_rationale,
+            created_at=now_utc(),
+            updated_at=now_utc(),
+        )
+        db.add(row)
+    else:
+        row.role = norm_role
+        row.rationale = norm_rationale
+        row.updated_at = now_utc()
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    record_attribution_event(
+        db,
+        event_type="program_molecule_status.upsert",
+        entity_type="ProgramMoleculeStatus",
+        entity_id=int(row.id),
+        metadata={
+            "program_id": int(program_id),
+            "molecule_id": int(molecule_id),
+            "role": norm_role,
+        },
+    )
+    db.commit()
+    return row
 
 
 def list_programs(db: Session) -> list[Program]:
@@ -86,6 +170,16 @@ def get_program_detail(
         .all()
     )
     review_queue = build_program_review_queue(db, program_id=program_id)
+    status_rows = list_program_molecule_statuses(db, program_id=int(program_id))
+    status_by_mid = {
+        int(s.molecule_id): {
+            "role": _normalize_program_molecule_role(str(s.role or "")),
+            "rationale": str(s.rationale or "").strip(),
+            "updated_at": (s.updated_at.isoformat() if s.updated_at is not None else ""),
+        }
+        for s in status_rows
+        if s.molecule_id is not None
+    }
 
     # v1.2.9m: deterministic DI rollups (latest snapshot per molecule)
     all_snaps = (
@@ -270,6 +364,13 @@ def get_program_detail(
         status_counts[bucket] += 1
 
         blockers = out.get("blockers") if isinstance(out.get("blockers"), list) else []
+        blocker_keys = sorted(
+            {
+                str(b.get("blocker_key") or b.get("key") or "").strip()
+                for b in blockers
+                if isinstance(b, dict) and str(b.get("blocker_key") or b.get("key") or "").strip()
+            }
+        )
         for b in blockers:
             if isinstance(b, dict):
                 k = str(b.get("blocker_key") or b.get("key") or "")
@@ -325,6 +426,8 @@ def get_program_detail(
                 "decision_state": decision_state,
                 "readiness_state": bucket,
                 "blocker_count": int(len(blockers)),
+                "key_blocker": (blocker_keys[0] if blocker_keys else ""),
+                "latest_evidence_update": (snap.created_at.isoformat() if snap.created_at is not None else ""),
                 "policy_version": policy_version,
             }
         )
@@ -345,6 +448,66 @@ def get_program_detail(
             }
         )
     metric_coverage = sorted(metric_coverage, key=lambda r: (-int(r.get("missing_count") or 0), str(r.get("metric_key") or "")))
+    evidence_rows = db.execute(
+        text(
+            """
+            SELECT
+              dr.molecule_id AS molecule_id,
+              COALESCE(dm.metric_key, dm.name) AS metric_key
+            FROM data_records dr
+            JOIN data_measurements dm ON dm.data_record_id = dr.id
+            WHERE dr.program_id = :pid
+              AND dr.molecule_id IS NOT NULL
+            ORDER BY dr.molecule_id ASC, COALESCE(dm.metric_key, dm.name) ASC, dm.id ASC
+            """
+        ),
+        {"pid": int(program_id)},
+    ).mappings().all()
+    group_to_mols: dict[str, set[int]] = {}
+    group_to_keys: dict[str, set[str]] = {}
+    mol_to_groups: dict[int, set[str]] = {}
+    for er in evidence_rows:
+        mid = int(er.get("molecule_id") or 0)
+        mk = str(er.get("metric_key") or "").strip()
+        if mid <= 0 or not mk:
+            continue
+        grp = str(metric_group_for_key(mk) or "Other")
+        group_to_mols.setdefault(grp, set()).add(mid)
+        group_to_keys.setdefault(grp, set()).add(mk)
+        mol_to_groups.setdefault(mid, set()).add(grp)
+    program_evidence_summary = sorted(
+        [
+            {
+                "group": grp,
+                "molecule_coverage_count": int(len(group_to_mols.get(grp, set()))),
+                "metric_key_count": int(len(group_to_keys.get(grp, set()))),
+            }
+            for grp in sorted(set(group_to_mols.keys()) | set(group_to_keys.keys()))
+        ],
+        key=lambda r: metric_group_sort_key(str(r.get("group") or "Other")),
+    )
+    evidence_groups = [str(r.get("group") or "") for r in program_evidence_summary if str(r.get("group") or "").strip()]
+    matrix_rows = []
+    for m in sorted(molecules, key=lambda x: (str(x.primary_id or ""), int(x.id))):
+        present = mol_to_groups.get(int(m.id), set())
+        matrix_rows.append(
+            {
+                "molecule_id": int(m.id),
+                "primary_id": str(m.primary_id or ""),
+                "title": str(m.title or ""),
+                "cells": [
+                    {
+                        "group": grp,
+                        "present": bool(grp in present),
+                    }
+                    for grp in evidence_groups
+                ],
+            }
+        )
+    program_evidence_matrix = {
+        "groups": evidence_groups,
+        "rows": matrix_rows,
+    }
 
     pol_filter = (policy_version_filter or "").strip()
     if pol_filter:
@@ -369,6 +532,117 @@ def get_program_detail(
         "lineage": lineage_rows,
         "molecule_rollup": sorted(molecule_rollup, key=lambda r: str(r.get("primary_id") or "")),
     }
+    role_counts: dict[str, int] = {k: 0 for k in PROGRAM_MOLECULE_ROLES}
+    for m in molecules:
+        role = str((status_by_mid.get(int(m.id)) or {}).get("role") or "active")
+        role_norm = _normalize_program_molecule_role(role)
+        role_counts[role_norm] = int(role_counts.get(role_norm, 0)) + 1
+    pending_entry_count = int(sum(len(g.get("records") or []) for g in review_queue))
+    ready_count = int(status_counts.get("READY", 0))
+    blocked_count = int(status_counts.get("BLOCKED", 0))
+    known_count = int(ready_count + blocked_count)
+    progress_percent = (round((ready_count * 100.0 / known_count), 1) if known_count > 0 else 0.0)
+    confidence_percent = (
+        round(((known_count - blocked_count) * 100.0 / known_count), 1)
+        if known_count > 0
+        else 0.0
+    )
+    program_dashboard = {
+        "molecule_count": int(len(molecules)),
+        "pending_entry_count": pending_entry_count,
+        "role_counts": {k: int(role_counts.get(k, 0)) for k in PROGRAM_MOLECULE_ROLES},
+        "active_contender_count": int(
+            role_counts.get("lead", 0) + role_counts.get("backup", 0) + role_counts.get("active", 0)
+        ),
+        "posture_label": (
+            "READY"
+            if ready_count > 0 and blocked_count == 0
+            else ("BLOCKED" if blocked_count > 0 else "UNKNOWN")
+        ),
+        # Display-only bars, deterministic from molecule rollup state counts.
+        "progress_percent": progress_percent,
+        "confidence_percent": confidence_percent,
+        "progress_basis": "derived_from_latest_molecule_readiness_states",
+        "confidence_basis": "derived_from_non_blocked_fraction_of_known_states",
+        "progress_label": (
+            "advanced"
+            if progress_percent >= 80.0
+            else ("developing" if progress_percent >= 40.0 else "early")
+        ),
+        "confidence_label": (
+            "high"
+            if confidence_percent >= 80.0
+            else ("moderate" if confidence_percent >= 40.0 else "low")
+        ),
+    }
+    role_grouped: dict[str, list[dict[str, Any]]] = {k: [] for k in PROGRAM_MOLECULE_ROLES}
+    for pm, m in program_memberships:
+        role_info = status_by_mid.get(int(m.id)) or {}
+        role = _normalize_program_molecule_role(str(role_info.get("role") or "active"))
+        role_grouped[role].append(
+            {
+                "molecule_id": int(m.id),
+                "primary_id": str(m.primary_id or ""),
+                "title": str(m.title or ""),
+                "rationale": str(role_info.get("rationale") or "").strip(),
+                "sort_index": int(pm.sort_index or 0),
+            }
+        )
+    candidate_set = {
+        role: sorted(
+            role_grouped.get(role) or [],
+            key=lambda x: (int(x.get("sort_index") or 0), str(x.get("primary_id") or ""), int(x.get("molecule_id") or 0)),
+        )
+        for role in PROGRAM_MOLECULE_ROLES
+    }
+    status_board = sorted(
+        [
+            {
+                "molecule_id": int(r.get("molecule_id") or 0),
+                "primary_id": str(r.get("primary_id") or ""),
+                "title": str(r.get("title") or ""),
+                "role": _normalize_program_molecule_role(str((status_by_mid.get(int(r.get("molecule_id") or 0)) or {}).get("role") or "active")),
+                "readiness_state": str(r.get("readiness_state") or "UNKNOWN"),
+                "key_blocker": str(r.get("key_blocker") or ""),
+                "latest_evidence_update": str(r.get("latest_evidence_update") or ""),
+            }
+            for r in molecule_rollup
+            if int(r.get("molecule_id") or 0) > 0
+        ],
+        key=lambda x: (str(x.get("primary_id") or ""), int(x.get("molecule_id") or 0)),
+    )
+    prioritized_subjects = [
+        f"{role}:{item['primary_id']}"
+        for role in ("lead", "backup", "active")
+        for item in (candidate_set.get(role) or [])
+        if isinstance(item, dict) and str(item.get("primary_id") or "").strip()
+    ]
+    top_missing_metric = (
+        str((di_dashboard.get("top_missing_metrics") or [("", 0)])[0][0] or "")
+        if isinstance(di_dashboard.get("top_missing_metrics"), list) and di_dashboard.get("top_missing_metrics")
+        else ""
+    )
+    top_failing_gate = (
+        str((di_dashboard.get("top_failing_gates") or [("", 0)])[0][0] or "")
+        if isinstance(di_dashboard.get("top_failing_gates"), list) and di_dashboard.get("top_failing_gates")
+        else ""
+    )
+    suggestion_items: list[str] = []
+    if top_missing_metric:
+        suggestion_items.append(
+            f"Close missing evidence for {humanize_key(top_missing_metric)} in priority candidates ({', '.join(prioritized_subjects[:3]) if prioritized_subjects else 'lead/backup/active set'})."
+        )
+    if top_failing_gate:
+        suggestion_items.append(
+            f"Address failing gate {humanize_key(top_failing_gate)} first for lead and backup candidates."
+        )
+    if pending_entry_count > 0:
+        suggestion_items.append(
+            f"Resolve pending review queue entries ({pending_entry_count}) to stabilize evidence availability before the next program review."
+        )
+    if not suggestion_items:
+        suggestion_items.append("No prioritized experiment suggestions available from current program evidence surfaces.")
+    program_suggested_experiments = suggestion_items[:5]
 
     return {
         "program": p,
@@ -382,6 +656,8 @@ def get_program_detail(
                 "primary_id": str(m.primary_id or ""),
                 "title": str(m.title or ""),
                 "owner_program_id": int(m.program_id) if m.program_id is not None else None,
+                "candidate_role": str((status_by_mid.get(int(m.id)) or {}).get("role") or "active"),
+                "candidate_role_rationale": str((status_by_mid.get(int(m.id)) or {}).get("rationale") or ""),
             }
             for pm, m in program_memberships
         ],
@@ -399,6 +675,13 @@ def get_program_detail(
         "recent_evidence": recent_evidence,
         "recent_decisions": recent_decisions,
         "review_queue_by_molecule": review_queue,
+        "program_molecule_role_options": list(PROGRAM_MOLECULE_ROLES),
+        "candidate_set": candidate_set,
+        "program_molecule_status_board": status_board,
+        "program_evidence_summary": program_evidence_summary,
+        "program_evidence_matrix": program_evidence_matrix,
+        "program_suggested_experiments": program_suggested_experiments,
+        "program_dashboard": program_dashboard,
         "di_dashboard": di_dashboard,
         "audits": audits,
     }

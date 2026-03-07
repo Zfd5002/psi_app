@@ -6780,6 +6780,43 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-07 — v1.3.0b58
+Intent:
+- Finalize Program-centric PSI phase 1 with status documentation and regression hardening checks.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/DI_V3_STATUS_v1.3.0b58.md`
+- `docs/README.md`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added a formal V3 status checkpoint document covering delivered program-centric surfaces, guardrails, and remaining gaps.
+- Added a regression test that enforces governance panel default-hidden behavior in program detail.
+- Updated docs index to include the new V3 status checkpoint.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b57
+Intent:
+- Enforce scientist-vs-governance separation on the program dashboard by hiding DI governance analytics behind an explicit toggle.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Program detail now renders DI governance analytics inside a default-hidden panel with `aria-hidden="true"`.
+- Added deterministic governance toggle state persistence via `localStorage` key `psi_program_detail_mode`.
+- Scientist-first surfaces remain visible by default; governance details remain accessible on demand.
+
+Gates:
+- PASS
+
 ## 2026-03-03 — v1.3.0b27
 Intent:
 - Final verification checkpoint for b16-b27 chain with deterministic gate confirmation and overlay-safe packaging consistency.
@@ -8652,6 +8689,190 @@ Behavior:
 - Updated legacy YAML call sites to use compatibility wrappers (containment approach; no DI snapshot semantic changes).
 - Added governance-panel note clarifying legacy YAML path non-interference with DI snapshot semantics.
 - Added startup compatibility test and legacy wrapper round-trip test.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b47
+Intent:
+- Add a minimal additive program-level molecule role/state foundation for program-centric workflows.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/services/programs.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_molecule_status.py`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added `ProgramMoleculeStatus` table model (`program_id`, `molecule_id`, `role`, `rationale`, timestamps) with deterministic unique key.
+- Added deterministic service helpers to list/upsert program molecule role state.
+- Added role update route `POST /programs/{program_id}/molecules/{molecule_id}/role`.
+- Program dashboard now displays and edits role/rationale in membership rows.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b48
+Intent:
+- Establish a scientist-first program dashboard scaffold on `/programs/{id}` with deterministic summary bars and counts.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added deterministic `program_dashboard` summary block in program detail service.
+- Added Program Header cards for molecule count, active contenders, posture, pending entries, and candidate role counts.
+- Added display-only progress/confidence bars derived from existing rollup state counts.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b49
+Intent:
+- Add a deterministic Candidate Set surface (lead/backup/active/watchlist/deprioritized/archived) to the program dashboard.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added `candidate_set` grouping in program detail service based on per-program role state and membership order.
+- Added Candidate Set cards to `/programs/{id}` with role-grouped molecule lists and rationale display.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b50
+Intent:
+- Add a deterministic Molecule Status Board on the program dashboard.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Program detail now computes `program_molecule_status_board` rows from latest per-molecule snapshot outputs plus role state.
+- Added Molecule Status Board UI with molecule, role, readiness, key blocker, and last evidence update.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b51
+Intent:
+- Add a deterministic program evidence summary by evidence category / metric group.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Program detail now computes `program_evidence_summary` from program data measurements using metric-group normalization.
+- Added Program Evidence Summary table to `/programs/{id}` with stable group ordering and coverage counts.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b52
+Intent:
+- Add a deterministic Program Evidence Map matrix (molecules × evidence categories).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added `program_evidence_matrix` to program detail context.
+- Added Program Evidence Map table with stable group ordering and explicit present/missing markers.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b53
+Intent:
+- Refine program progress/confidence bars with explicit deterministic basis labeling.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added program-level `progress_label` / `confidence_label` and explicit display-only basis strings.
+- Program dashboard now explains how progress/confidence percentages are derived from existing deterministic state counts.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b54
+Intent:
+- Add program-aware suggested next experiments to the program dashboard.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Program detail now emits deterministic `program_suggested_experiments` prioritized for lead/backup/active candidates.
+- Suggestions are derived from existing missing metric / failing gate / pending queue signals (display-only, non-semantic).
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b55
+Intent:
+- Redesign program report board template into a scientist-facing program review briefing.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/reports/board_program_v3.html`
+- `tests/test_board_program_posture_rendering.py`
+
+Behavior:
+- Program board now renders structured sections: Executive Summary, Program Context, Candidate Set, Evidence Overview, Program Risks, Recommended Next Experiments, Decision Framing, and Evidence Appendix.
+- Governance detail remains secondary via existing technical panel path.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0b56
+Intent:
+- Improve program navigation/drill-down from program dashboard to molecule/evidence/report surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added Program Drill-down quick links for molecules, data records, evidence, decisions, and one-click program report generation.
+- Navigation remains deterministic and route-only (no semantic changes).
 
 Gates:
 - PASS

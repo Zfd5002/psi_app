@@ -6,6 +6,7 @@
 
 ## V3 Status / Governance Notes
 - [DI V3 Status (v1.3.0b23)](DI_V3_STATUS_v1.3.0b23.md)
+- [DI V3 Status (v1.3.0b58)](DI_V3_STATUS_v1.3.0b58.md)
 - [DI V3 Governance Notes](DI_V3_GOVERNANCE_NOTES.md)
 - [DI Constitution](DI_CONSTITUTION.md)
 - [DI Snapshot Contract](DI_SNAPSHOT_CONTRACT.md)

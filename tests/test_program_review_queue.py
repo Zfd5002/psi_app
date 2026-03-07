@@ -122,7 +122,20 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
     html = tpl.render(
         request=_Req(),
         program=SimpleNamespace(id=1, name="P1", description=""),
-        program_memberships_v3=[],
+        program_memberships_v3=[
+            {
+                "membership_id": 1,
+                "program_id": 1,
+                "molecule_id": 2,
+                "sort_index": 0,
+                "primary_id": "A-1",
+                "title": "A",
+                "owner_program_id": 1,
+                "candidate_role": "lead",
+                "candidate_role_rationale": "best profile",
+            }
+        ],
+        program_molecule_role_options=["lead", "backup", "active", "watchlist", "deprioritized", "archived"],
         all_molecules_for_membership=[],
         molecules=[],
         recent_batches=[],
@@ -147,6 +160,62 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
             "lineage": [],
             "lineage_verify_enabled": False,
         },
+        program_dashboard={
+            "molecule_count": 2,
+            "active_contender_count": 2,
+            "posture_label": "READY",
+            "pending_entry_count": 2,
+            "role_counts": {
+                "lead": 1,
+                "backup": 1,
+                "active": 0,
+                "watchlist": 0,
+                "deprioritized": 0,
+                "archived": 0,
+            },
+            "progress_percent": 100.0,
+            "confidence_percent": 100.0,
+            "progress_label": "advanced",
+            "confidence_label": "high",
+            "progress_basis": "derived_from_latest_molecule_readiness_states",
+            "confidence_basis": "derived_from_non_blocked_fraction_of_known_states",
+        },
+        candidate_set={
+            "lead": [{"molecule_id": 2, "primary_id": "A-1", "title": "A", "rationale": "best profile", "sort_index": 0}],
+            "backup": [{"molecule_id": 3, "primary_id": "B-1", "title": "B", "rationale": "", "sort_index": 1}],
+            "active": [],
+            "watchlist": [],
+            "deprioritized": [],
+            "archived": [],
+        },
+        program_molecule_status_board=[
+            {
+                "molecule_id": 2,
+                "primary_id": "A-1",
+                "title": "A",
+                "role": "lead",
+                "readiness_state": "READY",
+                "key_blocker": "g3_endotoxin",
+                "latest_evidence_update": "2026-03-07T00:00:00",
+            }
+        ],
+        program_evidence_summary=[
+            {"group": "Binding", "molecule_coverage_count": 2, "metric_key_count": 2},
+        ],
+        program_evidence_matrix={
+            "groups": ["Binding"],
+            "rows": [
+                {
+                    "molecule_id": 2,
+                    "primary_id": "A-1",
+                    "title": "A",
+                    "cells": [{"group": "Binding", "present": True}],
+                }
+            ],
+        },
+        program_suggested_experiments=[
+            "Close missing evidence for KD in priority candidates (lead:A-1, backup:B-1).",
+        ],
         audits=[],
     )
     assert "Review data entries" in html
@@ -155,9 +224,31 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
     assert "/data/11/qc/approve" in html
     assert "/data/11/qc/reject" in html
     assert "/data/11/edit?return_to=/programs/1" in html
+    assert "/programs/1/molecules/2/role" in html
+    assert "best profile" in html
+    assert "Program progress (UI-only)" in html
+    assert "Program confidence (UI-only)" in html
+    assert "derived_from_latest_molecule_readiness_states" in html
+    assert "derived_from_non_blocked_fraction_of_known_states" in html
+    assert "Candidate Set" in html
+    assert "None assigned." in html
+    assert "Molecule Status Board" in html
+    assert "G3 Endotoxin" in html
+    assert "Program Evidence Summary" in html
+    assert "Binding" in html
+    assert "Program Evidence Map" in html
+    assert "✓" in html
+    assert "Suggested Next Experiments" in html
+    assert "Program Drill-down" in html
+    assert "/reports/new?report_type=program_report&subject_ids=1" in html
     assert 'id="record-11"' in html
     assert "psi_program_review_scroll_y" in html
     assert "review-queue-action-form" in html
+    assert 'id="toggle-governance-program"' in html
+    assert 'id="program-governance-panel"' in html
+    assert 'data-program-governance-panel="true"' in html
+    assert 'aria-hidden="true"' in html
+    assert "psi_program_detail_mode" in html
     assert html.find("A-1") < html.find("B-1")
 
 
@@ -167,6 +258,7 @@ def test_program_detail_template_hides_bulk_buttons_when_no_pending() -> None:
         request=_Req(),
         program=SimpleNamespace(id=1, name="P1", description=""),
         program_memberships_v3=[],
+        program_molecule_role_options=["lead", "backup", "active", "watchlist", "deprioritized", "archived"],
         all_molecules_for_membership=[],
         molecules=[],
         recent_batches=[],
@@ -191,16 +283,69 @@ def test_program_detail_template_hides_bulk_buttons_when_no_pending() -> None:
             "lineage": [],
             "lineage_verify_enabled": False,
         },
+        program_dashboard={},
+        candidate_set={},
+        program_molecule_status_board=[],
+        program_evidence_summary=[],
+        program_evidence_matrix={},
+        program_suggested_experiments=[],
         audits=[],
     )
     assert "/programs/1/review/approve-all" not in html
     assert "/programs/1/review/reject-all" not in html
 
 
+def test_program_detail_governance_panel_hidden_by_default() -> None:
+    tpl = _env().get_template("programs/detail.html")
+    html = tpl.render(
+        request=_Req(),
+        program=SimpleNamespace(id=1, name="P1", description=""),
+        program_memberships_v3=[],
+        program_molecule_role_options=["lead", "backup", "active", "watchlist", "deprioritized", "archived"],
+        all_molecules_for_membership=[],
+        molecules=[],
+        recent_batches=[],
+        recent_data=[],
+        recent_evidence=[],
+        recent_decisions=[],
+        review_queue_by_molecule=[],
+        di_dashboard={
+            "counts": {"READY": 0, "BLOCKED": 0, "UNKNOWN": 0},
+            "policy_version_filter": None,
+            "policy_versions": [],
+            "policy_ids": [],
+            "top_blockers": [],
+            "top_missing_metrics": [],
+            "top_failing_gates": [],
+            "metric_coverage": [],
+            "qc_ignore_reasons": [],
+            "qc_failed_metrics": [],
+            "qc_unreviewed_metrics": [],
+            "molecule_rollup": [],
+            "molecule_rollup_filtered": [],
+            "lineage": [],
+            "lineage_verify_enabled": False,
+        },
+        program_dashboard={},
+        candidate_set={},
+        program_molecule_status_board=[],
+        program_evidence_summary=[],
+        program_evidence_matrix={},
+        program_suggested_experiments=[],
+        audits=[],
+    )
+    assert "Show governance details" in html
+    assert 'id="program-governance-panel"' in html
+    assert 'style="display:none;"' in html
+    assert 'aria-hidden="true"' in html
+    assert "DI portfolio status (latest snapshot per molecule)" in html
+
+
 def test_program_review_bulk_routes_exist() -> None:
     route_keys = {(r.path, tuple(sorted(getattr(r, "methods", set())))) for r in programs_router.router.routes}
     assert ("/programs/{program_id}/review/approve-all", ("POST",)) in route_keys
     assert ("/programs/{program_id}/review/reject-all", ("POST",)) in route_keys
+    assert ("/programs/{program_id}/molecules/{molecule_id}/role", ("POST",)) in route_keys
 
 
 def test_program_review_approve_all_endpoint_processes_pending_queue() -> None:

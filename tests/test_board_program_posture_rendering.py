@@ -37,5 +37,8 @@ def test_board_program_template_renders_posture_summary_counts() -> None:
         runtime_policy_versions={},
     )
     assert "Portfolio Posture Summary" in html
+    assert "Executive Summary" in html
+    assert "Current Candidate Set" in html
+    assert "Recommended Next Experiments" in html
     assert "Total molecules" in html
     assert ">3<" in html
