@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Claim #{{ claim.id }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Scientific Claim</h1>
+  <div><b>Title:</b> {{ claim.title }}</div>
+  <div><b>Type:</b> {{ claim.claim_type|humanize_state }}</div>
+  <div><b>Status:</b> {{ claim.status|humanize_state }}</div>
+  <div><b>Confidence:</b> {{ claim.confidence_level|humanize_state }}</div>
+  <div><b>Statement:</b> {{ claim.statement }}</div>
+  {% if claim.rationale %}<div><b>Rationale:</b> {{ claim.rationale }}</div>{% endif %}
+
+  {% set m = (maturity if maturity is defined and maturity is mapping else {}) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Maturity Summary</h3>
+    <div class="grid cols-4">
+      <div><b>Supporting:</b> {{ m.supporting_count if m.supporting_count is defined else 0 }}</div>
+      <div><b>Contradicting:</b> {{ m.contradicting_count if m.contradicting_count is defined else 0 }}</div>
+      <div><b>Linked tasks open/done:</b> {{ m.linked_tasks_open if m.linked_tasks_open is defined else 0 }}/{{ m.linked_tasks_done if m.linked_tasks_done is defined else 0 }}</div>
+      <div><b>Linked decisions:</b> {{ m.linked_decisions_count if m.linked_decisions_count is defined else 0 }}</div>
+    </div>
+  </div>
+
+  {% set ev = (evidence_links if evidence_links is defined and evidence_links is iterable else []) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Evidence Links</h3>
+    <table class="table mini">
+      <thead><tr><th>Direction</th><th>DataRecord</th><th>Note</th></tr></thead>
+      <tbody>
+      {% for r in ev %}
+        <tr>
+          <td>{{ r.direction|humanize_state }}</td>
+          <td><a href="/data/{{ r.data_record_id }}">#{{ r.data_record_id }}</a></td>
+          <td>{{ r.note or "" }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">No linked evidence.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% set dl = (decision_links if decision_links is defined and decision_links is iterable else []) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Decision Links</h3>
+    <ul>
+      {% for r in dl %}
+        <li><a href="/decisions/{{ r.decision_snapshot_id }}">Snapshot #{{ r.decision_snapshot_id }}</a> · {{ r.relationship_type|humanize_state }}</li>
+      {% else %}
+        <li class="muted">No linked decisions.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% set tl = (task_links if task_links is defined and task_links is iterable else []) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Task Links</h3>
+    <ul>
+      {% for r in tl %}
+        <li><a href="/programs/{{ claim.program_id }}/board">Task #{{ r.experiment_task_id }}</a> · {{ r.relationship_type|humanize_state }}</li>
+      {% else %}
+        <li class="muted">No linked tasks.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% set olt = (open_linked_tasks if open_linked_tasks is defined and open_linked_tasks is iterable else []) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Open Linked Tasks</h3>
+    <ul>
+      {% for t in olt %}
+        <li>#{{ t.task_id }} · {{ t.status|humanize_state }} · {{ t.urgency|humanize_state }} · {% if t.suggested_assay %}{{ t.suggested_assay }}{% else %}{{ t.metric_key }}{% endif %}</li>
+      {% else %}
+        <li class="muted">No open linked tasks.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% set tc = (trajectory_candidates if trajectory_candidates is defined and trajectory_candidates is iterable else []) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Relevant Trajectory Candidates</h3>
+    <table class="table mini">
+      <thead><tr><th>Experiment</th><th>Metric</th><th>Readiness gain</th><th>Confidence</th></tr></thead>
+      <tbody>
+      {% for r in tc %}
+        <tr>
+          <td>{{ r.suggested_assay if r.suggested_assay is defined and r.suggested_assay else "recommended experiment" }}</td>
+          <td>{{ r.metric_key if r.metric_key is defined else "—" }}</td>
+          <td>{{ r.expected_readiness_gain if r.expected_readiness_gain is defined else 0 }}</td>
+          <td>{{ r.confidence_level if r.confidence_level is defined else "low" }} ({{ "%.2f"|format(r.confidence_score if r.confidence_score is defined else 0.0) }})</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No relevant trajectory candidates.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

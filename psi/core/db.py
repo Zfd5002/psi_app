@@ -324,6 +324,42 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "created_at": "TEXT",
             "updated_at": "TEXT",
         },
+        "scientific_claims": {
+            "id": "INTEGER",
+            "scope_type": "TEXT",
+            "molecule_id": "INTEGER",
+            "program_id": "INTEGER",
+            "title": "TEXT",
+            "claim_type": "TEXT",
+            "statement": "TEXT",
+            "status": "TEXT",
+            "confidence_level": "TEXT",
+            "rationale": "TEXT",
+            "created_at": "TEXT",
+            "updated_at": "TEXT",
+        },
+        "scientific_claim_evidence_links": {
+            "id": "INTEGER",
+            "claim_id": "INTEGER",
+            "data_record_id": "INTEGER",
+            "direction": "TEXT",
+            "note": "TEXT",
+            "created_at": "TEXT",
+        },
+        "scientific_claim_decision_links": {
+            "id": "INTEGER",
+            "claim_id": "INTEGER",
+            "decision_snapshot_id": "INTEGER",
+            "relationship_type": "TEXT",
+            "created_at": "TEXT",
+        },
+        "scientific_claim_task_links": {
+            "id": "INTEGER",
+            "claim_id": "INTEGER",
+            "experiment_task_id": "INTEGER",
+            "relationship_type": "TEXT",
+            "created_at": "TEXT",
+        },
 
         # v1.2.3g: per-measurement provenance (optional legacy table; additive columns only)
         # NOTE: data_measurements is managed by PRAGMA-driven services in PSI and may pre-exist
@@ -678,6 +714,47 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
         conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_experiment_tasks_linked_data_record_id "
             "ON program_experiment_tasks(linked_data_record_id)"
+        ))
+        # v1.3.0c76: scientific claims indexes (additive).
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_scientific_claims_scope_status "
+            "ON scientific_claims(scope_type, status)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_scientific_claims_molecule_status "
+            "ON scientific_claims(molecule_id, status)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_scientific_claims_program_status "
+            "ON scientific_claims(program_id, status)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_scientific_claims_type_status "
+            "ON scientific_claims(claim_type, status)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_claim_evidence_claim "
+            "ON scientific_claim_evidence_links(claim_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_claim_evidence_record "
+            "ON scientific_claim_evidence_links(data_record_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_claim_decision_claim "
+            "ON scientific_claim_decision_links(claim_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_claim_decision_snapshot "
+            "ON scientific_claim_decision_links(decision_snapshot_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_claim_task_claim "
+            "ON scientific_claim_task_links(claim_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_claim_task_task "
+            "ON scientific_claim_task_links(experiment_task_id)"
         ))
         conn.commit()
 

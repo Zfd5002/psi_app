@@ -85,6 +85,31 @@
       {% endfor %}
     </tbody>
   </table>
+  {% set pcs = (program_claim_summary if program_claim_summary is defined and program_claim_summary is mapping else {}) %}
+  {% set pcp = (program_claims_preview if program_claims_preview is defined and program_claims_preview is iterable else []) %}
+  <h3>Scientific Claims Summary</h3>
+  <div class="grid cols-4">
+    <div class="card"><div class="muted mini">Hypothesis / Emerging</div><div style="font-size:24px;font-weight:700;">{{ pcs.hypothesis_or_emerging if pcs.hypothesis_or_emerging is defined else 0 }}</div></div>
+    <div class="card"><div class="muted mini">Supported</div><div style="font-size:24px;font-weight:700;">{{ pcs.supported if pcs.supported is defined else 0 }}</div></div>
+    <div class="card"><div class="muted mini">Contradicted</div><div style="font-size:24px;font-weight:700;">{{ pcs.contradicted if pcs.contradicted is defined else 0 }}</div></div>
+    <div class="card"><div class="muted mini">Evidence-starved</div><div style="font-size:24px;font-weight:700;">{{ pcs.evidence_starved if pcs.evidence_starved is defined else 0 }}</div></div>
+  </div>
+  <table class="table mini" style="margin-top:8px;">
+    <thead><tr><th>Claim</th><th>Type</th><th>Status</th><th>Confidence</th><th>Support/Conflict</th></tr></thead>
+    <tbody>
+      {% for c in pcp %}
+      <tr>
+        <td><a href="/claims/{{ c.claim_id }}">{{ c.title }}</a></td>
+        <td>{{ c.claim_type|humanize_state }}</td>
+        <td>{{ c.status|humanize_state }}</td>
+        <td>{{ c.confidence_level|humanize_state }}</td>
+        <td>{{ c.supporting_count }}/{{ c.contradicting_count }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No active program claims.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
   {% set cs = (candidate_set if candidate_set is defined and candidate_set is mapping else {}) %}
   <h3>Candidate Set</h3>
   <div class="grid cols-3">

@@ -29,6 +29,7 @@ class Program(Base):
     memberships = relationship("ProgramMembership", back_populates="program", cascade="all, delete-orphan")
     molecule_statuses = relationship("ProgramMoleculeStatus", back_populates="program", cascade="all, delete-orphan")
     portfolio_memberships = relationship("PortfolioMembership", back_populates="program", cascade="all, delete-orphan")
+    scientific_claims = relationship("ScientificClaim", back_populates="program", cascade="all, delete-orphan")
 
 
 class Molecule(Base):
@@ -80,6 +81,7 @@ class Molecule(Base):
         cascade="all, delete-orphan",
     )
     variant_set_memberships = relationship("BuilderVariantSetMember", back_populates="molecule", cascade="all, delete-orphan")
+    scientific_claims = relationship("ScientificClaim", back_populates="molecule", cascade="all, delete-orphan")
 
 
 class Portfolio(Base):
@@ -419,6 +421,7 @@ class DataRecord(Base):
 
     citations = relationship("EvidenceCitation", back_populates="data_record", cascade="all, delete-orphan")
     linked_experiment_tasks = relationship("ExperimentTask", back_populates="linked_data_record")
+    scientific_claim_links = relationship("ScientificClaimEvidenceLink", back_populates="data_record", cascade="all, delete-orphan")
 
 
 class ExperimentTask(Base):
@@ -451,6 +454,91 @@ class ExperimentTask(Base):
     molecule = relationship("Molecule", back_populates="experiment_tasks")
     source_snapshot = relationship("DecisionSnapshot", back_populates="experiment_tasks")
     linked_data_record = relationship("DataRecord", back_populates="linked_experiment_tasks")
+    scientific_claim_links = relationship("ScientificClaimTaskLink", back_populates="experiment_task", cascade="all, delete-orphan")
+
+
+class ScientificClaim(Base):
+    __tablename__ = "scientific_claims"
+    __table_args__ = (
+        Index("ix_scientific_claims_scope_status", "scope_type", "status"),
+        Index("ix_scientific_claims_molecule_status", "molecule_id", "status"),
+        Index("ix_scientific_claims_program_status", "program_id", "status"),
+        Index("ix_scientific_claims_type_status", "claim_type", "status"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    scope_type = Column(Text, nullable=False, default="molecule")
+    molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=True)
+    program_id = Column(Integer, ForeignKey("programs.id"), nullable=True)
+    title = Column(Text, nullable=False)
+    claim_type = Column(Text, nullable=False)
+    statement = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="hypothesis")
+    confidence_level = Column(Text, nullable=False, default="low")
+    rationale = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    molecule = relationship("Molecule", back_populates="scientific_claims")
+    program = relationship("Program", back_populates="scientific_claims")
+    evidence_links = relationship("ScientificClaimEvidenceLink", back_populates="claim", cascade="all, delete-orphan")
+    decision_links = relationship("ScientificClaimDecisionLink", back_populates="claim", cascade="all, delete-orphan")
+    task_links = relationship("ScientificClaimTaskLink", back_populates="claim", cascade="all, delete-orphan")
+
+
+class ScientificClaimEvidenceLink(Base):
+    __tablename__ = "scientific_claim_evidence_links"
+    __table_args__ = (
+        UniqueConstraint("claim_id", "data_record_id", "direction", name="uq_claim_evidence_direction"),
+        Index("ix_claim_evidence_claim", "claim_id"),
+        Index("ix_claim_evidence_record", "data_record_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    claim_id = Column(Integer, ForeignKey("scientific_claims.id"), nullable=False)
+    data_record_id = Column(Integer, ForeignKey("data_records.id"), nullable=False)
+    direction = Column(Text, nullable=False, default="contextual")
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    claim = relationship("ScientificClaim", back_populates="evidence_links")
+    data_record = relationship("DataRecord", back_populates="scientific_claim_links")
+
+
+class ScientificClaimDecisionLink(Base):
+    __tablename__ = "scientific_claim_decision_links"
+    __table_args__ = (
+        UniqueConstraint("claim_id", "decision_snapshot_id", "relationship_type", name="uq_claim_decision_rel"),
+        Index("ix_claim_decision_claim", "claim_id"),
+        Index("ix_claim_decision_snapshot", "decision_snapshot_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    claim_id = Column(Integer, ForeignKey("scientific_claims.id"), nullable=False)
+    decision_snapshot_id = Column(Integer, ForeignKey("decision_snapshots.id"), nullable=False)
+    relationship_type = Column(Text, nullable=False, default="informs")
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    claim = relationship("ScientificClaim", back_populates="decision_links")
+    decision_snapshot = relationship("DecisionSnapshot")
+
+
+class ScientificClaimTaskLink(Base):
+    __tablename__ = "scientific_claim_task_links"
+    __table_args__ = (
+        UniqueConstraint("claim_id", "experiment_task_id", "relationship_type", name="uq_claim_task_rel"),
+        Index("ix_claim_task_claim", "claim_id"),
+        Index("ix_claim_task_task", "experiment_task_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    claim_id = Column(Integer, ForeignKey("scientific_claims.id"), nullable=False)
+    experiment_task_id = Column(Integer, ForeignKey("program_experiment_tasks.id"), nullable=False)
+    relationship_type = Column(Text, nullable=False, default="tests")
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    claim = relationship("ScientificClaim", back_populates="task_links")
+    experiment_task = relationship("ExperimentTask", back_populates="scientific_claim_links")
 
 
 class Evidence(Base):

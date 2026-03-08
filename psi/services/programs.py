@@ -27,6 +27,7 @@ from psi.services.di.verify import verify_snapshot
 from psi.services.metric_catalog import metric_catalog_entry, metric_group_for_key, metric_group_sort_key
 from psi.services.evidence_preview import build_record_evidence_preview
 from psi.web.ui_labels import humanize_key
+from psi.services import claims as claims_svc
 
 PROGRAM_MOLECULE_ROLES: tuple[str, ...] = (
     "lead",
@@ -670,6 +671,36 @@ def get_program_detail(
     if not suggestion_items:
         suggestion_items.append("No prioritized experiment suggestions available from current program evidence surfaces.")
     program_suggested_experiments = suggestion_items[:5]
+    claim_rows = claims_svc.top_claims_for_program(db, program_id=int(program_id), limit=20)
+    claim_summary_counts = {
+        "hypothesis_or_emerging": 0,
+        "supported": 0,
+        "contradicted": 0,
+        "evidence_starved": 0,
+    }
+    claim_preview = []
+    for c in claim_rows:
+        msum = claims_svc.summarize_claim_maturity(db, claim_id=int(c.id))
+        st = str(c.status or "")
+        if st in {"hypothesis", "emerging"}:
+            claim_summary_counts["hypothesis_or_emerging"] += 1
+        if st == "supported":
+            claim_summary_counts["supported"] += 1
+        if st == "contradicted":
+            claim_summary_counts["contradicted"] += 1
+        if int(msum.get("supporting_count") or 0) + int(msum.get("contradicting_count") or 0) == 0:
+            claim_summary_counts["evidence_starved"] += 1
+        claim_preview.append(
+            {
+                "claim_id": int(c.id),
+                "title": str(c.title or ""),
+                "claim_type": str(c.claim_type or ""),
+                "status": str(c.status or ""),
+                "confidence_level": str(c.confidence_level or ""),
+                "supporting_count": int(msum.get("supporting_count") or 0),
+                "contradicting_count": int(msum.get("contradicting_count") or 0),
+            }
+        )
 
     return {
         "program": p,
@@ -709,6 +740,8 @@ def get_program_detail(
         "program_evidence_summary": program_evidence_summary,
         "program_evidence_matrix": program_evidence_matrix,
         "program_suggested_experiments": program_suggested_experiments,
+        "program_claim_summary": claim_summary_counts,
+        "program_claims_preview": claim_preview[:10],
         "program_dashboard": program_dashboard,
         "di_dashboard": di_dashboard,
         "audits": audits,

@@ -4,9 +4,10 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from psi.core.models import DataRecord, DecisionSnapshot, ExperimentTask, Molecule, Program
+from psi.core.models import DataRecord, DecisionSnapshot, ExperimentTask, Molecule, Program, ScientificClaim
 from psi.services.dev_board import build_development_board
 from psi.services.insight_engine import build_insight_bundle
+from psi.services import claims as claims_svc
 import json
 
 
@@ -378,3 +379,40 @@ def build_portfolio_export_rows(db: Session) -> list[dict[str, int | float | str
             }
         )
     return out
+
+
+def build_portfolio_claim_summary(db: Session, *, limit: int = 20) -> dict[str, list[dict[str, int | str]]]:
+    claims = (
+        db.query(ScientificClaim)
+        .filter(ScientificClaim.status != "archived")
+        .order_by(ScientificClaim.updated_at.desc(), ScientificClaim.id.asc())
+        .all()
+    )
+    rows: list[dict[str, int | str]] = []
+    for c in claims:
+        m = claims_svc.summarize_claim_maturity(db, claim_id=int(c.id))
+        task_burden = int(m.get("linked_tasks_open") or 0) + int(m.get("linked_tasks_done") or 0)
+        rows.append(
+            {
+                "claim_id": int(c.id),
+                "title": str(c.title or ""),
+                "status": str(c.status or ""),
+                "confidence_level": str(c.confidence_level or ""),
+                "supporting_count": int(m.get("supporting_count") or 0),
+                "contradicting_count": int(m.get("contradicting_count") or 0),
+                "task_burden": int(task_burden),
+            }
+        )
+    most_supported = sorted(rows, key=lambda r: (-int(r["supporting_count"]), str(r["title"]), int(r["claim_id"])))[: max(1, int(limit))]
+    at_risk = sorted(rows, key=lambda r: (-int(r["contradicting_count"]), str(r["title"]), int(r["claim_id"])))[: max(1, int(limit))]
+    evidence_starved = sorted(
+        [r for r in rows if int(r["supporting_count"]) + int(r["contradicting_count"]) == 0],
+        key=lambda r: (str(r["status"]), str(r["title"]), int(r["claim_id"])),
+    )[: max(1, int(limit))]
+    highest_task_burden = sorted(rows, key=lambda r: (-int(r["task_burden"]), str(r["title"]), int(r["claim_id"])))[: max(1, int(limit))]
+    return {
+        "most_supported_claims": most_supported,
+        "most_at_risk_claims": at_risk,
+        "most_evidence_starved_claims": evidence_starved,
+        "highest_task_burden_claims": highest_task_burden,
+    }

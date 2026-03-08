@@ -16,6 +16,7 @@ from psi.services.portfolio import (
     build_evidence_gap_report,
     build_portfolio_timeline,
     build_portfolio_export_rows,
+    build_portfolio_claim_summary,
 )
 
 
@@ -355,6 +356,34 @@ def test_portfolio_export_rows_follow_program_ordering() -> None:
             assert rows[0]["program_name"] == "PX-1"
             assert rows[1]["program_name"] == "PX-2"
             assert "program_status" in rows[0]
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_portfolio_claim_summary_rollups() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            from psi.services import claims as claims_svc
+            now = datetime(2026, 3, 7)
+            p = Program(name="PCS", created_at=now, updated_at=now)
+            db.add(p); db.commit(); db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="PCS-M1", title="", created_at=now, updated_at=now)
+            db.add(m); db.commit(); db.refresh(m)
+            c1 = claims_svc.create_claim(db, scope_type="molecule", molecule_id=int(m.id), program_id=int(p.id), title="Supported claim", claim_type="affinity", statement="x", status="supported")
+            c2 = claims_svc.create_claim(db, scope_type="molecule", molecule_id=int(m.id), program_id=int(p.id), title="Risk claim", claim_type="safety_signal", statement="x", status="emerging")
+            rec = DataRecord(program_id=int(p.id), molecule_id=int(m.id), batch_id=None, domain="Biological", data_type="Binding", method="BLI", title="r", created_at=now, updated_at=now)
+            db.add(rec); db.commit(); db.refresh(rec)
+            claims_svc.link_claim_to_data_record(db, claim_id=int(c1.id), data_record_id=int(rec.id), direction="supporting")
+            claims_svc.link_claim_to_data_record(db, claim_id=int(c2.id), data_record_id=int(rec.id), direction="contradicting")
+            out = build_portfolio_claim_summary(db, limit=10)
+            assert "most_supported_claims" in out
+            assert "most_at_risk_claims" in out
+            assert str(out["most_supported_claims"][0]["title"]) in {"Supported claim", "Risk claim"}
+            assert str(out["most_at_risk_claims"][0]["title"]) in {"Supported claim", "Risk claim"}
         finally:
             db.close()
     finally:

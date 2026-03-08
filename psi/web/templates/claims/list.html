@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Scientific Claims | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Scientific Claims</h1>
+  <div class="muted mini">Disciplined scientific assertion layer across molecules and programs.</div>
+  {% set rows = (claims if claims is defined and claims is iterable else []) %}
+  <table class="table mini" style="margin-top:8px;">
+    <thead><tr><th>ID</th><th>Title</th><th>Scope</th><th>Type</th><th>Status</th><th>Confidence</th></tr></thead>
+    <tbody>
+      {% for c in rows %}
+      <tr>
+        <td>#{{ c.id }}</td>
+        <td><a href="/claims/{{ c.id }}">{{ c.title }}</a></td>
+        <td>{{ c.scope_type|humanize_state }}</td>
+        <td>{{ c.claim_type|humanize_state }}</td>
+        <td>{{ c.status|humanize_state }}</td>
+        <td>{{ c.confidence_level|humanize_state }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">No active claims.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -48,6 +48,7 @@ def test_portfolio_route_context(monkeypatch) -> None:
             assert "program_summaries" in resp.context
             assert "portfolio_timeline" in resp.context
             assert "portfolio_trajectory" in resp.context
+            assert "portfolio_claim_summary" in resp.context
             assert isinstance(resp.context["program_summaries"], list)
         finally:
             db.close()

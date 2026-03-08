@@ -58,6 +58,7 @@ from psi.services.sequence_annotation import annotate_sequence_for_editor
 from psi.services.insight_engine import build_insight_bundle, summarize_trend_signals
 from psi.services.trends import build_molecule_trends
 from psi.services.trajectory import build_trajectory_tree, generate_trajectory_candidates, rank_trajectory_candidates
+from psi.services import claims as claims_svc
 
 
 def _pack_segments(segments: list[dict]) -> list[list[dict]]:
@@ -520,6 +521,32 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         generate_trajectory_candidates(db, molecule_id=int(molecule_id))
     )[:5]
     trajectory_tree = build_trajectory_tree(db, molecule_id=int(molecule_id), max_depth=2, branch_limit=4)
+    top_claim_rows = claims_svc.top_claims_for_molecule(db, molecule_id=int(molecule_id), limit=5)
+    molecule_claims = []
+    for c in top_claim_rows:
+        support = claims_svc.summarize_claim_support(db, claim_id=int(c.id))
+        maturity = claims_svc.summarize_claim_maturity(db, claim_id=int(c.id))
+        task_links = claims_svc.list_claim_tasks(db, claim_id=int(c.id))
+        next_task = ""
+        if task_links:
+            t0 = task_links[0].experiment_task
+            if t0 is not None:
+                assay = str(t0.suggested_assay or "").strip()
+                mk = str(t0.metric_key or "").strip()
+                next_task = assay or mk or f"Task #{int(t0.id)}"
+        molecule_claims.append(
+            {
+                "claim_id": int(c.id),
+                "title": str(c.title or ""),
+                "claim_type": str(c.claim_type or ""),
+                "status": str(c.status or ""),
+                "confidence_level": str(c.confidence_level or ""),
+                "supporting_count": int(support.get("supporting_count") or 0),
+                "contradicting_count": int(support.get("contradicting_count") or 0),
+                "maturity_summary": str(maturity.get("maturity_summary") or ""),
+                "next_task_label": next_task,
+            }
+        )
 
     return {
         "molecule": m,
@@ -553,6 +580,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "open_experiment_tasks": open_experiment_tasks,
         "trajectory_candidates": trajectory_candidates,
         "trajectory_tree": trajectory_tree,
+        "molecule_claims": molecule_claims,
         "pdl1_allowed_mismatches": int(pdl1_allowed_mismatches or 0),
         "property_runs": runs,
         "latest_run": latest_run,

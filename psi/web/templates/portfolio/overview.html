@@ -146,5 +146,54 @@
       </tbody>
     </table>
   </div>
+
+  {% set pcs = (portfolio_claim_summary if portfolio_claim_summary is defined and portfolio_claim_summary is mapping else {}) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Portfolio Claim Insights</h3>
+    <div class="grid cols-2">
+      <div>
+        <div class="muted mini">Most supported claims</div>
+        <ul>
+          {% for r in (pcs.most_supported_claims if pcs.most_supported_claims is defined else []) %}
+            <li><a href="/claims/{{ r.claim_id }}">{{ r.title }}</a> (support={{ r.supporting_count }})</li>
+          {% else %}
+            <li class="muted">No claims.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Most at-risk claims</div>
+        <ul>
+          {% for r in (pcs.most_at_risk_claims if pcs.most_at_risk_claims is defined else []) %}
+            <li><a href="/claims/{{ r.claim_id }}">{{ r.title }}</a> (contradict={{ r.contradicting_count }})</li>
+          {% else %}
+            <li class="muted">No claims.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="grid cols-2">
+      <div>
+        <div class="muted mini">Most evidence-starved claims</div>
+        <ul>
+          {% for r in (pcs.most_evidence_starved_claims if pcs.most_evidence_starved_claims is defined else []) %}
+            <li><a href="/claims/{{ r.claim_id }}">{{ r.title }}</a> (status={{ r.status|humanize_state }})</li>
+          {% else %}
+            <li class="muted">No claims.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Highest task-burden claims</div>
+        <ul>
+          {% for r in (pcs.highest_task_burden_claims if pcs.highest_task_burden_claims is defined else []) %}
+            <li><a href="/claims/{{ r.claim_id }}">{{ r.title }}</a> (tasks={{ r.task_burden }})</li>
+          {% else %}
+            <li class="muted">No claims.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

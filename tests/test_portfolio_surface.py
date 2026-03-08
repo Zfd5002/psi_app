@@ -76,6 +76,12 @@ def test_portfolio_overview_template_sections() -> None:
                 "confidence_score": 0.81,
             }
         ],
+        portfolio_claim_summary={
+            "most_supported_claims": [{"claim_id": 4, "title": "Affinity claim", "supporting_count": 3}],
+            "most_at_risk_claims": [{"claim_id": 5, "title": "Safety claim", "contradicting_count": 2}],
+            "most_evidence_starved_claims": [{"claim_id": 6, "title": "Mechanism claim", "status": "hypothesis"}],
+            "highest_task_burden_claims": [{"claim_id": 7, "title": "Readiness claim", "task_burden": 4}],
+        },
     )
     assert "Portfolio Intelligence" in html
     assert "Portfolio Summary" in html
@@ -85,6 +91,8 @@ def test_portfolio_overview_template_sections() -> None:
     assert "Evidence Gap Report" in html
     assert "Portfolio Timeline" in html
     assert "Portfolio Trajectory Insights" in html
+    assert "Portfolio Claim Insights" in html
+    assert "Affinity claim" in html
     assert "kd_nM" in html
     assert "/molecules/7" in html
     assert "2026-03-02" in html

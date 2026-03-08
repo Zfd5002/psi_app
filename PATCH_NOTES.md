@@ -11302,3 +11302,271 @@ Behavior:
 
 Gates:
 - PASS
+## 2026-03-07 — v1.3.0c76
+Intent:
+- Add ScientificClaim persistence foundation with additive schema support.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `tests/test_scientific_claim_model.py`
+
+Behavior:
+- Added `ScientificClaim` core model and additive link models for evidence/decision/task relationships.
+- Extended schema ensure/index setup for deterministic claim query patterns.
+- Added model/schema tests validating table shape and additive lifecycle/link behavior.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c77
+Intent:
+- Add Scientific Claims service layer with deterministic lifecycle/query operations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `tests/test_claims_service.py`
+
+Behavior:
+- Added claim service operations: create/get/list/update/archive/top helpers.
+- Added deterministic molecule/program claim ordering by status, confidence, updated_at, id.
+- Added service tests covering creation, ordering, lifecycle transitions, and retrieval APIs.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c78
+Intent:
+- Harden scientific-claim lifecycle transitions and deterministic ordering semantics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `tests/test_claims_service.py`
+
+Behavior:
+- Added explicit transition helper `can_transition_claim_status(...)` and enforced one-way transition rules.
+- Archived status remains terminal unless explicitly changed in service policy.
+- Added transition-matrix tests covering allowed/blocked lifecycle paths.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c79
+Intent:
+- Add disciplined claim-type templates and statement helpers.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `tests/test_claims_service.py`
+
+Behavior:
+- Added canonical claim-type template map to constrain statement semantics.
+- Added helper `claim_type_template(...)` and strengthened statement formatting for typed claims.
+- Added tests ensuring claim type normalization/template behavior remains deterministic.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c80
+Intent:
+- Add claim-to-evidence linkage semantics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `tests/test_claim_evidence_links.py`
+
+Behavior:
+- Added deterministic claim evidence linking/unlinking/listing surfaces with direction support (`supporting|contradicting|contextual`).
+- Added dedicated evidence-link tests validating add/list/remove behavior.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c81
+Intent:
+- Add claim-to-decision linkage semantics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `tests/test_claim_decision_links.py`
+
+Behavior:
+- Added deterministic claim/decision association helpers and list surfaces.
+- Added dedicated tests validating link-only behavior with no DecisionSnapshot payload mutation.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c82
+Intent:
+- Add claim-to-task linkage semantics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `tests/test_claim_task_links.py`
+
+Behavior:
+- Added deterministic claim/task association helpers and listing support.
+- Added dedicated tests validating link behavior and task-state non-mutation guarantees.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c83
+Intent:
+- Add deterministic claim synthesis summaries.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `tests/test_claim_synthesis.py`
+
+Behavior:
+- Added deterministic synthesis helpers: support summary, conflict summary, maturity summary.
+- Maturity surfaces now include support/conflict counts, linked decision count, and linked task open/done counts.
+- Added dedicated synthesis tests for summary correctness.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c84
+Intent:
+- Add molecule-level scientific claims panel.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_claim_surface.py`
+
+Behavior:
+- Molecule detail context now includes top active claims with deterministic support/conflict/maturity summaries.
+- Added “Scientific Claims” panel to molecule detail showing status, confidence, support/conflict, and linked next-task hint.
+- Added molecule-claim surface tests for context and rendering.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c85
+Intent:
+- Add scientific claim detail route and page.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/app.py`
+- `psi/web/routers/claims.py`
+- `psi/web/templates/claims/detail.html`
+- `tests/test_claim_router.py`
+- `tests/test_claim_surface.py`
+
+Behavior:
+- Added server-rendered claim detail route `/claims/{claim_id}`.
+- Added claim detail surface with claim statement, type/status/confidence, evidence/decision/task links, and maturity summary.
+- Added route/template tests for detail rendering and context.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c86
+Intent:
+- Add task and trajectory context to claim surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `psi/web/templates/claims/detail.html`
+- `tests/test_claim_router.py`
+- `tests/test_claim_surface.py`
+
+Behavior:
+- Claim detail context now includes linked open tasks and claim-relevant trajectory candidates.
+- Added claim-type metric hints to select relevant trajectory rows deterministically.
+- Claim detail page now renders open-task context and trajectory context sections.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c87
+Intent:
+- Add program-level scientific claim summary surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_claim_summary.py`
+
+Behavior:
+- Program detail context now includes deterministic claim summary counts and preview rows.
+- Program page now renders claim status buckets and top active claim rows.
+- Added tests validating program claim rollup context behavior.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c88
+Intent:
+- Add portfolio-level claim insight rollups.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_router.py`
+- `tests/test_portfolio_service.py`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Added deterministic `build_portfolio_claim_summary(...)` rollups for most-supported, most-at-risk, evidence-starved, and highest-task-burden claims.
+- Portfolio overview now renders claim insight sections.
+- Added router/service/template tests for claim summary context and rendering.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c89
+Intent:
+- Add Scientific Claims regression boundary coverage.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_claim_regression_boundaries.py`
+
+Behavior:
+- Added explicit regression tests ensuring claim reads do not mutate DI snapshots, task states, or create evidence rows.
+- Added deterministic ordering/summary regression checks for claims service outputs.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c90
+Intent:
+- Add Scientific Claims layer documentation and final coherence polish.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/SCIENTIFIC_CLAIMS_LAYER.md`
+- `psi/services/claims.py`
+- `psi/web/routers/claims.py`
+- `psi/web/templates/base.html`
+- `psi/web/templates/claims/list.html`
+- `tests/test_base_navigation.py`
+- `tests/test_claim_router.py`
+- `tests/test_claim_surface.py`
+
+Behavior:
+- Added claims index route `/claims` and list template for scientist-facing discoverability.
+- Added navigation entry for Claims.
+- Added documentation covering claim/hypothesis semantics, link boundaries, architecture constraints, and extension points.
+
+Gates:
+- PASS
