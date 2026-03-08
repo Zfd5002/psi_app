@@ -25,6 +25,24 @@ def test_data_form_uses_static_js_and_config_payload() -> None:
     )
     assert 'id="dataFormConfig"' in html
     assert '/static/data_form.js' in html
+    assert 'id="batchRequirementHint"' in html
+    assert 'name="task_id"' not in html
+
+
+def test_data_form_includes_task_id_hidden_input_when_prefilled() -> None:
+    tpl = _env().get_template("data/form.html")
+    html = tpl.render(
+        request=SimpleNamespace(query_params={}),
+        record=None,
+        programs=[SimpleNamespace(id=1, name="P1")],
+        molecules=[],
+        batches=[],
+        domains=["Biological"],
+        prefill={"program_id": 1, "molecule_id": None, "batch_id": None, "task_id": 42},
+        return_to="/programs/1/workflow",
+    )
+    assert 'name="task_id"' in html
+    assert 'value="42"' in html
 
 
 def test_evidence_form_uses_static_js_and_config_payload() -> None:

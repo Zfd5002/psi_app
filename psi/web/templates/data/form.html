@@ -37,7 +37,9 @@
     <div class="muted mini">Capture the experiment run, structured outputs, and any attached files.</div>
   </div>
   <form id="dataForm" class="form" method="post" action="{% if record %}/data/{{ record.id }}/edit{% else %}/data/new{% endif %}" enctype="multipart/form-data">
-    <input type="hidden" name="task_id" value="{{ prefill.task_id if prefill is defined and prefill.task_id is defined and prefill.task_id else '' }}" />
+    {% if prefill is defined and prefill.task_id is defined and prefill.task_id %}
+    <input type="hidden" name="task_id" value="{{ prefill.task_id }}" />
+    {% endif %}
     <input type="hidden" name="action_intent" id="actionIntent" value="save" />
     <input type="hidden" name="actor" value="scientist" />
     <input type="hidden" name="return_to" value="{{ return_to if return_to is defined else '' }}" />

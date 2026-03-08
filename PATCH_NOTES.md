@@ -14231,3 +14231,27 @@ Behavior:
 
 Gates:
 - PASS
+
+## 2026-03-08 — v1.3.0d90
+Intent:
+- Surgical hardening for `/data/new` manual entry and small batch-context UX guidance, without changing data/DI logic.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/data/form.html`
+- `psi/web/templates/partials/data/form_core_fields.html`
+- `psi/web/static/data_form.js`
+- `tests/test_ingestion_static_js.py`
+
+Behavior:
+- Fixed manual `/data/new` submission parse failure path by rendering hidden `task_id` only when a real task id exists.
+- Preserved task-linked capture behavior: workflow/task entry still posts integer `task_id` when present.
+- Added lightweight inline batch-scope guidance text (`#batchRequirementHint`) driven by existing registry-derived batch requirement logic in `data_form.js`.
+- No schema/model/service/DI semantics changed.
+
+Gates:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS (`matched=5`, `failed=0`)

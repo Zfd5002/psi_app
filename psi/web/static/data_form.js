@@ -18,6 +18,7 @@
     const paramsJson = document.getElementById('paramsJson');
     const resultsJson = document.getElementById('resultsJson');
     const batchSel = document.getElementById('batchSel');
+    const batchRequirementHint = document.getElementById('batchRequirementHint');
 
     const schemas = registry.data_schemas || {};
     const legacySchemas = registry.legacy_data_schemas || {};
@@ -106,16 +107,21 @@
 
     function enforceBatchRequirement(){
       const dt = dataTypeSel.value;
+      let requires = false;
       if(requiringBatch.has(dt) || legacyRequiringBatch.has(dt)){
-        batchSel.required = true;
-        return;
+        requires = true;
+      } else if(legacyProgramLevel.has(dt)){
+        requires = false;
+      } else {
+        const meta = dataTypeMeta[dt];
+        requires = !!(meta && meta.requires_batch);
       }
-      if(legacyProgramLevel.has(dt)){
-        batchSel.required = false;
-        return;
+      batchSel.required = requires;
+      if(batchRequirementHint){
+        batchRequirementHint.textContent = requires
+          ? 'This data type is batch-scoped in PSI. Select a Batch before saving.'
+          : 'Batch is optional for this data type.';
       }
-      const meta = dataTypeMeta[dt];
-      batchSel.required = !!(meta && meta.requires_batch);
     }
 
     function renderSchema(){
