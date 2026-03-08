@@ -2,7 +2,6 @@
 {% block title %}Variant Set {{ variant_set.id }} | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
   {% set page_eyebrow = "Builder Workflow" %}
   {% set page_title = "Variant Family Review" %}
   {% set page_subtitle = "Builder campaign detail (standalone from Programs/DI)." %}
@@ -39,7 +38,7 @@
     <h3 style="margin-top:0;">Next Actions</h3>
     <div class="action-bar-utility no-print">
       <a class="btn mini primary" href="/builder/variant-set">Build Another Variant Family</a>
-      <a class="btn mini" href="/builder">Back to Builder Home</a>
+      <a class="btn mini" href="/builder">Open Builder Home</a>
       {% if members and members[0] is mapping and members[0].molecule_id is defined %}
       <a class="btn mini" href="/molecules/{{ members[0].molecule_id }}">Open First Member Molecule</a>
       {% endif %}

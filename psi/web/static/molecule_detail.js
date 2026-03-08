@@ -4,7 +4,6 @@
   if (configEl) {
     try { config = JSON.parse(configEl.textContent || "{}"); } catch (e) { config = {}; }
   }
-  const moleculeId = String(config.molecule_id || "");
 
 (function(){
     // Persist open/closed state for key <details> panels (molecule-scoped).

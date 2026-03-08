@@ -2,7 +2,6 @@
 {% block title %}Builder CDR Builder | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
   {% set page_eyebrow = "Builder Workspace" %}
   {% set page_title = "Builder: CDR Scaffold Builder" %}
   {% set page_subtitle = "Construct a draft molecule from CDR inputs and scaffold assumptions." %}
@@ -10,6 +9,13 @@
   {% include "partials/page_header.html" %}
   {% set surface_chrome_active_index = 0 %}
   {% include "partials/surface_chrome.html" %}
+  <div class="section-heading" style="margin-top:10px;">
+    <h2>Context</h2>
+    <div class="muted mini">Build a scaffold-guided CDR draft and review assumptions before molecule creation.</div>
+  </div>
+  <div class="section-heading" style="margin-top:10px;">
+    <h2>Inputs</h2>
+  </div>
   <form method="post" action="/builder/cdr-builder/draft">
     {% set selected_program = (form_data.parent_program_id if form_data is defined and form_data.parent_program_id is defined else None) %}
     {% set selected_parent = (form_data.parent_molecule_id if form_data is defined and form_data.parent_molecule_id is defined else None) %}
@@ -52,7 +58,9 @@
   </form>
 
   {% if draft is defined and draft %}
-  <h3 style="margin-top:12px;">CDR Draft Preview</h3>
+  <div class="section-heading" style="margin-top:12px;">
+    <h2>Preview / Generated Result</h2>
+  </div>
   {% if draft.errors %}
   <div class="card" style="border-color:#c62828;background:#fff8f8;">
     <div><b>Draft has validation errors</b></div>
@@ -128,6 +136,9 @@
   <div class="card section-card section-workflow" style="margin-top:12px;">
     <h3 style="margin-top:0;">Next Actions</h3>
     <div class="action-bar-utility no-print">
+      {% if form_data is defined and form_data.parent_molecule_id is defined and form_data.parent_molecule_id %}
+      <a class="btn mini" href="/molecules/{{ form_data.parent_molecule_id }}">Return to Parent Molecule</a>
+      {% endif %}
       {% if form_data is defined and form_data.parent_program_id is defined and form_data.parent_program_id %}
       <a class="btn mini primary" href="/programs/{{ form_data.parent_program_id }}/workflow">Open Program Workflow</a>
       <a class="btn mini" href="/programs/{{ form_data.parent_program_id }}/board">Open Development Board</a>

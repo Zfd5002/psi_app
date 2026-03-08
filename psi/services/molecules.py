@@ -151,6 +151,125 @@ def get_molecule(db: Session, molecule_id: int) -> Molecule | None:
     return db.get(Molecule, molecule_id)
 
 
+def _build_lineage_context(db: Session, *, molecule_id: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    parent_row = (
+        db.query(MoleculeDerivation, Molecule)
+        .join(Molecule, Molecule.id == MoleculeDerivation.parent_molecule_id)
+        .filter(MoleculeDerivation.child_molecule_id == int(molecule_id))
+        .order_by(MoleculeDerivation.created_at.desc(), MoleculeDerivation.id.desc())
+        .first()
+    )
+    parent_lineage: dict[str, Any] | None = None
+    if parent_row is not None:
+        deriv, parent_molecule = parent_row
+        parent_lineage = {
+            "molecule_id": int(parent_molecule.id),
+            "primary_id": str(parent_molecule.primary_id or ""),
+            "title": str(parent_molecule.title or ""),
+            "derivation_type": str(deriv.derivation_type or ""),
+            "summary": str(deriv.summary or ""),
+        }
+
+    child_rows = (
+        db.query(MoleculeDerivation, Molecule)
+        .join(Molecule, Molecule.id == MoleculeDerivation.child_molecule_id)
+        .filter(MoleculeDerivation.parent_molecule_id == int(molecule_id))
+        .order_by(MoleculeDerivation.created_at.desc(), MoleculeDerivation.id.desc(), Molecule.id.desc())
+        .all()
+    )
+    child_lineage: list[dict[str, Any]] = []
+    for deriv, child_molecule in child_rows:
+        child_lineage.append(
+            {
+                "molecule_id": int(child_molecule.id),
+                "primary_id": str(child_molecule.primary_id or ""),
+                "title": str(child_molecule.title or ""),
+                "derivation_type": str(deriv.derivation_type or ""),
+                "summary": str(deriv.summary or ""),
+            }
+        )
+    return parent_lineage, child_lineage
+
+
+def _parse_property_values(values: list[PropertyValue]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    parsed_values: list[dict[str, Any]] = []
+    by_key: dict[str, dict[str, Any]] = {}
+    for v in values:
+        try:
+            parsed = json.loads(v.value_json) if v.value_json else None
+        except Exception:
+            parsed = v.value_json
+        item = {"key": v.property_key, "label": v.label, "value": parsed, "tier": v.tier}
+        parsed_values.append(item)
+        by_key[v.property_key] = item
+    return parsed_values, by_key
+
+
+def _build_molecule_plan_preview(db: Session, *, molecule_id: int, limit: int = 3) -> list[dict[str, Any]]:
+    top_plan_rows = plans_svc.top_plans_for_molecule(db, molecule_id=int(molecule_id), limit=int(limit))
+    if not top_plan_rows:
+        try:
+            plans_svc.generate_plan_for_molecule(db, molecule_id=int(molecule_id))
+        except Exception:
+            pass
+        top_plan_rows = plans_svc.top_plans_for_molecule(db, molecule_id=int(molecule_id), limit=int(limit))
+
+    out: list[dict[str, Any]] = []
+    for p in top_plan_rows:
+        steps = plans_svc.list_plan_steps(db, plan_id=int(p.id))
+        out.append(
+            {
+                "plan_id": int(p.id),
+                "title": str(p.title or ""),
+                "plan_type": str(p.plan_type or ""),
+                "status": str(p.status or ""),
+                "expected_readiness_gain": float(p.expected_readiness_gain or 0.0),
+                "expected_claim_support_gain": float(p.expected_claim_support_gain or 0.0),
+                "expected_evidence_coverage_gain": float(p.expected_evidence_coverage_gain or 0.0),
+                "steps": [
+                    {
+                        "step_order": int(s.step_order),
+                        "step_kind": str(s.step_kind or ""),
+                        "metric_key": str(s.metric_key or ""),
+                        "suggested_assay": str(s.suggested_assay or ""),
+                    }
+                    for s in steps[:3]
+                ],
+            }
+        )
+    return out
+
+
+def _build_molecule_claim_preview(db: Session, *, molecule_id: int, limit: int = 5) -> list[dict[str, Any]]:
+    top_claim_rows = claims_svc.top_claims_for_molecule(db, molecule_id=int(molecule_id), limit=int(limit))
+    out: list[dict[str, Any]] = []
+    for c in top_claim_rows:
+        support = claims_svc.summarize_claim_support(db, claim_id=int(c.id))
+        maturity = claims_svc.summarize_claim_maturity(db, claim_id=int(c.id))
+        task_links = claims_svc.list_claim_tasks(db, claim_id=int(c.id))
+        next_task = ""
+        if task_links:
+            t0 = task_links[0].experiment_task
+            if t0 is not None:
+                assay = str(t0.suggested_assay or "").strip()
+                mk = str(t0.metric_key or "").strip()
+                next_task = assay or mk or f"Task #{int(t0.id)}"
+        out.append(
+            {
+                "claim_id": int(c.id),
+                "title": str(c.title or ""),
+                "claim_type": str(c.claim_type or ""),
+                "status": str(c.status or ""),
+                "confidence_level": str(c.confidence_level or ""),
+                "supporting_count": int(support.get("supporting_count") or 0),
+                "contradicting_count": int(support.get("contradicting_count") or 0),
+                "maturity_summary": str(maturity.get("maturity_summary") or ""),
+                "next_task_label": next_task,
+            }
+        )
+    return out
+
+
 from psi.services.molecule_header import (
     _build_confidence_model,
     _build_drift_summary_plain,
@@ -330,42 +449,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     evidence = list(evidence_context.get("evidence") or [])
     pending_evidence_preview = evidence_context.get("pending_evidence_preview") or []
 
-    parent_row = (
-        db.query(MoleculeDerivation, Molecule)
-        .join(Molecule, Molecule.id == MoleculeDerivation.parent_molecule_id)
-        .filter(MoleculeDerivation.child_molecule_id == int(molecule_id))
-        .order_by(MoleculeDerivation.created_at.desc(), MoleculeDerivation.id.desc())
-        .first()
-    )
-    parent_lineage: dict[str, Any] | None = None
-    if parent_row is not None:
-        deriv, parent_molecule = parent_row
-        parent_lineage = {
-            "molecule_id": int(parent_molecule.id),
-            "primary_id": str(parent_molecule.primary_id or ""),
-            "title": str(parent_molecule.title or ""),
-            "derivation_type": str(deriv.derivation_type or ""),
-            "summary": str(deriv.summary or ""),
-        }
-
-    child_rows = (
-        db.query(MoleculeDerivation, Molecule)
-        .join(Molecule, Molecule.id == MoleculeDerivation.child_molecule_id)
-        .filter(MoleculeDerivation.parent_molecule_id == int(molecule_id))
-        .order_by(MoleculeDerivation.created_at.desc(), MoleculeDerivation.id.desc(), Molecule.id.desc())
-        .all()
-    )
-    child_lineage: list[dict[str, Any]] = []
-    for deriv, child_molecule in child_rows:
-        child_lineage.append(
-            {
-                "molecule_id": int(child_molecule.id),
-                "primary_id": str(child_molecule.primary_id or ""),
-                "title": str(child_molecule.title or ""),
-                "derivation_type": str(deriv.derivation_type or ""),
-                "summary": str(deriv.summary or ""),
-            }
-        )
+    parent_lineage, child_lineage = _build_lineage_context(db, molecule_id=int(molecule_id))
 
     file_links = db.query(FileLink).filter(FileLink.entity_type == "Molecule", FileLink.entity_id == molecule_id).all()
     file_ids = [fl.file_id for fl in file_links]
@@ -392,27 +476,8 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
 
     latest_values = get_run_values(db, latest_run.id) if latest_run else []
     immuno_values = get_run_values(db, latest_immuno_run.id) if latest_immuno_run else []
-    parsed_values = []
-    by_key = {}
-    for v in latest_values:
-        try:
-            parsed = json.loads(v.value_json) if v.value_json else None
-        except Exception:
-            parsed = v.value_json
-        item = {"key": v.property_key, "label": v.label, "value": parsed, "tier": v.tier}
-        parsed_values.append(item)
-        by_key[v.property_key] = item
-
-    immuno_parsed = []
-    immuno_by_key = {}
-    for v in immuno_values:
-        try:
-            parsed = json.loads(v.value_json) if v.value_json else None
-        except Exception:
-            parsed = v.value_json
-        item = {"key": v.property_key, "label": v.label, "value": parsed, "tier": v.tier}
-        immuno_parsed.append(item)
-        immuno_by_key[v.property_key] = item
+    parsed_values, by_key = _parse_property_values(latest_values)
+    immuno_parsed, immuno_by_key = _parse_property_values(immuno_values)
 
     sequence_context = build_molecule_sequence_context(db, molecule_id=int(molecule_id))
     components = list(sequence_context.get("components") or [])
@@ -460,62 +525,8 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     molecule_trend_insights = trajectory_context.get("molecule_trend_insights")
     trajectory_candidates = list(trajectory_context.get("trajectory_candidates") or [])
     trajectory_tree = dict(trajectory_context.get("trajectory_tree") or {})
-    top_plan_rows = plans_svc.top_plans_for_molecule(db, molecule_id=int(molecule_id), limit=3)
-    if not top_plan_rows:
-        try:
-            plans_svc.generate_plan_for_molecule(db, molecule_id=int(molecule_id))
-        except Exception:
-            pass
-        top_plan_rows = plans_svc.top_plans_for_molecule(db, molecule_id=int(molecule_id), limit=3)
-    molecule_plans = []
-    for p in top_plan_rows:
-        steps = plans_svc.list_plan_steps(db, plan_id=int(p.id))
-        molecule_plans.append(
-            {
-                "plan_id": int(p.id),
-                "title": str(p.title or ""),
-                "plan_type": str(p.plan_type or ""),
-                "status": str(p.status or ""),
-                "expected_readiness_gain": float(p.expected_readiness_gain or 0.0),
-                "expected_claim_support_gain": float(p.expected_claim_support_gain or 0.0),
-                "expected_evidence_coverage_gain": float(p.expected_evidence_coverage_gain or 0.0),
-                "steps": [
-                    {
-                        "step_order": int(s.step_order),
-                        "step_kind": str(s.step_kind or ""),
-                        "metric_key": str(s.metric_key or ""),
-                        "suggested_assay": str(s.suggested_assay or ""),
-                    }
-                    for s in steps[:3]
-                ],
-            }
-        )
-    top_claim_rows = claims_svc.top_claims_for_molecule(db, molecule_id=int(molecule_id), limit=5)
-    molecule_claims = []
-    for c in top_claim_rows:
-        support = claims_svc.summarize_claim_support(db, claim_id=int(c.id))
-        maturity = claims_svc.summarize_claim_maturity(db, claim_id=int(c.id))
-        task_links = claims_svc.list_claim_tasks(db, claim_id=int(c.id))
-        next_task = ""
-        if task_links:
-            t0 = task_links[0].experiment_task
-            if t0 is not None:
-                assay = str(t0.suggested_assay or "").strip()
-                mk = str(t0.metric_key or "").strip()
-                next_task = assay or mk or f"Task #{int(t0.id)}"
-        molecule_claims.append(
-            {
-                "claim_id": int(c.id),
-                "title": str(c.title or ""),
-                "claim_type": str(c.claim_type or ""),
-                "status": str(c.status or ""),
-                "confidence_level": str(c.confidence_level or ""),
-                "supporting_count": int(support.get("supporting_count") or 0),
-                "contradicting_count": int(support.get("contradicting_count") or 0),
-                "maturity_summary": str(maturity.get("maturity_summary") or ""),
-                "next_task_label": next_task,
-            }
-        )
+    molecule_plans = _build_molecule_plan_preview(db, molecule_id=int(molecule_id), limit=3)
+    molecule_claims = _build_molecule_claim_preview(db, molecule_id=int(molecule_id), limit=5)
 
     return {
         "molecule": m,

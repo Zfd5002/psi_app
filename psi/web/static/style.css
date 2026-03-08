@@ -392,3 +392,12 @@ body.pdf-mode .narrative-list{gap:3px}
   .summary-metric-strip{grid-template-columns:1fr}
   .nav-secondary{padding-top:6px}
 }
+
+/* Molecule zone wrappers keep second-pass partial sections visually cohesive. */
+.molecule-zone {
+  margin-top: 12px;
+}
+
+.molecule-zone .section-heading {
+  margin-top: 0;
+}

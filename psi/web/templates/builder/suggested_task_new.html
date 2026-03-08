@@ -2,7 +2,6 @@
 {% block title %}Suggested Experiment Task | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
   {% set page_eyebrow = "Execution Handoff" %}
   {% set page_title = "Create Task from Suggested Experiment" %}
   {% set page_subtitle = "Prefilled from molecule insight recommendations. Task creation remains explicit." %}
@@ -16,6 +15,7 @@
     <div><b>Metric:</b> {{ prefill.metric_key if prefill.metric_key else "—" }}</div>
     <div><b>Suggested assay:</b> {{ prefill.suggested_assay if prefill.suggested_assay else "—" }}</div>
     {% if prefill.suggested_rationale %}<div><b>Rationale:</b> {{ prefill.suggested_rationale }}</div>{% endif %}
+    <div class="muted mini" style="margin-top:6px;">After creating the task, continue in Program Workflow to start or resume execution.</div>
   </div>
 
   <form method="post" action="/programs/{{ prefill.program_id }}/tasks/create" style="display:grid;gap:8px;max-width:680px;margin-top:10px;">
@@ -29,7 +29,7 @@
     </label>
     <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
     <div style="display:flex;gap:8px;">
-      <button class="btn primary" type="submit">Create task</button>
+      <button class="btn primary" type="submit">Create Task</button>
       <a class="btn" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow</a>
       <a class="btn" href="/molecules/{{ molecule.id }}">Cancel</a>
     </div>

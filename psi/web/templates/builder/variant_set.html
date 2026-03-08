@@ -2,7 +2,6 @@
 {% block title %}Builder Variant Set | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
   {% set page_eyebrow = "Builder Workspace" %}
   {% set page_title = "Builder: Variant Set Builder" %}
   {% set page_subtitle = "Design a controlled, deterministic family of variants before saving molecules." %}
@@ -10,6 +9,13 @@
   {% include "partials/page_header.html" %}
   {% set surface_chrome_active_index = 1 %}
   {% include "partials/surface_chrome.html" %}
+  <div class="section-heading" style="margin-top:10px;">
+    <h2>Context</h2>
+    <div class="muted mini">Assemble a deterministic family design, preview all members, then save in one controlled step.</div>
+  </div>
+  <div class="section-heading" style="margin-top:10px;">
+    <h2>Inputs</h2>
+  </div>
 
   <form method="post" action="/builder/variant-set/draft">
     {% set selected_program = (form_data.parent_program_id if form_data is defined and form_data.parent_program_id is defined else None) %}
@@ -98,12 +104,14 @@
 
     <div style="margin-top:8px;display:flex;gap:8px;">
       <button class="btn primary" type="submit">Build variant set draft</button>
-      <a class="btn" href="/builder">Back to Builder Home</a>
+      <a class="btn" href="/builder">Open Builder Home</a>
     </div>
   </form>
 
   {% if draft is defined and draft %}
-  <h3 style="margin-top:12px;">Variant Set Draft Preview</h3>
+  <div class="section-heading" style="margin-top:12px;">
+    <h2>Preview / Generated Result</h2>
+  </div>
   {% if draft.errors %}
   <div class="card" style="border-color:#c62828;background:#fff8f8;">
     <div><b>Draft has validation errors</b></div>
@@ -163,12 +171,15 @@
   <div class="card section-card section-workflow" style="margin-top:12px;">
     <h3 style="margin-top:0;">Next Actions</h3>
     <div class="action-bar-utility no-print">
+      {% if form_data is defined and form_data.parent_molecule_id is defined and form_data.parent_molecule_id %}
+      <a class="btn mini" href="/molecules/{{ form_data.parent_molecule_id }}">Return to Parent Molecule</a>
+      {% endif %}
       {% if form_data is defined and form_data.parent_program_id is defined and form_data.parent_program_id %}
       <a class="btn mini primary" href="/programs/{{ form_data.parent_program_id }}/workflow">Open Program Workflow</a>
       <a class="btn mini" href="/programs/{{ form_data.parent_program_id }}/board">Open Development Board</a>
       {% endif %}
       <a class="btn mini" href="/builder/point-mutation">Open Point Mutation Builder</a>
-      <a class="btn mini" href="/builder">Back to Builder Home</a>
+      <a class="btn mini" href="/builder">Open Builder Home</a>
     </div>
   </div>
 </div>

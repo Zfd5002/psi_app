@@ -26,8 +26,8 @@
       <div class="molecule-cockpit-label">Execution Entry Points</div>
       <div class="molecule-cockpit-actions no-print">
         <a class="btn mini" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow</a>
-        <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&source=molecule&return_to=/molecules/{{ molecule.id }}#execution">Start result capture</a>
-        <a class="btn mini" href="/builder/suggested-task/new?molecule_id={{ molecule.id }}">Create task from suggestion</a>
+        <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&source=molecule&return_to=/molecules/{{ molecule.id }}#execution">Capture Experiment Result</a>
+        <a class="btn mini" href="/builder/suggested-task/new?molecule_id={{ molecule.id }}">Create Task from Suggestion</a>
         <a class="btn mini" href="/plans/new?scope_type=molecule&molecule_id={{ molecule.id }}">Create molecule plan</a>
         <a class="btn mini" href="/claims/new?molecule_id={{ molecule.id }}">Create molecule claim</a>
         <a class="btn mini" href="#evidence">Review recent evidence</a>

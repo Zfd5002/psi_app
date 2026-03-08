@@ -7497,6 +7497,40 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-08 — v1.3.0d81
+Intent:
+- Continue molecule second-pass cleanup by isolating claim/plan preview assembly from `get_molecule_detail`.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/molecules.py`
+- `psi/version.py`
+
+Behavior:
+- Added `_build_molecule_plan_preview(...)` to centralize molecule plan preview generation.
+- Added `_build_molecule_claim_preview(...)` to centralize molecule claim preview generation.
+- Updated `get_molecule_detail(...)` to consume these helpers, improving orchestration sequencing and readability while preserving output contract.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d80
+Intent:
+- Continue second-pass molecule service cleanup by extracting stable context-assembly blocks from `get_molecule_detail`.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/molecules.py`
+- `psi/version.py`
+
+Behavior:
+- Added `_build_lineage_context(...)` to isolate parent/child lineage assembly.
+- Added `_parse_property_values(...)` to isolate deterministic property-run value parsing.
+- Rewired `get_molecule_detail(...)` to call these helpers, improving coordinator readability without changing payload structure.
+
+Gates:
+- PASS
+
 ## 2026-03-08 — v1.3.0d79
 Intent:
 - Consolidate duplicated test scaffolding into shared fixtures (`_mkdb`, `_DummyTemplates`, query request helper) for maintainability.
@@ -13991,6 +14025,209 @@ Behavior:
 - Added shared `partials/surface_chrome.html` to render descriptor-based archetype cues + local subnav consistently.
 - Replaced repeated inline archetype/local-nav snippets across builder surfaces with the shared partial.
 - Preserved existing builder behavior while reducing duplication and making descriptor usage more maintainable.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d80
+Intent:
+- Continue second-pass molecule service cleanup by removing repeated inline context assembly from `get_molecule_detail`.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/molecules.py`
+- `psi/version.py`
+
+Behavior:
+- Added `_build_lineage_context(...)` helper to centralize lineage generation and run slicing logic.
+- Added `_parse_property_values(...)` helper to normalize JSON property-run parsing and key extraction.
+- Replaced inline lineage/property parsing blocks in `get_molecule_detail(...)` with helper delegation.
+- Preserved runtime behavior while making orchestration flow easier to scan and maintain.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d81
+Intent:
+- Continue second-pass molecule service cleanup by isolating stable claim/plan summary assembly into named helpers.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/molecules.py`
+- `psi/version.py`
+
+Behavior:
+- Added `_build_molecule_plan_preview(...)` helper to assemble recommended plan preview rows with deterministic ordering.
+- Added `_build_molecule_claim_preview(...)` helper to assemble claim preview rows plus support/conflict rollups.
+- Replaced remaining inline claim/plan preview loops in `get_molecule_detail(...)` with helper calls.
+- Preserved behavior while further clarifying `get_molecule_detail(...)` as a coordinator.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d82
+Intent:
+- Continue molecule template decomposition by extracting stable lower-page sections from `molecules/detail.html`.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/molecules/partials/evidence_data_zone.html`
+- `psi/web/templates/molecules/partials/history_audit_zone.html`
+
+Behavior:
+- Extracted the full `Evidence & Data` region into `molecules/partials/evidence_data_zone.html`.
+- Extracted the full `History & Audit` region into `molecules/partials/history_audit_zone.html`.
+- Replaced in-template blocks with include calls, preserving all existing controls, IDs, forms, and links.
+- Kept runtime behavior unchanged while reducing top-level template density.
+- Added partial names to patch notes for traceability.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d83
+Intent:
+- Harden molecule surface structure after second-pass decomposition and clean small JS/template drift.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/molecule_detail.js`
+- `psi/web/static/style.css`
+- `psi/web/templates/molecules/partials/evidence_data_zone.html`
+- `psi/web/templates/molecules/partials/history_audit_zone.html`
+
+Behavior:
+- Removed an unused top-level `moleculeId` assignment from `molecule_detail.js` to keep config handling tidy.
+- Wrapped extracted molecule partial blocks in stable `molecule-zone` section containers to keep framing cohesive.
+- Added lightweight `.molecule-zone` CSS primitives so extracted zones retain consistent spacing without changing behavior.
+- Preserved all IDs, controls, links, and script hooks.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d84
+Intent:
+- Start builder structural consistency pass by normalizing core workspace hierarchy on high-traffic builder flows.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/point_mutation.html`
+
+Behavior:
+- Added explicit `Context`, `Inputs`, and `Preview / Generated Result` section framing to clone and point-mutation builder pages.
+- Added lightweight context cards clarifying deterministic builder behavior and downstream workflow handoff.
+- Preserved all existing forms, validation rendering, links, and JS behavior.
+- Kept `Next Actions` blocks intact while improving top-to-bottom workspace readability.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d85
+Intent:
+- Continue builder consistency pass across remaining core builder surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/cdr_builder.html`
+- `psi/web/templates/builder/index.html`
+- `psi/web/templates/builder/variant_set.html`
+
+Behavior:
+- Added consistent `Context`, `Inputs`, and `Preview / Generated Result` section framing to CDR builder and variant set pages.
+- Added explicit section framing to Builder home for context, workspace-entry inputs, and parent-molecule preview table.
+- Preserved existing form behaviors, preview rendering, and action links.
+- Improved cross-builder hierarchy consistency without feature changes.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d86
+Intent:
+- Tighten builder integration with molecule/workflow surfaces through clearer return-path cues.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/cdr_builder.html`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/builder/suggested_task_new.html`
+- `psi/web/templates/builder/variant_set.html`
+
+Behavior:
+- Added `Return to Parent Molecule` links in builder next-action regions whenever parent context is present.
+- Kept existing workflow/board CTAs while making molecule re-entry explicit from builder workspaces.
+- Added explicit post-task guidance on suggested-task handoff page to continue execution in program workflow.
+- Preserved route behavior and task creation semantics.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d87
+Intent:
+- Run cross-surface consistency pass on molecule/builder/workflow family with descriptor-consumption cleanup.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/cdr_builder.html`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/index.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/builder/suggested_task_new.html`
+- `psi/web/templates/builder/variant_set.html`
+- `psi/web/templates/builder/variant_set_detail.html`
+
+Behavior:
+- Removed redundant local `sf` aliases across builder templates and standardized direct `surface` descriptor consumption.
+- Kept descriptor-driven header/chrome rendering consistent with molecule/program surfaces.
+- Preserved existing builder behavior, links, and form actions while reducing small composition inconsistencies.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d88
+Intent:
+- Continue cross-surface consistency pass with workflow/action vocabulary cleanup and sparse-state phrasing polish.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/index.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/builder/suggested_task_new.html`
+- `psi/web/templates/builder/variant_set.html`
+- `psi/web/templates/builder/variant_set_detail.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/molecules/partials/evidence_data_zone.html`
+
+Behavior:
+- Normalized builder CTA wording (`Open Builder Home`, `Open Point Mutation Builder`, `Capture Experiment Result`, `Create Task`).
+- Harmonized low-data language on builder/molecule surfaces (`No molecules available yet`, clearer no-batch guidance).
+- Preserved routes and behavior while reducing cross-surface wording drift.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d89
+Intent:
+- Consolidate and harden d80–d88 refinements into a coherent molecule/builder/workflow surface block.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/partials/workflow_loop.html`
+
+Behavior:
+- Finalized workflow CTA wording on molecule workflow loop to align with system-wide vocabulary (`Capture Experiment Result`, `Create Task from Suggestion`).
+- Removed residual phrasing drift introduced during iterative builder/molecule passes.
+- No route or behavior changes; consolidation-only wording hardening.
 
 Gates:
 - PASS
