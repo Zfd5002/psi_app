@@ -17,7 +17,7 @@
     {"href": plan_context_href, "label": plan_context_label}
   ] %}
   {% set page_secondary_actions = [
-    {"href": "/programs/" ~ plan.program_id ~ "/workflow", "label": "Open Program Workflow Center"},
+    {"href": "/programs/" ~ plan.program_id ~ "/workflow", "label": "Open Program Workflow"},
     {"href": ("/claims/" ~ plan.claim_id) if plan.claim_id else "/claims", "label": "Claim Context"}
   ] %}
   {% set page_metrics = [

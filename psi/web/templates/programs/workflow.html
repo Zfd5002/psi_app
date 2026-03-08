@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{{ program.name }} Program Workflow Center | PSI{% endblock %}
+{% block title %}{{ program.name }} Program Workflow | PSI{% endblock %}
 {% block content %}
 <div class="card">
   {% set page_eyebrow = "Program Workflow" %}
-  {% set page_title = program.name ~ " Program Workflow Center" %}
+  {% set page_title = program.name ~ " Program Workflow" %}
   {% set page_subtitle = "Unified operational workflow surface across board, claims, plans, and molecule actions." %}
   {% set page_primary_actions = [
     {"href": "/programs/" ~ program.id ~ "/board", "label": "Open Board"},
@@ -27,16 +27,15 @@
     "Review recently completed tasks to confirm evidence linkage"
   ] %}
   {% include "partials/page_header.html" %}
-  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
-  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
-  {% if sf_labels %}
-    <div class="page-archetype-bar">
-      {% for lbl in sf_labels %}
-        <span class="page-archetype-chip{% if loop.index0 == 1 %} is-active{% endif %}">{{ lbl }}</span>
-      {% endfor %}
-    </div>
-  {% endif %}
+  {% set surface_chrome_active_index = 1 %}
+  {% include "partials/surface_chrome.html" %}
   {% include "partials/capture_notice.html" %}
+  <div class="workflow-primary-actions no-print">
+    <a class="btn primary" href="#ready-start">Start ready work</a>
+    <a class="btn primary" href="#awaiting-data">Capture pending results</a>
+    <a class="btn" href="#interpretation-queue">Review interpretation queue</a>
+    <a class="btn" href="#recent-learning">Review recent learning</a>
+  </div>
   {% set sr = (source_rollup if source_rollup is defined and source_rollup is mapping else {}) %}
   <div class="card section-card section-primary" style="margin-top:10px;">
     <div class="section-heading">
@@ -62,11 +61,9 @@
       </div>
     </div>
   </div>
-  <div class="card section-card section-workflow" style="margin-top:10px;">
-    <div class="section-heading">
-      <h2>Task Origin Context</h2>
-      <div class="muted mini">All creation paths converge into this shared workflow center.</div>
-    </div>
+  <details class="card progressive-disclosure section-secondary workflow-origin-disclosure" style="margin-top:10px;">
+    <summary>Task origin context</summary>
+    <div class="muted mini" style="margin-top:6px;">All creation paths converge into this shared workflow center.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
       <span class="chip">Board {{ sr.get("board", 0) }}</span>
       <span class="chip">Claims {{ sr.get("claim", 0) }}</span>
@@ -75,54 +72,38 @@
       <span class="chip">Manual {{ sr.get("manual", 0) }}</span>
       <span class="chip">Insight {{ sr.get("insight", 0) }}</span>
     </div>
+  </details>
+  <div class="grid cols-2 workflow-secondary-stack" style="margin-top:10px;">
+    <details class="card progressive-disclosure section-secondary" id="recent-learning" {% if recent_data_records|length or recent_evidence|length %}open{% endif %}>
+      <summary><b>Recently Captured Learning</b> <span class="muted mini">({{ recent_data_records|length }} results · {{ recent_evidence|length }} evidence)</span></summary>
+      <div class="muted mini" style="margin-top:6px;">Latest results and evidence in this program, surfaced for interpretation follow-through.</div>
+      {% include "partials/programs/workflow_recent_learning.html" %}
+    </details>
+    <details class="card progressive-disclosure section-secondary" id="interpretation-queue" {% if pending_interpretation|length %}open{% endif %}>
+      <summary><b>Results Awaiting Interpretation</b> <span class="muted mini">({{ pending_interpretation|length }})</span></summary>
+      <div class="muted mini" style="margin-top:6px;">Recently captured results without evidence citation yet.</div>
+      {% include "partials/programs/workflow_interpretation_queue.html" %}
+    </details>
   </div>
-  <div class="card section-card section-primary" style="margin-top:10px;" id="recent-learning">
-    <div class="section-heading">
-      <h2>Recently Captured Learning</h2>
-      <div class="muted mini">Latest results and evidence in this program, surfaced for interpretation follow-through.</div>
-    </div>
-    {% include "partials/programs/workflow_recent_learning.html" %}
-  </div>
-  <div class="card section-card section-workflow" style="margin-top:10px;" id="interpretation-queue">
-    <div class="section-heading">
-      <h2>Results Awaiting Interpretation</h2>
-      <div class="muted mini">Recently captured results without evidence citation yet.</div>
-    </div>
-    {% include "partials/programs/workflow_interpretation_queue.html" %}
-  </div>
-
-  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
-  <div class="local-subnav no-print">
-    {% if sf_nav %}
-      {% for item in sf_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}
-    {% else %}
-      <a href="#ready-start">Ready to Start</a>
-      <a href="#in-progress">In Progress</a>
-      <a href="#blocked">Blocked</a>
-      <a href="#awaiting-data">Awaiting Data Entry</a>
-      <a href="#completed">Recently Completed</a>
-    {% endif %}
-  </div>
-
-  <div class="section-heading" style="margin-top:12px;"><h2 id="ready-start">Ready to Start</h2><div class="muted mini">Planned tasks that can begin now.</div></div>
+  <div class="section-heading workflow-section-heading" style="margin-top:12px;"><h2 id="ready-start">Ready to Start</h2><div class="muted mini">Planned tasks that can begin now.</div></div>
   {% set rows = ready_to_start %}
   {% set empty_text = "No tasks ready to start." %}
   {% set section_id = "ready-start-table" %}
   {% include "partials/programs/workflow_task_table.html" %}
 
-  <div class="section-heading" style="margin-top:12px;"><h2 id="in-progress">In Progress</h2><div class="muted mini">Active work currently underway.</div></div>
+  <div class="section-heading workflow-section-heading" style="margin-top:12px;"><h2 id="in-progress">In Progress</h2><div class="muted mini">Active work currently underway.</div></div>
   {% set rows = in_progress %}
   {% set empty_text = "No tasks in progress." %}
   {% set section_id = "in-progress-table" %}
   {% include "partials/programs/workflow_task_table.html" %}
 
-  <div class="section-heading" style="margin-top:12px;"><h2 id="blocked">Blocked</h2><div class="muted mini">Tasks needing intervention.</div></div>
+  <div class="section-heading workflow-section-heading" style="margin-top:12px;"><h2 id="blocked">Blocked</h2><div class="muted mini">Tasks needing intervention.</div></div>
   {% set rows = blocked_tasks %}
   {% set empty_text = "No blocked tasks." %}
   {% set section_id = "blocked-table" %}
   {% include "partials/programs/workflow_task_table.html" %}
 
-  <div class="section-heading" style="margin-top:12px;"><h2 id="awaiting-data">Awaiting Data Entry</h2><div class="muted mini">Tasks in progress but not yet linked to evidence.</div></div>
+  <div class="section-heading workflow-section-heading" style="margin-top:12px;"><h2 id="awaiting-data">Awaiting Data Entry</h2><div class="muted mini">Tasks in progress but not yet linked to evidence.</div></div>
   <div class="linked-table-wrap" style="margin-top:8px;">
     <table class="table mini">
       <thead><tr><th>Task</th><th>Molecule</th><th>Focus</th><th class="no-print">Primary action</th></tr></thead>
@@ -132,7 +113,7 @@
     </table>
   </div>
 
-  <div class="section-heading" style="margin-top:12px;"><h2 id="completed">Recently Completed</h2><div class="muted mini">Latest completed work items.</div></div>
+  <div class="section-heading workflow-section-heading" style="margin-top:12px;"><h2 id="completed">Recently Completed</h2><div class="muted mini">Latest completed work items.</div></div>
   <div class="linked-table-wrap" style="margin-top:8px;">
     <table class="table mini">
       <thead><tr><th>Task</th><th>Molecule</th><th>Completed focus</th><th>Evidence link</th></tr></thead>

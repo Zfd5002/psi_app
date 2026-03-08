@@ -10,7 +10,7 @@
   ] %}
   {% set page_secondary_actions = [
     {"href": "/data/" ~ record.id ~ "/edit", "label": "Edit"},
-    {"href": "/programs/" ~ record.program.id ~ "/workflow", "label": "Continue in Program Workflow Center"},
+    {"href": "/programs/" ~ record.program.id ~ "/workflow", "label": "Continue in Program Workflow"},
     {"href": "/programs/" ~ record.program.id, "label": "Back to Program"}
   ] %}
   {% if record.molecule %}
@@ -30,19 +30,12 @@
   {% include "partials/page_header.html" %}
   {% include "partials/surface_chrome.html" %}
   <div class="page-intent-line">Captured result context: Program <a href="/programs/{{ record.program.id }}">{{ record.program.name }}</a>{% if record.molecule %} • Molecule <a href="/molecules/{{ record.molecule.id }}">{{ record.molecule.primary_id }}</a>{% endif %}{% if record.batch %} • Batch <a href="/batches/{{ record.batch.id }}">{{ record.batch.batch_id }}</a>{% endif %}.</div>
-  {% set capture_notice = {
-    "captured": (detail_handoff.captured if detail_handoff is defined and detail_handoff else false),
-    "from_task": (detail_handoff.from_task if detail_handoff is defined and detail_handoff else false),
-    "next_step": (detail_handoff.next if detail_handoff is defined and detail_handoff else ""),
-    "return_to": (detail_handoff.return_to if detail_handoff is defined and detail_handoff else ""),
-    "message": ("" if detail_handoff is defined and detail_handoff and detail_handoff.next == "evidence" else "Review this result and continue the scientific loop.")
-  } %}
   {% include "partials/capture_notice.html" %}
   <div class="grid cols-2" style="margin-top:10px;">
     <div class="card section-card section-workflow" style="margin:0;">
       <h3 style="margin-top:0;">Workflow Re-entry</h3>
       <div class="action-bar-utility no-print">
-        <a class="btn mini primary" href="/programs/{{ record.program.id }}/workflow">Continue in Program Workflow Center</a>
+        <a class="btn mini primary" href="/programs/{{ record.program.id }}/workflow">Continue in Program Workflow</a>
         {% if record.molecule %}<a class="btn mini" href="/molecules/{{ record.molecule.id }}">Open Molecule Workspace</a>{% endif %}
         <a class="btn mini" href="/programs/{{ record.program.id }}/board">Open Board</a>
       </div>
@@ -50,7 +43,7 @@
     <div class="card section-card section-primary" style="margin:0;">
       <h3 style="margin-top:0;">Recommended Next Step</h3>
       <div class="mini">If this run changes scientific posture, create evidence and cite this data record.</div>
-      <div style="margin-top:8px;" class="no-print"><a class="btn mini primary" href="/evidence/new?program_id={{ record.program_id }}{% if record.molecule_id %}&molecule_id={{ record.molecule_id }}{% endif %}{% if record.batch_id %}&batch_id={{ record.batch_id }}{% endif %}&return_to=/data/{{ record.id }}">Create Evidence from This Result</a></div>
+      <div style="margin-top:8px;" class="no-print"><a class="btn mini primary" href="/evidence/new?program_id={{ record.program_id }}{% if record.molecule_id %}&molecule_id={{ record.molecule_id }}{% endif %}{% if record.batch_id %}&batch_id={{ record.batch_id }}{% endif %}&return_to=/data/{{ record.id }}">Create or Link Evidence</a></div>
     </div>
   </div>
 

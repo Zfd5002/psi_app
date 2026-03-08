@@ -6,7 +6,7 @@
   {% set page_eyebrow = "Execution Handoff" %}
   {% set page_title = "Create Task from Suggested Experiment" %}
   {% set page_subtitle = "Prefilled from molecule insight recommendations. Task creation remains explicit." %}
-  {% set page_secondary_actions = [{"href": "/molecules/" ~ molecule.id, "label": "Back to Molecule"}, {"href": "/programs/" ~ molecule.program_id ~ "/workflow", "label": "Open Program Workflow Center"}] %}
+  {% set page_secondary_actions = [{"href": "/molecules/" ~ molecule.id, "label": "Back to Molecule"}, {"href": "/programs/" ~ molecule.program_id ~ "/workflow", "label": "Open Program Workflow"}] %}
   {% include "partials/page_header.html" %}
   {% set surface_chrome_active_index = 0 %}
   {% include "partials/surface_chrome.html" %}
@@ -30,7 +30,7 @@
     <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
     <div style="display:flex;gap:8px;">
       <button class="btn primary" type="submit">Create task</button>
-      <a class="btn" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow Center</a>
+      <a class="btn" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow</a>
       <a class="btn" href="/molecules/{{ molecule.id }}">Cancel</a>
     </div>
   </form>

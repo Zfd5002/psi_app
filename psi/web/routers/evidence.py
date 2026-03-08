@@ -126,11 +126,10 @@ def evidence_detail(evidence_id: int, request: Request, db: Session = Depends(ge
         raise HTTPException(404)
     ctx["request"] = request
     hctx = handoff.get_handoff_context(request)
-    ctx["detail_handoff"] = {
-        "captured": bool(hctx.captured),
-        "updated": bool(hctx.updated),
-        "return_to": str(hctx.return_to or ""),
-    }
+    ctx["capture_notice"] = handoff.build_capture_notice(
+        context=hctx,
+        message="Recommended next step: review linked data and return to molecule/program workflow to continue de-risking.",
+    )
     ev = ctx.get("ev")
     ctx["surface"] = ui_surfaces.evidence_detail_surface(
         evidence_id=int(evidence_id),

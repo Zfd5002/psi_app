@@ -274,12 +274,10 @@ def detail_data(record_id: int, request: Request, db: Session = Depends(get_db))
     ctx["request"] = request
     rec = ctx.get("record")
     hctx = handoff.get_handoff_context(request)
-    ctx["detail_handoff"] = {
-        "captured": bool(hctx.captured),
-        "from_task": bool(hctx.from_task),
-        "next": str(hctx.next_step or ""),
-        "return_to": str(hctx.return_to or ""),
-    }
+    ctx["capture_notice"] = handoff.build_capture_notice(
+        context=hctx,
+        message=("" if str(hctx.next_step or "").strip().lower() == "evidence" else "Review this result and continue the scientific loop."),
+    )
     ctx["surface"] = ui_surfaces.data_detail_surface(
         record_id=int(record_id),
         program_id=int(rec.program_id) if rec is not None and getattr(rec, "program_id", None) is not None else None,

@@ -1,3 +1,204 @@
+## 2026-03-08 — v1.3.0d70
+Why:
+- Consolidate d61–d69 with lightweight regression hardening around ingestion composition and static-JS extraction.
+
+What:
+- Added `tests/test_ingestion_static_js.py` to verify:
+  - data form uses `#dataFormConfig` + `/static/data_form.js`
+  - evidence form uses `#evidenceFormConfig` + `/static/evidence_form.js`
+- This locks in maintainability improvements from d63/d64 and prevents drift back to large inline scripts.
+- No behavior/model/DI changes.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d69
+Why:
+- Tighten descriptor composition hygiene and reduce bespoke surface chrome rendering drift.
+
+What:
+- Improved `psi/web/templates/partials/surface_chrome.html`:
+  - supports `nav_item(..., active=True)` rendering as active local-nav state.
+- Added active local-nav styling in `psi/web/static/style.css`.
+- Simplified `psi/web/templates/programs/workflow.html` composition:
+  - removed ad hoc archetype/local-nav rendering,
+  - now consumes shared `surface_chrome` partial directly with `surface_chrome_active_index`.
+- Descriptor system remains lightweight and declarative.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d68
+Why:
+- Finish workflow/action vocabulary normalization across related scientific surfaces.
+
+What:
+- Normalized remaining "Program Workflow Center" wording to "Program Workflow" in:
+  - `psi/web/ui_surfaces.py`
+  - `psi/web/templates/programs/workflow.html`
+  - `psi/web/templates/programs/board.html`
+  - `psi/web/templates/claims/detail.html`
+  - `psi/web/templates/plans/detail.html`
+  - `psi/web/templates/molecules/detail.html`
+  - `psi/web/templates/builder/suggested_task_new.html`
+  - `psi/web/templates/builder/clone.html`
+  - `psi/web/templates/builder/cdr_builder.html`
+  - `psi/web/templates/builder/variant_set.html`
+  - `psi/web/templates/builder/point_mutation.html`
+- Normalized remaining entry wording from "Start data entry" to "Start result capture" where touched.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d67
+Why:
+- Normalize workflow vocabulary across core ingestion/re-entry surfaces so actions read as one coherent system.
+
+What:
+- Updated CTA and label wording in:
+  - `psi/web/templates/data/form.html`
+  - `psi/web/templates/data/detail.html`
+  - `psi/web/templates/evidence/form.html`
+  - `psi/web/templates/evidence/detail.html`
+  - `psi/web/templates/programs/detail.html`
+- Standardized around:
+  - "Program Workflow"
+  - "Capture Experiment Results"
+  - "Create or Link Evidence"
+- Preserved route behavior and all existing links.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d66
+Why:
+- Complete capture-notice context cleanup on program/molecule detail pages and keep legacy query compatibility centralized.
+
+What:
+- Extended `psi/web/handoff_context.py::build_capture_notice(...)`:
+  - supports legacy `?evidence=1` alias for updated-flow signaling.
+- Refactored routers to provide normalized notice context:
+  - `psi/web/routers/programs.py` (program detail)
+  - `psi/web/routers/molecules.py` (molecule detail)
+- Removed remaining template-local capture notice assembly from:
+  - `psi/web/templates/programs/detail.html`
+  - `psi/web/templates/molecules/detail.html`
+- Added alias coverage in `tests/test_handoff_context.py`.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d65
+Why:
+- Complete capture/re-entry cleanup on ingestion detail surfaces by moving notice assembly out of templates.
+
+What:
+- Added reusable helper in `psi/web/handoff_context.py`:
+  - `build_capture_notice(...)`
+- Refactored routers to provide normalized notice context:
+  - `psi/web/routers/data_records.py`
+  - `psi/web/routers/evidence.py`
+- Simplified templates to consume shared notice context directly:
+  - `psi/web/templates/data/detail.html`
+  - `psi/web/templates/evidence/detail.html`
+- Updated tests:
+  - `tests/test_capture_reentry_notices.py`
+  - `tests/test_handoff_context.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d64
+Why:
+- Complete ingestion inline-JS extraction by moving Evidence Form script logic into a static asset.
+
+What:
+- Added `psi/web/static/evidence_form.js` with existing evidence-form citation and inline-data behavior.
+- Updated `psi/web/templates/evidence/form.html`:
+  - removed large inline `<script>` block,
+  - added JSON config payload (`#evidenceFormConfig`),
+  - loaded `/static/evidence_form.js`.
+- Behavior preserved; no router/model/DI changes.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d63
+Why:
+- Reduce ingestion template complexity by extracting large inline Data Form JavaScript into a dedicated static asset.
+
+What:
+- Added `psi/web/static/data_form.js` with the full data form registry/schema behavior previously inline.
+- Updated `psi/web/templates/data/form.html`:
+  - removed large inline `<script>` block,
+  - added compact JSON config payload (`#dataFormConfig`),
+  - loaded `/static/data_form.js`.
+- Preserved form behavior and server-rendered architecture.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d62
+Why:
+- Further reduce workflow surface density by demoting secondary monitoring sections while preserving operational access.
+
+What:
+- Updated `psi/web/templates/programs/workflow.html`:
+  - moved "Recently Captured Learning" and "Results Awaiting Interpretation" into compact disclosure panels,
+  - auto-open behavior when rows exist to keep active signals visible,
+  - kept all existing links/actions unchanged.
+- Added secondary-stack visual tuning in `psi/web/static/style.css` for compact table readability and summary scanability.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d61
+Why:
+- Reduce interaction density on the program workflow surface so primary operational moves are easier to scan.
+
+What:
+- Updated workflow hierarchy in `psi/web/templates/programs/workflow.html`:
+  - added top-level workflow primary action strip,
+  - demoted task-origin rollup into a progressive disclosure panel,
+  - strengthened section heading separation for task buckets.
+- Updated row actions in `psi/web/templates/partials/programs/workflow_task_table.html`:
+  - made `Start` the obvious primary action,
+  - moved secondary row actions (`Block`, `Done`) into compact overflow disclosure.
+- Added workflow-specific styling in `psi/web/static/style.css` for scanability and row action grouping.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
 ## 2026-03-08 — v1.3.0d60
 Why:
 - Final consolidation pass to keep handoff/return-path handling centralized and descriptor-enabled ingestion surfaces maintainable.

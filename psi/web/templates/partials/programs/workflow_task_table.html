@@ -15,19 +15,24 @@
         <td>{{ t.due_date or "—" }}</td>
         <td>{{ (t.source_kind or "manual")|humanize_state }}</td>
         <td>{% if t.suggested_assay %}{{ t.suggested_assay }}{% elif t.metric_key %}{{ t.metric_key }}{% else %}task{% endif %}</td>
-        <td class="no-print">
+        <td class="no-print workflow-row-actions">
           <form method="post" action="/programs/{{ program.id }}/tasks/{{ t.id }}/start" style="display:inline;">
             <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/workflow" />
-            <button class="btn mini" type="submit">Start</button>
+            <button class="btn mini primary" type="submit">Start</button>
           </form>
-          <form method="post" action="/programs/{{ program.id }}/tasks/{{ t.id }}/block" style="display:inline;">
-            <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/workflow" />
-            <button class="btn mini" type="submit">Block</button>
-          </form>
-          <form method="post" action="/programs/{{ program.id }}/tasks/{{ t.id }}/done" style="display:inline;">
-            <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/workflow" />
-            <button class="btn mini primary" type="submit">Done</button>
-          </form>
+          <details class="board-actions-overflow" style="display:inline-block;">
+            <summary class="link">More</summary>
+            <div class="workflow-row-overflow-actions">
+              <form method="post" action="/programs/{{ program.id }}/tasks/{{ t.id }}/block" style="display:inline;">
+                <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/workflow" />
+                <button class="btn mini" type="submit">Block</button>
+              </form>
+              <form method="post" action="/programs/{{ program.id }}/tasks/{{ t.id }}/done" style="display:inline;">
+                <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/workflow" />
+                <button class="btn mini" type="submit">Done</button>
+              </form>
+            </div>
+          </details>
         </td>
       </tr>
     {% else %}

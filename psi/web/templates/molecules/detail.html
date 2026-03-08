@@ -58,12 +58,6 @@
     {% endif %}
   </div>
   <div class="page-intent-line">Molecule cockpit: interpret signal, decide next experiment bundle, and execute through tracked tasks.</div>
-  {% set capture_notice = {
-    "captured": (request.query_params.get("captured") if request is defined and request.query_params is defined else ""),
-    "updated": (request.query_params.get("evidence") if request is defined and request.query_params is defined else ""),
-    "return_to": ("/programs/" ~ molecule.program_id ~ "/workflow"),
-    "message": "Continue in Program Workflow Center to unblock, assign, and close the next work item."
-  } %}
   {% include "partials/capture_notice.html" %}
   <div id="zone-overview" class="section-heading" style="margin-top:10px;">
     <h2>Overview</h2>
@@ -105,7 +99,7 @@
       </div>
     </div>
     <div class="molecule-cockpit-actions no-print">
-      <a class="btn primary" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow Center</a>
+      <a class="btn primary" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow</a>
       {% if next_plan %}
         <a class="btn" href="/plans/{{ next_plan.plan_id }}">Open top plan</a>
       {% else %}
@@ -148,8 +142,8 @@
       <div class="molecule-cockpit-cell">
         <div class="molecule-cockpit-label">Execution Entry Points</div>
         <div class="molecule-cockpit-actions no-print">
-          <a class="btn mini" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow Center</a>
-          <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&source=molecule&return_to=/molecules/{{ molecule.id }}#execution">Start data entry</a>
+          <a class="btn mini" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow</a>
+          <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&source=molecule&return_to=/molecules/{{ molecule.id }}#execution">Start result capture</a>
           <a class="btn mini" href="/builder/suggested-task/new?molecule_id={{ molecule.id }}">Create task from suggestion</a>
           <a class="btn mini" href="/plans/new?scope_type=molecule&molecule_id={{ molecule.id }}">Create molecule plan</a>
           <a class="btn mini" href="/claims/new?molecule_id={{ molecule.id }}">Create molecule claim</a>

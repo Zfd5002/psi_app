@@ -107,3 +107,30 @@ def build_return_url(
         ),
     )
 
+
+def build_capture_notice(
+    *,
+    request: Any | None = None,
+    context: HandoffContext | None = None,
+    return_to: str = "",
+    message: str = "",
+) -> dict[str, Any]:
+    ctx = context
+    if ctx is None and request is not None:
+        ctx = get_handoff_context(request)
+    if ctx is None:
+        ctx = HandoffContext()
+    updated = bool(ctx.updated)
+    if not updated and request is not None:
+        q = getattr(request, "query_params", {}) or {}
+        if hasattr(q, "get"):
+            updated = _as_bool(q.get("evidence", ""))
+    resolved_return = str(ctx.return_to or return_to or "").strip()
+    return {
+        "captured": bool(ctx.captured),
+        "updated": updated,
+        "from_task": bool(ctx.from_task),
+        "next_step": str(ctx.next_step or "").strip().lower(),
+        "return_to": resolved_return,
+        "message": str(message or "").strip(),
+    }

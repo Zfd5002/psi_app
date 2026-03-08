@@ -15,7 +15,7 @@
   {% set page_subtitle = "Scientist operations surface (deterministic, DI read-only consumption)." %}
   {% set page_statuses = ["Estimated outcome (heuristic projection) applies to trajectory hints"] %}
   {% set page_primary_actions = [
-    {"href": "/programs/" ~ program.id ~ "/workflow", "label": "Open Program Workflow Center"},
+    {"href": "/programs/" ~ program.id ~ "/workflow", "label": "Open Program Workflow"},
     {"href": "/programs/" ~ program.id, "label": "Back to Program"},
     {"href": "/molecules?program_id=" ~ program.id, "label": "Program Molecules"}
   ] %}
@@ -136,7 +136,7 @@
       <div><b>Unassigned tasks:</b> {{ er.unassigned if er is mapping and er.unassigned is defined else 0 }}</div>
     </div>
     <div class="action-bar-utility no-print" style="margin-top:8px;">
-      <a class="btn mini primary" href="/programs/{{ program.id }}/workflow">Open Program Workflow Center</a>
+      <a class="btn mini primary" href="/programs/{{ program.id }}/workflow">Open Program Workflow</a>
       <a class="btn mini" href="/programs/{{ program.id }}">Back to Program Strategy</a>
     </div>
   </div>

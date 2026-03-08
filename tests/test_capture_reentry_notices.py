@@ -30,7 +30,7 @@ def test_evidence_detail_shows_capture_notice() -> None:
         ),
         data_records=[],
         audits=[],
-        detail_handoff={"captured": True, "updated": False, "return_to": "/programs/1/workflow"},
+        capture_notice={"captured": True, "updated": False, "return_to": "/programs/1/workflow"},
     )
     assert "Capture recorded." in html
     assert "/programs/1/workflow" in html

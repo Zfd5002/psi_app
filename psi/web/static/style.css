@@ -329,6 +329,7 @@ body.pdf-mode .narrative-list{gap:3px}
 .section-heading h2,.section-heading h3{margin:0}
 .local-subnav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
 .local-subnav a{padding:6px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.local-subnav a.active{background:rgba(51,184,255,.12);border-color:rgba(51,184,255,.32);color:var(--text)}
 .local-subnav a:hover{background:rgba(255,255,255,.06);color:var(--text);text-decoration:none}
 .local-subnav a:focus{outline:1px solid rgba(51,184,255,.35);outline-offset:1px}
 .progressive-disclosure{border:1px solid rgba(159,176,192,.24);border-radius:12px;padding:8px 10px;background:rgba(7,13,24,.4)}
@@ -366,6 +367,14 @@ body.pdf-mode .narrative-list{gap:3px}
 .board-card .chip{margin:0}
 .board-card-primary-action .btn{font-weight:700}
 .board-actions-overflow summary{font-size:12px;color:var(--muted)}
+.workflow-primary-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.workflow-origin-disclosure summary{text-transform:uppercase;letter-spacing:.06em;font-size:12px;color:var(--muted)}
+.workflow-section-heading{padding:4px 0;border-bottom:1px dashed rgba(159,176,192,.2)}
+.workflow-row-actions{white-space:nowrap}
+.workflow-row-overflow-actions{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0}
+.workflow-secondary-stack .progressive-disclosure{margin:0}
+.workflow-secondary-stack summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.workflow-secondary-stack table.mini th,.workflow-secondary-stack table.mini td{padding:8px 8px}
 .board-column ul{list-style:none;margin:8px 0 0 0;padding:0;display:grid;gap:8px}
 .board-column .muted.mini{line-height:1.35}
 @media (max-width:1000px){

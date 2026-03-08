@@ -60,6 +60,12 @@ def program_detail(program_id: int, request: Request, db: Session = Depends(get_
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request
+    hctx = handoff.get_handoff_context(request)
+    ctx["capture_notice"] = handoff.build_capture_notice(
+        context=hctx,
+        return_to=f"/programs/{int(program_id)}/workflow",
+        message="Re-enter Program Workflow to continue task progression.",
+    )
     ctx["surface"] = ui_surfaces.program_detail_surface(program_id=int(program_id))
     return templates.TemplateResponse("programs/detail.html", ctx)
 

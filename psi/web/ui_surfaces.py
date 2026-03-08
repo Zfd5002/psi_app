@@ -72,7 +72,7 @@ def program_detail_surface(*, program_id: int) -> SurfaceDescriptor:
             nav_item("Attention Now", "#attention-now"),
             nav_item("Priorities", "#scientific-priorities"),
             nav_item("Execution Links", "#execution-links"),
-            nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"),
+            nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"),
             nav_item("Open Tasks", "#open-tasks"),
         ],
         archetype_labels=["Overview Page", "Workspace Links", "Operational Handoff"],
@@ -93,7 +93,7 @@ def program_board_surface(*, program_id: int) -> SurfaceDescriptor:
             nav_item("Failed", "#board-failed"),
             nav_item("Missing", "#board-missing-data"),
             nav_item("Not Evaluated", "#board-not-evaluated"),
-            nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"),
+            nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"),
         ],
         archetype_labels=["Overview Inputs", "Operational Page", "Execution Actions"],
         attention_mode="high",
@@ -104,7 +104,7 @@ def program_board_surface(*, program_id: int) -> SurfaceDescriptor:
 def program_workflow_surface(*, program_id: int) -> SurfaceDescriptor:
     return workflow_surface(
         surface_key="program_workflow",
-        surface_title="Program Workflow Center",
+        surface_title="Program Workflow",
         dominant_purpose="task lifecycle execution",
         local_nav=[
             nav_item("Ready to Start", "#ready-start"),
@@ -174,7 +174,7 @@ def claim_detail_surface(*, program_id: int | None = None) -> SurfaceDescriptor:
         nav_item("Plans", "#claim-plans"),
     ]
     if program_id is not None:
-        nav.append(nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"))
+        nav.append(nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
     return workspace_surface(
         surface_key="claim_detail",
         surface_title="Scientific Claim",
@@ -193,7 +193,7 @@ def plan_detail_surface(*, program_id: int | None = None) -> SurfaceDescriptor:
         nav_item("Actions", "#plan-actions"),
     ]
     if program_id is not None:
-        nav.append(nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"))
+        nav.append(nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
     return workspace_surface(
         surface_key="plan_detail",
         surface_title="Scientific Plan",
@@ -261,7 +261,7 @@ def data_registry_surface() -> SurfaceDescriptor:
 def data_entry_surface(*, program_id: int | None = None, molecule_id: int | None = None, from_task: bool = False) -> SurfaceDescriptor:
     nav = [nav_item("Lab Notebook", "/data"), nav_item("New Data Record", "/data/new")]
     if program_id is not None:
-        nav.append(nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"))
+        nav.append(nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
         nav.append(nav_item("Program Board", f"/programs/{int(program_id)}/board"))
     if molecule_id is not None:
         nav.append(nav_item("Molecule Workspace", f"/molecules/{int(molecule_id)}"))
@@ -280,7 +280,7 @@ def data_entry_surface(*, program_id: int | None = None, molecule_id: int | None
 def data_detail_surface(*, record_id: int, program_id: int | None = None, molecule_id: int | None = None) -> SurfaceDescriptor:
     nav = [nav_item("Lab Notebook", "/data"), nav_item("This Data Record", f"/data/{int(record_id)}")]
     if program_id is not None:
-        nav.append(nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"))
+        nav.append(nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
     if molecule_id is not None:
         nav.append(nav_item("Molecule Workspace", f"/molecules/{int(molecule_id)}"))
     return workspace_surface(
@@ -308,7 +308,7 @@ def evidence_registry_surface() -> SurfaceDescriptor:
 def evidence_entry_surface(*, program_id: int | None = None, molecule_id: int | None = None, batch_id: int | None = None) -> SurfaceDescriptor:
     nav = [nav_item("Evidence", "/evidence"), nav_item("New Evidence", "/evidence/new")]
     if program_id is not None:
-        nav.append(nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"))
+        nav.append(nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
     if molecule_id is not None:
         nav.append(nav_item("Molecule Workspace", f"/molecules/{int(molecule_id)}"))
     if batch_id is not None:
@@ -328,7 +328,7 @@ def evidence_entry_surface(*, program_id: int | None = None, molecule_id: int | 
 def evidence_detail_surface(*, evidence_id: int, program_id: int | None = None, molecule_id: int | None = None) -> SurfaceDescriptor:
     nav = [nav_item("Evidence", "/evidence"), nav_item("This Evidence Record", f"/evidence/{int(evidence_id)}")]
     if program_id is not None:
-        nav.append(nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"))
+        nav.append(nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
     if molecule_id is not None:
         nav.append(nav_item("Molecule Workspace", f"/molecules/{int(molecule_id)}"))
     return workspace_surface(
@@ -452,7 +452,7 @@ def builder_variant_set_detail_surface(*, variant_set_id: int) -> SurfaceDescrip
 def builder_suggested_task_surface(*, molecule_id: int, program_id: int | None = None) -> SurfaceDescriptor:
     nav = [nav_item("Molecule Workspace", f"/molecules/{int(molecule_id)}"), nav_item("Builder Home", "/builder")]
     if program_id is not None:
-        nav.insert(1, nav_item("Program Workflow Center", f"/programs/{int(program_id)}/workflow"))
+        nav.insert(1, nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
     return operational_surface(
         surface_key="builder_suggested_task",
         surface_title="Create Task from Suggested Experiment",

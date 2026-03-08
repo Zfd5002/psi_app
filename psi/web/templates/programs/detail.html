@@ -12,7 +12,7 @@
     "Progress: " ~ ((pd.progress_percent if pd.progress_percent is defined else 0) ~ "%")
   ] %}
   {% set page_primary_actions = [
-    {"href": "/programs/" ~ program.id ~ "/workflow", "label": "Open Program Workflow Center"},
+    {"href": "/programs/" ~ program.id ~ "/workflow", "label": "Open Program Workflow"},
     {"href": "/programs/" ~ program.id ~ "/board", "label": "Open Development Board"}
   ] %}
   {% set page_secondary_actions = [
@@ -43,12 +43,6 @@
       {% endfor %}
     </div>
   {% endif %}
-  {% set capture_notice = {
-    "captured": (request.query_params.get("captured") if request is defined and request.query_params is defined else ""),
-    "updated": (request.query_params.get("evidence") if request is defined and request.query_params is defined else ""),
-    "return_to": ("/programs/" ~ program.id ~ "/workflow"),
-    "message": "Re-enter Program Workflow Center to continue task progression."
-  } %}
   {% include "partials/capture_notice.html" %}
   {% set blocker_rows = (di_dashboard.top_blockers if di_dashboard is defined and di_dashboard and di_dashboard.top_blockers is defined else []) %}
   {% set recent_evidence_count = (recent_evidence|length) if recent_evidence is defined and recent_evidence is iterable else 0 %}
@@ -184,7 +178,7 @@
       <div class="muted mini">Use these entry points to move strategy into tracked work</div>
     </div>
     <div class="action-bar-utility no-print" style="margin-top:8px;">
-      <a class="btn primary" href="/programs/{{ program.id }}/workflow">Open Program Workflow Center</a>
+      <a class="btn primary" href="/programs/{{ program.id }}/workflow">Open Program Workflow</a>
       <a class="btn primary" href="/programs/{{ program.id }}/board">Open Development Board</a>
       <a class="btn" href="#open-tasks">Open Operational Tasks</a>
       <a class="btn" href="/molecules/new?program_id={{ program.id }}">Add Molecule</a>
@@ -213,7 +207,7 @@
       <a href="#attention-now">Attention Now</a>
       <a href="#scientific-priorities">Priorities</a>
       <a href="#execution-links">Execution Links</a>
-      <a href="/programs/{{ program.id }}/workflow">Program Workflow Center</a>
+      <a href="/programs/{{ program.id }}/workflow">Program Workflow</a>
       <a href="#open-tasks">Open Tasks</a>
       <a href="#program-narrative">Narrative</a>
       <a href="#secondary-ops">Secondary Ops</a>

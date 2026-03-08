@@ -8,7 +8,7 @@
   {% set page_primary_actions = [{"href": "/evidence/" ~ ev.id ~ "/edit", "label": "Edit Evidence"}] %}
   {% set page_secondary_actions = [
     {"href": "/data/new?program_id=" ~ ev.program_id ~ (("&molecule_id=" ~ ev.molecule_id) if ev.molecule_id else "") ~ (("&batch_id=" ~ ev.batch_id) if ev.batch_id else ""), "label": "Capture Related Data"},
-    {"href": "/programs/" ~ ev.program_id ~ "/workflow", "label": "Continue in Program Workflow Center"},
+    {"href": "/programs/" ~ ev.program_id ~ "/workflow", "label": "Continue in Program Workflow"},
     {"href": "/evidence", "label": "Back to Evidence"}
   ] %}
   {% if ev.molecule_id %}{% set page_secondary_actions = page_secondary_actions + [{"href": "/molecules/" ~ ev.molecule_id, "label": "Open Molecule Workspace"}] %}{% endif %}
@@ -26,12 +26,6 @@
   {% include "partials/page_header.html" %}
   {% include "partials/surface_chrome.html" %}
   <div class="page-intent-line">Evidence bridges measured data to scientific interpretation and program decisions.</div>
-  {% set capture_notice = {
-    "captured": (detail_handoff.captured if detail_handoff is defined and detail_handoff else false),
-    "updated": (detail_handoff.updated if detail_handoff is defined and detail_handoff else false),
-    "return_to": (detail_handoff.return_to if detail_handoff is defined and detail_handoff else ""),
-    "message": "Recommended next step: review linked data and return to molecule/program workflow to continue de-risking."
-  } %}
   {% include "partials/capture_notice.html" %}
 
   <hr class="sep" />

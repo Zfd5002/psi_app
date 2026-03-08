@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from psi.web.deps import get_db, get_storage_cfg, get_templates
 from psi.web import ui_surfaces
+from psi.web import handoff_context as handoff
 from psi.core.db import get_db as get_db_ctx
 from psi.services import molecules as svc
 from psi.services.computed import run_computed_properties, run_immunogenicity_mhci
@@ -262,6 +263,12 @@ def molecule_detail(molecule_id: int, request: Request, tab: str = "overview", b
         raise HTTPException(404)
     ctx["request"] = request
     ctx["tab"] = tab
+    hctx = handoff.get_handoff_context(request)
+    ctx["capture_notice"] = handoff.build_capture_notice(
+        context=hctx,
+        return_to=f"/programs/{int(ctx['molecule'].program_id)}/workflow",
+        message="Continue in Program Workflow to unblock, assign, and close the next work item.",
+    )
     ctx["surface"] = ui_surfaces.molecule_detail_surface(molecule_id=int(molecule_id))
 
     # v1.2.7: QC-aware batch-first context. Batches render on all tabs.

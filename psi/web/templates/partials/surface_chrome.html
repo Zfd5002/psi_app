@@ -12,7 +12,8 @@
 {% if _nav %}
 <div class="local-subnav no-print">
   {% for item in _nav %}
-    <a href="{{ item.href }}">{{ item.label }}</a>
+    {% set _active = (item.active if item.active is defined else false) %}
+    <a href="{{ item.href }}"{% if _active %} class="active"{% endif %}>{{ item.label }}</a>
   {% endfor %}
 </div>
 {% endif %}
