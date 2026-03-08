@@ -4,7 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
+from psi.core.db import ensure_schema
+from psi.core.models import Base, ExperimentTask, Molecule, Program
 from psi.web.routers import builder as builder_router
 from psi.web.ui_labels import humanize_state
 
@@ -14,6 +18,14 @@ def _env() -> Environment:
     env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
     env.filters["humanize_state"] = humanize_state
     return env
+
+
+def _mkdb():
+    eng = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=eng)
+    ensure_schema(engine_override=eng)
+    SessionTmp = sessionmaker(bind=eng, future=True)
+    return eng, SessionTmp
 
 
 def test_builder_routes_exist() -> None:
@@ -28,6 +40,43 @@ def test_builder_routes_exist() -> None:
     assert ("/builder/cdr-builder", ("GET",)) in route_keys
     assert ("/builder/cdr-builder/draft", ("POST",)) in route_keys
     assert ("/builder/search_molecules", ("GET",)) in route_keys
+    assert ("/builder/exploration-task", ("POST",)) in route_keys
+
+
+def test_create_builder_exploration_task_route_creates_operational_task() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            p = Program(name="P-builder-task")
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="M-B1", title="builder-mol")
+            db.add(m)
+            db.commit()
+            db.refresh(m)
+
+            resp = builder_router.create_builder_exploration_task(
+                parent_molecule_id=int(m.id),
+                task_title="create_variant",
+                notes="explore substitutions",
+                action_target="point-mutation",
+                redirect_to="",
+                db=db,
+            )
+            assert resp.status_code == 303
+            assert "/builder/point-mutation" in str(resp.headers.get("location") or "")
+            rows = db.query(ExperimentTask).order_by(ExperimentTask.id.asc()).all()
+            assert len(rows) == 1
+            assert str(rows[0].source_kind or "") == "builder_exploration"
+            assert str(rows[0].suggested_assay or "") == "builder:point-mutation"
+            assert int(rows[0].program_id) == int(p.id)
+            assert int(rows[0].molecule_id) == int(m.id)
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
 
 
 def test_builder_index_template_renders_standalone_builder_surface() -> None:

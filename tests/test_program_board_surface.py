@@ -28,9 +28,14 @@ def test_program_board_template_renders_sections() -> None:
         program=SimpleNamespace(id=1, name="P1"),
         board_filter="all",
         board_query="M-2",
+        board_owner_filter="Dr X",
+        board_urgency_filter="high",
+        board_task_status_filter="open",
+        board_due_filter="due_soon",
         board={
+            "execution_rollup": {"in_progress_this_week": 1, "overdue": 2, "blocked": 1, "unassigned": 3},
             "groups": {
-                "ready": [{"molecule_id": 2, "primary_id": "M-2", "status": "ready", "blocking_reason": "", "trend_signal": "improving", "missing_metrics": ["kd_nM"], "recommended_experiments": [{"metric_key": "kd_nM"}], "warnings": ["confirmation recommended"]}],
+                "ready": [{"molecule_id": 2, "primary_id": "M-2", "status": "ready", "blocking_reason": "", "trend_signal": "improving", "missing_metrics": ["kd_nM"], "recommended_experiments": [{"metric_key": "kd_nM"}], "warnings": ["confirmation recommended"], "open_task_count": 2, "in_progress_task_count": 1, "top_next_task_label": "SPR (kd_nM)", "top_next_action": "Continue task: SPR (kd_nM)", "why_here": "Ready because required criteria are currently satisfied."}],
                 "failed": [],
                 "missing_data": [],
                 "not_evaluated": [],
@@ -43,21 +48,38 @@ def test_program_board_template_renders_sections() -> None:
     assert "MISSING DATA" in html
     assert "NOT EVALUATED" in html
     assert "Program Summary" in html
+    assert "Execution Panel" in html
+    assert "In progress this week:" in html
+    assert "> 1<" in html
     assert "Ready:" in html
     assert "> 1<" in html
     assert "/programs/1/board?filter=ready" in html
     assert "Search molecule ID" in html
     assert 'name="q"' in html
+    assert "Apply task filters" in html
+    assert 'name="owner"' in html
+    assert 'name="urgency"' in html
+    assert 'name="task_status"' in html
+    assert 'name="due"' in html
     assert "/molecules/2" in html
     assert 'id="board-ready"' in html
     assert "count=1" in html
     assert "Status: ready" in html
+    assert "Tasks:" in html
+    assert "open 2" in html
+    assert "in progress 1" in html
+    assert "next SPR (kd_nM)" in html
+    assert "Why here: Ready because required criteria are currently satisfied." in html
+    assert "Top next action:</b> Continue task: SPR (kd_nM)" in html
     assert "▲ improving" in html
     assert 'data-card-link="/molecules/2"' in html
     assert "Add missing measurement" in html
-    assert "Run suggested experiment" in html
-    assert "/data/new?program_id=1" in html
-    assert "molecule_id=2" in html
-    assert "/builder/point-mutation?parent_molecule_id=2" in html
+    assert "Create task" in html
+    assert "Create task + start data entry" in html
+    assert "/programs/1/tasks/create" in html
+    assert "/programs/1/tasks/create-and-start-data" in html
+    assert 'name="metric_key"' in html
+    assert "/builder/exploration-task" in html
+    assert "Create exploration task + variant" in html
     assert "/molecules/2#sequence-editor" in html
     assert "⚠ confirmation recommended" in html

@@ -3,7 +3,18 @@
 {% block content %}
 <div class="card">
   <h1>{% if record %}Edit Data Record{% else %}New Data Record{% endif %}</h1>
+  {% if not record and task_context %}
+  <div class="card" style="margin:10px 0;">
+    <h3 style="margin-top:0;">Task Context</h3>
+    <div class="mini muted">Task #{{ task_context.task_id }} | status={{ task_context.status }} | urgency={{ task_context.urgency }}</div>
+    <div class="mini">Molecule ID: {{ task_context.molecule_id }}{% if task_context.metric_key %} | Metric: {{ task_context.metric_key }}{% endif %}{% if task_context.suggested_assay %} | Assay: {{ task_context.suggested_assay }}{% endif %}</div>
+    {% if task_context.owner_text %}<div class="mini">Owner: {{ task_context.owner_text }}</div>{% endif %}
+    {% if task_context.due_date %}<div class="mini">Due: {{ task_context.due_date }}</div>{% endif %}
+    {% if task_context.notes %}<div class="mini muted">Notes: {{ task_context.notes }}</div>{% endif %}
+  </div>
+  {% endif %}
   <form id="dataForm" class="form" method="post" action="{% if record %}/data/{{ record.id }}/edit{% else %}/data/new{% endif %}" enctype="multipart/form-data">
+    <input type="hidden" name="task_id" value="{{ prefill.task_id if prefill is defined and prefill.task_id is defined and prefill.task_id else '' }}" />
     <input type="hidden" name="action_intent" id="actionIntent" value="save" />
     <input type="hidden" name="actor" value="scientist" />
     <input type="hidden" name="return_to" value="{{ request.query_params.get('return_to') if request is defined and request.query_params is defined else '' }}" />

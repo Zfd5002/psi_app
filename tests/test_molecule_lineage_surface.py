@@ -172,6 +172,17 @@ def test_molecule_detail_template_renders_lineage_panel() -> None:
             "series": {"monomer_pct": [{"value": 82.0}, {"value": 85.0}]},
         },
         molecule_trend_insights=[{"metric_key": "monomer_pct", "signal": "improving"}],
+        open_experiment_tasks=[
+            {
+                "id": 41,
+                "status": "planned",
+                "urgency": "high",
+                "owner_text": "Dr. A",
+                "due_date": "2026-03-12",
+                "metric_key": "kd_nM",
+                "suggested_assay": "SPR",
+            }
+        ],
     )
     assert "Lineage" in html
     assert "Parent molecule" in html
@@ -181,6 +192,9 @@ def test_molecule_detail_template_renders_lineage_panel() -> None:
     assert "sequence_editor_tooltip" in html
     assert "/static/sequence_editor.js" in html
     assert "What This Molecule Needs Next" in html
+    assert "Operational Tasks" in html
+    assert "#41" in html
+    assert "Start" in html
     assert "Add measurement for kd_nM" in html
     assert "Blocking evidence detail" in html
     assert "Monomer &gt;= 85 %" in html or "Monomer >= 85 %" in html

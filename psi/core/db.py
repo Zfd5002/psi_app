@@ -307,6 +307,23 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
             "created_at": "TEXT",
             "updated_at": "TEXT",
         },
+        "program_experiment_tasks": {
+            "id": "INTEGER",
+            "program_id": "INTEGER",
+            "molecule_id": "INTEGER",
+            "metric_key": "TEXT",
+            "suggested_assay": "TEXT",
+            "status": "TEXT",
+            "owner_text": "TEXT",
+            "due_date": "TEXT",
+            "urgency": "TEXT",
+            "source_kind": "TEXT",
+            "source_snapshot_id": "INTEGER",
+            "linked_data_record_id": "INTEGER",
+            "notes": "TEXT",
+            "created_at": "TEXT",
+            "updated_at": "TEXT",
+        },
 
         # v1.2.3g: per-measurement provenance (optional legacy table; additive columns only)
         # NOTE: data_measurements is managed by PRAGMA-driven services in PSI and may pre-exist
@@ -640,6 +657,28 @@ def ensure_schema(*, engine_override: Optional[Engine] = None) -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_links_role ON file_links(role)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_deriv_parent ON file_derivations(parent_file_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_deriv_child ON file_derivations(child_file_id)"))
+
+        # v1.3.0c31: operational experiment task indexes (additive)
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_experiment_tasks_program_status "
+            "ON program_experiment_tasks(program_id, status)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_experiment_tasks_molecule_status "
+            "ON program_experiment_tasks(molecule_id, status)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_experiment_tasks_program_molecule "
+            "ON program_experiment_tasks(program_id, molecule_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_experiment_tasks_source_snapshot_id "
+            "ON program_experiment_tasks(source_snapshot_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_experiment_tasks_linked_data_record_id "
+            "ON program_experiment_tasks(linked_data_record_id)"
+        ))
         conn.commit()
 
 

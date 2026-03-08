@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
+
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -9,6 +13,7 @@ from psi.web.deps import get_db, get_templates
 from psi.services import programs as svc
 from psi.services import data_records as data_records_svc
 from psi.services import dev_board as dev_board_svc
+from psi.services import experiment_tasks as experiment_tasks_svc
 
 router = APIRouter()
 
@@ -79,6 +84,51 @@ def program_development_board(program_id: int, request: Request, db: Session = D
                 },
             }
     q = str(request.query_params.get("q") or "").strip().lower()
+    owner_filter = str(request.query_params.get("owner") or "").strip().lower()
+    urgency_filter = str(request.query_params.get("urgency") or "").strip().lower()
+    status_filter = str(request.query_params.get("task_status") or "").strip().lower()
+    due_filter = str(request.query_params.get("due") or "").strip().lower()
+    if urgency_filter not in {"", "critical", "high", "normal", "low"}:
+        urgency_filter = ""
+    if status_filter not in {"", "planned", "in_progress", "blocked", "done", "open"}:
+        status_filter = ""
+    if due_filter not in {"", "overdue", "due_soon"}:
+        due_filter = ""
+
+    def _due_match(row: dict) -> bool:
+        if not due_filter:
+            return True
+        raw = str(row.get("top_task_due_date") or "").strip()
+        if not raw:
+            return False
+        try:
+            d = date.fromisoformat(raw)
+        except Exception:
+            return False
+        today = date.today()
+        if due_filter == "overdue":
+            return d < today
+        if due_filter == "due_soon":
+            return today <= d <= (today + timedelta(days=7))
+        return True
+
+    def _task_row_match(row: dict) -> bool:
+        if q and q not in str(row.get("primary_id") or "").lower():
+            return False
+        if owner_filter and owner_filter not in str(row.get("top_task_owner_text") or "").lower():
+            return False
+        if urgency_filter and urgency_filter != str(row.get("top_task_urgency") or "").lower():
+            return False
+        if status_filter:
+            if status_filter == "open":
+                if int(row.get("open_task_count") or 0) <= 0:
+                    return False
+            elif status_filter != str(row.get("top_task_status") or "").lower():
+                return False
+        if not _due_match(row):
+            return False
+        return True
+
     if q:
         groups = board.get("groups") if isinstance(board, dict) else {}
         if isinstance(groups, dict):
@@ -88,14 +138,34 @@ def program_development_board(program_id: int, request: Request, db: Session = D
                     k: [
                         row
                         for row in (groups.get(k) or [])
-                        if isinstance(row, dict) and q in str(row.get("primary_id") or "").lower()
+                        if isinstance(row, dict) and _task_row_match(row)
                     ]
+                    for k in ("ready", "failed", "missing_data", "not_evaluated")
+                },
+            }
+    elif owner_filter or urgency_filter or status_filter or due_filter:
+        groups = board.get("groups") if isinstance(board, dict) else {}
+        if isinstance(groups, dict):
+            board = {
+                **board,
+                "groups": {
+                    k: [row for row in (groups.get(k) or []) if isinstance(row, dict) and _task_row_match(row)]
                     for k in ("ready", "failed", "missing_data", "not_evaluated")
                 },
             }
     return templates.TemplateResponse(
         "programs/board.html",
-        {"request": request, "program": program, "board": board, "board_filter": board_filter, "board_query": q},
+        {
+            "request": request,
+            "program": program,
+            "board": board,
+            "board_filter": board_filter,
+            "board_query": q,
+            "board_owner_filter": owner_filter,
+            "board_urgency_filter": urgency_filter,
+            "board_task_status_filter": status_filter,
+            "board_due_filter": due_filter,
+        },
     )
 
 
@@ -246,3 +316,223 @@ def program_review_reject_all(
             note=None,
         )
     return RedirectResponse(url=f"/programs/{program_id}", status_code=303)
+
+
+@router.post("/programs/{program_id}/tasks/create")
+def create_experiment_task(
+    program_id: int,
+    molecule_id: int = Form(...),
+    metric_key: str = Form(""),
+    suggested_assay: str = Form(""),
+    owner_text: str = Form(""),
+    due_date: str = Form(""),
+    urgency: str = Form("normal"),
+    source_kind: str = Form("manual"),
+    source_snapshot_id: int | None = Form(None),
+    notes: str = Form(""),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    p = svc.get_program(db, int(program_id))
+    if not p:
+        raise HTTPException(404)
+    m = db.get(Molecule, int(molecule_id))
+    if m is None:
+        raise HTTPException(404)
+    if int(m.program_id) != int(program_id):
+        raise HTTPException(status_code=400, detail="molecule_not_in_program")
+    experiment_tasks_svc.create_experiment_task(
+        db,
+        program_id=int(program_id),
+        molecule_id=int(molecule_id),
+        metric_key=metric_key,
+        suggested_assay=suggested_assay,
+        owner_text=owner_text,
+        due_date=due_date,
+        urgency=urgency,
+        source_kind=source_kind,
+        source_snapshot_id=source_snapshot_id,
+        notes=notes,
+    )
+    target = str(redirect_to or "").strip() or f"/programs/{program_id}/board"
+    return RedirectResponse(url=target, status_code=303)
+
+
+@router.post("/programs/{program_id}/tasks/{task_id}/status")
+def update_experiment_task_status(
+    program_id: int,
+    task_id: int,
+    status: str = Form(...),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        task = experiment_tasks_svc.update_task_status(db, task_id=int(task_id), status=status)
+    except KeyError:
+        raise HTTPException(404)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if int(task.program_id) != int(program_id):
+        raise HTTPException(status_code=400, detail="task_not_in_program")
+    target = str(redirect_to or "").strip() or f"/programs/{program_id}/board"
+    return RedirectResponse(url=target, status_code=303)
+
+
+@router.post("/programs/{program_id}/tasks/{task_id}/start")
+def start_experiment_task(
+    program_id: int,
+    task_id: int,
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    return update_experiment_task_status(
+        program_id=program_id,
+        task_id=task_id,
+        status="in_progress",
+        redirect_to=redirect_to,
+        db=db,
+    )
+
+
+@router.post("/programs/{program_id}/tasks/{task_id}/block")
+def block_experiment_task(
+    program_id: int,
+    task_id: int,
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    return update_experiment_task_status(
+        program_id=program_id,
+        task_id=task_id,
+        status="blocked",
+        redirect_to=redirect_to,
+        db=db,
+    )
+
+
+@router.post("/programs/{program_id}/tasks/{task_id}/done")
+def complete_experiment_task(
+    program_id: int,
+    task_id: int,
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    return update_experiment_task_status(
+        program_id=program_id,
+        task_id=task_id,
+        status="done",
+        redirect_to=redirect_to,
+        db=db,
+    )
+
+
+@router.post("/programs/{program_id}/tasks/{task_id}/owner")
+def update_experiment_task_owner(
+    program_id: int,
+    task_id: int,
+    owner_text: str = Form(""),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        task = experiment_tasks_svc.assign_task_owner(db, task_id=int(task_id), owner_text=owner_text)
+    except KeyError:
+        raise HTTPException(404)
+    if int(task.program_id) != int(program_id):
+        raise HTTPException(status_code=400, detail="task_not_in_program")
+    target = str(redirect_to or "").strip() or f"/programs/{program_id}/board"
+    return RedirectResponse(url=target, status_code=303)
+
+
+@router.post("/programs/{program_id}/tasks/{task_id}/due-date")
+def update_experiment_task_due_date(
+    program_id: int,
+    task_id: int,
+    due_date: str = Form(""),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        task = experiment_tasks_svc.set_task_due_date(db, task_id=int(task_id), due_date=due_date)
+    except KeyError:
+        raise HTTPException(404)
+    if int(task.program_id) != int(program_id):
+        raise HTTPException(status_code=400, detail="task_not_in_program")
+    target = str(redirect_to or "").strip() or f"/programs/{program_id}/board"
+    return RedirectResponse(url=target, status_code=303)
+
+
+@router.post("/programs/{program_id}/tasks/{task_id}/urgency")
+def update_experiment_task_urgency(
+    program_id: int,
+    task_id: int,
+    urgency: str = Form("normal"),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        task = experiment_tasks_svc.set_task_urgency(db, task_id=int(task_id), urgency=urgency)
+    except KeyError:
+        raise HTTPException(404)
+    if int(task.program_id) != int(program_id):
+        raise HTTPException(status_code=400, detail="task_not_in_program")
+    target = str(redirect_to or "").strip() or f"/programs/{program_id}/board"
+    return RedirectResponse(url=target, status_code=303)
+
+
+@router.post("/programs/{program_id}/tasks/{task_id}/notes")
+def update_experiment_task_notes(
+    program_id: int,
+    task_id: int,
+    notes: str = Form(""),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        task = experiment_tasks_svc.set_task_notes(db, task_id=int(task_id), notes=notes)
+    except KeyError:
+        raise HTTPException(404)
+    if int(task.program_id) != int(program_id):
+        raise HTTPException(status_code=400, detail="task_not_in_program")
+    target = str(redirect_to or "").strip() or f"/programs/{program_id}/board"
+    return RedirectResponse(url=target, status_code=303)
+
+
+@router.post("/programs/{program_id}/tasks/create-and-start-data")
+def create_task_and_start_data_entry(
+    program_id: int,
+    molecule_id: int = Form(...),
+    metric_key: str = Form(""),
+    suggested_assay: str = Form(""),
+    source_snapshot_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    p = svc.get_program(db, int(program_id))
+    if not p:
+        raise HTTPException(404)
+    m = db.get(Molecule, int(molecule_id))
+    if m is None:
+        raise HTTPException(404)
+    if int(m.program_id) != int(program_id):
+        raise HTTPException(status_code=400, detail="molecule_not_in_program")
+    task = experiment_tasks_svc.create_experiment_task(
+        db,
+        program_id=int(program_id),
+        molecule_id=int(molecule_id),
+        metric_key=metric_key,
+        suggested_assay=suggested_assay,
+        source_kind="board",
+        source_snapshot_id=source_snapshot_id,
+    )
+    method = str(suggested_assay or metric_key or "").strip()
+    title = f"Run {metric_key} experiment".strip() if str(metric_key or "").strip() else "Run recommended experiment"
+    query = urlencode(
+        {
+            "program_id": int(program_id),
+            "molecule_id": int(molecule_id),
+            "method": method,
+            "title": title,
+            "task_id": int(task.id),
+        }
+    )
+    return RedirectResponse(url=f"/data/new?{query}", status_code=303)

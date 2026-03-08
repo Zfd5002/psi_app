@@ -6,7 +6,7 @@ import os
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import Any
-from sqlalchemy import text
+from sqlalchemy import text, case, func
 
 from psi.core.audit import record_audit
 from psi.core.models import (
@@ -21,6 +21,7 @@ from psi.core.models import (
     Molecule,
     MoleculeDerivation,
     Program,
+    ExperimentTask,
     MoleculeComponent,
     DomainInstance,
     DomainArtifact,
@@ -481,6 +482,39 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     )
     molecule_trends = build_molecule_trends(db, molecule_id=int(molecule_id))
     molecule_trend_insights = summarize_trend_signals(molecule_trends)
+    urgency_rank = case(
+        (ExperimentTask.urgency == "critical", 0),
+        (ExperimentTask.urgency == "high", 1),
+        (ExperimentTask.urgency == "normal", 2),
+        (ExperimentTask.urgency == "low", 3),
+        else_=4,
+    )
+    open_task_rows = (
+        db.query(ExperimentTask)
+        .filter(ExperimentTask.molecule_id == int(molecule_id))
+        .filter(ExperimentTask.status != "done")
+        .order_by(
+            urgency_rank.asc(),
+            func.coalesce(ExperimentTask.due_date, "9999-12-31").asc(),
+            ExperimentTask.created_at.asc(),
+            ExperimentTask.id.asc(),
+        )
+        .all()
+    )
+    open_experiment_tasks = [
+        {
+            "id": int(t.id),
+            "status": str(t.status or ""),
+            "urgency": str(t.urgency or ""),
+            "owner_text": str(t.owner_text or ""),
+            "due_date": str(t.due_date or ""),
+            "metric_key": str(t.metric_key or ""),
+            "suggested_assay": str(t.suggested_assay or ""),
+            "notes": str(t.notes or ""),
+            "source_kind": str(t.source_kind or ""),
+        }
+        for t in open_task_rows
+    ]
 
     return {
         "molecule": m,
@@ -511,6 +545,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "sequence_editor_annotations": sequence_editor_annotations,
         "molecule_trends": molecule_trends,
         "molecule_trend_insights": molecule_trend_insights,
+        "open_experiment_tasks": open_experiment_tasks,
         "pdl1_allowed_mismatches": int(pdl1_allowed_mismatches or 0),
         "property_runs": runs,
         "latest_run": latest_run,

@@ -13,19 +13,64 @@
   </div>
   {% set bf = board_filter if board_filter is defined else "all" %}
   {% set bq = board_query if board_query is defined else "" %}
+  {% set bo = board_owner_filter if board_owner_filter is defined else "" %}
+  {% set bu = board_urgency_filter if board_urgency_filter is defined else "" %}
+  {% set bs = board_task_status_filter if board_task_status_filter is defined else "" %}
+  {% set bd = board_due_filter if board_due_filter is defined else "" %}
   <form method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
     <input type="hidden" name="filter" value="{{ bf }}" />
+    <input type="hidden" name="owner" value="{{ bo }}" />
+    <input type="hidden" name="urgency" value="{{ bu }}" />
+    <input type="hidden" name="task_status" value="{{ bs }}" />
+    <input type="hidden" name="due" value="{{ bd }}" />
     <label>
       <div class="muted mini">Search molecule ID</div>
       <input type="text" name="q" value="{{ bq }}" placeholder="e.g. M-205" />
     </label>
     <button class="btn mini" type="submit">Search</button>
   </form>
+  <form method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+    <input type="hidden" name="filter" value="{{ bf }}" />
+    <input type="hidden" name="q" value="{{ bq }}" />
+    <label>
+      <div class="muted mini">Owner</div>
+      <input type="text" name="owner" value="{{ bo }}" placeholder="e.g. Dr. K" />
+    </label>
+    <label>
+      <div class="muted mini">Urgency</div>
+      <select name="urgency">
+        <option value="" {% if not bu %}selected{% endif %}>all</option>
+        <option value="critical" {% if bu == "critical" %}selected{% endif %}>critical</option>
+        <option value="high" {% if bu == "high" %}selected{% endif %}>high</option>
+        <option value="normal" {% if bu == "normal" %}selected{% endif %}>normal</option>
+        <option value="low" {% if bu == "low" %}selected{% endif %}>low</option>
+      </select>
+    </label>
+    <label>
+      <div class="muted mini">Task status</div>
+      <select name="task_status">
+        <option value="" {% if not bs %}selected{% endif %}>all</option>
+        <option value="open" {% if bs == "open" %}selected{% endif %}>open</option>
+        <option value="planned" {% if bs == "planned" %}selected{% endif %}>planned</option>
+        <option value="in_progress" {% if bs == "in_progress" %}selected{% endif %}>in progress</option>
+        <option value="blocked" {% if bs == "blocked" %}selected{% endif %}>blocked</option>
+      </select>
+    </label>
+    <label>
+      <div class="muted mini">Due</div>
+      <select name="due">
+        <option value="" {% if not bd %}selected{% endif %}>all</option>
+        <option value="due_soon" {% if bd == "due_soon" %}selected{% endif %}>due soon</option>
+        <option value="overdue" {% if bd == "overdue" %}selected{% endif %}>overdue</option>
+      </select>
+    </label>
+    <button class="btn mini" type="submit">Apply task filters</button>
+  </form>
   <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-    <a class="btn mini {% if bf == 'all' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=all&q={{ bq }}">All</a>
-    <a class="btn mini {% if bf == 'ready' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=ready&q={{ bq }}">Show only ready</a>
-    <a class="btn mini {% if bf == 'failed' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=failed&q={{ bq }}">Show only failed</a>
-    <a class="btn mini {% if bf == 'missing' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=missing&q={{ bq }}">Show only missing</a>
+    <a class="btn mini {% if bf == 'all' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=all&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">All</a>
+    <a class="btn mini {% if bf == 'ready' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=ready&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only ready</a>
+    <a class="btn mini {% if bf == 'failed' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=failed&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only failed</a>
+    <a class="btn mini {% if bf == 'missing' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=missing&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only missing</a>
   </div>
 
   {% set g = (board.groups if board is defined and board.groups is defined else {}) %}
@@ -36,6 +81,16 @@
       <div><b>Failed:</b> {{ (g.failed|length) if g is mapping and g.failed is defined else 0 }}</div>
       <div><b>Missing data:</b> {{ (g.missing_data|length) if g is mapping and g.missing_data is defined else 0 }}</div>
       <div><b>Not evaluated:</b> {{ (g.not_evaluated|length) if g is mapping and g.not_evaluated is defined else 0 }}</div>
+    </div>
+  </div>
+  {% set er = (board.execution_rollup if board is defined and board.execution_rollup is defined else {}) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Execution Panel</h3>
+    <div class="grid cols-4">
+      <div><b>In progress this week:</b> {{ er.in_progress_this_week if er is mapping and er.in_progress_this_week is defined else 0 }}</div>
+      <div><b>Overdue tasks:</b> {{ er.overdue if er is mapping and er.overdue is defined else 0 }}</div>
+      <div><b>Blocked tasks:</b> {{ er.blocked if er is mapping and er.blocked is defined else 0 }}</div>
+      <div><b>Unassigned tasks:</b> {{ er.unassigned if er is mapping and er.unassigned is defined else 0 }}</div>
     </div>
   </div>
   <div class="grid cols-2" style="margin-top:10px;">
@@ -51,7 +106,14 @@
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
             </div>
             <div class="mini muted">Status: {{ row.status if row.status is defined else "not assessed" }}</div>
+            <div class="mini muted">
+              Tasks: <span class="chip">open {{ row.open_task_count if row.open_task_count is defined else 0 }}</span>
+              <span class="chip">in progress {{ row.in_progress_task_count if row.in_progress_task_count is defined else 0 }}</span>
+              {% if row.top_next_task_label is defined and row.top_next_task_label %}<span class="chip">next {{ row.top_next_task_label }}</span>{% endif %}
+            </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
+            <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
+            <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
             {% if row.warnings is defined and row.warnings %}
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                 {% for w in row.warnings %}<span class="chip">⚠ {{ w }}</span>{% endfor %}
@@ -64,9 +126,31 @@
               {% endif %}
               {% set rec = (row.recommended_experiments[0] if row.recommended_experiments is defined and row.recommended_experiments else None) %}
               {% if rec %}
-                <a class="btn mini primary" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Run%20{{ (rec.metric_key if rec.metric_key is defined else '') }}%20experiment&method={{ rec.metric_key if rec.metric_key is defined else '' }}">Run suggested experiment</a>
+                {% set rec_metric = (rec.metric_key if rec.metric_key is defined else "") %}
+                {% set rec_assay = (rec.assay_key if rec.assay_key is defined and rec.assay_key else rec_metric) %}
+                <form method="post" action="/programs/{{ program.id }}/tasks/create" style="display:inline;">
+                  <input type="hidden" name="molecule_id" value="{{ row.molecule_id }}" />
+                  <input type="hidden" name="metric_key" value="{{ rec_metric }}" />
+                  <input type="hidden" name="suggested_assay" value="{{ rec_assay }}" />
+                  <input type="hidden" name="source_kind" value="board" />
+                  <input type="hidden" name="source_snapshot_id" value="{{ row.snapshot_id if row.snapshot_id is defined and row.snapshot_id is not none else '' }}" />
+                  <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/board" />
+                  <button class="btn mini" type="submit">Create task</button>
+                </form>
+                <form method="post" action="/programs/{{ program.id }}/tasks/create-and-start-data" style="display:inline;">
+                  <input type="hidden" name="molecule_id" value="{{ row.molecule_id }}" />
+                  <input type="hidden" name="metric_key" value="{{ rec_metric }}" />
+                  <input type="hidden" name="suggested_assay" value="{{ rec_assay }}" />
+                  <input type="hidden" name="source_snapshot_id" value="{{ row.snapshot_id if row.snapshot_id is defined and row.snapshot_id is not none else '' }}" />
+                  <button class="btn mini primary" type="submit">Create task + start data entry</button>
+                </form>
               {% endif %}
-              <a class="btn mini" href="/builder/point-mutation?parent_molecule_id={{ row.molecule_id }}">Create variant</a>
+              <form method="post" action="/builder/exploration-task" style="display:inline;">
+                <input type="hidden" name="parent_molecule_id" value="{{ row.molecule_id }}" />
+                <input type="hidden" name="task_title" value="create_variant_for_{{ row.primary_id }}" />
+                <input type="hidden" name="action_target" value="point-mutation" />
+                <button class="btn mini" type="submit">Create exploration task + variant</button>
+              </form>
               <a class="btn mini" href="/molecules/{{ row.molecule_id }}#sequence-editor">Open sequence editor</a>
             </div>
           </li>
@@ -87,7 +171,14 @@
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
             </div>
             <div class="mini muted">Status: {{ row.status if row.status is defined else "not assessed" }}</div>
+            <div class="mini muted">
+              Tasks: <span class="chip">open {{ row.open_task_count if row.open_task_count is defined else 0 }}</span>
+              <span class="chip">in progress {{ row.in_progress_task_count if row.in_progress_task_count is defined else 0 }}</span>
+              {% if row.top_next_task_label is defined and row.top_next_task_label %}<span class="chip">next {{ row.top_next_task_label }}</span>{% endif %}
+            </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
+            <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
+            <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
             {% if row.warnings is defined and row.warnings %}
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                 {% for w in row.warnings %}<span class="chip">⚠ {{ w }}</span>{% endfor %}
@@ -100,9 +191,31 @@
               {% endif %}
               {% set rec = (row.recommended_experiments[0] if row.recommended_experiments is defined and row.recommended_experiments else None) %}
               {% if rec %}
-                <a class="btn mini primary" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Run%20{{ (rec.metric_key if rec.metric_key is defined else '') }}%20experiment&method={{ rec.metric_key if rec.metric_key is defined else '' }}">Run suggested experiment</a>
+                {% set rec_metric = (rec.metric_key if rec.metric_key is defined else "") %}
+                {% set rec_assay = (rec.assay_key if rec.assay_key is defined and rec.assay_key else rec_metric) %}
+                <form method="post" action="/programs/{{ program.id }}/tasks/create" style="display:inline;">
+                  <input type="hidden" name="molecule_id" value="{{ row.molecule_id }}" />
+                  <input type="hidden" name="metric_key" value="{{ rec_metric }}" />
+                  <input type="hidden" name="suggested_assay" value="{{ rec_assay }}" />
+                  <input type="hidden" name="source_kind" value="board" />
+                  <input type="hidden" name="source_snapshot_id" value="{{ row.snapshot_id if row.snapshot_id is defined and row.snapshot_id is not none else '' }}" />
+                  <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/board" />
+                  <button class="btn mini" type="submit">Create task</button>
+                </form>
+                <form method="post" action="/programs/{{ program.id }}/tasks/create-and-start-data" style="display:inline;">
+                  <input type="hidden" name="molecule_id" value="{{ row.molecule_id }}" />
+                  <input type="hidden" name="metric_key" value="{{ rec_metric }}" />
+                  <input type="hidden" name="suggested_assay" value="{{ rec_assay }}" />
+                  <input type="hidden" name="source_snapshot_id" value="{{ row.snapshot_id if row.snapshot_id is defined and row.snapshot_id is not none else '' }}" />
+                  <button class="btn mini primary" type="submit">Create task + start data entry</button>
+                </form>
               {% endif %}
-              <a class="btn mini" href="/builder/point-mutation?parent_molecule_id={{ row.molecule_id }}">Create variant</a>
+              <form method="post" action="/builder/exploration-task" style="display:inline;">
+                <input type="hidden" name="parent_molecule_id" value="{{ row.molecule_id }}" />
+                <input type="hidden" name="task_title" value="create_variant_for_{{ row.primary_id }}" />
+                <input type="hidden" name="action_target" value="point-mutation" />
+                <button class="btn mini" type="submit">Create exploration task + variant</button>
+              </form>
               <a class="btn mini" href="/molecules/{{ row.molecule_id }}#sequence-editor">Open sequence editor</a>
             </div>
           </li>
@@ -123,7 +236,14 @@
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
             </div>
             <div class="mini muted">Status: {{ row.status if row.status is defined else "not assessed" }}</div>
+            <div class="mini muted">
+              Tasks: <span class="chip">open {{ row.open_task_count if row.open_task_count is defined else 0 }}</span>
+              <span class="chip">in progress {{ row.in_progress_task_count if row.in_progress_task_count is defined else 0 }}</span>
+              {% if row.top_next_task_label is defined and row.top_next_task_label %}<span class="chip">next {{ row.top_next_task_label }}</span>{% endif %}
+            </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
+            <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
+            <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
             {% if row.warnings is defined and row.warnings %}
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                 {% for w in row.warnings %}<span class="chip">⚠ {{ w }}</span>{% endfor %}
@@ -136,9 +256,31 @@
               {% endif %}
               {% set rec = (row.recommended_experiments[0] if row.recommended_experiments is defined and row.recommended_experiments else None) %}
               {% if rec %}
-                <a class="btn mini primary" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Run%20{{ (rec.metric_key if rec.metric_key is defined else '') }}%20experiment&method={{ rec.metric_key if rec.metric_key is defined else '' }}">Run suggested experiment</a>
+                {% set rec_metric = (rec.metric_key if rec.metric_key is defined else "") %}
+                {% set rec_assay = (rec.assay_key if rec.assay_key is defined and rec.assay_key else rec_metric) %}
+                <form method="post" action="/programs/{{ program.id }}/tasks/create" style="display:inline;">
+                  <input type="hidden" name="molecule_id" value="{{ row.molecule_id }}" />
+                  <input type="hidden" name="metric_key" value="{{ rec_metric }}" />
+                  <input type="hidden" name="suggested_assay" value="{{ rec_assay }}" />
+                  <input type="hidden" name="source_kind" value="board" />
+                  <input type="hidden" name="source_snapshot_id" value="{{ row.snapshot_id if row.snapshot_id is defined and row.snapshot_id is not none else '' }}" />
+                  <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/board" />
+                  <button class="btn mini" type="submit">Create task</button>
+                </form>
+                <form method="post" action="/programs/{{ program.id }}/tasks/create-and-start-data" style="display:inline;">
+                  <input type="hidden" name="molecule_id" value="{{ row.molecule_id }}" />
+                  <input type="hidden" name="metric_key" value="{{ rec_metric }}" />
+                  <input type="hidden" name="suggested_assay" value="{{ rec_assay }}" />
+                  <input type="hidden" name="source_snapshot_id" value="{{ row.snapshot_id if row.snapshot_id is defined and row.snapshot_id is not none else '' }}" />
+                  <button class="btn mini primary" type="submit">Create task + start data entry</button>
+                </form>
               {% endif %}
-              <a class="btn mini" href="/builder/point-mutation?parent_molecule_id={{ row.molecule_id }}">Create variant</a>
+              <form method="post" action="/builder/exploration-task" style="display:inline;">
+                <input type="hidden" name="parent_molecule_id" value="{{ row.molecule_id }}" />
+                <input type="hidden" name="task_title" value="create_variant_for_{{ row.primary_id }}" />
+                <input type="hidden" name="action_target" value="point-mutation" />
+                <button class="btn mini" type="submit">Create exploration task + variant</button>
+              </form>
               <a class="btn mini" href="/molecules/{{ row.molecule_id }}#sequence-editor">Open sequence editor</a>
             </div>
           </li>
@@ -159,7 +301,14 @@
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
             </div>
             <div class="mini muted">Status: {{ row.status if row.status is defined else "not assessed" }}</div>
+            <div class="mini muted">
+              Tasks: <span class="chip">open {{ row.open_task_count if row.open_task_count is defined else 0 }}</span>
+              <span class="chip">in progress {{ row.in_progress_task_count if row.in_progress_task_count is defined else 0 }}</span>
+              {% if row.top_next_task_label is defined and row.top_next_task_label %}<span class="chip">next {{ row.top_next_task_label }}</span>{% endif %}
+            </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
+            <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
+            <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
             {% if row.warnings is defined and row.warnings %}
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                 {% for w in row.warnings %}<span class="chip">⚠ {{ w }}</span>{% endfor %}
@@ -172,9 +321,31 @@
               {% endif %}
               {% set rec = (row.recommended_experiments[0] if row.recommended_experiments is defined and row.recommended_experiments else None) %}
               {% if rec %}
-                <a class="btn mini primary" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Run%20{{ (rec.metric_key if rec.metric_key is defined else '') }}%20experiment&method={{ rec.metric_key if rec.metric_key is defined else '' }}">Run suggested experiment</a>
+                {% set rec_metric = (rec.metric_key if rec.metric_key is defined else "") %}
+                {% set rec_assay = (rec.assay_key if rec.assay_key is defined and rec.assay_key else rec_metric) %}
+                <form method="post" action="/programs/{{ program.id }}/tasks/create" style="display:inline;">
+                  <input type="hidden" name="molecule_id" value="{{ row.molecule_id }}" />
+                  <input type="hidden" name="metric_key" value="{{ rec_metric }}" />
+                  <input type="hidden" name="suggested_assay" value="{{ rec_assay }}" />
+                  <input type="hidden" name="source_kind" value="board" />
+                  <input type="hidden" name="source_snapshot_id" value="{{ row.snapshot_id if row.snapshot_id is defined and row.snapshot_id is not none else '' }}" />
+                  <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/board" />
+                  <button class="btn mini" type="submit">Create task</button>
+                </form>
+                <form method="post" action="/programs/{{ program.id }}/tasks/create-and-start-data" style="display:inline;">
+                  <input type="hidden" name="molecule_id" value="{{ row.molecule_id }}" />
+                  <input type="hidden" name="metric_key" value="{{ rec_metric }}" />
+                  <input type="hidden" name="suggested_assay" value="{{ rec_assay }}" />
+                  <input type="hidden" name="source_snapshot_id" value="{{ row.snapshot_id if row.snapshot_id is defined and row.snapshot_id is not none else '' }}" />
+                  <button class="btn mini primary" type="submit">Create task + start data entry</button>
+                </form>
               {% endif %}
-              <a class="btn mini" href="/builder/point-mutation?parent_molecule_id={{ row.molecule_id }}">Create variant</a>
+              <form method="post" action="/builder/exploration-task" style="display:inline;">
+                <input type="hidden" name="parent_molecule_id" value="{{ row.molecule_id }}" />
+                <input type="hidden" name="task_title" value="create_variant_for_{{ row.primary_id }}" />
+                <input type="hidden" name="action_target" value="point-mutation" />
+                <button class="btn mini" type="submit">Create exploration task + variant</button>
+              </form>
               <a class="btn mini" href="/molecules/{{ row.molecule_id }}#sequence-editor">Open sequence editor</a>
             </div>
           </li>
@@ -191,7 +362,7 @@
       el.style.cursor = "pointer";
       el.addEventListener("click", function (ev) {
         var target = ev.target;
-        if (target && target.closest && target.closest("a")) return;
+        if (target && target.closest && target.closest("a,button,form,input,select,textarea")) return;
         var href = el.getAttribute("data-card-link");
         if (href) window.location.href = href;
       });

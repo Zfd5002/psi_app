@@ -13,6 +13,7 @@ from psi.core.models import (
     Batch,
     DataRecord,
     DecisionSnapshot,
+    ExperimentTask,
     Evidence,
     Molecule,
     Program,
@@ -181,6 +182,35 @@ def get_program_detail(
         .all()
     )
     review_queue = build_program_review_queue(db, program_id=program_id)
+    open_task_rows = (
+        db.query(ExperimentTask, Molecule)
+        .join(Molecule, Molecule.id == ExperimentTask.molecule_id)
+        .filter(ExperimentTask.program_id == int(program_id))
+        .filter(ExperimentTask.status != "done")
+        .order_by(
+            ExperimentTask.urgency.asc(),
+            ExperimentTask.due_date.asc().nullslast(),
+            ExperimentTask.created_at.asc(),
+            ExperimentTask.id.asc(),
+        )
+        .limit(25)
+        .all()
+    )
+    open_experiment_tasks_preview = [
+        {
+            "task_id": int(t.id),
+            "molecule_id": int(t.molecule_id),
+            "molecule_primary_id": str(m.primary_id or ""),
+            "status": str(t.status or ""),
+            "urgency": str(t.urgency or ""),
+            "due_date": str(t.due_date or ""),
+            "owner_text": str(t.owner_text or ""),
+            "metric_key": str(t.metric_key or ""),
+            "suggested_assay": str(t.suggested_assay or ""),
+            "source_kind": str(t.source_kind or ""),
+        }
+        for t, m in open_task_rows
+    ]
     status_rows = list_program_molecule_statuses(db, program_id=int(program_id))
     status_by_mid = {
         int(s.molecule_id): {
@@ -672,6 +702,7 @@ def get_program_detail(
         "recent_evidence": recent_evidence,
         "recent_decisions": recent_decisions,
         "review_queue_by_molecule": review_queue,
+        "open_experiment_tasks_preview": open_experiment_tasks_preview,
         "program_molecule_role_options": list(PROGRAM_MOLECULE_ROLES),
         "candidate_set": candidate_set,
         "program_molecule_status_board": status_board,

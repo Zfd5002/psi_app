@@ -60,6 +60,43 @@
     </div>
   </div>
 
+  {% set omt = (open_experiment_tasks if open_experiment_tasks is defined and open_experiment_tasks is iterable else []) %}
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Operational Tasks</h2>
+    <div class="muted mini">Open experiment/exploration tasks linked to this molecule.</div>
+    <table class="table mini" style="margin-top:8px;">
+      <thead><tr><th>ID</th><th>Status</th><th>Urgency</th><th>Focus</th><th>Owner</th><th>Due</th><th class="no-print">Actions</th></tr></thead>
+      <tbody>
+      {% for t in omt %}
+        <tr>
+          <td>#{{ t.id }}</td>
+          <td>{{ t.status|humanize_state }}</td>
+          <td>{{ t.urgency }}</td>
+          <td>{% if t.suggested_assay %}{{ t.suggested_assay }}{% elif t.metric_key %}{{ t.metric_key }}{% else %}task{% endif %}</td>
+          <td>{{ t.owner_text or "unassigned" }}</td>
+          <td>{{ t.due_date or "—" }}</td>
+          <td class="no-print">
+            <form method="post" action="/programs/{{ molecule.program_id }}/tasks/{{ t.id }}/start" style="display:inline;">
+              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
+              <button class="btn mini" type="submit">Start</button>
+            </form>
+            <form method="post" action="/programs/{{ molecule.program_id }}/tasks/{{ t.id }}/block" style="display:inline;">
+              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
+              <button class="btn mini" type="submit">Block</button>
+            </form>
+            <form method="post" action="/programs/{{ molecule.program_id }}/tasks/{{ t.id }}/done" style="display:inline;">
+              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
+              <button class="btn mini primary" type="submit">Done</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="muted">No open tasks.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
   <div class="molecule-header card" style="margin-top:12px;">
     <div class="molecule-header-top">
       <div>

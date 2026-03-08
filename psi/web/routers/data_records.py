@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from psi.services.legacy_yaml_compat import load_rules_legacy_yaml
 from psi.services import data_records as svc
 from psi.services import bulk_import as bulk_import_svc
+from psi.core.models import ExperimentTask
 from psi.web.deps import get_db, get_rules_path, get_storage_cfg, get_templates
 
 router = APIRouter()
@@ -114,6 +115,7 @@ def new_data(
     data_type: Optional[str] = None,
     method: Optional[str] = None,
     title: Optional[str] = None,
+    task_id: Optional[int] = None,
     db: Session = Depends(get_db),
     rules_path=Depends(get_rules_path),
 ):
@@ -125,6 +127,35 @@ def new_data(
     for d in domains:
         et = rules["domains"][d].get("evidence_types", [])
         domain_evidence_types[d] = list(et.keys()) if isinstance(et, dict) else list(et)
+
+    task_ctx = None
+    task = None
+    if task_id is not None:
+        task = db.get(ExperimentTask, int(task_id))
+        if task is not None:
+            task_ctx = {
+                "task_id": int(task.id),
+                "program_id": int(task.program_id),
+                "molecule_id": int(task.molecule_id),
+                "metric_key": str(task.metric_key or ""),
+                "suggested_assay": str(task.suggested_assay or ""),
+                "status": str(task.status or ""),
+                "owner_text": str(task.owner_text or ""),
+                "due_date": str(task.due_date or ""),
+                "urgency": str(task.urgency or ""),
+                "notes": str(task.notes or ""),
+            }
+            if program_id is None:
+                program_id = int(task.program_id)
+            if molecule_id is None:
+                molecule_id = int(task.molecule_id)
+            if not str(method or "").strip():
+                method = str(task.suggested_assay or task.metric_key or "").strip() or None
+            if not str(title or "").strip():
+                mk = str(task.metric_key or "").strip()
+                title = (f"Run {mk} experiment" if mk else "Run task-linked experiment")
+            if not str(data_type or "").strip():
+                data_type = "Binding"
 
     ctx = {
         **base,
@@ -142,7 +173,9 @@ def new_data(
             "data_type": data_type,
             "method": method,
             "title": title,
+            "task_id": task_id,
         },
+        "task_context": task_ctx,
     }
     return templates.TemplateResponse("data/form.html", ctx)
 
@@ -156,6 +189,7 @@ def create_data(
     data_type: str = Form(...),
     method: str = Form(...),
     title: str = Form(...),
+    task_id: Optional[int] = Form(None),
     notes: str = Form(""),
     run_date: str = Form(""),
     params_json: str = Form("{}"),
@@ -188,6 +222,23 @@ def create_data(
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+    if task_id is not None:
+        try:
+            from psi.services import experiment_tasks as task_svc
+
+            task_svc.link_task_to_data_record(db, task_id=int(task_id), data_record_id=int(rec.id))
+            task_row = db.get(ExperimentTask, int(task_id))
+            cur_status = str(task_row.status or "").strip().lower() if task_row is not None else ""
+            if cur_status in {"planned", "blocked"}:
+                task_svc.update_task_status(db, task_id=int(task_id), status="in_progress")
+                cur_status = "in_progress"
+            if cur_status != "done":
+                task_svc.update_task_status(db, task_id=int(task_id), status="done")
+        except KeyError:
+            raise HTTPException(404, "ExperimentTask not found")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
     return RedirectResponse(url=f"/data/{rec.id}", status_code=303)
 

@@ -65,6 +65,26 @@
     <a class="btn mini" href="/decisions?program_id={{ program.id }}">Program decisions</a>
     <a class="btn mini" href="/reports/new?report_type=program_report&subject_ids={{ program.id }}">Generate program report</a>
   </div>
+  {% set opt = (open_experiment_tasks_preview if open_experiment_tasks_preview is defined and open_experiment_tasks_preview is iterable else []) %}
+  <h3>Open Operational Tasks</h3>
+  <table class="table mini">
+    <thead><tr><th>Task</th><th>Molecule</th><th>Status</th><th>Urgency</th><th>Owner</th><th>Due</th><th>Focus</th></tr></thead>
+    <tbody>
+      {% for t in opt %}
+      <tr>
+        <td>#{{ t.task_id }}</td>
+        <td><a href="/molecules/{{ t.molecule_id }}">{{ t.molecule_primary_id }}</a></td>
+        <td>{{ t.status|humanize_state }}</td>
+        <td>{{ t.urgency }}</td>
+        <td>{{ t.owner_text or "unassigned" }}</td>
+        <td>{{ t.due_date or "—" }}</td>
+        <td>{% if t.suggested_assay %}{{ t.suggested_assay }}{% elif t.metric_key %}{{ t.metric_key }}{% else %}task{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">No open operational tasks.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
   {% set cs = (candidate_set if candidate_set is defined and candidate_set is mapping else {}) %}
   <h3>Candidate Set</h3>
   <div class="grid cols-3">

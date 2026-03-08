@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from psi.core.db import ensure_schema
 from psi.core.measurement_schema import measurement_cols
-from psi.core.models import Base, DataRecord, DecisionSnapshot, Molecule, Program
+from psi.core.models import Base, DataRecord, DecisionSnapshot, ExperimentTask, Molecule, Program
 from psi.services import dev_board
 from psi.services.dev_board import build_development_board
 
@@ -129,13 +129,15 @@ def test_build_development_board_groups_molecules_deterministically() -> None:
             )
             db.commit()
 
-            board = build_development_board(db, program_id=int(p.id))
+            board = build_development_board(db, program_id=int(p.id), use_cache=False)
             groups = board["groups"]
             assert [x["primary_id"] for x in groups["ready"]] == ["M-A"]
             assert [x["primary_id"] for x in groups["failed"]] == ["M-B"]
             assert [x["primary_id"] for x in groups["missing_data"]] == ["M-C"]
             assert [x["primary_id"] for x in groups["not_evaluated"]] == ["M-D"]
             assert groups["ready"][0]["trend_signal"] == "improving"
+            assert str(groups["missing_data"][0]["why_here"]).startswith("Missing data because")
+            assert str(groups["not_evaluated"][0]["why_here"]) == "Not evaluated because no DI snapshot exists."
             assert isinstance(groups["failed"][0]["warnings"], list)
         finally:
             db.close()
@@ -188,6 +190,86 @@ def test_board_cache_and_invalidation(monkeypatch) -> None:
             dev_board.invalidate_program_board_cache(program_id=int(p.id))
             _ = build_development_board(db, program_id=int(p.id), use_cache=True)
             assert calls["n"] == 2
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_build_development_board_includes_task_chips() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 7)
+            p = Program(name="P-board-tasks", created_at=now, updated_at=now)
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="M-TASK", title="task card", created_at=now, updated_at=now)
+            db.add(m)
+            db.commit()
+            db.refresh(m)
+            db.add(
+                DecisionSnapshot(
+                    program_id=int(p.id),
+                    molecule_id=int(m.id),
+                    batch_id=None,
+                    decision_key="advance_to_in_vivo",
+                    rules_version="v1",
+                    inputs_json="{}",
+                    outputs_json=json.dumps({"decision_state": "ready", "gate_outcomes": {}, "blockers": []}),
+                    evidence_ids_json="[]",
+                    is_superseded=0,
+                    created_at=now,
+                )
+            )
+            db.commit()
+            db.add_all(
+                [
+                    ExperimentTask(
+                        program_id=int(p.id),
+                        molecule_id=int(m.id),
+                        metric_key="kd_nM",
+                        suggested_assay="SPR",
+                        status="in_progress",
+                        urgency="high",
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ExperimentTask(
+                        program_id=int(p.id),
+                        molecule_id=int(m.id),
+                        metric_key="tm_c",
+                        suggested_assay="DSF",
+                        status="planned",
+                        urgency="normal",
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ExperimentTask(
+                        program_id=int(p.id),
+                        molecule_id=int(m.id),
+                        metric_key="sec_monomer_pct",
+                        suggested_assay="SEC_HPLC",
+                        status="done",
+                        urgency="low",
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ]
+            )
+            db.commit()
+
+            board = build_development_board(db, program_id=int(p.id), use_cache=False)
+            row = board["groups"]["ready"][0]
+            assert int(row["open_task_count"]) == 2
+            assert int(row["in_progress_task_count"]) == 1
+            assert str(row["top_next_task_label"]) == "SPR (kd_nM)"
+            assert str(row["top_next_action"]) == "Continue task: SPR (kd_nM)"
+            assert int(board["execution_rollup"]["in_progress_this_week"]) == 1
+            assert int(board["execution_rollup"]["blocked"]) == 0
+            assert int(board["execution_rollup"]["unassigned"]) == 2
         finally:
             db.close()
     finally:

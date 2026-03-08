@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from typing import Any
 
+from sqlalchemy import case, func
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from psi.core.models import DecisionSnapshot, Molecule
+from psi.core.models import DecisionSnapshot, ExperimentTask, Molecule
 from psi.core.measurement_schema import measurement_cols
 from psi.services.insight_engine import build_insight_bundle, summarize_trend_signals
 from psi.services.trends import TREND_METRIC_KEYS
@@ -127,6 +129,141 @@ def _warning_flags(*, bundle: dict[str, Any], trend_signal: str) -> list[str]:
     return sorted(set(warnings))
 
 
+def _why_here(*, has_snapshot: bool, group_key: str, bundle: dict[str, Any], missing_metrics: list[str], blocking_reason: str) -> str:
+    if not has_snapshot:
+        return "Not evaluated because no DI snapshot exists."
+    if group_key == "missing_data":
+        mk = str(missing_metrics[0] or "").strip() if missing_metrics else ""
+        if mk:
+            return f"Missing data because {mk} not measured."
+        return "Missing data because required metrics are not measured."
+    if group_key == "failed":
+        if blocking_reason:
+            return f"Failed criteria because {blocking_reason}."
+        failing = [x for x in (bundle.get("failing_evidence") or []) if isinstance(x, dict)]
+        if failing:
+            mk = str(failing[0].get("metric_key") or "").strip()
+            if mk:
+                return f"Failed criteria because {mk} is out of range."
+        return "Failed criteria based on latest DI decision context."
+    if group_key == "ready":
+        return "Ready because required criteria are currently satisfied."
+    return "Not currently prioritized by DI decision context."
+
+
+def _task_insights_by_molecule(db: Session, *, program_id: int) -> dict[int, dict[str, Any]]:
+    urgency_rank = case(
+        (ExperimentTask.urgency == "critical", 0),
+        (ExperimentTask.urgency == "high", 1),
+        (ExperimentTask.urgency == "normal", 2),
+        (ExperimentTask.urgency == "low", 3),
+        else_=4,
+    )
+    rows = (
+        db.query(ExperimentTask)
+        .filter(ExperimentTask.program_id == int(program_id))
+        .order_by(
+            ExperimentTask.molecule_id.asc(),
+            urgency_rank.asc(),
+            func.coalesce(ExperimentTask.due_date, "9999-12-31").asc(),
+            ExperimentTask.created_at.asc(),
+            ExperimentTask.id.asc(),
+        )
+        .all()
+    )
+    by_mid: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        mid = int(row.molecule_id)
+        bucket = by_mid.setdefault(
+            mid,
+            {
+                "open_task_count": 0,
+                "in_progress_task_count": 0,
+                "top_next_task_label": "",
+                "top_task_status": "",
+                "top_task_owner_text": "",
+                "top_task_due_date": "",
+                "top_task_urgency": "",
+            },
+        )
+        st = str(row.status or "").strip().lower()
+        is_open = st != "done"
+        if is_open:
+            bucket["open_task_count"] = int(bucket["open_task_count"]) + 1
+        if st == "in_progress":
+            bucket["in_progress_task_count"] = int(bucket["in_progress_task_count"]) + 1
+        if is_open and not str(bucket.get("top_next_task_label") or "").strip():
+            assay = str(row.suggested_assay or "").strip()
+            mk = str(row.metric_key or "").strip()
+            if assay and mk:
+                bucket["top_next_task_label"] = f"{assay} ({mk})"
+            elif assay:
+                bucket["top_next_task_label"] = assay
+            elif mk:
+                bucket["top_next_task_label"] = mk
+            else:
+                bucket["top_next_task_label"] = f"Task #{int(row.id)}"
+            bucket["top_task_status"] = st
+            bucket["top_task_owner_text"] = str(row.owner_text or "").strip()
+            bucket["top_task_due_date"] = str(row.due_date or "").strip()
+            bucket["top_task_urgency"] = str(row.urgency or "").strip().lower()
+    return by_mid
+
+
+def _top_next_action(*, card: dict[str, Any]) -> str:
+    nxt = str(card.get("top_next_task_label") or "").strip()
+    if nxt:
+        return f"Continue task: {nxt}"
+    missing = [x for x in (card.get("missing_metrics") or []) if str(x or "").strip()]
+    if missing:
+        return f"Add missing measurement: {missing[0]}"
+    recs = [x for x in (card.get("recommended_experiments") or []) if isinstance(x, dict)]
+    if recs:
+        mk = str(recs[0].get("metric_key") or "").strip()
+        if mk:
+            return f"Create task for suggested experiment: {mk}"
+    return "Review molecule detail"
+
+
+def _execution_rollup(db: Session, *, program_id: int) -> dict[str, int]:
+    rows = (
+        db.query(ExperimentTask)
+        .filter(ExperimentTask.program_id == int(program_id))
+        .order_by(ExperimentTask.id.asc())
+        .all()
+    )
+    today = date.today()
+    in_progress_this_week = 0
+    overdue = 0
+    blocked = 0
+    unassigned = 0
+    for t in rows:
+        st = str(t.status or "").strip().lower()
+        owner = str(t.owner_text or "").strip()
+        due_raw = str(t.due_date or "").strip()
+        if st == "in_progress":
+            ts = t.updated_at or t.created_at
+            if ts is not None and ts.date() >= (today - timedelta(days=7)):
+                in_progress_this_week += 1
+        if st == "blocked":
+            blocked += 1
+        if st != "done" and not owner:
+            unassigned += 1
+        if st != "done" and due_raw:
+            try:
+                d = date.fromisoformat(due_raw)
+            except Exception:
+                d = None
+            if d is not None and d < today:
+                overdue += 1
+    return {
+        "in_progress_this_week": int(in_progress_this_week),
+        "overdue": int(overdue),
+        "blocked": int(blocked),
+        "unassigned": int(unassigned),
+    }
+
+
 def build_development_board(db: Session, *, program_id: int, use_cache: bool = True) -> dict[str, Any]:
     program_id_i = int(program_id)
     if use_cache and program_id_i in _BOARD_CACHE_BY_PROGRAM_ID:
@@ -158,6 +295,7 @@ def build_development_board(db: Session, *, program_id: int, use_cache: bool = T
         "not_evaluated": [],
     }
     trend_by_molecule = _trend_signals_by_molecule(db, program_id=program_id_i)
+    task_by_molecule = _task_insights_by_molecule(db, program_id=program_id_i)
     for m in molecules:
         mid = int(m.id)
         snap = latest_by_molecule.get(mid)
@@ -166,25 +304,46 @@ def build_development_board(db: Session, *, program_id: int, use_cache: bool = T
         missing = [x for x in (bundle.get("missing_evidence") or []) if isinstance(x, dict)]
         status = str(bundle.get("molecule_status") or "not_assessed")
         trend_signal = str(trend_by_molecule.get(mid) or "stable")
+        missing_metrics = [str(x.get("metric_key") or "") for x in missing if str(x.get("metric_key") or "").strip()]
+        blocking_reason = _blocking_reason(bundle)
+        grp = _group_key(has_snapshot=(snap is not None), status=status, missing_count=len(missing_metrics))
         card = {
             "molecule_id": mid,
             "primary_id": str(m.primary_id or ""),
             "title": str(m.title or ""),
             "status": status,
-            "blocking_reason": _blocking_reason(bundle),
+            "blocking_reason": blocking_reason,
             "snapshot_id": (int(snap.id) if snap is not None else None),
-            "missing_metrics": [str(x.get("metric_key") or "") for x in missing if str(x.get("metric_key") or "").strip()],
+            "missing_metrics": missing_metrics,
             "recommended_experiments": [x for x in (bundle.get("recommended_experiments") or []) if isinstance(x, dict)],
             "warnings": _warning_flags(bundle=bundle, trend_signal=trend_signal),
             "trend_signal": trend_signal,
+            "open_task_count": int(task_by_molecule.get(mid, {}).get("open_task_count") or 0),
+            "in_progress_task_count": int(task_by_molecule.get(mid, {}).get("in_progress_task_count") or 0),
+            "top_next_task_label": str(task_by_molecule.get(mid, {}).get("top_next_task_label") or ""),
+            "top_task_status": str(task_by_molecule.get(mid, {}).get("top_task_status") or ""),
+            "top_task_owner_text": str(task_by_molecule.get(mid, {}).get("top_task_owner_text") or ""),
+            "top_task_due_date": str(task_by_molecule.get(mid, {}).get("top_task_due_date") or ""),
+            "top_task_urgency": str(task_by_molecule.get(mid, {}).get("top_task_urgency") or ""),
+            "why_here": _why_here(
+                has_snapshot=(snap is not None),
+                group_key=grp,
+                bundle=bundle,
+                missing_metrics=missing_metrics,
+                blocking_reason=blocking_reason,
+            ),
         }
-        grp = _group_key(has_snapshot=(snap is not None), status=status, missing_count=len(card["missing_metrics"]))
+        card["top_next_action"] = _top_next_action(card=card)
         groups[grp].append(card)
 
     for key in ("ready", "failed", "missing_data", "not_evaluated"):
         groups[key] = sorted(groups[key], key=lambda x: (str(x.get("primary_id") or ""), int(x.get("molecule_id") or 0)))
 
-    out = {"program_id": program_id_i, "groups": groups}
+    out = {
+        "program_id": program_id_i,
+        "groups": groups,
+        "execution_rollup": _execution_rollup(db, program_id=program_id_i),
+    }
     if use_cache:
         _BOARD_CACHE_BY_PROGRAM_ID[program_id_i] = out
     return out

@@ -6780,6 +6780,388 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-07 — v1.3.0c31
+Intent:
+- Introduce a minimal persisted operational `ExperimentTask` entity as the foundation for board-to-execution workflows.
+
+## 2026-03-07 — v1.3.0c33
+Intent:
+- Add lightweight server-rendered task routes for create/update operations.
+
+## 2026-03-07 — v1.3.0c34
+Intent:
+- Harden experiment task transitions and deterministic open-task ordering.
+
+## 2026-03-07 — v1.3.0c35
+Intent:
+- Wire experiment tasks into Development Board cards as command-center chips.
+
+## 2026-03-07 — v1.3.0c36
+Intent:
+- Add compact “Why here?” explanations to board cards from InsightEngine-derived context.
+
+## 2026-03-07 — v1.3.0c37
+Intent:
+- Make board recommendation actions task-first with optional immediate data-entry handoff.
+
+## 2026-03-07 — v1.3.0c38
+Intent:
+- Polish board cards into clearer operational action stacks.
+
+## 2026-03-07 — v1.3.0c39
+Intent:
+- Extend `/data/new` with experiment-task handoff context.
+
+## 2026-03-07 — v1.3.0c40
+Intent:
+- Complete and link experiment tasks on successful DataRecord creation from task-linked flows.
+
+## 2026-03-07 — v1.3.0c41
+Intent:
+- Add builder exploration operational tasks without coupling builder provenance/state.
+
+## 2026-03-07 — v1.3.0c42
+Intent:
+- Add molecule/program cross-surface operational task visibility.
+
+## 2026-03-07 — v1.3.0c43
+Intent:
+- Add Development Board operational execution filters.
+
+## 2026-03-07 — v1.3.0c44
+Intent:
+- Add top-of-board in-progress rollup panel for daily execution visibility.
+
+## 2026-03-07 — v1.3.0c45
+Intent:
+- Regression hardening + task model boundary documentation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_experiment_task_regression_boundaries.py`
+- `docs/COMMAND_CENTER_TASK_MODEL.md`
+
+Behavior:
+- Added regression tests covering:
+  - task lifecycle and determinism with board present
+  - task → DataRecord linkage behavior
+  - no DI snapshot payload mutation from task operations
+  - no fake evidence record creation via task linkage
+- Added docs defining command-center boundaries and non-goals:
+  - no DI semantic coupling
+  - no snapshot/report coupling for task state
+  - no evidence-object overloading
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_dev_board.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board payload now includes `execution_rollup`:
+  - `in_progress_this_week`
+  - `overdue`
+  - `blocked`
+  - `unassigned`
+- Added “Execution Panel” at top of board for quick operational triage.
+- Added service/template tests for rollup derivation/rendering.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_program_board_filters.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Added board filters for:
+  - owner
+  - urgency
+  - due soon / overdue
+  - task status (`planned`, `in_progress`, `blocked`, `open`)
+- Preserved existing group/search filters and made query-preserving links/forms.
+- Card payload now includes top-task owner/status/urgency/due metadata for deterministic filtering.
+- Added route/template tests validating filter behavior.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/services/programs.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_molecule_task_visibility.py`
+- `tests/test_molecule_lineage_surface.py`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Molecule detail now surfaces open operational tasks with quick status actions.
+- Program detail now includes compact “Open Operational Tasks” summary table.
+- Visibility remains additive/read-only with task updates routed through existing task endpoints.
+- Added service/template tests for molecule/program task visibility.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_builder_router.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Added route `POST /builder/exploration-task` to create lightweight engineering exploration tasks with:
+  - `source_kind=builder_exploration`
+  - builder-target hint in `suggested_assay` (`builder:point-mutation`, etc.)
+- Route redirects into builder/sequence surfaces with `task_id` context.
+- Board CTA now supports “Create exploration task + variant” from molecule cards.
+- Added route/template tests for exploration-task creation and wiring.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/data_records.py`
+- `psi/web/templates/data/form.html`
+- `tests/test_data_task_handoff.py`
+
+Behavior:
+- Data form now carries hidden `task_id` through submit.
+- `POST /data/new` now handles `task_id` by:
+  - linking `linked_data_record_id` to created DataRecord
+  - transitioning task status through lifecycle to `done` (respecting allowed transitions)
+- Keeps Evidence/DataRecord semantics unchanged:
+  - DataRecord remains evidence object
+  - ExperimentTask is operational record with pointer to evidence
+- Added test coverage for link+complete behavior.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/data_records.py`
+- `psi/web/templates/data/form.html`
+- `tests/test_data_task_handoff.py`
+
+Behavior:
+- `/data/new` now accepts `task_id`.
+- When `task_id` is present and valid, form prefill derives from task context (program/molecule/method/title defaults).
+- New Data form renders a compact “Task Context” panel showing linked task details.
+- No evidence rows are auto-created during handoff (prefill only).
+- Added route-level handoff test coverage.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_dev_board.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Added deterministic `top_next_action` per card:
+  - continue top task when open task exists
+  - else add missing measurement
+  - else create suggested-experiment task
+  - else review molecule detail
+- Surface now explicitly shows:
+  - why-here narrative
+  - top next action
+  - trend/warnings/blocker/task chips
+- Added tests for card action derivation/rendering.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_experiment_task_routes.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Replaced direct “Run suggested experiment” links with:
+  - `Create task`
+  - `Create task + start data entry`
+- Added route `POST /programs/{program_id}/tasks/create-and-start-data`:
+  - creates a tracked task from board recommendation
+  - redirects to `/data/new` with task/program/molecule context in query params
+- Updated card click JS guard to avoid intercepting form/button interactions.
+- Added route/template tests for payload/redirect correctness.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_dev_board.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board cards now include `why_here` narrative computed from existing bundle/grouping context:
+  - failed criteria explanation
+  - missing data explanation
+  - no-snapshot explanation
+- Template renders `Why here:` on each card with no ad hoc DI recomputation.
+- Added tests for rendered explanation text and deterministic missing/no-snapshot messaging.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_dev_board.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board card payload now includes:
+  - `open_task_count`
+  - `in_progress_task_count`
+  - `top_next_task_label`
+- Board template now renders task chips on each molecule card.
+- Added service/template tests covering task-aware board rendering.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/experiment_tasks.py`
+- `tests/test_experiment_tasks.py`
+
+Behavior:
+- Enforced lifecycle transitions:
+  - `planned -> in_progress`
+  - `planned -> blocked`
+  - `in_progress -> done`
+  - `in_progress -> blocked`
+  - `blocked -> in_progress`
+  - `done` remains terminal
+- Open-task ordering for list/top-next now uses deterministic key order:
+  - urgency
+  - due_date
+  - created_at
+  - id
+- Added transition-graph tests and updated ordering expectations.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/experiment_tasks.py`
+- `psi/web/routers/programs.py`
+- `tests/test_experiment_task_routes.py`
+
+Behavior:
+- Added POST routes for:
+  - task create
+  - status update
+  - mark in progress / blocked / done
+  - owner update
+  - due date update
+  - urgency update
+  - notes update
+- Added service setters for urgency and notes to keep router logic thin/deterministic.
+- Added route-level tests for registration and end-to-end create/update behavior.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `tests/test_experiment_task_model.py`
+
+Behavior:
+- Added additive ORM entity `program_experiment_tasks` with explicit separation from:
+  - DI snapshots (`decision_snapshots`)
+  - evidence records (`data_records`)
+  - builder lineage/provenance entities
+- Added nullable linkage fields:
+  - `source_snapshot_id` (read-only decision context pointer)
+  - `linked_data_record_id` (evidence linkage pointer)
+- Added deterministic query indexes for program/molecule/status retrieval.
+- Added schema/model regression tests covering table shape, index presence, and linkage behavior.
+
+Schema changes:
+- New table: `program_experiment_tasks`.
+- Additive indexes:
+  - `ix_experiment_tasks_program_status`
+  - `ix_experiment_tasks_molecule_status`
+  - `ix_experiment_tasks_program_molecule`
+  - `ix_experiment_tasks_source_snapshot_id`
+  - `ix_experiment_tasks_linked_data_record_id`
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c32
+Intent:
+- Add a lightweight deterministic `ExperimentTask` service layer for operational work management.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/experiment_tasks.py`
+- `tests/test_experiment_tasks.py`
+
+Behavior:
+- Added task service operations:
+  - `create_experiment_task`
+  - `list_tasks_for_program`
+  - `list_tasks_for_molecule`
+  - `update_task_status`
+  - `assign_task_owner`
+  - `set_task_due_date`
+  - `link_task_to_data_record`
+  - `top_open_task_for_molecule`
+- Enforced deterministic list ordering across status/urgency/due date/created_at/id.
+- Enforced one-way completion behavior (`done` is terminal).
+- Kept boundaries clean:
+  - no DI writes
+  - no fake DataRecord creation
+  - task-to-DataRecord linkage only to existing evidence rows
+
+Gates:
+- PASS
+
 ## 2026-03-07 — v1.3.0c30
 Intent:
 - Development Board performance pass for larger program sizes.

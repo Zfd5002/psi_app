@@ -25,6 +25,7 @@ class Program(Base):
     data_records = relationship("DataRecord", back_populates="program", cascade="all, delete-orphan")
     evidence = relationship("Evidence", back_populates="program", cascade="all, delete-orphan")
     decisions = relationship("DecisionSnapshot", back_populates="program", cascade="all, delete-orphan")
+    experiment_tasks = relationship("ExperimentTask", back_populates="program", cascade="all, delete-orphan")
     memberships = relationship("ProgramMembership", back_populates="program", cascade="all, delete-orphan")
     molecule_statuses = relationship("ProgramMoleculeStatus", back_populates="program", cascade="all, delete-orphan")
     portfolio_memberships = relationship("PortfolioMembership", back_populates="program", cascade="all, delete-orphan")
@@ -59,6 +60,7 @@ class Molecule(Base):
     program = relationship("Program", back_populates="molecules")
     batches = relationship("Batch", back_populates="molecule", cascade="all, delete-orphan")
     data_records = relationship("DataRecord", back_populates="molecule")
+    experiment_tasks = relationship("ExperimentTask", back_populates="molecule", cascade="all, delete-orphan")
     evidence = relationship("Evidence", back_populates="molecule")
 
     components = relationship("MoleculeComponent", back_populates="molecule", cascade="all, delete-orphan")
@@ -416,6 +418,39 @@ class DataRecord(Base):
     batch = relationship("Batch", back_populates="data_records")
 
     citations = relationship("EvidenceCitation", back_populates="data_record", cascade="all, delete-orphan")
+    linked_experiment_tasks = relationship("ExperimentTask", back_populates="linked_data_record")
+
+
+class ExperimentTask(Base):
+    __tablename__ = "program_experiment_tasks"
+    __table_args__ = (
+        Index("ix_experiment_tasks_program_status", "program_id", "status"),
+        Index("ix_experiment_tasks_molecule_status", "molecule_id", "status"),
+        Index("ix_experiment_tasks_program_molecule", "program_id", "molecule_id"),
+        Index("ix_experiment_tasks_source_snapshot_id", "source_snapshot_id"),
+        Index("ix_experiment_tasks_linked_data_record_id", "linked_data_record_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    program_id = Column(Integer, ForeignKey("programs.id"), nullable=False)
+    molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=False)
+    metric_key = Column(Text, nullable=True)
+    suggested_assay = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, default="planned")
+    owner_text = Column(Text, nullable=True)
+    due_date = Column(Text, nullable=True)  # ISO date string
+    urgency = Column(Text, nullable=False, default="normal")
+    source_kind = Column(Text, nullable=False, default="manual")
+    source_snapshot_id = Column(Integer, ForeignKey("decision_snapshots.id"), nullable=True)
+    linked_data_record_id = Column(Integer, ForeignKey("data_records.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    program = relationship("Program", back_populates="experiment_tasks")
+    molecule = relationship("Molecule", back_populates="experiment_tasks")
+    source_snapshot = relationship("DecisionSnapshot", back_populates="experiment_tasks")
+    linked_data_record = relationship("DataRecord", back_populates="linked_experiment_tasks")
 
 
 class Evidence(Base):
@@ -754,6 +789,7 @@ class DecisionSnapshot(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     program = relationship("Program", back_populates="decisions")
+    experiment_tasks = relationship("ExperimentTask", back_populates="source_snapshot")
     outcomes = relationship("OutcomeLabel", back_populates="snapshot", cascade="all, delete-orphan")
 
 class OutcomeLabel(Base):

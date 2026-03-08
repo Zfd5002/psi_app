@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from psi.services.builder_ops import (
     build_scaffold_panel_members,
 )
 from psi.core.models import BuilderVariantSet, BuilderVariantSetMember, Molecule, MoleculeComponent, MoleculeDerivation, Program
+from psi.services import experiment_tasks as experiment_tasks_svc
 from psi.web.deps import get_db, get_templates
 
 router = APIRouter()
@@ -104,6 +105,39 @@ def _search_builder_molecules(db: Session, *, q: str, limit: int = 10) -> list[d
             }
         )
     return out
+
+
+@router.post("/builder/exploration-task")
+def create_builder_exploration_task(
+    parent_molecule_id: int = Form(...),
+    task_title: str = Form("engineering_exploration"),
+    notes: str = Form(""),
+    action_target: str = Form("point-mutation"),
+    redirect_to: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    parent = db.get(Molecule, int(parent_molecule_id))
+    if parent is None:
+        raise HTTPException(404)
+    target = str(action_target or "point-mutation").strip().lower()
+    if target not in {"point-mutation", "variant-set", "sequence-editor"}:
+        target = "point-mutation"
+    task = experiment_tasks_svc.create_experiment_task(
+        db,
+        program_id=int(parent.program_id),
+        molecule_id=int(parent.id),
+        metric_key=(str(task_title or "").strip() or "engineering_exploration"),
+        suggested_assay=f"builder:{target}",
+        source_kind="builder_exploration",
+        notes=notes,
+    )
+    if str(redirect_to or "").strip():
+        return RedirectResponse(url=str(redirect_to), status_code=303)
+    if target == "variant-set":
+        return RedirectResponse(url=f"/builder/variant-set?parent_molecule_id={int(parent.id)}&task_id={int(task.id)}", status_code=303)
+    if target == "sequence-editor":
+        return RedirectResponse(url=f"/molecules/{int(parent.id)}?task_id={int(task.id)}#sequence-editor", status_code=303)
+    return RedirectResponse(url=f"/builder/point-mutation?parent_molecule_id={int(parent.id)}&task_id={int(task.id)}", status_code=303)
 
 
 @router.get("/builder", response_class=HTMLResponse)
