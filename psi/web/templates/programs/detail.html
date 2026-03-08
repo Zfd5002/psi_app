@@ -34,15 +34,8 @@
     "Next action: focus role assignments and highest urgency tasks"
   ] %}
   {% include "partials/page_header.html" %}
-  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
-  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
-  {% if sf_labels %}
-    <div class="page-archetype-bar">
-      {% for lbl in sf_labels %}
-        <span class="page-archetype-chip{% if loop.index0 == 0 %} is-active{% endif %}">{{ lbl }}</span>
-      {% endfor %}
-    </div>
-  {% endif %}
+  {% set surface_chrome_active_index = 0 %}
+  {% include "partials/surface_chrome.html" %}
   {% include "partials/capture_notice.html" %}
   {% set blocker_rows = (di_dashboard.top_blockers if di_dashboard is defined and di_dashboard and di_dashboard.top_blockers is defined else []) %}
   {% set recent_evidence_count = (recent_evidence|length) if recent_evidence is defined and recent_evidence is iterable else 0 %}
@@ -190,7 +183,7 @@
     <a class="tab active" href="#overview">Overview</a>
     <a class="tab" href="#audit">Audit</a>
   </div>
-  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
+  {% set sf_nav = (surface.local_nav if surface is defined and surface is mapping and surface.local_nav is defined and surface.local_nav is iterable else []) %}
   <div class="local-subnav no-print">
     {% if sf_nav %}
       {% for item in sf_nav %}

@@ -3,27 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from psi.core.db import ensure_schema
-from psi.core.models import Base, Molecule, Program
+from psi.core.models import Molecule, Program
 from psi.services import plans as plans_svc
 from psi.web.routers import programs as programs_router
-
-
-def _mkdb():
-    eng = create_engine("sqlite:///:memory:", future=True)
-    Base.metadata.create_all(bind=eng)
-    ensure_schema(engine_override=eng)
-    SessionTmp = sessionmaker(bind=eng, future=True)
-    return eng, SessionTmp
-
-
-class _DummyTemplates:
-    @staticmethod
-    def TemplateResponse(_name: str, ctx: dict):
-        return SimpleNamespace(context=ctx)
 
 
 def test_program_narrative_route_exists() -> None:
@@ -32,9 +14,9 @@ def test_program_narrative_route_exists() -> None:
     assert ("/programs/{program_id}/narrative/export", ("GET",)) in route_keys
 
 
-def test_program_narrative_route_context(monkeypatch) -> None:
-    eng, SessionTmp = _mkdb()
-    monkeypatch.setattr(programs_router, "get_templates", lambda _request: _DummyTemplates())
+def test_program_narrative_route_context(monkeypatch, mkdb, dummy_templates) -> None:
+    eng, SessionTmp = mkdb()
+    monkeypatch.setattr(programs_router, "get_templates", lambda _request: dummy_templates)
     try:
         db = SessionTmp()
         try:

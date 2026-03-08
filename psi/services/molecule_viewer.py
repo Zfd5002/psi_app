@@ -319,3 +319,35 @@ def build_viewer_v2_components(
             }
         )
     return viewer_v2_components
+
+
+def build_molecule_viewer_context(
+    *,
+    components: list[MoleculeComponent],
+    domain_instances: list[DomainInstance],
+    numbering_payload: dict[str, Any] | None,
+    pdl1_allowed_mismatches: int,
+) -> dict[str, Any]:
+    di_by_component = domain_instances_by_component(domain_instances=domain_instances)
+    feature_tracks = build_feature_tracks(
+        components=components,
+        di_by_component=di_by_component,
+        pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
+    )
+    numbering_maps = build_numbering_maps(
+        components=components,
+        di_by_component=di_by_component,
+        numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
+    )
+    viewer_v2_components = build_viewer_v2_components(
+        feature_tracks=feature_tracks,
+        di_by_component=di_by_component,
+        numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
+        pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
+    )
+    return {
+        "di_by_component": di_by_component,
+        "feature_tracks": feature_tracks,
+        "numbering_maps": numbering_maps,
+        "viewer_v2_components": viewer_v2_components,
+    }

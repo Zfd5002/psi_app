@@ -1,0 +1,42 @@
+<div class="card molecule-cockpit-lane section-primary">
+  <div class="section-heading">
+    <h2>Scientist Working Lane</h2>
+    <div class="muted mini">Current state, key signal, open work, and next step</div>
+  </div>
+  <div class="molecule-cockpit-grid">
+    <div class="molecule-cockpit-cell">
+      <div class="molecule-cockpit-label">Current State</div>
+      <div class="molecule-cockpit-value">{{ mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else "not started" }}</div>
+      <div class="muted mini">Confidence: {{ mh.confidence_model.scalar_label if mh.confidence_model is defined and mh.confidence_model and mh.confidence_model.scalar_label is defined else "not assessed" }}</div>
+    </div>
+    <div class="molecule-cockpit-cell">
+      <div class="molecule-cockpit-label">Key Signal / Blocker</div>
+      <div class="molecule-cockpit-value">{{ blocker_text }}</div>
+      <div class="muted mini">Signal source: latest DI + recorded measurements (read-only interpretation)</div>
+    </div>
+    <div class="molecule-cockpit-cell">
+      <div class="molecule-cockpit-label">Open Work</div>
+      <div class="molecule-cockpit-value">{{ omt|length }} open operational task{{ "" if (omt|length) == 1 else "s" }}</div>
+      <ul class="molecule-cockpit-list muted mini">
+        <li>Claims in focus: {{ mclaims|length }}</li>
+        <li>Recommended plans: {{ mplans|length }}</li>
+        <li>{% if next_task %}Next task: #{{ next_task.id }}{% else %}No active task queued{% endif %}</li>
+      </ul>
+    </div>
+  </div>
+  <div class="molecule-cockpit-actions no-print">
+    <a class="btn primary" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow</a>
+    {% if next_plan %}
+      <a class="btn" href="/plans/{{ next_plan.plan_id }}">Open top plan</a>
+    {% else %}
+      <a class="btn" href="/plans/new?scope_type=molecule&molecule_id={{ molecule.id }}">Create plan</a>
+    {% endif %}
+    {% if next_claim %}
+      <a class="btn" href="/claims/{{ next_claim.claim_id }}">Open top claim</a>
+    {% else %}
+      <a class="btn" href="/claims/new?molecule_id={{ molecule.id }}">Create claim</a>
+    {% endif %}
+    <a class="btn" href="#operational-tasks">Review execution tasks</a>
+    <a class="btn" href="#scientific-trajectory">Review trajectory</a>
+  </div>
+</div>

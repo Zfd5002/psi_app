@@ -1,0 +1,26 @@
+<div class="card section-card section-workflow" id="recommended-plans" style="margin-top:12px;">
+  <h2 style="margin-top:0;">Recommended Plans</h2>
+  <div class="muted mini">Deterministic work bundles generated from trajectory, evidence gaps, and task context.</div>
+  <table class="table mini" style="margin-top:8px;">
+    <thead><tr><th>Plan</th><th>Type</th><th>Expected gains</th><th>Proposed steps</th></tr></thead>
+    <tbody>
+    {% for p in mplans %}
+      <tr>
+        <td><a href="/plans/{{ p.plan_id }}">{{ p.title }}</a></td>
+        <td>{{ p.plan_type|humanize_state }}</td>
+        <td>R {{ "%.2f"|format(p.expected_readiness_gain) }} · C {{ "%.2f"|format(p.expected_claim_support_gain) }} · E {{ "%.2f"|format(p.expected_evidence_coverage_gain) }}</td>
+        <td>
+          {% set st = (p.steps if p.steps is defined and p.steps is iterable else []) %}
+          {% for s in st %}
+            <div>{{ s.step_order }}. {% if s.suggested_assay %}{{ s.suggested_assay }}{% elif s.metric_key %}{{ s.metric_key }}{% else %}step{% endif %} ({{ s.step_kind|humanize_state }})</div>
+          {% else %}
+            <span class="muted">No proposed steps.</span>
+          {% endfor %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted empty-state-cell">No recommended plans available.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>

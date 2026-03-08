@@ -2,38 +2,14 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime, timedelta
-from types import SimpleNamespace
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from psi.core.db import ensure_schema
-from psi.core.models import Base, DecisionSnapshot, ExperimentTask, Molecule, Program
+from psi.core.models import DecisionSnapshot, ExperimentTask, Molecule, Program
 from psi.services import dev_board as dev_board_svc
 from psi.web.routers import programs as programs_router
 
 
-def _mkdb():
-    eng = create_engine("sqlite:///:memory:", future=True)
-    Base.metadata.create_all(bind=eng)
-    ensure_schema(engine_override=eng)
-    SessionTmp = sessionmaker(bind=eng, future=True)
-    return eng, SessionTmp
-
-
-class _DummyTemplates:
-    @staticmethod
-    def TemplateResponse(_name: str, ctx: dict):
-        return SimpleNamespace(context=ctx)
-
-
-def _mk_request(query: dict[str, str]):
-    return SimpleNamespace(query_params=query)
-
-
-def test_program_board_task_filters(monkeypatch) -> None:
-    eng, SessionTmp = _mkdb()
-    monkeypatch.setattr(programs_router, "get_templates", lambda _request: _DummyTemplates())
+def test_program_board_task_filters(monkeypatch, mkdb, dummy_templates, mk_query_request) -> None:
+    eng, SessionTmp = mkdb()
+    monkeypatch.setattr(programs_router, "get_templates", lambda _request: dummy_templates)
     try:
         db = SessionTmp()
         try:
@@ -116,25 +92,25 @@ def test_program_board_task_filters(monkeypatch) -> None:
                 groups = resp.context["board"]["groups"]
                 return sorted([str(r.get("primary_id")) for key in ("ready", "failed", "missing_data", "not_evaluated") for r in (groups.get(key) or [])])
 
-            base = programs_router.program_development_board(program_id=int(p.id), request=_mk_request({}), db=db)
+            base = programs_router.program_development_board(program_id=int(p.id), request=mk_query_request({}), db=db)
             assert _ids(base) == ["M-F1", "M-F2", "M-F3", "M-F4"]
 
-            owner = programs_router.program_development_board(program_id=int(p.id), request=_mk_request({"owner": "dr b"}), db=db)
+            owner = programs_router.program_development_board(program_id=int(p.id), request=mk_query_request({"owner": "dr b"}), db=db)
             assert _ids(owner) == ["M-F2"]
 
-            urg = programs_router.program_development_board(program_id=int(p.id), request=_mk_request({"urgency": "critical"}), db=db)
+            urg = programs_router.program_development_board(program_id=int(p.id), request=mk_query_request({"urgency": "critical"}), db=db)
             assert _ids(urg) == ["M-F3"]
 
-            due_soon = programs_router.program_development_board(program_id=int(p.id), request=_mk_request({"due": "due_soon"}), db=db)
+            due_soon = programs_router.program_development_board(program_id=int(p.id), request=mk_query_request({"due": "due_soon"}), db=db)
             assert _ids(due_soon) == ["M-F1"]
 
-            overdue = programs_router.program_development_board(program_id=int(p.id), request=_mk_request({"due": "overdue"}), db=db)
+            overdue = programs_router.program_development_board(program_id=int(p.id), request=mk_query_request({"due": "overdue"}), db=db)
             assert _ids(overdue) == ["M-F2"]
 
-            blocked = programs_router.program_development_board(program_id=int(p.id), request=_mk_request({"task_status": "blocked"}), db=db)
+            blocked = programs_router.program_development_board(program_id=int(p.id), request=mk_query_request({"task_status": "blocked"}), db=db)
             assert _ids(blocked) == ["M-F2"]
 
-            open_only = programs_router.program_development_board(program_id=int(p.id), request=_mk_request({"task_status": "open"}), db=db)
+            open_only = programs_router.program_development_board(program_id=int(p.id), request=mk_query_request({"task_status": "open"}), db=db)
             assert _ids(open_only) == ["M-F1", "M-F2", "M-F3"]
         finally:
             db.close()

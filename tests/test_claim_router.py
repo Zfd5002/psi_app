@@ -3,27 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from psi.core.db import ensure_schema
-from psi.core.models import Base, DecisionSnapshot, ExperimentTask, Molecule, Program
+from psi.core.models import DecisionSnapshot, ExperimentTask, Molecule, Program
 from psi.services import claims as claims_svc
 from psi.web.routers import claims as claims_router
-
-
-def _mkdb():
-    eng = create_engine("sqlite:///:memory:", future=True)
-    Base.metadata.create_all(bind=eng)
-    ensure_schema(engine_override=eng)
-    SessionTmp = sessionmaker(bind=eng, future=True)
-    return eng, SessionTmp
-
-
-class _DummyTemplates:
-    @staticmethod
-    def TemplateResponse(_name: str, ctx: dict):
-        return SimpleNamespace(context=ctx)
 
 
 def test_claim_route_exists() -> None:
@@ -32,9 +14,9 @@ def test_claim_route_exists() -> None:
     assert ("/claims/{claim_id}", ("GET",)) in route_keys
 
 
-def test_claim_detail_route_context(monkeypatch) -> None:
-    eng, SessionTmp = _mkdb()
-    monkeypatch.setattr(claims_router, "get_templates", lambda _request: _DummyTemplates())
+def test_claim_detail_route_context(monkeypatch, mkdb, dummy_templates) -> None:
+    eng, SessionTmp = mkdb()
+    monkeypatch.setattr(claims_router, "get_templates", lambda _request: dummy_templates)
     try:
         db = SessionTmp()
         try:

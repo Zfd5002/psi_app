@@ -6,7 +6,7 @@ import os
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import Any
-from sqlalchemy import text, case, func
+from sqlalchemy import text
 
 from psi.core.audit import record_audit
 from psi.core.models import (
@@ -23,7 +23,6 @@ from psi.core.models import (
     Program,
     ExperimentTask,
     MoleculeComponent,
-    DomainInstance,
     DomainArtifact,
     PropertyRunEvent,
     PropertyRun,
@@ -38,7 +37,6 @@ from psi.services.computed import run_computed_properties, get_property_runs, ge
 from psi.services.domains import extract_domains_for_molecule
 from psi.services.numbering import get_numbering_artifacts_for_molecule
 from psi.services import qc as qc_svc
-from psi.services.evidence_preview import build_pending_evidence_preview_for_molecule
 from psi.core.reference_features import detect_pdl1_features
 from psi.core.deps import heavy_compute_available_for_molecule
 from psi.core.biochem import liability_sites
@@ -48,16 +46,11 @@ from psi.core.measurement_schema import measurement_cols
 from psi.services.di.util import heavy_compute_banner_text, is_heavy_compute_enabled
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
 from psi.services.molecule_viewer import (
-    _confidence_from_mismatches,
-    build_feature_tracks,
-    build_numbering_maps,
-    build_viewer_v2_components,
-    domain_instances_by_component,
+    build_molecule_viewer_context,
 )
 from psi.services.sequence_annotation import annotate_sequence_for_editor
-from psi.services.insight_engine import build_insight_bundle, summarize_trend_signals
-from psi.services.trends import build_molecule_trends
-from psi.services.trajectory import build_trajectory_tree, generate_trajectory_candidates, rank_trajectory_candidates
+from psi.services.insight_engine import build_insight_bundle
+from psi.services.trajectory import build_molecule_trajectory_context
 from psi.services import claims as claims_svc
 from psi.services import plans as plans_svc
 
@@ -97,6 +90,7 @@ from psi.services.molecule_sequences import (
     _id_allocation_retry_exhausted,
     _next_chain_id,
     _canonical_composition,
+    build_molecule_sequence_context,
     composition_sha256,
     get_or_create_chain,
 )
@@ -331,21 +325,10 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
 
     qc_counts_by_batch = qc_svc.get_qc_counts_for_batches(db, molecule_id=molecule_id)
 
-    data_records = (
-        db.query(DataRecord)
-        .filter(DataRecord.molecule_id == molecule_id)
-        .order_by(DataRecord.run_date.desc().nullslast(), DataRecord.created_at.desc())
-        .limit(50)
-        .all()
-    )
-    evidence = (
-        db.query(Evidence)
-        .filter(Evidence.molecule_id == molecule_id)
-        .order_by(Evidence.created_at.desc())
-        .limit(50)
-        .all()
-    )
-    pending_evidence_preview = build_pending_evidence_preview_for_molecule(db, molecule_id=int(molecule_id))
+    evidence_context = build_molecule_evidence_context(db, molecule_id=int(molecule_id))
+    data_records = list(evidence_context.get("data_records") or [])
+    evidence = list(evidence_context.get("evidence") or [])
+    pending_evidence_preview = evidence_context.get("pending_evidence_preview") or []
 
     parent_row = (
         db.query(MoleculeDerivation, Molecule)
@@ -431,7 +414,8 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         immuno_parsed.append(item)
         immuno_by_key[v.property_key] = item
 
-    components = db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == molecule_id).all()
+    sequence_context = build_molecule_sequence_context(db, molecule_id=int(molecule_id))
+    components = list(sequence_context.get("components") or [])
 
     # Heavy compute gating (UI-facing).
     fmt = (m.molecule_format or "").strip()
@@ -439,20 +423,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     heavy_gate_domains = heavy_compute_available_for_molecule(m, require=() if fmt == "scFv" else ("anarci", "biopython"))
     heavy_gate_numbering = heavy_compute_available_for_molecule(m, require=("abnumber", "biopython"))
 
-    domain_instances = (
-        db.query(DomainInstance)
-        .filter(DomainInstance.molecule_id == molecule_id)
-        .order_by(DomainInstance.component_id.asc(), DomainInstance.domain_type.asc())
-        .all()
-    )
-
-    # --- UI feature tracks (Domains + reference matches, incremental) ---
-    di_by_component = domain_instances_by_component(domain_instances=domain_instances)
-    feature_tracks = build_feature_tracks(
-        components=components,
-        di_by_component=di_by_component,
-        pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
-    )
+    domain_instances = list(sequence_context.get("domain_instances") or [])
 
     # Latest run logs (for troubleshooting)
     run_events = []
@@ -467,61 +438,28 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     # Manual numbering cache (default scheme kabat for display)
     numbering_payload = get_numbering_artifacts_for_molecule(db, molecule_id=molecule_id, scheme="kabat")
 
-    numbering_maps = build_numbering_maps(
+    viewer_context = build_molecule_viewer_context(
         components=components,
-        di_by_component=di_by_component,
-        numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
-    )
-    viewer_v2_components = build_viewer_v2_components(
-        feature_tracks=feature_tracks,
-        di_by_component=di_by_component,
+        domain_instances=domain_instances,
         numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
         pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
     )
+    di_by_component = dict(viewer_context.get("di_by_component") or {})
+    feature_tracks = list(viewer_context.get("feature_tracks") or [])
+    numbering_maps = list(viewer_context.get("numbering_maps") or [])
+    viewer_v2_components = list(viewer_context.get("viewer_v2_components") or [])
     sequence_editor_annotations = annotate_sequence_for_editor(
         components=components,
         domain_instances=domain_instances,
         numbering_maps=numbering_maps,
     )
-    molecule_trends = build_molecule_trends(db, molecule_id=int(molecule_id))
-    molecule_trend_insights = summarize_trend_signals(molecule_trends)
-    urgency_rank = case(
-        (ExperimentTask.urgency == "critical", 0),
-        (ExperimentTask.urgency == "high", 1),
-        (ExperimentTask.urgency == "normal", 2),
-        (ExperimentTask.urgency == "low", 3),
-        else_=4,
-    )
-    open_task_rows = (
-        db.query(ExperimentTask)
-        .filter(ExperimentTask.molecule_id == int(molecule_id))
-        .filter(ExperimentTask.status != "done")
-        .order_by(
-            urgency_rank.asc(),
-            func.coalesce(ExperimentTask.due_date, "9999-12-31").asc(),
-            ExperimentTask.created_at.asc(),
-            ExperimentTask.id.asc(),
-        )
-        .all()
-    )
-    open_experiment_tasks = [
-        {
-            "id": int(t.id),
-            "status": str(t.status or ""),
-            "urgency": str(t.urgency or ""),
-            "owner_text": str(t.owner_text or ""),
-            "due_date": str(t.due_date or ""),
-            "metric_key": str(t.metric_key or ""),
-            "suggested_assay": str(t.suggested_assay or ""),
-            "notes": str(t.notes or ""),
-            "source_kind": str(t.source_kind or ""),
-        }
-        for t in open_task_rows
-    ]
-    trajectory_candidates = rank_trajectory_candidates(
-        generate_trajectory_candidates(db, molecule_id=int(molecule_id))
-    )[:5]
-    trajectory_tree = build_trajectory_tree(db, molecule_id=int(molecule_id), max_depth=2, branch_limit=4)
+    experiment_context = build_molecule_experiment_context(db, molecule_id=int(molecule_id))
+    open_experiment_tasks = list(experiment_context.get("open_experiment_tasks") or [])
+    trajectory_context = build_molecule_trajectory_context(db, molecule_id=int(molecule_id))
+    molecule_trends = trajectory_context.get("molecule_trends")
+    molecule_trend_insights = trajectory_context.get("molecule_trend_insights")
+    trajectory_candidates = list(trajectory_context.get("trajectory_candidates") or [])
+    trajectory_tree = dict(trajectory_context.get("trajectory_tree") or {})
     top_plan_rows = plans_svc.top_plans_for_molecule(db, molecule_id=int(molecule_id), limit=3)
     if not top_plan_rows:
         try:
@@ -626,350 +564,13 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
     }
 
 
-def _background_compute(molecule_id: int, trigger_reason: str, db_path: str | None = None) -> None:
-    """Run computed properties in a fresh session (for BackgroundTasks)."""
-    import os
-
-    # Avoid import-time SessionLocal for background tasks to preserve db_path correctness in tests/tools.
-    with get_db(db_path, ensure=False) as db:
-        m = db.get(Molecule, molecule_id)
-        heavy_global = os.getenv("PSI_ENABLE_HEAVY_COMPUTE", "").strip() == "1"
-        tier = "FAST+HEAVY" if heavy_global and m and int(m.heavy_compute_enabled or 0) == 1 else "FAST"
-        run_computed_properties(db, molecule_id=molecule_id, trigger_reason=trigger_reason, compute_tier=tier)
-
-
-def _background_domain_extraction(molecule_id: int, db_path: str | None = None) -> None:
-    # Avoid import-time SessionLocal for background tasks to preserve db_path correctness in tests/tools.
-    with get_db(db_path, ensure=False) as db:
-        extract_domains_for_molecule(db, molecule_id)
-
-
-def _resolve_db_path(db: Session, db_path: str | None) -> str | None:
-    if db_path:
-        return db_path
-    try:
-        bind = db.get_bind()
-        url = getattr(bind, "url", None)
-        if url is not None and url.database:
-            return str(url.database)
-    except Exception:
-        return None
-    return None
-
-
-def _next_molecule_primary_id(db: Session) -> str:
-    """Allocate next TCBXXX id (best-effort)."""
-    pat = re.compile(r"^TCB(\d{3})$")
-    max_n = 0
-    rows = db.query(Molecule.primary_id).all()
-    for (pid,) in rows:
-        if not pid:
-            continue
-        mm = pat.match(str(pid).strip())
-        if mm:
-            max_n = max(max_n, int(mm.group(1)))
-    return f"TCB{max_n + 1:03d}"
-
-
-def create_molecule(
-    db: Session,
-    *,
-    program_id: int,
-    primary_id: str,
-    title: str = "",
-    description: str = "",  # legacy form field; treated as user override
-    sequences: str = "",  # legacy/unstructured only
-    molecule_format: str | None = None,
-    description_user: str | None = None,
-    heavy_compute_enabled: int = 0,
-    components: dict[str, str] | None = None,
-    background_tasks=None,
-    db_path: str | None = None,
-) -> Molecule:
-    """Create a molecule.
-
-    v1.2.0 semantics:
-    - Molecule identity is the canonical HC/LC role->CHAIN mapping (composition_sha256)
-    - Chains are globally de-duped via SequenceEntity (sha256)
-    - Duplicate molecule compositions are blocked
-    """
-    # Backward compatibility: keep Molecule.description populated with user description.
-    desc_user = (description_user if description_user is not None else description).strip() or None
-
-    pid = (primary_id or "").strip()
-    auto_primary = not pid
-    max_attempts = 3 if auto_primary else 1
-
-    for attempt in range(max_attempts):
-        if not pid:
-            pid = _next_molecule_primary_id(db)
-
-        try:
-            # Create molecule row early (but don't commit until collision check passes)
-            m = Molecule(
-                program_id=program_id,
-                primary_id=pid,
-                title=title.strip() or None,
-                description=desc_user,
-                description_user=desc_user,
-                molecule_format=(molecule_format or None),
-                heavy_compute_enabled=int(heavy_compute_enabled or 0),
-                sequences=None,
-                created_at=now_utc(),
-                updated_at=now_utc(),
-            )
-
-            # Structured components are the v1.2.0 source of truth. Legacy `sequences` remains populated.
-            role_order = ["HC1", "HC2", "LC1", "LC2"]
-            role_to_seq: dict[str, str] = {}
-
-            if components:
-                # Only accept v1.2.0 user roles; ignore others (legacy remains readable).
-                for r in role_order:
-                    if r in components:
-                        role_to_seq[r] = components.get(r, "") or ""
-
-                # Default infer: HC2=HC1, LC2=LC1 when blank.
-                hc1 = normalize_aa_sequence(role_to_seq.get("HC1", ""))
-                lc1 = normalize_aa_sequence(role_to_seq.get("LC1", ""))
-                if not hc1 or not lc1:
-                    raise ValueError("HC1 and LC1 are required for structured molecule creation")
-
-                hc2 = normalize_aa_sequence(role_to_seq.get("HC2", "")) or hc1
-                lc2 = normalize_aa_sequence(role_to_seq.get("LC2", "")) or lc1
-
-                role_to_seq = {"HC1": hc1, "HC2": hc2, "LC1": lc1, "LC2": lc2}
-
-                # Chain registry + composition hash
-                chains_by_role: dict[str, str | None] = {}
-                ents_by_role = {}
-                for role, seq in role_to_seq.items():
-                    ent = get_or_create_chain(db, seq)
-                    ents_by_role[role] = ent
-                    chains_by_role[role] = getattr(ent, "chain_id", None)
-
-                comp_hash = composition_sha256(chains_by_role)
-                # Collision check (block creation)
-                existing = db.query(Molecule).filter(Molecule.composition_sha256 == comp_hash).first()
-                if existing is not None:
-                    raise DuplicateMoleculeError(existing_molecule_id=existing.id, existing_primary_id=existing.primary_id)
-
-                m.composition_sha256 = comp_hash
-
-                # Populate legacy multi-FASTA
-                m.sequences = to_fasta([(r, role_to_seq[r]) for r in role_order]).strip() or None
-
-                db.add(m)
-                db.flush()  # assign id
-
-                # Create components as join records
-                for role in role_order:
-                    seq = role_to_seq[role]
-                    ent = ents_by_role[role]
-                    c = MoleculeComponent(
-                        molecule_id=m.id,
-                        role=role,
-                        fasta=seq,
-                        sha256=sha256_text(seq),
-                        sequence_entity_id=ent.id,
-                        created_at=now_utc(),
-                        updated_at=now_utc(),
-                    )
-                    db.add(c)
-
-                db.commit()
-                db.refresh(m)
-            else:
-                # Legacy/unstructured path (no collision semantics)
-                m.sequences = sequences.strip() or None
-                db.add(m)
-                db.commit()
-                db.refresh(m)
-
-            record_audit(db, entity_type="Molecule", entity_id=m.id, action="create", before=None, after=model_to_dict(m))
-            db.commit()
-
-            # Auto-run computed properties
-            if background_tasks is not None:
-                background_db_path = _resolve_db_path(db, db_path)
-                background_tasks.add_task(_background_compute, m.id, "molecule_created", background_db_path)
-                background_tasks.add_task(_background_domain_extraction, m.id, background_db_path)
-            return m
-        except IntegrityError as exc:
-            db.rollback()
-            db.expunge_all()
-            if attempt == max_attempts - 1:
-                if auto_primary:
-                    raise _id_allocation_retry_exhausted(
-                        "molecule primary ID",
-                        max_attempts,
-                        exc,
-                        last_candidate=pid,
-                    ) from exc
-                raise
-            pid = ""
-            continue
-
-
-def update_molecule(
-    db: Session,
-    *,
-    molecule_id: int,
-    program_id: int,
-    primary_id: str,
-    title: str = "",
-    description: str = "",  # legacy field; treated as user override
-    sequences: str = "",  # legacy/unstructured only
-    molecule_format: str | None = None,
-    description_user: str | None = None,
-    heavy_compute_enabled: int = 0,
-    components: dict[str, str] | None = None,
-    background_tasks=None,
-    db_path: str | None = None,
-    reason: str = "",
-) -> Molecule:
-    m = get_molecule(db, molecule_id)
-    if not m:
-        raise KeyError("Molecule not found")
-    before = model_to_dict(m)
-    m.program_id = program_id
-    m.primary_id = primary_id.strip()
-    m.title = title.strip() or None
-    desc_user = (description_user if description_user is not None else description).strip() or None
-    m.description = desc_user
-    m.description_user = desc_user
-    m.molecule_format = (molecule_format or None)
-    m.heavy_compute_enabled = int(heavy_compute_enabled or 0)
-
-    sequences_changed = False
-
-    if components is not None:
-        # v1.2.0: only accept HC/LC user roles for structured edits.
-        role_order = ["HC1", "HC2", "LC1", "LC2"]
-
-        # Collect requested structured roles from the incoming payload.
-        requested = {r: (components.get(r, "") or "") for r in role_order if r in components}
-
-        # If the form submitted any of the structured roles, treat this as a structured edit.
-        if any(r in requested for r in ["HC1", "LC1", "HC2", "LC2"]):
-            hc1 = normalize_aa_sequence(requested.get("HC1", ""))
-            lc1 = normalize_aa_sequence(requested.get("LC1", ""))
-            if not hc1 or not lc1:
-                raise ValueError("HC1 and LC1 are required for structured molecule editing")
-
-            hc2 = normalize_aa_sequence(requested.get("HC2", "")) or hc1
-            lc2 = normalize_aa_sequence(requested.get("LC2", "")) or lc1
-
-            role_to_seq = {"HC1": hc1, "HC2": hc2, "LC1": lc1, "LC2": lc2}
-
-            # Chain registry + composition hash
-            chains_by_role: dict[str, str | None] = {}
-            ents_by_role = {}
-            for role, seq in role_to_seq.items():
-                ent = get_or_create_chain(db, seq)
-                ents_by_role[role] = ent
-                chains_by_role[role] = getattr(ent, "chain_id", None)
-
-            comp_hash = composition_sha256(chains_by_role)
-            existing = db.query(Molecule).filter(Molecule.composition_sha256 == comp_hash, Molecule.id != m.id).first()
-            if existing is not None:
-                raise DuplicateMoleculeError(existing_molecule_id=existing.id, existing_primary_id=existing.primary_id)
-
-            m.composition_sha256 = comp_hash
-
-            # Update components (role-unique)
-            existing_components = {c.role: c for c in db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == m.id).all()}
-            for role in role_order:
-                seq = role_to_seq[role]
-                ent = ents_by_role[role]
-                if role in existing_components:
-                    c = existing_components[role]
-                    if c.fasta != seq or c.sequence_entity_id != ent.id:
-                        c.fasta = seq
-                        c.sha256 = sha256_text(seq)
-                        c.sequence_entity_id = ent.id
-                        c.updated_at = now_utc()
-                        db.add(c)
-                        sequences_changed = True
-                else:
-                    db.add(
-                        MoleculeComponent(
-                            molecule_id=m.id,
-                            role=role,
-                            fasta=seq,
-                            sha256=sha256_text(seq),
-                            sequence_entity_id=ent.id,
-                            created_at=now_utc(),
-                            updated_at=now_utc(),
-                        )
-                    )
-                    sequences_changed = True
-
-            # Keep legacy FASTA blob populated
-            m.sequences = to_fasta([(r, role_to_seq[r]) for r in role_order]).strip() or None
-            sequences_changed = True
-        else:
-            # Additive legacy behavior for non-structured roles (kept for backwards compatibility)
-            existing = {c.role: c for c in db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == m.id).all()}
-            for role, fasta in components.items():
-                fasta_n = normalize_aa_sequence(fasta)
-                if not fasta_n:
-                    if role in existing:
-                        db.delete(existing[role])
-                        sequences_changed = True
-                    continue
-                if role in existing:
-                    if existing[role].fasta != fasta_n:
-                        existing[role].fasta = fasta_n
-                        existing[role].sha256 = sha256_text(fasta_n)
-                        existing[role].updated_at = now_utc()
-                        db.add(existing[role])
-                        sequences_changed = True
-                else:
-                    db.add(
-                        MoleculeComponent(
-                            molecule_id=m.id,
-                            role=role,
-                            fasta=fasta_n,
-                            sha256=sha256_text(fasta_n),
-                            created_at=now_utc(),
-                            updated_at=now_utc(),
-                        )
-                    )
-                    sequences_changed = True
-
-        # Legacy/unstructured edit
-        new_sequences = sequences.strip() or None
-        if (m.sequences or "") != (new_sequences or ""):
-            sequences_changed = True
-        m.sequences = new_sequences
-
-    m.updated_at = now_utc()
-    db.add(m)
-    db.commit()
-    record_audit(
-        db,
-        entity_type="Molecule",
-        entity_id=m.id,
-        action="update",
-        before=before,
-        after=model_to_dict(m),
-        reason=reason or None,
-    )
-    db.commit()
-
-    if sequences_changed and background_tasks is not None:
-        background_db_path = _resolve_db_path(db, db_path)
-        background_tasks.add_task(_background_compute, m.id, "molecule_sequences_changed", background_db_path)
-        background_tasks.add_task(_background_domain_extraction, m.id, background_db_path)
-    return m
-
-
-
+# d71: removed an earlier duplicate implementation block for background/create/update helpers.
 from psi.services.molecule_experimental import (
     _batch_sort_key,
     _best_measurement,
     _collect_record_ids_from_panels,
+    build_molecule_evidence_context,
+    build_molecule_experiment_context,
     _fetch_measurements_for_record,
     _fmt_num,
     _fmt_percent,

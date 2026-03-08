@@ -1,0 +1,22 @@
+<div class="card section-card section-primary" id="scientific-claims" style="margin-top:8px;">
+  <h2 style="margin-top:0;">Scientific Claims</h2>
+  <div class="muted mini">Top active scientific assertions for this molecule.</div>
+  <table class="table mini" style="margin-top:8px;">
+    <thead><tr><th>Claim</th><th>Type</th><th>Status</th><th>Confidence</th><th>Support/Conflict</th><th>Maturity</th><th>Next task</th></tr></thead>
+    <tbody>
+    {% for c in mclaims %}
+      <tr>
+        <td><a href="/claims/{{ c.claim_id }}">{{ c.title }}</a></td>
+        <td>{{ c.claim_type|humanize_state }}</td>
+        <td>{{ c.status|humanize_state }}</td>
+        <td>{{ c.confidence_level|humanize_state }}</td>
+        <td>{{ c.supporting_count }}/{{ c.contradicting_count }}</td>
+        <td>{{ c.maturity_summary|humanize_state }}</td>
+        <td>{{ c.next_task_label if c.next_task_label else "—" }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted empty-state-cell">No active claims linked to this molecule.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>

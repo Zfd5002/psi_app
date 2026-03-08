@@ -1,0 +1,37 @@
+<div class="card section-card section-workflow" id="workflow-loop" style="margin-top:10px;">
+  <div class="section-heading">
+    <h2>Workflow Loop</h2>
+    <div class="muted mini">Evidence → Claim → Plan → Task → Experiment → Evidence</div>
+  </div>
+  <div class="grid cols-3" style="margin-top:8px;">
+    <div class="molecule-cockpit-cell">
+      <div class="molecule-cockpit-label">Current Posture</div>
+      <ul class="molecule-cockpit-list mini">
+        <li>Evidence rows: {{ evidence_count }}</li>
+        <li>Claims in focus: {{ mclaims|length }}</li>
+        <li>Recommended plans: {{ mplans|length }}</li>
+        <li>Open tasks: {{ omt|length }}</li>
+      </ul>
+    </div>
+    <div class="molecule-cockpit-cell">
+      <div class="molecule-cockpit-label">Transition Available Next</div>
+      <ul class="molecule-cockpit-list mini">
+        <li>{% if mclaims|length == 0 %}Create an explicit claim for this molecule{% else %}Review top claim support/conflict{% endif %}</li>
+        <li>{% if mplans|length == 0 %}Create a readiness or de-risking plan{% else %}Open top plan and instantiate steps{% endif %}</li>
+        <li>{% if omt|length == 0 %}Create tracked task from suggestion{% else %}Advance highest-priority open task{% endif %}</li>
+        <li>Run experiment and record evidence to close loop</li>
+      </ul>
+    </div>
+    <div class="molecule-cockpit-cell">
+      <div class="molecule-cockpit-label">Execution Entry Points</div>
+      <div class="molecule-cockpit-actions no-print">
+        <a class="btn mini" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow</a>
+        <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&source=molecule&return_to=/molecules/{{ molecule.id }}#execution">Start result capture</a>
+        <a class="btn mini" href="/builder/suggested-task/new?molecule_id={{ molecule.id }}">Create task from suggestion</a>
+        <a class="btn mini" href="/plans/new?scope_type=molecule&molecule_id={{ molecule.id }}">Create molecule plan</a>
+        <a class="btn mini" href="/claims/new?molecule_id={{ molecule.id }}">Create molecule claim</a>
+        <a class="btn mini" href="#evidence">Review recent evidence</a>
+      </div>
+    </div>
+  </div>
+</div>

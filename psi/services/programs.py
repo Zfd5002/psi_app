@@ -125,17 +125,39 @@ def get_program(db: Session, program_id: int) -> Program | None:
     return db.get(Program, program_id)
 
 
-def get_program_detail(
-    db: Session,
-    program_id: int,
-    *,
-    policy_version_filter: str | None = None,
-    verify_lineage: bool = False,
-) -> dict:
-    p = get_program(db, program_id)
-    if not p:
-        raise KeyError("Program not found")
+def _build_open_experiment_tasks_preview(db: Session, *, program_id: int) -> list[dict[str, Any]]:
+    open_task_rows = (
+        db.query(ExperimentTask, Molecule)
+        .join(Molecule, Molecule.id == ExperimentTask.molecule_id)
+        .filter(ExperimentTask.program_id == int(program_id))
+        .filter(ExperimentTask.status != "done")
+        .order_by(
+            ExperimentTask.urgency.asc(),
+            ExperimentTask.due_date.asc().nullslast(),
+            ExperimentTask.created_at.asc(),
+            ExperimentTask.id.asc(),
+        )
+        .limit(25)
+        .all()
+    )
+    return [
+        {
+            "task_id": int(t.id),
+            "molecule_id": int(t.molecule_id),
+            "molecule_primary_id": str(m.primary_id or ""),
+            "status": str(t.status or ""),
+            "urgency": str(t.urgency or ""),
+            "due_date": str(t.due_date or ""),
+            "owner_text": str(t.owner_text or ""),
+            "metric_key": str(t.metric_key or ""),
+            "suggested_assay": str(t.suggested_assay or ""),
+            "source_kind": str(t.source_kind or ""),
+        }
+        for t, m in open_task_rows
+    ]
 
+
+def _collect_program_detail_inputs(db: Session, *, program_id: int) -> dict[str, Any]:
     molecules = db.query(Molecule).filter(Molecule.program_id == program_id).order_by(Molecule.created_at.desc()).all()
     program_memberships = (
         db.query(ProgramMembership, Molecule)
@@ -185,35 +207,7 @@ def get_program_detail(
         .all()
     )
     review_queue = build_program_review_queue(db, program_id=program_id)
-    open_task_rows = (
-        db.query(ExperimentTask, Molecule)
-        .join(Molecule, Molecule.id == ExperimentTask.molecule_id)
-        .filter(ExperimentTask.program_id == int(program_id))
-        .filter(ExperimentTask.status != "done")
-        .order_by(
-            ExperimentTask.urgency.asc(),
-            ExperimentTask.due_date.asc().nullslast(),
-            ExperimentTask.created_at.asc(),
-            ExperimentTask.id.asc(),
-        )
-        .limit(25)
-        .all()
-    )
-    open_experiment_tasks_preview = [
-        {
-            "task_id": int(t.id),
-            "molecule_id": int(t.molecule_id),
-            "molecule_primary_id": str(m.primary_id or ""),
-            "status": str(t.status or ""),
-            "urgency": str(t.urgency or ""),
-            "due_date": str(t.due_date or ""),
-            "owner_text": str(t.owner_text or ""),
-            "metric_key": str(t.metric_key or ""),
-            "suggested_assay": str(t.suggested_assay or ""),
-            "source_kind": str(t.source_kind or ""),
-        }
-        for t, m in open_task_rows
-    ]
+    open_experiment_tasks_preview = _build_open_experiment_tasks_preview(db, program_id=int(program_id))
     status_rows = list_program_molecule_statuses(db, program_id=int(program_id))
     status_by_mid = {
         int(s.molecule_id): {
@@ -224,6 +218,117 @@ def get_program_detail(
         for s in status_rows
         if s.molecule_id is not None
     }
+    return {
+        "molecules": molecules,
+        "program_memberships": program_memberships,
+        "all_molecules": all_molecules,
+        "recent_batches": recent_batches,
+        "recent_data": recent_data,
+        "recent_evidence": recent_evidence,
+        "recent_decisions": recent_decisions,
+        "audits": audits,
+        "review_queue": review_queue,
+        "open_experiment_tasks_preview": open_experiment_tasks_preview,
+        "status_by_mid": status_by_mid,
+    }
+
+
+def _build_program_claim_plan_context(db: Session, *, program_id: int) -> dict[str, Any]:
+    claim_rows = claims_svc.top_claims_for_program(db, program_id=int(program_id), limit=20)
+    claim_summary_counts = {
+        "hypothesis_or_emerging": 0,
+        "supported": 0,
+        "contradicted": 0,
+        "evidence_starved": 0,
+    }
+    claim_preview = []
+    for c in claim_rows:
+        msum = claims_svc.summarize_claim_maturity(db, claim_id=int(c.id))
+        st = str(c.status or "")
+        if st in {"hypothesis", "emerging"}:
+            claim_summary_counts["hypothesis_or_emerging"] += 1
+        if st == "supported":
+            claim_summary_counts["supported"] += 1
+        if st == "contradicted":
+            claim_summary_counts["contradicted"] += 1
+        if int(msum.get("supporting_count") or 0) + int(msum.get("contradicting_count") or 0) == 0:
+            claim_summary_counts["evidence_starved"] += 1
+        claim_preview.append(
+            {
+                "claim_id": int(c.id),
+                "title": str(c.title or ""),
+                "claim_type": str(c.claim_type or ""),
+                "status": str(c.status or ""),
+                "confidence_level": str(c.confidence_level or ""),
+                "supporting_count": int(msum.get("supporting_count") or 0),
+                "contradicting_count": int(msum.get("contradicting_count") or 0),
+            }
+        )
+    plan_rows = plans_svc.list_plans_for_program(db, program_id=int(program_id), include_archived=True)
+    plan_preview_rows = plans_svc.top_plans_for_program(db, program_id=int(program_id), limit=10)
+    plan_summary = {
+        "recommended": 0,
+        "accepted": 0,
+        "awaiting_task_instantiation": 0,
+        "bottleneck_targeting": 0,
+    }
+    for prow in plan_rows:
+        st = str(prow.status or "")
+        if st == "recommended":
+            plan_summary["recommended"] += 1
+        if st == "accepted":
+            plan_summary["accepted"] += 1
+        steps = plans_svc.list_plan_steps(db, plan_id=int(prow.id))
+        if any(str(s.status or "") == "proposed" for s in steps):
+            plan_summary["awaiting_task_instantiation"] += 1
+        if any(str(s.metric_key or "").strip() for s in steps):
+            plan_summary["bottleneck_targeting"] += 1
+    plan_preview = []
+    for prow in plan_preview_rows:
+        steps = plans_svc.list_plan_steps(db, plan_id=int(prow.id))
+        plan_preview.append(
+            {
+                "plan_id": int(prow.id),
+                "title": str(prow.title or ""),
+                "plan_type": str(prow.plan_type or ""),
+                "status": str(prow.status or ""),
+                "expected_readiness_gain": float(prow.expected_readiness_gain or 0.0),
+                "expected_claim_support_gain": float(prow.expected_claim_support_gain or 0.0),
+                "expected_evidence_coverage_gain": float(prow.expected_evidence_coverage_gain or 0.0),
+                "proposed_steps": int(sum(1 for s in steps if str(s.status or "") == "proposed")),
+            }
+        )
+    return {
+        "program_claim_summary": claim_summary_counts,
+        "program_claims_preview": claim_preview[:10],
+        "program_plan_summary": plan_summary,
+        "program_plans_preview": plan_preview[:10],
+    }
+
+
+def get_program_detail(
+    db: Session,
+    program_id: int,
+    *,
+    policy_version_filter: str | None = None,
+    verify_lineage: bool = False,
+) -> dict:
+    p = get_program(db, program_id)
+    if not p:
+        raise KeyError("Program not found")
+
+    base_ctx = _collect_program_detail_inputs(db, program_id=int(program_id))
+    molecules = list(base_ctx["molecules"])
+    program_memberships = list(base_ctx["program_memberships"])
+    all_molecules = list(base_ctx["all_molecules"])
+    recent_batches = list(base_ctx["recent_batches"])
+    recent_data = list(base_ctx["recent_data"])
+    recent_evidence = list(base_ctx["recent_evidence"])
+    recent_decisions = list(base_ctx["recent_decisions"])
+    audits = list(base_ctx["audits"])
+    review_queue = list(base_ctx["review_queue"])
+    open_experiment_tasks_preview = list(base_ctx["open_experiment_tasks_preview"])
+    status_by_mid = dict(base_ctx["status_by_mid"])
 
     # v1.2.9m: deterministic DI rollups (latest snapshot per molecule)
     all_snaps = (
@@ -673,70 +778,11 @@ def get_program_detail(
     if not suggestion_items:
         suggestion_items.append("No prioritized experiment suggestions available from current program evidence surfaces.")
     program_suggested_experiments = suggestion_items[:5]
-    claim_rows = claims_svc.top_claims_for_program(db, program_id=int(program_id), limit=20)
-    claim_summary_counts = {
-        "hypothesis_or_emerging": 0,
-        "supported": 0,
-        "contradicted": 0,
-        "evidence_starved": 0,
-    }
-    claim_preview = []
-    for c in claim_rows:
-        msum = claims_svc.summarize_claim_maturity(db, claim_id=int(c.id))
-        st = str(c.status or "")
-        if st in {"hypothesis", "emerging"}:
-            claim_summary_counts["hypothesis_or_emerging"] += 1
-        if st == "supported":
-            claim_summary_counts["supported"] += 1
-        if st == "contradicted":
-            claim_summary_counts["contradicted"] += 1
-        if int(msum.get("supporting_count") or 0) + int(msum.get("contradicting_count") or 0) == 0:
-            claim_summary_counts["evidence_starved"] += 1
-        claim_preview.append(
-            {
-                "claim_id": int(c.id),
-                "title": str(c.title or ""),
-                "claim_type": str(c.claim_type or ""),
-                "status": str(c.status or ""),
-                "confidence_level": str(c.confidence_level or ""),
-                "supporting_count": int(msum.get("supporting_count") or 0),
-                "contradicting_count": int(msum.get("contradicting_count") or 0),
-            }
-        )
-    plan_rows = plans_svc.list_plans_for_program(db, program_id=int(program_id), include_archived=True)
-    plan_preview_rows = plans_svc.top_plans_for_program(db, program_id=int(program_id), limit=10)
-    plan_summary = {
-        "recommended": 0,
-        "accepted": 0,
-        "awaiting_task_instantiation": 0,
-        "bottleneck_targeting": 0,
-    }
-    for prow in plan_rows:
-        st = str(prow.status or "")
-        if st == "recommended":
-            plan_summary["recommended"] += 1
-        if st == "accepted":
-            plan_summary["accepted"] += 1
-        steps = plans_svc.list_plan_steps(db, plan_id=int(prow.id))
-        if any(str(s.status or "") == "proposed" for s in steps):
-            plan_summary["awaiting_task_instantiation"] += 1
-        if any(str(s.metric_key or "").strip() for s in steps):
-            plan_summary["bottleneck_targeting"] += 1
-    plan_preview = []
-    for prow in plan_preview_rows:
-        steps = plans_svc.list_plan_steps(db, plan_id=int(prow.id))
-        plan_preview.append(
-            {
-                "plan_id": int(prow.id),
-                "title": str(prow.title or ""),
-                "plan_type": str(prow.plan_type or ""),
-                "status": str(prow.status or ""),
-                "expected_readiness_gain": float(prow.expected_readiness_gain or 0.0),
-                "expected_claim_support_gain": float(prow.expected_claim_support_gain or 0.0),
-                "expected_evidence_coverage_gain": float(prow.expected_evidence_coverage_gain or 0.0),
-                "proposed_steps": int(sum(1 for s in steps if str(s.status or "") == "proposed")),
-            }
-        )
+    claim_plan_ctx = _build_program_claim_plan_context(db, program_id=int(program_id))
+    claim_summary_counts = dict(claim_plan_ctx["program_claim_summary"])
+    claim_preview = list(claim_plan_ctx["program_claims_preview"])
+    plan_summary = dict(claim_plan_ctx["program_plan_summary"])
+    plan_preview = list(claim_plan_ctx["program_plans_preview"])
     program_narrative = narratives_svc.build_program_narrative(db, program_id=int(program_id))
 
     return {

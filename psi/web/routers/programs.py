@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
-
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
@@ -13,6 +11,7 @@ from psi.web import handoff_context as handoff
 from psi.services import programs as svc
 from psi.services import data_records as data_records_svc
 from psi.services import dev_board as dev_board_svc
+from psi.services import program_board as program_board_svc
 from psi.services import experiment_tasks as experiment_tasks_svc
 from psi.services import narratives as narratives_svc
 from psi.services import workflow_center as workflow_center_svc
@@ -142,71 +141,15 @@ def program_development_board(program_id: int, request: Request, db: Session = D
     urgency_filter = str(request.query_params.get("urgency") or "").strip().lower()
     status_filter = str(request.query_params.get("task_status") or "").strip().lower()
     due_filter = str(request.query_params.get("due") or "").strip().lower()
-    if urgency_filter not in {"", "critical", "high", "normal", "low"}:
-        urgency_filter = ""
-    if status_filter not in {"", "planned", "in_progress", "blocked", "done", "open"}:
-        status_filter = ""
-    if due_filter not in {"", "overdue", "due_soon"}:
-        due_filter = ""
-
-    def _due_match(row: dict) -> bool:
-        if not due_filter:
-            return True
-        raw = str(row.get("top_task_due_date") or "").strip()
-        if not raw:
-            return False
-        try:
-            d = date.fromisoformat(raw)
-        except Exception:
-            return False
-        today = date.today()
-        if due_filter == "overdue":
-            return d < today
-        if due_filter == "due_soon":
-            return today <= d <= (today + timedelta(days=7))
-        return True
-
-    def _task_row_match(row: dict) -> bool:
-        if q and q not in str(row.get("primary_id") or "").lower():
-            return False
-        if owner_filter and owner_filter not in str(row.get("top_task_owner_text") or "").lower():
-            return False
-        if urgency_filter and urgency_filter != str(row.get("top_task_urgency") or "").lower():
-            return False
-        if status_filter:
-            if status_filter == "open":
-                if int(row.get("open_task_count") or 0) <= 0:
-                    return False
-            elif status_filter != str(row.get("top_task_status") or "").lower():
-                return False
-        if not _due_match(row):
-            return False
-        return True
-
-    if q:
-        groups = board.get("groups") if isinstance(board, dict) else {}
-        if isinstance(groups, dict):
-            board = {
-                **board,
-                "groups": {
-                    k: [
-                        row
-                        for row in (groups.get(k) or [])
-                        if isinstance(row, dict) and _task_row_match(row)
-                    ]
-                    for k in ("ready", "failed", "missing_data", "not_evaluated")
-                },
-            }
-    elif owner_filter or urgency_filter or status_filter or due_filter:
-        groups = board.get("groups") if isinstance(board, dict) else {}
-        if isinstance(groups, dict):
-            board = {
-                **board,
-                "groups": {
-                    k: [row for row in (groups.get(k) or []) if isinstance(row, dict) and _task_row_match(row)]
-                    for k in ("ready", "failed", "missing_data", "not_evaluated")
-                },
-            }
+    if q or owner_filter or urgency_filter or status_filter or due_filter:
+        board = program_board_svc.apply_board_filters(
+            board,
+            q=q,
+            owner=owner_filter,
+            urgency=urgency_filter,
+            status=status_filter,
+            due=due_filter,
+        )
     return templates.TemplateResponse(
         "programs/board.html",
         {

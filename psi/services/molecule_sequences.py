@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from psi.core.fasta import normalize_aa_sequence, sha256_text
-from psi.core.models import SequenceEntity
+from psi.core.models import DomainInstance, MoleculeComponent, SequenceEntity
 from psi.core.utils import now_utc
 
 
@@ -108,3 +108,16 @@ def composition_sha256(chain_by_role: dict[str, str | None]) -> str:
     payload = _json.dumps(canonical, sort_keys=True, separators=(',', ':'))
     return sha256_text(payload)
 
+
+def build_molecule_sequence_context(db: Session, *, molecule_id: int) -> dict:
+    components = db.query(MoleculeComponent).filter(MoleculeComponent.molecule_id == molecule_id).all()
+    domain_instances = (
+        db.query(DomainInstance)
+        .filter(DomainInstance.molecule_id == molecule_id)
+        .order_by(DomainInstance.component_id.asc(), DomainInstance.domain_type.asc())
+        .all()
+    )
+    return {
+        "components": components,
+        "domain_instances": domain_instances,
+    }

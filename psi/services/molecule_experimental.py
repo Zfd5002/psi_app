@@ -3,9 +3,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from psi.core.models import Batch, DataRecord, Molecule
+from psi.core.models import Batch, DataRecord, Evidence, ExperimentTask, Molecule
+from psi.services.evidence_preview import build_pending_evidence_preview_for_molecule
 from psi.services import qc as qc_svc
 
 
@@ -243,6 +245,66 @@ def get_molecule_experimental_context(db: Session, molecule_id: int, *, selected
         "exp_latest_binding": None,
         "exp_latest_endotoxin": None,
     }
+
+
+def build_molecule_evidence_context(db: Session, *, molecule_id: int) -> dict[str, Any]:
+    data_records = (
+        db.query(DataRecord)
+        .filter(DataRecord.molecule_id == int(molecule_id))
+        .order_by(DataRecord.run_date.desc().nullslast(), DataRecord.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    evidence = (
+        db.query(Evidence)
+        .filter(Evidence.molecule_id == int(molecule_id))
+        .order_by(Evidence.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    pending_evidence_preview = build_pending_evidence_preview_for_molecule(db, molecule_id=int(molecule_id))
+    return {
+        "data_records": data_records,
+        "evidence": evidence,
+        "pending_evidence_preview": pending_evidence_preview,
+    }
+
+
+def build_molecule_experiment_context(db: Session, *, molecule_id: int) -> dict[str, Any]:
+    urgency_rank = case(
+        (ExperimentTask.urgency == "critical", 0),
+        (ExperimentTask.urgency == "high", 1),
+        (ExperimentTask.urgency == "normal", 2),
+        (ExperimentTask.urgency == "low", 3),
+        else_=4,
+    )
+    open_task_rows = (
+        db.query(ExperimentTask)
+        .filter(ExperimentTask.molecule_id == int(molecule_id))
+        .filter(ExperimentTask.status != "done")
+        .order_by(
+            urgency_rank.asc(),
+            func.coalesce(ExperimentTask.due_date, "9999-12-31").asc(),
+            ExperimentTask.created_at.asc(),
+            ExperimentTask.id.asc(),
+        )
+        .all()
+    )
+    open_experiment_tasks = [
+        {
+            "id": int(t.id),
+            "status": str(t.status or ""),
+            "urgency": str(t.urgency or ""),
+            "owner_text": str(t.owner_text or ""),
+            "due_date": str(t.due_date or ""),
+            "metric_key": str(t.metric_key or ""),
+            "suggested_assay": str(t.suggested_assay or ""),
+            "notes": str(t.notes or ""),
+            "source_kind": str(t.source_kind or ""),
+        }
+        for t in open_task_rows
+    ]
+    return {"open_experiment_tasks": open_experiment_tasks}
 
 
 # ---- v1.2.7: batch-first molecule UI decoration (QC-aware headlines) ----

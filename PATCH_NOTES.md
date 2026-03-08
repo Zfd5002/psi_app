@@ -7497,6 +7497,191 @@ Schema changes:
 Gates:
 - PASS
 
+## 2026-03-08 — v1.3.0d79
+Intent:
+- Consolidate duplicated test scaffolding into shared fixtures (`_mkdb`, `_DummyTemplates`, query request helper) for maintainability.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/conftest.py` (new)
+- `tests/test_claim_router.py`
+- `tests/test_plan_router.py`
+- `tests/test_portfolio_router.py`
+- `tests/test_program_board_filters.py`
+- `tests/test_program_narrative_router.py`
+- `tests/test_suggested_experiment_task_creation.py`
+
+Behavior:
+- Added shared fixtures in `tests/conftest.py`:
+  - `mkdb`
+  - `dummy_templates`
+  - `mk_query_request`
+- Migrated all test files that previously defined both `_mkdb()` and `_DummyTemplates()` to these shared fixtures.
+- Preserved test behavior and scope while removing duplicated setup code.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d78
+Intent:
+- Move development board row-filter logic from router to service while preserving board group structure.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/program_board.py` (new)
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `tests/test_program_board_filter_service.py` (new)
+
+Behavior:
+- Added `apply_board_filters(board, *, q, owner, urgency, status, due)` in `psi/services/program_board.py`.
+- Refactored `/programs/{program_id}/board` route to delegate task-row filtering to the new service.
+- Kept group filter behavior (`filter=ready|failed|missing`) in router and preserved output group structure.
+- Added service-level tests for owner/status, due-window, and open-status filtering.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d77
+Intent:
+- Standardize major detail surfaces on shared surface chrome and remove local descriptor aliasing drift.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Switched molecule/program detail templates to include `partials/surface_chrome.html` after page header.
+- Removed molecule template’s local `sf` alias; `surface_chrome` now reads from `surface` directly.
+- Preserved molecule fallback local subnav when descriptor nav is absent.
+- Updated program detail nav extraction to read directly from `surface.local_nav`.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d76
+Intent:
+- Start `programs.py` monolith cleanup by extracting `get_program_detail` sub-assemblers in-place (no router changes, no new architecture layer).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/programs.py`
+- `psi/version.py`
+
+Behavior:
+- Added helper `_build_open_experiment_tasks_preview(...)` for deterministic task preview construction.
+- Added helper `_collect_program_detail_inputs(...)` to gather core query payloads/status maps.
+- Added helper `_build_program_claim_plan_context(...)` for claim/plan summary and preview rollups.
+- Updated `get_program_detail` to coordinate these helpers while preserving output keys and behavior.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d75
+Intent:
+- Partialize stable molecule detail sections to reduce main-template density while preserving behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/molecules/partials/working_lane.html`
+- `psi/web/templates/molecules/partials/workflow_loop.html`
+- `psi/web/templates/molecules/partials/operational_tasks.html`
+- `psi/web/templates/molecules/partials/scientific_claims.html`
+- `psi/web/templates/molecules/partials/recommended_plans.html`
+
+Behavior:
+- Extracted stable sections from molecule detail into reusable includes:
+  - `molecules/partials/working_lane.html`
+  - `molecules/partials/workflow_loop.html`
+  - `molecules/partials/operational_tasks.html`
+  - `molecules/partials/scientific_claims.html`
+  - `molecules/partials/recommended_plans.html`
+- Kept section ordering and existing actions unchanged.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d74
+Intent:
+- Extract inline JavaScript from the molecule detail template into a static asset with DOM/JSON-based configuration.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/molecule_detail.js`
+- `psi/web/templates/molecules/detail.html`
+
+Behavior:
+- Moved molecule-detail inline scripts (panel state persistence, view-mode toggle, trend/annotation/viewer interactions, numbering map behavior) into `psi/web/static/molecule_detail.js`.
+- Added `molecule-detail-config` JSON script payload in template and switched JS config reads to DOM JSON/data instead of Jinja embedded in JS source.
+- Kept `sequence_editor.js` loading and molecule detail behavior intact while making template script blocks declarative.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d73
+Intent:
+- Continue molecule detail service cleanup by delegating evidence, experiment-task, and trajectory/analysis context assembly.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/molecule_experimental.py`
+- `psi/services/molecules.py`
+- `psi/services/trajectory.py`
+- `psi/version.py`
+
+Behavior:
+- Added `build_molecule_evidence_context(...)` and `build_molecule_experiment_context(...)` to `molecule_experimental`.
+- Added `build_molecule_trajectory_context(...)` to `trajectory`.
+- Updated `get_molecule_detail` to consume those delegated contexts instead of assembling evidence/task/trajectory blocks inline.
+- Preserved existing output keys consumed by molecule templates/routes.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d72
+Intent:
+- Begin coordinator cleanup of `get_molecule_detail` by delegating sequence/viewer context assembly to existing molecule sub-services.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/molecule_sequences.py`
+- `psi/services/molecule_viewer.py`
+- `psi/services/molecules.py`
+- `psi/version.py`
+
+Behavior:
+- Added `build_molecule_sequence_context(...)` in `molecule_sequences` for molecule component + domain instance retrieval.
+- Added `build_molecule_viewer_context(...)` in `molecule_viewer` for feature tracks, numbering maps, and viewer component assembly.
+- Updated `get_molecule_detail` to consume delegated sequence/viewer context outputs instead of assembling those blocks inline.
+- Preserved route/service behavior and return payload contract.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d71
+Intent:
+- Remove latent duplicate molecule service definitions that were silently shadowed by later definitions.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/molecules.py`
+- `psi/version.py`
+
+Behavior:
+- Removed the earlier duplicate block for `_background_compute`, `_background_domain_extraction`, `_resolve_db_path`, `_next_molecule_primary_id`, `create_molecule`, and `update_molecule`.
+- Kept the later implementation block as the active runtime behavior.
+- Verified duplicate `create_molecule` bodies were identical; `update_molecule` logic was equivalent, with earlier diff noise caused by the repeated import block boundary.
+- Added a short in-file note documenting the duplicate block removal.
+
+Gates:
+- PASS
+
 ## 2026-03-07 — v1.3.0c31
 Intent:
 - Introduce a minimal persisted operational `ExperimentTask` entity as the foundation for board-to-execution workflows.

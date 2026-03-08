@@ -5,20 +5,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from psi.core.db import ensure_schema
-from psi.core.models import Base, Molecule, Program
+from psi.core.models import Molecule, Program
 from psi.web.routers import builder as builder_router
-
-
-def _mkdb():
-    eng = create_engine("sqlite:///:memory:", future=True)
-    Base.metadata.create_all(bind=eng)
-    ensure_schema(engine_override=eng)
-    SessionTmp = sessionmaker(bind=eng, future=True)
-    return eng, SessionTmp
 
 
 def _env() -> Environment:
@@ -26,20 +15,14 @@ def _env() -> Environment:
     return Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
 
 
-class _DummyTemplates:
-    @staticmethod
-    def TemplateResponse(_name: str, ctx: dict):
-        return SimpleNamespace(context=ctx)
-
-
 def test_suggested_task_route_exists() -> None:
     route_keys = {(r.path, tuple(sorted(getattr(r, "methods", set()) or set()))) for r in builder_router.router.routes}
     assert ("/builder/suggested-task/new", ("GET",)) in route_keys
 
 
-def test_suggested_task_route_prefills_payload(monkeypatch) -> None:
-    eng, SessionTmp = _mkdb()
-    monkeypatch.setattr(builder_router, "get_templates", lambda _request: _DummyTemplates())
+def test_suggested_task_route_prefills_payload(monkeypatch, mkdb, dummy_templates) -> None:
+    eng, SessionTmp = mkdb()
+    monkeypatch.setattr(builder_router, "get_templates", lambda _request: dummy_templates)
     try:
         db = SessionTmp()
         try:

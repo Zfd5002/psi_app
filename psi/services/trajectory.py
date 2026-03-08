@@ -6,7 +6,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from psi.core.models import DecisionSnapshot, Molecule, Program
-from psi.services.insight_engine import build_insight_bundle
+from psi.services.insight_engine import build_insight_bundle, summarize_trend_signals
+from psi.services.trends import build_molecule_trends
 
 
 def _safe_json(raw: str | None) -> dict[str, Any]:
@@ -535,4 +536,19 @@ def build_trajectory_tree(
     return {
         "molecule_id": int(molecule_id),
         "nodes": nodes,
+    }
+
+
+def build_molecule_trajectory_context(db: Session, *, molecule_id: int) -> dict[str, Any]:
+    molecule_trends = build_molecule_trends(db, molecule_id=int(molecule_id))
+    molecule_trend_insights = summarize_trend_signals(molecule_trends)
+    trajectory_candidates = rank_trajectory_candidates(
+        generate_trajectory_candidates(db, molecule_id=int(molecule_id))
+    )[:5]
+    trajectory_tree = build_trajectory_tree(db, molecule_id=int(molecule_id), max_depth=2, branch_limit=4)
+    return {
+        "molecule_trends": molecule_trends,
+        "molecule_trend_insights": molecule_trend_insights,
+        "trajectory_candidates": trajectory_candidates,
+        "trajectory_tree": trajectory_tree,
     }
