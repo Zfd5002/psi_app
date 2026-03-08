@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Portfolio Intelligence | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Portfolio Intelligence</h1>
+  <div class="muted">Leadership read-model across programs, molecules, tasks, and insight outputs.</div>
+
+  {% set s = (portfolio_summary if portfolio_summary is defined and portfolio_summary is mapping else {}) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Portfolio Summary</h3>
+    <div class="grid cols-4">
+      <div><b>Programs:</b> {{ s.program_count if s.program_count is defined else 0 }}</div>
+      <div><b>Molecules:</b> {{ s.molecule_count if s.molecule_count is defined else 0 }}</div>
+      <div><b>Ready molecules:</b> {{ s.ready_molecules if s.ready_molecules is defined else 0 }}</div>
+      <div><b>Missing-data molecules:</b> {{ s.missing_data_molecules if s.missing_data_molecules is defined else 0 }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Global Task Status</h3>
+    <div class="grid cols-4">
+      <div><b>Tasks in progress:</b> {{ s.tasks_in_progress if s.tasks_in_progress is defined else 0 }}</div>
+      <div><b>Tasks overdue:</b> {{ s.tasks_overdue if s.tasks_overdue is defined else 0 }}</div>
+      <div><b>Tasks blocked:</b> {{ s.tasks_blocked if s.tasks_blocked is defined else 0 }}</div>
+      <div><b>Tasks unassigned:</b> {{ s.tasks_unassigned if s.tasks_unassigned is defined else 0 }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Program Table</h3>
+    {% set rows = (program_summaries if program_summaries is defined and program_summaries is iterable else []) %}
+    <table class="table mini">
+      <thead>
+        <tr>
+          <th>Program</th>
+          <th>Heat</th>
+          <th>Readiness score</th>
+          <th>Ready</th>
+          <th>Failed</th>
+          <th>Missing data</th>
+          <th>Open tasks</th>
+          <th>Overdue</th>
+          <th>Blocked</th>
+          <th>Bottlenecks</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td><a href="/programs/{{ r.program_id }}">{{ r.program_name }}</a></td>
+          <td>{{ r.heat_emoji if r.heat_emoji is defined else "🟡" }} {{ r.heat_label if r.heat_label is defined else "unknown" }}</td>
+          <td>{{ "%.2f"|format(r.readiness_score if r.readiness_score is defined else 0.0) }}</td>
+          <td>{{ r.molecules_ready if r.molecules_ready is defined else 0 }}</td>
+          <td>{{ r.molecules_failed if r.molecules_failed is defined else 0 }}</td>
+          <td>{{ r.molecules_missing_data if r.molecules_missing_data is defined else 0 }}</td>
+          <td>{{ r.open_tasks if r.open_tasks is defined else 0 }}</td>
+          <td>{{ r.overdue_tasks if r.overdue_tasks is defined else 0 }}</td>
+          <td>{{ r.blocked_tasks if r.blocked_tasks is defined else 0 }}</td>
+          <td>
+            {% set bb = (r.bottleneck_badges if r.bottleneck_badges is defined and r.bottleneck_badges is iterable else []) %}
+            {% for b in bb %}<span class="chip">⚠ {{ b }}</span>{% else %}<span class="muted">—</span>{% endfor %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" class="muted">No programs available.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Molecule Leaderboard</h3>
+    {% set lb = (molecule_leaderboard if molecule_leaderboard is defined and molecule_leaderboard is iterable else []) %}
+    <table class="table mini">
+      <thead><tr><th>Molecule</th><th>Program</th><th>Status</th><th>Evidence rows</th><th>Missing metrics</th><th>Score</th></tr></thead>
+      <tbody>
+      {% for r in lb %}
+        <tr>
+          <td><a href="/molecules/{{ r.molecule_id }}">{{ r.primary_id }}</a></td>
+          <td><a href="/programs/{{ r.program_id }}">#{{ r.program_id }}</a></td>
+          <td>{{ r.status|humanize_state }}</td>
+          <td>{{ r.completed_evidence_count if r.completed_evidence_count is defined else 0 }}</td>
+          <td>{{ r.missing_metrics_count if r.missing_metrics_count is defined else 0 }}</td>
+          <td>{{ "%.2f"|format(r.leaderboard_score if r.leaderboard_score is defined else 0.0) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">No molecule leaderboard rows available.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Evidence Gap Report</h3>
+    {% set gaps = (evidence_gap_report if evidence_gap_report is defined and evidence_gap_report is iterable else []) %}
+    <table class="table mini">
+      <thead><tr><th>Missing metric</th><th>Molecules affected</th></tr></thead>
+      <tbody>
+      {% for g in gaps %}
+        <tr><td>{{ g.metric_key }}</td><td>{{ g.missing_molecule_count }}</td></tr>
+      {% else %}
+        <tr><td colspan="2" class="muted">No recurring evidence gaps detected.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Portfolio Timeline</h3>
+    {% set timeline = (portfolio_timeline if portfolio_timeline is defined and portfolio_timeline is iterable else []) %}
+    <table class="table mini">
+      <thead><tr><th>Week start</th><th>Tasks completed</th><th>Tasks created</th><th>Evidence created</th></tr></thead>
+      <tbody>
+      {% for r in timeline %}
+        <tr>
+          <td>{{ r.week_start }}</td>
+          <td>{{ r.tasks_completed if r.tasks_completed is defined else 0 }}</td>
+          <td>{{ r.tasks_created if r.tasks_created is defined else 0 }}</td>
+          <td>{{ r.evidence_created if r.evidence_created is defined else 0 }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No recent activity in selected window.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

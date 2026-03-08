@@ -6836,6 +6836,268 @@ Intent:
 Intent:
 - Regression hardening + task model boundary documentation.
 
+## 2026-03-07 — v1.3.0c46
+Intent:
+- Introduce Portfolio Intelligence read-model service foundation.
+
+## 2026-03-07 — v1.3.0c47
+Intent:
+- Add program-level portfolio rollup builder.
+
+## 2026-03-07 — v1.3.0c48
+Intent:
+- Add deterministic ordering for portfolio program summaries.
+
+## 2026-03-07 — v1.3.0c49
+Intent:
+- Add Portfolio Intelligence router surface at `/portfolio`.
+
+## 2026-03-07 — v1.3.0c50
+Intent:
+- Add Portfolio Intelligence overview template.
+
+## 2026-03-07 — v1.3.0c51
+Intent:
+- Add Portfolio entry in main navigation.
+
+## 2026-03-07 — v1.3.0c52
+Intent:
+- Add portfolio-level program readiness scoring heuristic.
+
+## 2026-03-07 — v1.3.0c53
+Intent:
+- Add portfolio program heatmap indicators.
+
+## 2026-03-07 — v1.3.0c54
+Intent:
+- Add global task dashboard metrics for portfolio leadership view.
+
+## 2026-03-07 — v1.3.0c55
+Intent:
+- Add molecule leaderboard for closest-to-readiness portfolio view.
+
+## 2026-03-07 — v1.3.0c56
+Intent:
+- Add portfolio evidence-gap report from InsightEngine-derived missing metrics.
+
+## 2026-03-07 — v1.3.0c57
+Intent:
+- Add portfolio program bottleneck detection badges.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_service.py`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Added program bottleneck badges for:
+  - concentrated missing metric (>50% molecules share same missing metric)
+  - overdue task burden over threshold
+- Displayed badges in portfolio program table.
+- Added service/template tests.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_service.py`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Added `build_evidence_gap_report()` aggregating recurring missing metrics across molecules.
+- Added “Evidence Gap Report” section to `/portfolio`.
+- Added service/template tests for gap counting/rendering.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_service.py`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Added `build_molecule_leaderboard()` ranking molecules by:
+  - insight readiness status
+  - completed evidence row count
+  - missing metrics burden
+- Added leaderboard section to portfolio page.
+- Added service/template tests.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_service.py`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Portfolio summary now includes:
+  - `tasks_in_progress`
+  - `tasks_overdue`
+  - `tasks_blocked`
+  - `tasks_unassigned`
+- Portfolio page global task section now displays these derived metrics.
+- Added service/template tests.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_service.py`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Added heat classification/emoji on program rows:
+  - 🟢 progressing
+  - 🟡 evidence gaps
+  - 🔴 blocked
+- Heat derived from existing readiness/task rollup fields.
+- Added service/template tests.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `tests/test_portfolio_service.py`
+
+Behavior:
+- Readiness score now combines:
+  - ready molecules
+  - failed molecules
+  - missing-data molecules
+  - open/blocked/overdue task burden
+- Heuristic is portfolio-layer read-model only (no DI mutation).
+- Added regression test proving backlog penalties reduce score.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/base.html`
+- `tests/test_base_navigation.py`
+
+Behavior:
+- Added top-nav link to `/portfolio` while preserving existing `/portfolios`.
+- Added navigation regression test.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Added `/portfolio` page template with:
+  - Portfolio Summary
+  - Program Table
+  - Global Task Status
+- Added template rendering tests.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/app.py`
+- `tests/test_portfolio_router.py`
+
+Behavior:
+- Added `GET /portfolio` route returning:
+  - portfolio summary
+  - program portfolio summaries
+- Wired portfolio router into app.
+- Added route/context tests.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `tests/test_portfolio_service.py`
+
+Behavior:
+- Added `build_portfolio_program_summaries()` with deterministic ordering by:
+  1. readiness score (desc)
+  2. open task burden (asc)
+  3. molecule count (asc)
+  4. program_id (asc)
+- Added deterministic ordering regression test.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `tests/test_portfolio_service.py`
+
+Behavior:
+- Added `build_program_portfolio_summary(program_id)` with:
+  - `molecules_ready`
+  - `molecules_failed`
+  - `molecules_missing_data`
+  - `open_tasks`
+  - `overdue_tasks`
+  - `blocked_tasks`
+- Metrics derived from existing board read-model + task table; no DI state mutation.
+
+Gates:
+- PASS
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `tests/test_portfolio_service.py`
+
+Behavior:
+- Added `build_portfolio_summary()` returning:
+  - `program_count`
+  - `molecule_count`
+  - `task_count`
+  - `overdue_tasks`
+  - `blocked_tasks`
+  - `ready_molecules`
+  - `missing_data_molecules`
+- Summary is derived from existing entities and board insight groupings (read-model only).
+
+Gates:
+- PASS
+
 Changed files:
 - `PATCH_NOTES.md`
 - `psi/version.py`
@@ -10719,6 +10981,62 @@ Behavior:
 - DI decision detail context now includes `di_insight_bundle` from the Insight Engine.
 - Added top-level “Decision Summary” narrative block to DI snapshot template.
 - Added service test confirming DI snapshot detail includes deterministic narrative text.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c58
+Intent:
+- Add portfolio timeline activity chart surface derived from tasks and evidence timestamps.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_router.py`
+- `tests/test_portfolio_service.py`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Added deterministic weekly timeline rollup for tasks completed, tasks created, and evidence records created.
+- Wired timeline data into portfolio overview context and rendered a dedicated Portfolio Timeline section.
+- Added service/router/template tests covering timeline aggregation and rendering.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c59
+Intent:
+- Add portfolio CSV export for leadership reporting surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/portfolio.py`
+- `psi/web/routers/portfolio.py`
+- `tests/test_portfolio_router.py`
+- `tests/test_portfolio_service.py`
+
+Behavior:
+- Added deterministic export rows builder from program portfolio summaries.
+- Added `/portfolio/export` endpoint returning CSV with program status, task counts, and molecule readiness metrics.
+- Added router/service tests for CSV shape and deterministic row ordering.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c60
+Intent:
+- Add portfolio regression hardening coverage and layer documentation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/PORTFOLIO_INTELLIGENCE_LAYER.md`
+- `tests/test_portfolio_regression.py`
+
+Behavior:
+- Added regression tests for deterministic portfolio summary output, DI snapshot read-only guarantees, board behavior invariance, and task/data-record linkage integrity.
+- Added portfolio layer documentation defining architecture boundaries, read-model inputs, service surfaces, and regression guarantees.
 
 Gates:
 - PASS
