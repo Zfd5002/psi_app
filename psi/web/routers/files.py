@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from psi.services import files as svc
 from psi.web.deps import get_db, get_storage_cfg, get_templates
+from psi.web import ui_surfaces
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ def files_registry(
         "q": q or "",
         "source_kind": source_kind or "",
         "sha": sha or "",
+        "surface": ui_surfaces.files_registry_surface(),
     })
 
 

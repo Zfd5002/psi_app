@@ -1,0 +1,23 @@
+<div class="card" style="margin:0;">
+  <h2>Step 1: Cite existing Data Records</h2>
+  <div class="muted">Required unless you create a new Data Record inline in Step 2.</div>
+  <div class="mini muted" style="margin-top:6px;">Selected citations become the scientific support trace for this evidence statement.</div>
+
+  <div class="grid cols-2">
+    <div class="field">
+      <label>Filter</label>
+      <input id="drSearch" placeholder="filter by title / data_type / method" />
+      <div class="help">The list is restricted by the registry mapping for the selected evidence type.</div>
+    </div>
+    <div class="field">
+      <label>Eligible Data Records (in scope)</label>
+      <div id="drList" style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:10px;"></div>
+    </div>
+  </div>
+
+  <input type="hidden" name="citation_data_record_ids" id="citationIds" value="" />
+
+  {% if cited_ids %}
+    <div class="notice">Editing: previously cited IDs: {{ cited_ids|join(', ') }}</div>
+  {% endif %}
+</div>

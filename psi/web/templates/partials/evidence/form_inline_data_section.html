@@ -1,0 +1,65 @@
+<details class="card progressive-disclosure section-secondary" style="margin:0;">
+  <summary><b>Step 2 (optional): Capture a new Data Record inline</b></summary>
+  <div class="field" style="margin-top:8px;">
+    <label><input type="checkbox" id="inlineToggle" name="create_datarecord_inline" value="1" /> Capture a new Data Record and cite it automatically</label>
+  </div>
+
+  <div id="inlineBox" style="display:none;">
+    <div class="grid cols-2">
+      <div class="field">
+        <label>Data title</label>
+        <input name="dr_title" placeholder="e.g., SPR run 2026-01-17" />
+      </div>
+      <div class="field">
+        <label>Run date (optional)</label>
+        <input type="date" name="dr_run_date" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <input name="dr_notes" placeholder="optional" />
+    </div>
+
+    <div class="grid cols-3">
+      <div class="field">
+        <label>Domain</label>
+        <select name="dr_domain" id="drDomain">
+          {% for d in domains %}
+            <option value="{{ d }}">{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Data type</label>
+        <select name="dr_data_type" id="inlineDataType"></select>
+      </div>
+      <div class="field">
+        <label>Method</label>
+        <select name="dr_method" id="inlineMethod"></select>
+      </div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="card" style="margin:0;">
+        <h3>Parameters</h3>
+        <div id="inlineParams"></div>
+      </div>
+      <div class="card" style="margin:0;">
+        <h3>Results</h3>
+        <div id="inlineResults"></div>
+      </div>
+    </div>
+
+    <input type="hidden" name="dr_params_json" id="inlineParamsJson" value="{}" />
+    <input type="hidden" name="dr_results_json" id="inlineResultsJson" value="{}" />
+
+    <div class="field">
+      <label>Attach files to inline Data Record (optional)</label>
+      <input type="file" name="dr_files" multiple />
+    </div>
+
+    <div class="notice" style="border-color:var(--warn);">
+      Inline capture uses the same evidence scope (program/molecule/batch). If the chosen data type requires a batch, choose a batch in scope above.
+    </div>
+  </div>
+</details>

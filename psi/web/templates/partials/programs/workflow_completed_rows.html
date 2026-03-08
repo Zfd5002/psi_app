@@ -1,0 +1,11 @@
+{% for t in recently_completed %}
+  {% set m = molecule_by_id.get(t.molecule_id) if molecule_by_id is defined else None %}
+  <tr>
+    <td>#{{ t.id }}</td>
+    <td>{% if m %}<a href="/molecules/{{ t.molecule_id }}">{{ m.primary_id }}</a>{% else %}#{{ t.molecule_id }}{% endif %}</td>
+    <td>{% if t.suggested_assay %}{{ t.suggested_assay }}{% else %}{{ t.metric_key or "task" }}{% endif %}</td>
+    <td>{% if t.linked_data_record_id %}<a href="/data/{{ t.linked_data_record_id }}">Data #{{ t.linked_data_record_id }}</a>{% else %}<span class="muted">not linked</span>{% endif %}</td>
+  </tr>
+{% else %}
+  <tr><td colspan="4" class="muted empty-state-cell">No recently completed tasks.</td></tr>
+{% endfor %}

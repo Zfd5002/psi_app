@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from psi.services import reports_v3 as svc
 from psi.services import v3_narrative as narrative_svc
 from psi.web.deps import get_db, get_templates
+from psi.web import ui_surfaces
 
 router = APIRouter()
 
@@ -25,7 +26,10 @@ def _board_template_for_report_type(report_type: str) -> str:
 @router.get("/reports", response_class=HTMLResponse)
 def list_reports(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
-    return templates.TemplateResponse("reports/list.html", {"request": request, "report_runs": svc.list_report_runs(db)})
+    return templates.TemplateResponse(
+        "reports/list.html",
+        {"request": request, "report_runs": svc.list_report_runs(db), "surface": ui_surfaces.reports_registry_surface()},
+    )
 
 
 @router.get("/reports/new", response_class=HTMLResponse)

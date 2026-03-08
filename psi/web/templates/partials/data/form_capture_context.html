@@ -1,0 +1,30 @@
+<div class="grid cols-2" style="margin-top:10px;">
+  <div class="card section-card section-workflow" style="margin:0;">
+    <h3 style="margin-top:0;">Capture Context</h3>
+    <div class="mini muted">Entry mode: {% if record %}edit{% else %}new capture{% endif %} · source={{ handoff_source if handoff_source is defined and handoff_source else "manual" }}</div>
+    <ul class="molecule-cockpit-list">
+      <li>Program: {% if prefill is defined and prefill.program_id %}<a href="/programs/{{ prefill.program_id }}">#{{ prefill.program_id }}</a>{% else %}<span class="muted">not set</span>{% endif %}</li>
+      <li>Molecule: {% if prefill is defined and prefill.molecule_id %}<a href="/molecules/{{ prefill.molecule_id }}">#{{ prefill.molecule_id }}</a>{% else %}<span class="muted">optional</span>{% endif %}</li>
+      <li>Task link: {% if task_context %}<a href="/programs/{{ task_context.program_id }}/workflow">Task #{{ task_context.task_id }}</a>{% else %}<span class="muted">none</span>{% endif %}</li>
+    </ul>
+  </div>
+  <div class="card section-card section-primary" style="margin:0;">
+    <h3 style="margin-top:0;">What Happens Next</h3>
+    <ul class="molecule-cockpit-list">
+      <li>Save this data record to generate structured measurements.</li>
+      <li>Review QC status and evidence preview on the detail page.</li>
+      <li>Create/link evidence, then return to program workflow to continue execution.</li>
+    </ul>
+  </div>
+</div>
+{% if not record and task_context %}
+<div class="card section-card section-workflow" style="margin:10px 0;">
+  <h3 style="margin-top:0;">Task Context</h3>
+  <div class="mini muted">Task #{{ task_context.task_id }} | status={{ task_context.status }} | urgency={{ task_context.urgency }}</div>
+  <div class="mini">Molecule ID: {{ task_context.molecule_id }}{% if task_context.metric_key %} | Metric: {{ task_context.metric_key }}{% endif %}{% if task_context.suggested_assay %} | Assay: {{ task_context.suggested_assay }}{% endif %}</div>
+  {% if task_context.owner_text %}<div class="mini">Owner: {{ task_context.owner_text }}</div>{% endif %}
+  {% if task_context.due_date %}<div class="mini">Due: {{ task_context.due_date }}</div>{% endif %}
+  {% if task_context.notes %}<div class="mini muted">Notes: {{ task_context.notes }}</div>{% endif %}
+  <div class="muted mini" style="margin-top:8px;">After saving this result, you can create evidence and return to workflow with task linkage preserved.</div>
+</div>
+{% endif %}

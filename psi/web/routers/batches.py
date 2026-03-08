@@ -9,6 +9,7 @@ from psi.core.batch_id import next_batch_id
 from psi.core.models import Molecule
 from psi.services import files as file_svc
 from psi.web.deps import get_db, get_storage_cfg, get_templates
+from psi.web import ui_surfaces
 
 router = APIRouter()
 
@@ -17,7 +18,10 @@ router = APIRouter()
 def list_batches(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
     batches, molecules = svc.list_batches(db)
-    return templates.TemplateResponse("batches/list.html", {"request": request, "batches": batches, "molecules": molecules})
+    return templates.TemplateResponse(
+        "batches/list.html",
+        {"request": request, "batches": batches, "molecules": molecules, "surface": ui_surfaces.batches_registry_surface()},
+    )
 
 
 @router.get("/batches/new", response_class=HTMLResponse)

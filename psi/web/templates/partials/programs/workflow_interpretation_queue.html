@@ -1,0 +1,12 @@
+<div class="linked-table-wrap" style="margin-top:8px;">
+  <table class="table mini">
+    <thead><tr><th>Result</th><th>Molecule</th><th>Run</th><th class="no-print">Next step</th></tr></thead>
+    <tbody>
+      {% for r in pending_interpretation %}
+        {% include "partials/programs/workflow_interpretation_row.html" %}
+      {% else %}
+        <tr><td colspan="4" class="muted empty-state-cell">No recent results are waiting on evidence interpretation.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

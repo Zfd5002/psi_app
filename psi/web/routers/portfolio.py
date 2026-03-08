@@ -11,6 +11,7 @@ from psi.services import portfolio as portfolio_svc
 from psi.services import trajectory as trajectory_svc
 from psi.services import narratives as narratives_svc
 from psi.web.deps import get_db, get_templates
+from psi.web import ui_surfaces
 
 router = APIRouter()
 
@@ -43,6 +44,7 @@ def portfolio_overview(request: Request, db: Session = Depends(get_db)):
             "portfolio_plan_summary": plan_summary,
             "portfolio_narrative": portfolio_narrative,
             "narrative_brief": brief,
+            "surface": ui_surfaces.portfolio_overview_surface(),
         },
     )
 

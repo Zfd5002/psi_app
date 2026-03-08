@@ -2,14 +2,25 @@
 {% block title %}Molecules | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1>Molecules</h1>
-    <a class="btn primary" href="/molecules/new">New Molecule</a>
-  </div>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set rows = (molecules if molecules is defined and molecules is iterable else []) %}
+  {% set page_eyebrow = "Registry" %}
+  {% set page_title = "Molecules" %}
+  {% set page_subtitle = "Open molecule workspaces and review readiness posture quickly." %}
+  {% set page_primary_actions = [{"href": "/molecules/new", "label": "New Molecule"}] %}
+  {% set page_metrics = [{"label": "Molecules", "value": (rows|length)}] %}
+  {% set page_matters_now = ["Open molecule detail to continue Evidence → Claim → Plan → Task loops."] %}
+  {% include "partials/page_header.html" %}
+  {% if sf.archetype_labels is defined and sf.archetype_labels %}
+    <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if sf.local_nav is defined and sf.local_nav %}
+  <div class="local-subnav no-print">{% for item in sf.local_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}</div>
+  {% endif %}
   <table class="table">
     <thead><tr><th>Molecule</th><th>Status</th><th>Program</th><th>Created</th></tr></thead>
     <tbody>
-      {% for m in molecules %}
+      {% for m in rows %}
       {% set mh = header_by_molecule_id.get(m.id) if header_by_molecule_id is defined and header_by_molecule_id else {} %}
       {% set cm = mh.confidence_model if mh is mapping and mh.confidence_model is defined and mh.confidence_model else {} %}
       <tr>
@@ -60,7 +71,7 @@
         <td class="muted">{{ m.created_at }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="muted">No molecules yet.</td></tr>
+      <tr><td colspan="4" class="muted empty-state-cell">No molecules yet. Create one to start scientific execution tracking.</td></tr>
       {% endfor %}
     </tbody>
   </table>

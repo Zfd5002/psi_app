@@ -2,8 +2,14 @@
 {% block title %}Builder Clone | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Builder: Clone Molecule</h1>
-  <p class="muted">Preview-first clone flow. Select a parent molecule to build a draft.</p>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set page_eyebrow = "Builder Workspace" %}
+  {% set page_title = "Builder: Clone Molecule" %}
+  {% set page_subtitle = "Preview-first clone flow. Select a parent molecule to build a draft." %}
+  {% set page_secondary_actions = [{"href": "/builder", "label": "Builder Home"}, {"href": "/builder/point-mutation", "label": "Point Mutation"}, {"href": "/builder/variant-set", "label": "Variant Set"}] %}
+  {% include "partials/page_header.html" %}
+  {% set surface_chrome_active_index = 0 %}
+  {% include "partials/surface_chrome.html" %}
   <label>Find parent molecule</label>
   <input id="builder_parent_search" type="text" placeholder="Search by primary ID or title" autocomplete="off" />
   <div id="builder_parent_search_results" class="mini muted" style="margin:4px 0 8px 0;"></div>
@@ -68,6 +74,17 @@
   </form>
   {% endif %}
   {% endif %}
+  <div class="card section-card section-workflow" style="margin-top:12px;">
+    <h3 style="margin-top:0;">Next Actions</h3>
+    <div class="action-bar-utility no-print">
+      {% if form_data is defined and form_data.parent_program_id is defined and form_data.parent_program_id %}
+      <a class="btn mini primary" href="/programs/{{ form_data.parent_program_id }}/workflow">Open Program Workflow Center</a>
+      <a class="btn mini" href="/programs/{{ form_data.parent_program_id }}/board">Open Development Board</a>
+      {% endif %}
+      <a class="btn mini" href="/builder/point-mutation">Continue with Point Mutation</a>
+      <a class="btn mini" href="/builder/variant-set">Open Variant Set Builder</a>
+    </div>
+  </div>
 </div>
 <script>
 (function () {

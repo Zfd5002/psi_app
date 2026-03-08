@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ program.name }} Program Workflow Center | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  {% set page_eyebrow = "Program Workflow" %}
+  {% set page_title = program.name ~ " Program Workflow Center" %}
+  {% set page_subtitle = "Unified operational workflow surface across board, claims, plans, and molecule actions." %}
+  {% set page_primary_actions = [
+    {"href": "/programs/" ~ program.id ~ "/board", "label": "Open Board"},
+    {"href": "/programs/" ~ program.id, "label": "Back to Program"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/programs/" ~ program.id ~ "/board", "label": "Board"},
+    {"href": "/data?program_id=" ~ program.id, "label": "Results"},
+    {"href": "/molecules?program_id=" ~ program.id, "label": "Program Molecules"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Ready to Start", "value": (ready_to_start|length)},
+    {"label": "In Progress", "value": (in_progress|length)},
+    {"label": "Blocked", "value": (blocked_tasks|length)},
+    {"label": "Awaiting Data Entry", "value": (awaiting_data_entry|length)}
+  ] %}
+  {% set page_matters_now = [
+    "Start planned tasks with clear assay focus",
+    "Advance in-progress tasks into evidence capture",
+    "Unblock blocked tasks and reassign ownership where needed",
+    "Review recently completed tasks to confirm evidence linkage"
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
+  {% if sf_labels %}
+    <div class="page-archetype-bar">
+      {% for lbl in sf_labels %}
+        <span class="page-archetype-chip{% if loop.index0 == 1 %} is-active{% endif %}">{{ lbl }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% include "partials/capture_notice.html" %}
+  {% set sr = (source_rollup if source_rollup is defined and source_rollup is mapping else {}) %}
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Attention Now</h2>
+      <div class="muted mini">Operational bottlenecks needing intervention before throughput drops.</div>
+    </div>
+    <div class="summary-metric-strip" style="margin-top:8px;">
+      <div class="summary-metric">
+        <div class="summary-metric-label">Overdue Open Tasks</div>
+        <div class="summary-metric-value">{{ overdue_open if overdue_open is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Unassigned Open Tasks</div>
+        <div class="summary-metric-value">{{ unassigned_open if unassigned_open is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Awaiting Data Entry</div>
+        <div class="summary-metric-value">{{ awaiting_data_entry|length }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Recently Completed</div>
+        <div class="summary-metric-value">{{ recently_completed|length }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="card section-card section-workflow" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Task Origin Context</h2>
+      <div class="muted mini">All creation paths converge into this shared workflow center.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <span class="chip">Board {{ sr.get("board", 0) }}</span>
+      <span class="chip">Claims {{ sr.get("claim", 0) }}</span>
+      <span class="chip">Plans {{ sr.get("plan", 0) }}</span>
+      <span class="chip">Molecule {{ sr.get("molecule", 0) }}</span>
+      <span class="chip">Manual {{ sr.get("manual", 0) }}</span>
+      <span class="chip">Insight {{ sr.get("insight", 0) }}</span>
+    </div>
+  </div>
+  <div class="card section-card section-primary" style="margin-top:10px;" id="recent-learning">
+    <div class="section-heading">
+      <h2>Recently Captured Learning</h2>
+      <div class="muted mini">Latest results and evidence in this program, surfaced for interpretation follow-through.</div>
+    </div>
+    {% include "partials/programs/workflow_recent_learning.html" %}
+  </div>
+  <div class="card section-card section-workflow" style="margin-top:10px;" id="interpretation-queue">
+    <div class="section-heading">
+      <h2>Results Awaiting Interpretation</h2>
+      <div class="muted mini">Recently captured results without evidence citation yet.</div>
+    </div>
+    {% include "partials/programs/workflow_interpretation_queue.html" %}
+  </div>
+
+  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
+  <div class="local-subnav no-print">
+    {% if sf_nav %}
+      {% for item in sf_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}
+    {% else %}
+      <a href="#ready-start">Ready to Start</a>
+      <a href="#in-progress">In Progress</a>
+      <a href="#blocked">Blocked</a>
+      <a href="#awaiting-data">Awaiting Data Entry</a>
+      <a href="#completed">Recently Completed</a>
+    {% endif %}
+  </div>
+
+  <div class="section-heading" style="margin-top:12px;"><h2 id="ready-start">Ready to Start</h2><div class="muted mini">Planned tasks that can begin now.</div></div>
+  {% set rows = ready_to_start %}
+  {% set empty_text = "No tasks ready to start." %}
+  {% set section_id = "ready-start-table" %}
+  {% include "partials/programs/workflow_task_table.html" %}
+
+  <div class="section-heading" style="margin-top:12px;"><h2 id="in-progress">In Progress</h2><div class="muted mini">Active work currently underway.</div></div>
+  {% set rows = in_progress %}
+  {% set empty_text = "No tasks in progress." %}
+  {% set section_id = "in-progress-table" %}
+  {% include "partials/programs/workflow_task_table.html" %}
+
+  <div class="section-heading" style="margin-top:12px;"><h2 id="blocked">Blocked</h2><div class="muted mini">Tasks needing intervention.</div></div>
+  {% set rows = blocked_tasks %}
+  {% set empty_text = "No blocked tasks." %}
+  {% set section_id = "blocked-table" %}
+  {% include "partials/programs/workflow_task_table.html" %}
+
+  <div class="section-heading" style="margin-top:12px;"><h2 id="awaiting-data">Awaiting Data Entry</h2><div class="muted mini">Tasks in progress but not yet linked to evidence.</div></div>
+  <div class="linked-table-wrap" style="margin-top:8px;">
+    <table class="table mini">
+      <thead><tr><th>Task</th><th>Molecule</th><th>Focus</th><th class="no-print">Primary action</th></tr></thead>
+      <tbody>
+      {% include "partials/programs/workflow_awaiting_data_rows.html" %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-heading" style="margin-top:12px;"><h2 id="completed">Recently Completed</h2><div class="muted mini">Latest completed work items.</div></div>
+  <div class="linked-table-wrap" style="margin-top:8px;">
+    <table class="table mini">
+      <thead><tr><th>Task</th><th>Molecule</th><th>Completed focus</th><th>Evidence link</th></tr></thead>
+      <tbody>
+      {% include "partials/programs/workflow_completed_rows.html" %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,3 +1,519 @@
+## 2026-03-08 — v1.3.0d60
+Why:
+- Final consolidation pass to keep handoff/return-path handling centralized and descriptor-enabled ingestion surfaces maintainable.
+
+What:
+- Normalized data-entry return-path context through router-level handoff parsing:
+  - `psi/web/routers/data_records.py`
+    - `new_data(...)` now injects normalized `return_to` from `handoff_context`
+    - `edit_data(...)` now injects normalized `return_to` from `handoff_context`
+- Removed direct query-param reads from data form templates:
+  - `psi/web/templates/data/form.html` uses context `return_to`
+  - `psi/web/templates/partials/data/form_actions.html` uses context `return_to`
+- Result: handoff contract remains centralized in `psi/web/handoff_context.py` and templates stay presentation-only.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d59
+Why:
+- Continue template decomposition by extracting row-level workflow components and shared ingestion form actions.
+
+What:
+- Added workflow row partials:
+  - `psi/web/templates/partials/programs/workflow_recent_result_row.html`
+  - `psi/web/templates/partials/programs/workflow_recent_evidence_row.html`
+  - `psi/web/templates/partials/programs/workflow_interpretation_row.html`
+  - `psi/web/templates/partials/programs/workflow_awaiting_data_rows.html`
+  - `psi/web/templates/partials/programs/workflow_completed_rows.html`
+- Updated workflow partial assembly:
+  - `psi/web/templates/partials/programs/workflow_recent_learning.html`
+  - `psi/web/templates/partials/programs/workflow_interpretation_queue.html`
+  - `psi/web/templates/programs/workflow.html`
+- Added shared ingestion action partials:
+  - `psi/web/templates/partials/data/form_actions.html`
+  - `psi/web/templates/partials/evidence/form_actions.html`
+- Updated forms to consume shared action partials:
+  - `psi/web/templates/data/form.html`
+  - `psi/web/templates/evidence/form.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d58
+Why:
+- Reduce maintainability risk in dense workflow and ingestion templates by extracting reusable section partials while preserving behavior.
+
+What:
+- Decomposed `psi/web/templates/programs/workflow.html` with shared includes:
+  - `psi/web/templates/partials/programs/workflow_recent_learning.html`
+  - `psi/web/templates/partials/programs/workflow_interpretation_queue.html`
+  - `psi/web/templates/partials/programs/workflow_task_table.html`
+- Decomposed `psi/web/templates/data/form.html` into section partials:
+  - `psi/web/templates/partials/data/form_capture_context.html`
+  - `psi/web/templates/partials/data/form_core_fields.html`
+  - `psi/web/templates/partials/data/form_optional_context.html`
+- Decomposed `psi/web/templates/evidence/form.html` into section partials:
+  - `psi/web/templates/partials/evidence/form_context_cards.html`
+  - `psi/web/templates/partials/evidence/form_scope_fields.html`
+  - `psi/web/templates/partials/evidence/form_citation_section.html`
+  - `psi/web/templates/partials/evidence/form_inline_data_section.html`
+- No route/schema/DI behavior changes.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d57
+Why:
+- Harden claim/plan impact-elevation changes with explicit regression coverage for header-impact rollups.
+
+What:
+- Added tests:
+  - `tests/test_header_impact_rollups.py`
+    - validates claim detail `header_impact` contract keys,
+    - validates plan detail `header_impact` contract keys and execution activity rollup behavior.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d56
+Why:
+- Elevate recent-evidence and completed-work impact into claim/plan header summaries so interpretation priority is visible at first glance.
+
+What:
+- Extended claim detail service output in `psi/services/claims.py`:
+  - adds `header_impact` with:
+    - `recent_evidence_links`
+    - `recent_completed_work`
+    - `interpretation_pending`
+- Extended plan detail service output in `psi/services/plans.py`:
+  - adds `header_impact` with:
+    - `new_results_affecting_plan`
+    - `evidence_updates`
+    - `recent_execution_activity`
+- Updated header metric strips:
+  - `psi/web/templates/claims/detail.html`
+  - `psi/web/templates/plans/detail.html`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d55
+Why:
+- Complete workflow-center extraction pass by moving notice-context assembly out of template query parsing and into router/context plumbing.
+
+What:
+- Updated `psi/web/routers/programs.py::program_workflow_center`:
+  - now parses handoff flags via `handoff_context`,
+  - injects normalized `capture_notice` mapping into template context.
+- Simplified `psi/web/templates/programs/workflow.html`:
+  - removed inline query-param parsing,
+  - consumes shared `capture_notice` context directly.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d54
+Why:
+- Reduce router density in Program Workflow Center by extracting context assembly into a dedicated service.
+
+What:
+- Added `psi/services/workflow_center.py` with:
+  - `build_program_workflow_center(db, program_id=...)`
+  - deterministic assembly of:
+    - task buckets
+    - source rollup
+    - overdue/unassigned counts
+    - recent results/evidence
+    - interpretation queue
+- Refactored `psi/web/routers/programs.py::program_workflow_center` to delegate to service and keep router thin.
+- Added service tests:
+  - `tests/test_workflow_center_service.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d53
+Why:
+- Remove duplicated capture/update/re-entry messaging blocks by using one shared partial across workflow and scientific context pages.
+
+What:
+- Added shared partial:
+  - `psi/web/templates/partials/capture_notice.html`
+- Replaced duplicated notice blocks in:
+  - `psi/web/templates/data/detail.html`
+  - `psi/web/templates/evidence/detail.html`
+  - `psi/web/templates/programs/workflow.html`
+  - `psi/web/templates/programs/detail.html`
+  - `psi/web/templates/molecules/detail.html`
+- Added partial regression test:
+  - `tests/test_capture_notice_partial.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d52
+Why:
+- Complete handoff-context normalization by refactoring key routers to use shared parsing and redirect helpers.
+
+What:
+- Refactored handoff logic to `psi/web/handoff_context.py` in:
+  - `psi/web/routers/data_records.py`
+  - `psi/web/routers/evidence.py`
+  - `psi/web/routers/programs.py`
+- Replaced ad hoc query parsing/encoding with shared helpers:
+  - `get_handoff_context(...)`
+  - `build_return_url(...)`
+  - `with_query(...)`
+- Preserved behavior:
+  - task/data/evidence redirect flows remain deterministic,
+  - return-path support remains unchanged,
+  - capture/update flags still drive detail notices.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d51
+Why:
+- Begin workflow-closure consolidation by centralizing handoff context parsing and URL construction in one lightweight helper.
+
+What:
+- Added `psi/web/handoff_context.py`:
+  - `HandoffContext` dataclass
+  - `parse_handoff_context(...)`
+  - `get_handoff_context(request)`
+  - `build_handoff_query(...)`
+  - `with_query(...)`
+  - `build_return_url(...)`
+- Added tests:
+  - `tests/test_handoff_context.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d49
+Why:
+- Final workflow promotion pass: align navigation and cross-surface wording so workflow continuation reads as one coherent operating pattern.
+
+What:
+- Updated global and page-level terminology toward workflow coherence:
+  - `psi/web/templates/base.html` secondary nav `Lab Notebook` → `Results`.
+  - `psi/web/templates/data/list.html` retitled to **Experiment Results**.
+  - Program surfaces now use `Results` label in secondary actions:
+    - `psi/web/templates/programs/detail.html`
+    - `psi/web/templates/programs/board.html`
+    - `psi/web/templates/programs/workflow.html`
+- Normalized workflow-forward wording on ingestion detail surfaces:
+  - `psi/web/templates/data/detail.html`
+  - `psi/web/templates/evidence/detail.html`
+- Added workflow-nav coherence in descriptors:
+  - `psi/web/ui_surfaces.py` program workflow local-nav includes `Recent Learning` and `Awaiting Interpretation`.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d48
+Why:
+- Feed recent result/evidence signals back into claim and plan interpretation surfaces so scientific reasoning reflects newly captured learning.
+
+What:
+- Extended claim detail context in `psi/services/claims.py`:
+  - adds `recent_completed_linked_tasks` for recently done claim-linked tasks.
+- Extended plan detail context in `psi/services/plans.py`:
+  - adds `recent_completed_tasks`,
+  - adds `recent_evidence`,
+  - adds `evidence_by_record` mapping for task-linked data rows.
+- Updated interpretation templates:
+  - `psi/web/templates/claims/detail.html` adds **Recent Learning Cues** section.
+  - `psi/web/templates/plans/detail.html` adds **Recent Learning Feedback** section.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d47
+Why:
+- Improve scientific re-entry coherence across major workspaces after capture/update events.
+
+What:
+- Extended workflow local-nav consistency in `psi/web/ui_surfaces.py`:
+  - `program_workflow_surface` now includes anchors for:
+    - `Recent Learning`
+    - `Awaiting Interpretation`
+- Added lightweight post-capture notices:
+  - `psi/web/templates/molecules/detail.html` reacts to `captured`/`evidence` query flags.
+  - `psi/web/templates/programs/detail.html` reacts to `captured`/`evidence` query flags.
+  - Both surfaces emphasize returning to Program Workflow Center for continuation.
+- Added descriptor regression coverage:
+  - `tests/test_ui_surfaces.py` updated with workflow-nav assertions.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d46
+Why:
+- Improve post-capture scientific re-entry by making successful capture/update states explicit and linking users back to the right workflow context.
+
+What:
+- Updated capture redirects:
+  - `psi/web/routers/data_records.py::create_data` now appends `captured=1` and preserves handoff query semantics.
+  - `psi/web/routers/evidence.py::create_evidence` defaults to `?captured=1` detail redirect.
+  - `psi/web/routers/evidence.py::update_evidence` defaults to `?updated=1` detail redirect.
+- Extended detail contexts:
+  - `data_records.detail_data` now includes `captured` in `detail_handoff`.
+  - `evidence_detail` now includes `detail_handoff` flags (`captured`/`updated`/`return_to`).
+- Updated templates:
+  - `psi/web/templates/data/detail.html` notice now reflects successful capture state.
+  - `psi/web/templates/evidence/detail.html` adds capture/update re-entry notice with optional return link.
+- Added test:
+  - `tests/test_capture_reentry_notices.py`.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d45
+Why:
+- Normalize ingestion-surface terminology and descriptor framing so data/evidence pages read consistently in a scientist-first product voice.
+
+What:
+- Refined descriptor language in `psi/web/ui_surfaces.py`:
+  - `data_registry_surface` now frames as **Experiment Results** with scientist-oriented subtitle.
+  - `evidence_registry_surface` now frames as **Scientific Evidence** with interpretation-focused subtitle.
+  - Added richer archetype labels for data/evidence entry/detail surfaces to keep workflow/interpretation cues consistent.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d44
+Why:
+- Reduce ingestion friction by lowering visible form density and making optional sections more deliberate and scientist-readable.
+
+What:
+- Updated `psi/web/templates/data/form.html`:
+  - moved notes/files/audit reason into a progressive disclosure block,
+  - improved scientist-oriented labeling for optional context.
+- Updated `psi/web/templates/evidence/form.html`:
+  - converted inline data-record creation section into progressive disclosure,
+  - clarified inline scope wording.
+- Updated empty-state wording in `psi/web/templates/evidence/detail.html` for clearer traceability guidance.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d43
+Why:
+- Promote active interpretation work by surfacing recent results that still need evidence linkage.
+
+What:
+- Extended workflow route context in `psi/web/routers/programs.py`:
+  - computes `pending_interpretation` from recent program data records not cited by `EvidenceCitation`.
+- Added workflow interpretation queue section in `psi/web/templates/programs/workflow.html`:
+  - “Results Awaiting Interpretation” table with direct `Create evidence` actions.
+- Updated template regression coverage:
+  - `tests/test_program_workflow_recent_learning.py`.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d42
+Why:
+- Make recent results and evidence visible in the active workflow center so scientific learning is not buried as archival residue.
+
+What:
+- Extended workflow route context in `psi/web/routers/programs.py`:
+  - adds `recent_data_records` (latest program DataRecords),
+  - adds `recent_evidence` (latest program Evidence rows).
+- Added a `Recently Captured Learning` section to `psi/web/templates/programs/workflow.html`:
+  - recent results table with molecule links,
+  - recent evidence table with evidence detail links.
+- Added regression/template coverage:
+  - `tests/test_program_workflow_recent_learning.py`.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d41
+Why:
+- Complete handoff closure by carrying explicit post-capture intent into data detail and preserving deterministic return paths.
+
+What:
+- Updated `psi/web/routers/data_records.py`:
+  - `create_data` now accepts `return_to` and redirects with handoff query hints:
+    - `return_to`
+    - `from_task=1` + `next=evidence` when task-linked
+  - `detail_data` now passes `detail_handoff` context from query params.
+- Updated `psi/web/templates/data/detail.html`:
+  - top-level handoff notice with task-linked completion cue,
+  - recommended next-step language,
+  - optional return-to-prior-context link.
+- Added test coverage:
+  - `tests/test_data_handoff_redirects.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d40
+Why:
+- Strengthen task→data→evidence closure by preserving explicit origin and return-path context across launch points.
+
+What:
+- Updated task-start redirect in `psi/web/routers/programs.py` (`create_task_and_start_data_entry`) to include:
+  - `source=board`
+  - `return_to=/programs/{program_id}/workflow`
+- Updated workflow/data launch links to preserve context:
+  - `psi/web/templates/programs/workflow.html` (awaiting-data links include `source=workflow` + `return_to`)
+  - `psi/web/templates/programs/board.html` (missing-measurement links include `source=board` + `return_to`)
+  - `psi/web/templates/molecules/detail.html` (data entry links include `source=molecule` + return anchors)
+- Updated evidence launch from data detail to preserve return path:
+  - `psi/web/templates/data/detail.html` adds `return_to=/data/{record_id}` on evidence CTAs.
+- Added regression coverage:
+  - `tests/test_workflow_data_handoff_links.py`
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d39
+Why:
+- Improve evidence linkage ergonomics by preserving return paths and making context re-entry deterministic after evidence capture.
+
+What:
+- Added explicit return-path handling in `psi/web/routers/evidence.py`:
+  - `new_evidence` accepts `return_to` query param and passes it to template context.
+  - `create_evidence` / `update_evidence` accept `return_to` form field and redirect there when provided.
+  - `edit_evidence` preserves `return_to` from query params.
+- Updated `psi/web/templates/evidence/form.html`:
+  - hidden `return_to` propagation,
+  - clear “Return to Prior Context” secondary action when provided,
+  - cancel behavior respects return path,
+  - clarified citation linkage messaging.
+- Added regression coverage in `tests/test_evidence_form_return_path.py`.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d38
+Why:
+- Start evidence-surface reframing so evidence capture and review are clearly scientific interpretation workflows tied to data and execution context.
+
+What:
+- Added evidence descriptor builders in `psi/web/ui_surfaces.py`:
+  - `evidence_entry_surface(...)`
+  - `evidence_detail_surface(...)`
+- Wired evidence routes to pass descriptor context in `psi/web/routers/evidence.py`:
+  - `new_evidence`, `edit_evidence`, `evidence_detail`
+- Reframed evidence templates:
+  - `psi/web/templates/evidence/form.html` now has structured top-of-page context + next-step guidance.
+  - `psi/web/templates/evidence/detail.html` now uses shared header/surface framing, clearer return links, and demoted audit disclosure.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d37
+Why:
+- Complete the initial data-surface reframing with stronger handoff visibility and clearer next-step guidance for scientists capturing results.
+
+What:
+- Extended data entry route context in `psi/web/routers/data_records.py`:
+  - added optional `source` query param support
+  - added `handoff_source` context to clarify arrival path.
+- Improved data entry template workflow framing in `psi/web/templates/data/form.html`:
+  - added capture-context panel and explicit “What Happens Next” panel.
+- Improved data detail template re-entry framing in `psi/web/templates/data/detail.html`:
+  - added workflow re-entry action block and recommended next-step evidence CTA near top.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
+## 2026-03-08 — v1.3.0d36
+Why:
+- Start the workflow-closure chain by reframing data entry/detail as scientist result-capture surfaces with explicit context and next-step guidance.
+
+What:
+- Added descriptor builders in `psi/web/ui_surfaces.py`:
+  - `data_entry_surface(...)`
+  - `data_detail_surface(...)`
+- Wired data routes to pass descriptor context:
+  - `psi/web/routers/data_records.py` (`new_data`, `edit_data`, `detail_data`)
+- Reframed data templates with shared header/surface chrome and workflow cues:
+  - `psi/web/templates/data/form.html`
+  - `psi/web/templates/data/detail.html`
+  - Top-of-page now emphasizes task/program/molecule context and expected next steps (evidence creation + workflow return).
+  - Demoted audit in data detail into progressive disclosure.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+
 ## 2026-03-03 — v1.3.0b5
 Why:
 - Harden fact-sheet replay guardrails with explicit schema/ordering invariants and prevent regressions where view-time DB dependence could re-enter molecule board rendering.
@@ -12381,6 +12897,714 @@ Behavior:
 - Added localStorage-backed persistence for board filter state (`filter`, `q`, `owner`, `urgency`, `task_status`, `due`) keyed by program.
 - Added deterministic restoration wiring on board load and persistence hooks on form submit/filter-link click.
 - Added template-level regression test for persistence script presence.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d1
+Intent:
+- Establish shared scientist-first UI shell primitives and global IA scaffolding for d-series redesign work.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/base.html`
+- `psi/web/templates/partials/page_header.html`
+
+Behavior:
+- Refined nav hierarchy into primary workflow destinations vs utility destinations while preserving all existing routes.
+- Clarified `/portfolio` label as “Portfolio Intelligence” and kept legacy `/portfolios` accessible as a legacy utility link.
+- Added reusable CSS primitives for page headers, summary strips, attention panels, action hierarchy, local subnav, section priority tiers, and progressive disclosure styling.
+- Added reusable `partials/page_header.html` scaffold for consistent page top zones in subsequent patches.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d2
+Intent:
+- Standardize top-of-page scientist working frame (identity, status, key metrics, and action hierarchy) across core PSI surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/claims/detail.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/plans/detail.html`
+- `psi/web/templates/portfolio/overview.html`
+- `psi/web/templates/programs/board.html`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Added consistent page-header scaffold usage on molecule, program detail, program board, portfolio overview, claim detail, and plan detail.
+- Introduced top-of-page “What Matters Now” summaries tied to existing deterministic read-model signals on each target page.
+- Separated top-level actions into primary vs secondary clusters without removing existing lower-page controls.
+- Preserved existing route behaviors/forms while improving page identity and immediate next-step framing.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d3
+Intent:
+- Add shared section hierarchy and progressive disclosure affordances to reduce large-page scan burden while preserving determinism and route behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/claims/detail.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/plans/detail.html`
+- `psi/web/templates/portfolio/overview.html`
+- `psi/web/templates/programs/board.html`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Added local section-jump subnav on major pages to improve orientation and faster navigation within long surfaces.
+- Applied shared section-priority classes (`section-primary`, `section-workflow`, `section-secondary`, `section-technical`) to key blocks.
+- Added lightweight progressive disclosure treatment for molecule audit history and board filter controls using native semantic containers.
+- Demoted governance/technical-heavy regions visually without removing access or changing underlying data semantics.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d4
+Intent:
+- Finalize shared IA consistency and readability polish for the d-series foundation before deeper page decomposition work.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/claims/detail.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/plans/detail.html`
+- `psi/web/templates/portfolio/overview.html`
+- `psi/web/templates/programs/board.html`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Normalized cross-page intent framing with consistent “page intent” lines on major scientist-facing pages.
+- Improved empty/low-data readability with shared empty-state table treatment on touched surfaces.
+- Added minor hierarchy polish (focus styling, section heading spacing) to reinforce the shared header/section/action grammar.
+- Clarified portfolio overview terminology directly on `/portfolio` as the canonical intelligence surface.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d5
+Intent:
+- Stabilize global shell/nav layout so primary and utility navigation render in a clean, intentional desktop structure.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/base.html`
+
+Behavior:
+- Refactored nav shell into explicit main row (brand + primary nav) and utility row (secondary nav).
+- Strengthened nav layout CSS with non-wrapping nav chips, row-level flex alignment, and controlled horizontal overflow handling.
+- Preserved d-series IA intent and route paths while fixing visual bunching/collapse behavior.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d6
+Intent:
+- Reset molecule page top-level hierarchy into a scientist cockpit with a dominant working lane.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/molecules/detail.html`
+
+Behavior:
+- Added a dedicated molecule top-zone “Scientist Working Lane” summarizing current state, key blocker/signal, open work, and immediate next actions.
+- Added focused top-lane execution links (top plan/claim, tasks, trajectory) while preserving all existing molecule functionality.
+- Demoted legacy mixed top block visually so it no longer competes with cockpit-level orientation.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d7
+Intent:
+- Introduce explicit molecule page section architecture and local navigation to break the mega-page into conceptual scientist zones.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+
+Behavior:
+- Replaced molecule local subnav with conceptual zone jumps: Overview, Execution, Scientific Rationale, Evidence & Data, Sequence & Annotations, History & Audit.
+- Added explicit section-zone headers and anchor IDs to group existing molecule content into clearer conceptual lanes.
+- Preserved existing routes, forms, and content while improving orientation and page-level mental model.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d8
+Intent:
+- Layer molecule progressive disclosure and technical demotion so critical scientific signal remains primary while deep traceability stays accessible.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+
+Behavior:
+- Converted secondary technical sections (trajectory graph, governance detail) into standardized disclosure panels.
+- Added dense-table wrappers to decision history, pending evidence preview, and recent evidence sections for improved scanability on long records.
+- Preserved always-visible top signal and execution context while reducing visual competition from technical detail blocks.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d9
+Intent:
+- Make molecule execution workflow explicit and consolidate next-step communication around a visible loop.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+
+Behavior:
+- Added a dedicated molecule “Workflow Loop” zone near the top mapping Evidence → Claim → Plan → Task → Experiment → Evidence.
+- Added consolidated execution entry points (data entry, task creation from suggestion, plan creation, claim creation, evidence review) in one top-level cluster.
+- Extended molecule local subnav with direct jump to workflow loop for faster scientist orientation.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d10
+Intent:
+- Final molecule cockpit consistency polish to consolidate hierarchy, tighten labels, and improve low-data readability.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+
+Behavior:
+- Reduced redundant top-level emphasis by reframing the legacy top block as “Detailed Molecule Controls.”
+- Added quick utility links in Sequence & Annotations zone for editor/annotations/files navigation.
+- Improved remaining empty-state readability in touched trajectory/governance tables using shared empty-state treatment.
+- Preserved all existing molecule actions and scientific surfaces while improving internal consistency.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d11
+Intent:
+- Start program detail strategy rewrite by introducing an explicit strategic top frame before operational depth.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Added a top “Program State” section with stage, active molecules, open tasks, key blockers, and recent evidence signals.
+- Added an “Attention Now” strip summarizing blocked molecules, missing evidence pressure, urgent claims, and ready plans/tasks.
+- Kept all prior program detail functionality intact while improving strategic orientation at the top.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d12
+Intent:
+- Add explicit scientific-priority and execution-entry framing to program detail before deep mixed sections.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Added “Scientific Priorities” with top molecule focus and claim/plan posture summary.
+- Added “Execution Links” card with clear board/task/data entry points.
+- Preserved existing section content while making strategy and execution bridges more immediately visible near the top.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d13
+Intent:
+- Continue program strategy rewrite by demoting deep technical/governance sections and improving in-page orientation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Expanded program local subnav with direct links to strategy and secondary/governance anchors.
+- Added “Secondary Operations & Governance” separator before review queue and administrative depth.
+- Moved DI snapshot lineage and audit surfaces into explicit progressive-disclosure containers with technical demotion styling.
+- Preserved all existing data and controls while reducing visual competition with strategic top sections.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d14
+Intent:
+- Strengthen strategic decision visibility on program detail with an explicit prioritized molecule posture view.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Added a top-level “Priority Molecules” table (role, status, blocker, evidence freshness) near strategic sections.
+- Kept existing molecule status board content intact while surfacing key molecule posture where strategy decisions are made.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d15
+Intent:
+- Complete program strategy rewrite pass by demoting non-primary registry/evidence operations into secondary disclosure.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+
+Behavior:
+- Grouped governance membership, molecule status board, evidence mapping, and recent registry/activity blocks into a secondary progressive-disclosure section.
+- Preserved all existing controls and tables while reducing competition with strategic “Program State / Attention / Priorities / Execution Links” zones.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d16
+Intent:
+- Start program board operational rewrite with clearer card-level signal hierarchy.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/programs/board.html`
+
+Behavior:
+- Updated board card anatomy emphasis to foreground molecule identity, stage/status, blocker, top next action, and open task signal.
+- Added explicit evidence freshness line per card (using available row fields where present).
+- Added board card styling for improved column scanability without changing card actions or route behavior.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d17
+Intent:
+- Reduce board card action overload by separating one primary CTA from secondary actions.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/programs/board.html`
+
+Behavior:
+- Added a dedicated primary card action per molecule row.
+- Moved secondary card actions into a `More actions` disclosure block.
+- Preserved all prior actions while reducing default inline action density for faster board scanning.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d18
+Intent:
+- Complete board operational scanability pass by strengthening column structure and card density consistency.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/programs/board.html`
+
+Behavior:
+- Added consistent board-column classing across READY/FAILED/MISSING/NOT_EVALUATED sections.
+- Tightened board column list/card spacing to improve scan speed across molecule groups.
+- Preserved existing grouping logic and actions while improving operational readability.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d19
+Intent:
+- Introduce a coherent program-level workflow center that aggregates execution state into one scientist-facing surface.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/workflow.html`
+
+Behavior:
+- Added `/programs/{program_id}/workflow` as a program workflow center.
+- Aggregated existing ExperimentTasks into deterministic buckets: ready to start, in progress, blocked, awaiting data entry, recently completed.
+- Preserved existing task semantics and linked actions to current task/data-entry routes without introducing new persistence concepts.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d20
+Intent:
+- Strengthen workflow center integration so execution context is shared across strategy, board, and task-origin surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/board.html`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/programs/workflow.html`
+
+Behavior:
+- Added explicit Workflow Center entry points on program detail and board surfaces.
+- Added task-origin rollup and per-task origin context in workflow center to unify board/claim/plan/molecule/manual inflows.
+- Preserved all existing task actions while making program-level execution posture easier to navigate.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d21
+Intent:
+- Complete the program workflow/task center pass with explicit bottleneck signals and stronger cross-page execution consistency.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/programs/workflow.html`
+
+Behavior:
+- Added workflow-center attention metrics for overdue open tasks, unassigned open tasks, awaiting data entry, and recently completed work.
+- Kept deterministic task bucketing while adding operational posture visibility for daily triage.
+- Promoted Workflow Center as a primary action on program detail for a clearer strategy→execution handoff.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d22
+Intent:
+- Start the portfolio prioritization pass by moving attention-first signals to the top of the portfolio overview.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/portfolio/overview.html`
+
+Behavior:
+- Added a top-level Portfolio Attention Dashboard with programs needing attention, blocked programs, evidence gap burden, active experiments, and latest-week result count.
+- Added quick-link actions from the attention area into program prioritization, evidence gaps, and timeline sections.
+- Preserved existing portfolio analytics while making near-term triage posture immediately visible.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d23
+Intent:
+- Complete the portfolio prioritization pass by demoting deep analytics/reporting blocks behind a secondary disclosure.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/portfolio/overview.html`
+
+Behavior:
+- Wrapped lower-priority portfolio analytics (leaderboards, timelines, trajectory, claim/plan deep insight blocks) into a unified `Deep Analytics and Reports` progressive-disclosure section.
+- Kept attention dashboard, summary, narrative, task status, and program prioritization table directly visible for command-surface usage.
+- Preserved all links and data surfaces while reducing default cognitive load.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d24
+Intent:
+- Improve claim/plan interpretation readability by presenting scientific meaning before lifecycle and execution controls.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/claims/detail.html`
+- `psi/web/templates/plans/detail.html`
+
+Behavior:
+- Claim detail now leads with a dedicated Scientific Interpretation block, followed by maturity/evidence context, then explicit lifecycle actions.
+- Plan detail now leads with Plan Interpretation (rationale + expected gains), then ordered steps, then execution actions.
+- Preserved existing transitions/instantiate operations while reordering hierarchy toward scientific interpretation-first reading.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d25
+Intent:
+- Apply a cross-page archetype consistency pass so overview/workspace/operational surfaces share clearer hierarchy language.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/static/style.css`
+- `psi/web/templates/claims/detail.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/plans/detail.html`
+- `psi/web/templates/portfolio/overview.html`
+- `psi/web/templates/programs/board.html`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/programs/workflow.html`
+
+Behavior:
+- Added shared archetype cue styling (`page-archetype-bar`, `page-archetype-chip`) to normalize page-type framing.
+- Applied archetype cue strips across molecule, program strategy, board/workflow operations, portfolio overview, claim, and plan pages.
+- Kept all existing routes and behaviors intact while making page purpose/hierarchy more consistent.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d26
+Intent:
+- Introduce a lightweight server-side surface descriptor foundation for consistent page-role metadata.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/ui_surfaces.py`
+- `tests/test_ui_surfaces.py`
+
+Behavior:
+- Added `ui_surfaces` helpers for deterministic descriptor dictionaries and normalized surface kinds (`overview`, `workspace`, `operational`, `workflow`, `registry`).
+- Added small helper for local-nav items.
+- Added unit tests validating descriptor shape and deterministic defaults.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d27
+Intent:
+- Integrate surface descriptors into major scientist-facing surfaces for consistent archetype and local navigation framing.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/claims.py`
+- `psi/web/routers/molecules.py`
+- `psi/web/routers/plans.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/claims/detail.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/partials/page_header.html`
+- `psi/web/templates/plans/detail.html`
+- `psi/web/templates/portfolio/overview.html`
+- `psi/web/templates/programs/board.html`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/programs/workflow.html`
+- `psi/web/ui_surfaces.py`
+
+Behavior:
+- Added route-level descriptor injection for program detail/board/workflow, molecule detail, portfolio overview, claim detail, and plan detail.
+- Added descriptor builders for those surfaces (`program_*`, `molecule_detail`, `portfolio_overview`, `claim_detail`, `plan_detail`).
+- Updated templates to consume descriptor-driven archetype labels and local subnav with safe fallback behavior.
+- Updated shared page header partial to support descriptor fallback title/subtitle/eyebrow when explicit page fields are absent.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d28
+Intent:
+- Start registry/list modernization by descriptor-enabling key index routes and applying consistent page-header grammar.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/batches.py`
+- `psi/web/routers/data_records.py`
+- `psi/web/routers/evidence.py`
+- `psi/web/routers/files.py`
+- `psi/web/routers/molecules.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/batches/list.html`
+- `psi/web/templates/claims/list.html`
+- `psi/web/templates/data/list.html`
+- `psi/web/templates/evidence/list.html`
+- `psi/web/templates/files/list.html`
+- `psi/web/templates/molecules/list.html`
+- `psi/web/templates/plans/list.html`
+- `psi/web/templates/programs/list.html`
+- `psi/web/ui_surfaces.py`
+
+Behavior:
+- Added registry descriptor builders for programs, molecules, claims, plans, data, evidence, files, and batches.
+- Injected descriptor context into list routes.
+- Upgraded list pages to use shared header/action/metric structure and archetype cues.
+- Improved low-data messaging with clearer empty-state wording on modernized registries.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d29
+Intent:
+- Complete registry/list modernization pass by aligning remaining list surfaces and clarifying legacy portfolio positioning.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/portfolios.py`
+- `psi/web/routers/reports.py`
+- `psi/web/templates/portfolios/list.html`
+- `psi/web/templates/reports/list.html`
+- `psi/web/ui_surfaces.py`
+
+Behavior:
+- Added descriptor builders for reports registry and legacy portfolios registry.
+- Descriptor-enabled reports and legacy portfolios list routes.
+- Modernized reports and legacy portfolios list templates with shared page header scaffolding and archetype cues.
+- Clarified `/portfolio` as primary intelligence surface while retaining `/portfolios` as legacy CRUD surface.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d30
+Intent:
+- Start builder alignment pass by descriptor-enabling builder routes and adopting shared page-header/archetype framing.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/cdr_builder.html`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/index.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/builder/suggested_task_new.html`
+- `psi/web/templates/builder/variant_set.html`
+- `psi/web/templates/builder/variant_set_detail.html`
+- `psi/web/ui_surfaces.py`
+
+Behavior:
+- Added builder surface descriptor builders (home, clone, point mutation, CDR, variant set, variant family detail, suggested task handoff).
+- Injected descriptor context into builder template responses.
+- Updated builder templates with shared page header and archetype cues to align with overall PSI page language.
+- Improved suggested-task handoff with direct link to program workflow center.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d31
+Intent:
+- Complete builder alignment with explicit context→draft→next-action flow and stronger workflow-center handoff cues.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/cdr_builder.html`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/builder/variant_set.html`
+- `psi/web/templates/builder/variant_set_detail.html`
+
+Behavior:
+- Added standardized `Next Actions` workflow panels to major builder draft/result pages.
+- Added explicit links into program workflow center and board when program context exists.
+- Improved builder execution continuity so generated drafts naturally hand off to operational surfaces.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d32
+Intent:
+- Normalize workflow entry wording and high-value handoff links across major surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/suggested_task_new.html`
+- `psi/web/templates/claims/detail.html`
+- `psi/web/templates/data/form.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/plans/detail.html`
+- `psi/web/templates/programs/board.html`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/ui_surfaces.py`
+
+Behavior:
+- Standardized key CTA wording to `Open Program Workflow Center`.
+- Added/strengthened direct workflow-center links on molecule, claim, plan, builder task-handoff, and data-entry task-context surfaces.
+- Switched linked task navigation on claim/plan detail toward workflow center for consistent task-lifecycle context.
+- Updated descriptor nav labels to align with normalized workflow terminology.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d33
+Intent:
+- Tighten workflow return-path coherence and descriptor-based navigation continuity across claim/plan/builder surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/routers/claims.py`
+- `psi/web/routers/plans.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/ui_surfaces.py`
+
+Behavior:
+- Preserved molecule task-action context by redirecting task state changes back to `#operational-tasks`.
+- Extended claim/plan surface descriptors to include direct `Program Workflow Center` local-nav entries when program context exists.
+- Updated claim/plan route descriptor injection to pass program context explicitly.
+- Removed placeholder workflow nav in builder suggested-task descriptor and replaced with concrete program workflow link.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d34
+Intent:
+- Run secondary terminology and framing cleanup to keep scientist-facing language consistent across touched surfaces.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/base.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/programs/workflow.html`
+- `psi/web/ui_surfaces.py`
+
+Behavior:
+- Renamed secondary nav cluster label from `Utilities` to `Supporting Surfaces`.
+- Normalized workflow page naming to `Program Workflow Center`.
+- Clarified deprecated legacy YAML entry points on molecule surfaces.
+- Refined legacy portfolio descriptor wording toward compatibility framing.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0d35
+Intent:
+- Consolidate d26–d34 UX plumbing into cleaner reusable template chrome and consistent descriptor consumption.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/builder/cdr_builder.html`
+- `psi/web/templates/builder/clone.html`
+- `psi/web/templates/builder/index.html`
+- `psi/web/templates/builder/point_mutation.html`
+- `psi/web/templates/builder/suggested_task_new.html`
+- `psi/web/templates/builder/variant_set.html`
+- `psi/web/templates/builder/variant_set_detail.html`
+- `psi/web/templates/partials/surface_chrome.html`
+
+Behavior:
+- Added shared `partials/surface_chrome.html` to render descriptor-based archetype cues + local subnav consistently.
+- Replaced repeated inline archetype/local-nav snippets across builder surfaces with the shared partial.
+- Preserved existing builder behavior while reducing duplication and making descriptor usage more maintainable.
 
 Gates:
 - PASS

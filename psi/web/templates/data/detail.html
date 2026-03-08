@@ -2,24 +2,59 @@
 {% block title %}Data {{ record.id }} | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-    <div>
-      <h1>{{ record.title }}</h1>
-      <p class="muted">{{ record.domain }} • {{ record.data_type }}/{{ record.method }}</p>
-      <p class="muted">
-        Program: <a href="/programs/{{ record.program.id }}">{{ record.program.name }}</a>
-        {% if record.molecule %} • Molecule: <a href="/molecules/{{ record.molecule.id }}">{{ record.molecule.primary_id }}</a>{% endif %}
-        {% if record.batch %} • Batch: <a href="/batches/{{ record.batch.id }}">{{ record.batch.batch_id }}</a>{% endif %}
-        {% if record.run_date %} • Run date: {{ record.run_date }}{% endif %}
-      </p>
+  {% set page_eyebrow = "Result Review" %}
+  {% set page_title = record.title %}
+  {% set page_subtitle = record.domain ~ " • " ~ record.data_type ~ "/" ~ record.method %}
+  {% set page_primary_actions = [
+    {"href": "/evidence/new?program_id=" ~ record.program_id ~ (("&molecule_id=" ~ record.molecule_id) if record.molecule_id else "") ~ (("&batch_id=" ~ record.batch_id) if record.batch_id else "") ~ ("&return_to=/data/" ~ record.id), "label": "Create Evidence (cite this)"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/data/" ~ record.id ~ "/edit", "label": "Edit"},
+    {"href": "/programs/" ~ record.program.id ~ "/workflow", "label": "Continue in Program Workflow Center"},
+    {"href": "/programs/" ~ record.program.id, "label": "Back to Program"}
+  ] %}
+  {% if record.molecule %}
+    {% set page_secondary_actions = page_secondary_actions + [{"href": "/molecules/" ~ record.molecule.id, "label": "Open Molecule Workspace"}] %}
+  {% endif %}
+  {% set page_metrics = [
+    {"label": "Record ID", "value": ("#" ~ record.id)},
+    {"label": "Program", "value": record.program.name},
+    {"label": "Run Date", "value": (record.run_date if record.run_date else "not set")},
+    {"label": "Cited by Evidence", "value": (evidence_citing|length)}
+  ] %}
+  {% set page_matters_now = [
+    "Review extracted measurements and QC state for this run.",
+    "Create evidence if this result supports or contradicts a claim.",
+    "Return to program workflow to continue active experimental work."
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% include "partials/surface_chrome.html" %}
+  <div class="page-intent-line">Captured result context: Program <a href="/programs/{{ record.program.id }}">{{ record.program.name }}</a>{% if record.molecule %} • Molecule <a href="/molecules/{{ record.molecule.id }}">{{ record.molecule.primary_id }}</a>{% endif %}{% if record.batch %} • Batch <a href="/batches/{{ record.batch.id }}">{{ record.batch.batch_id }}</a>{% endif %}.</div>
+  {% set capture_notice = {
+    "captured": (detail_handoff.captured if detail_handoff is defined and detail_handoff else false),
+    "from_task": (detail_handoff.from_task if detail_handoff is defined and detail_handoff else false),
+    "next_step": (detail_handoff.next if detail_handoff is defined and detail_handoff else ""),
+    "return_to": (detail_handoff.return_to if detail_handoff is defined and detail_handoff else ""),
+    "message": ("" if detail_handoff is defined and detail_handoff and detail_handoff.next == "evidence" else "Review this result and continue the scientific loop.")
+  } %}
+  {% include "partials/capture_notice.html" %}
+  <div class="grid cols-2" style="margin-top:10px;">
+    <div class="card section-card section-workflow" style="margin:0;">
+      <h3 style="margin-top:0;">Workflow Re-entry</h3>
+      <div class="action-bar-utility no-print">
+        <a class="btn mini primary" href="/programs/{{ record.program.id }}/workflow">Continue in Program Workflow Center</a>
+        {% if record.molecule %}<a class="btn mini" href="/molecules/{{ record.molecule.id }}">Open Molecule Workspace</a>{% endif %}
+        <a class="btn mini" href="/programs/{{ record.program.id }}/board">Open Board</a>
+      </div>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
-      <a class="btn" href="/data/{{ record.id }}/edit">Edit</a>
-      <a class="btn primary" href="/evidence/new?program_id={{ record.program_id }}{% if record.molecule_id %}&molecule_id={{ record.molecule_id }}{% endif %}{% if record.batch_id %}&batch_id={{ record.batch_id }}{% endif %}">Create Evidence (cite this)</a>
+    <div class="card section-card section-primary" style="margin:0;">
+      <h3 style="margin-top:0;">Recommended Next Step</h3>
+      <div class="mini">If this run changes scientific posture, create evidence and cite this data record.</div>
+      <div style="margin-top:8px;" class="no-print"><a class="btn mini primary" href="/evidence/new?program_id={{ record.program_id }}{% if record.molecule_id %}&molecule_id={{ record.molecule_id }}{% endif %}{% if record.batch_id %}&batch_id={{ record.batch_id }}{% endif %}&return_to=/data/{{ record.id }}">Create Evidence from This Result</a></div>
     </div>
   </div>
 
-  <div class="grid cols-2">
+  <div class="grid cols-2 section-card section-secondary" style="margin-top:10px;">
     <div>
       <h2>Structured results</h2>
       <pre>{{ (record.results_json or '{}') }}</pre>
@@ -30,7 +65,7 @@
     </div>
   </div>
 
-<h2>Extracted measurements</h2>
+<h2 id="measurements">Extracted measurements</h2>
 <p class="muted">These rows are generated from Results/Parameters and used by the wide exporter. QC actions are append-only and attributed.</p>
 <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 10px 0;">
   <form method="post" action="{{ request.url_for('approve_record_qc', record_id=record.id) }}" style="display:inline;">
@@ -144,7 +179,7 @@
   <p class="muted">No extracted measurements found for this record.</p>
 {% endif %}
 
-  <h2>Evidence Preview</h2>
+  <h2 id="evidence-preview">Evidence Preview</h2>
   {% set ep = evidence_preview if evidence_preview is defined and evidence_preview else {} %}
   {% set ep_counts = ep.counts if ep is mapping and ep.counts is defined and ep.counts else {} %}
   {% if ep and ep.rows is defined and ep.rows and ep.rows|length %}
@@ -170,10 +205,10 @@
   {% endif %}
 
 
-  <h2>Notes</h2>
+  <h2 id="notes">Notes</h2>
   <pre>{{ record.notes or '' }}</pre>
 
-  <h2>Files</h2>
+  <h2 id="files">Files</h2>
   <table class="table">
     <thead><tr><th>Filename</th><th>SHA256</th><th>Size</th></tr></thead>
     <tbody>
@@ -190,7 +225,7 @@
     </tbody>
   </table>
 
-  <h2>Cited by evidence</h2>
+  <h2 id="citations">Cited by evidence</h2>
   <ul>
     {% for e in evidence_citing %}
       <li><a href="/evidence/{{ e.id }}">{{ e.evidence_type }}</a> <span class="muted">({{ e.domain }}, strength {{ e.strength }})</span></li>
@@ -199,7 +234,9 @@
     {% endfor %}
   </ul>
 
-  <h2>Audit</h2>
+  <details class="progressive-disclosure audit-demoted" id="audit">
+    <summary>Audit</summary>
   {% include "partials/audit_table.html" %}
+  </details>
 </div>
 {% endblock %}

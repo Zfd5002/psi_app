@@ -1,0 +1,10 @@
+<div style="display:flex;gap:10px;flex-wrap:wrap;">
+  <button class="btn primary" type="submit">Save Evidence</button>
+  {% if return_to is defined and return_to %}
+    <a class="btn" href="{{ return_to }}">Cancel</a>
+  {% elif ev %}
+    <a class="btn" href="/evidence/{{ ev.id }}">Cancel</a>
+  {% else %}
+    <a class="btn" href="/evidence">Cancel</a>
+  {% endif %}
+</div>

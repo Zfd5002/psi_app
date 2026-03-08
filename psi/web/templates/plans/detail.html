@@ -2,18 +2,151 @@
 {% block title %}Plan #{{ plan.id }} | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Scientific Plan</h1>
-  <div><b>Title:</b> {{ plan.title }}</div>
-  <div><b>Type:</b> {{ plan.plan_type|humanize_state }}</div>
-  <div><b>Status:</b> {{ plan.status|humanize_state }}</div>
-  <div><b>Scope:</b> {{ plan.scope_type|humanize_state }}</div>
-  {% if plan.program_id %}<div><b>Program:</b> <a href="/programs/{{ plan.program_id }}">#{{ plan.program_id }}</a></div>{% endif %}
-  {% if plan.molecule_id %}<div><b>Molecule:</b> <a href="/molecules/{{ plan.molecule_id }}">#{{ plan.molecule_id }}</a></div>{% endif %}
-  {% if plan.claim_id %}<div><b>Claim:</b> <a href="/claims/{{ plan.claim_id }}">#{{ plan.claim_id }}</a></div>{% endif %}
-  <div><b>Rationale:</b> {{ plan.rationale or "" }}</div>
-  <div><b>Expected gains:</b> Readiness {{ "%.2f"|format(plan.expected_readiness_gain or 0.0) }} · Claim support {{ "%.2f"|format(plan.expected_claim_support_gain or 0.0) }} · Evidence coverage {{ "%.2f"|format(plan.expected_evidence_coverage_gain or 0.0) }}</div>
-  {% if plan_score is defined %}<div><b>Plan score:</b> {{ "%.3f"|format(plan_score) }} · <b>Effort:</b> {{ effort_estimate if effort_estimate is defined else 0 }}</div>{% endif %}
-  <div class="no-print" style="margin-top:8px;">
+  {% set page_eyebrow = "Scientific Work Plan" %}
+  {% set page_title = plan.title %}
+  {% set page_subtitle = plan.rationale or "Deterministic plan linking trajectory, claims, and execution context." %}
+  {% set page_statuses = [
+    "Status: " ~ (plan.status|humanize_state),
+    "Type: " ~ (plan.plan_type|humanize_state),
+    "Scope: " ~ (plan.scope_type|humanize_state)
+  ] %}
+  {% set plan_context_href = ("/molecules/" ~ plan.molecule_id) if plan.molecule_id else ("/programs/" ~ plan.program_id) %}
+  {% set plan_context_label = "Molecule Context" if plan.molecule_id else "Program Context" %}
+  {% set page_primary_actions = [
+    {"href": "/plans", "label": "All Plans"},
+    {"href": plan_context_href, "label": plan_context_label}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/programs/" ~ plan.program_id ~ "/workflow", "label": "Open Program Workflow Center"},
+    {"href": ("/claims/" ~ plan.claim_id) if plan.claim_id else "/claims", "label": "Claim Context"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Readiness Gain", "value": "%.2f"|format(plan.expected_readiness_gain or 0.0)},
+    {"label": "Claim Support Gain", "value": "%.2f"|format(plan.expected_claim_support_gain or 0.0)},
+    {"label": "Evidence Coverage Gain", "value": "%.2f"|format(plan.expected_evidence_coverage_gain or 0.0)},
+    {"label": "New Results Affecting Plan", "value": (header_impact.new_results_affecting_plan if header_impact is defined and header_impact else 0)},
+    {"label": "Evidence Updates", "value": (header_impact.evidence_updates if header_impact is defined and header_impact else 0)},
+    {"label": "Recent Execution Activity", "value": (header_impact.recent_execution_activity if header_impact is defined and header_impact else 0)},
+    {"label": "Plan Score", "value": ("%.3f"|format(plan_score) if plan_score is defined else "—")}
+  ] %}
+  {% set page_matters_now = [
+    "Confirm plan status and instantiate only the steps needed now",
+    "Prioritize highest expected gains with manageable execution effort",
+    "Track step-to-task linkage to keep execution visible",
+    "Plan generation is read-model guidance; evidence still comes from recorded experiments"
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
+  {% if sf_labels %}
+    <div class="page-archetype-bar">
+      {% for lbl in sf_labels %}
+        <span class="page-archetype-chip{% if loop.index0 == 1 %} is-active{% endif %}">{{ lbl }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
+  <div class="local-subnav no-print">
+    {% if sf_nav %}
+      {% for item in sf_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}
+    {% else %}
+      <a href="#plan-interpretation">Interpretation</a>
+      <a href="#plan-steps">Ordered Steps</a>
+      <a href="#plan-actions">Actions</a>
+    {% endif %}
+  </div>
+  <div class="page-intent-line">Planning is recommendation state; execution happens only when steps are explicitly instantiated into tasks.</div>
+
+  <div class="card section-card section-primary" id="plan-interpretation" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Scientific Plan Interpretation</h3>
+    <div><b>Title:</b> {{ plan.title }}</div>
+    <div><b>Type:</b> {{ plan.plan_type|humanize_state }}</div>
+    <div><b>Status:</b> {{ plan.status|humanize_state }}</div>
+    <div><b>Scope:</b> {{ plan.scope_type|humanize_state }}</div>
+    {% if plan.program_id %}<div><b>Program:</b> <a href="/programs/{{ plan.program_id }}">#{{ plan.program_id }}</a></div>{% endif %}
+    {% if plan.molecule_id %}<div><b>Molecule:</b> <a href="/molecules/{{ plan.molecule_id }}">#{{ plan.molecule_id }}</a></div>{% endif %}
+    {% if plan.claim_id %}<div><b>Claim:</b> <a href="/claims/{{ plan.claim_id }}">#{{ plan.claim_id }}</a></div>{% endif %}
+    <div><b>Rationale:</b> {{ plan.rationale or "" }}</div>
+    <div><b>Expected gains:</b> Readiness {{ "%.2f"|format(plan.expected_readiness_gain or 0.0) }} · Claim support {{ "%.2f"|format(plan.expected_claim_support_gain or 0.0) }} · Evidence coverage {{ "%.2f"|format(plan.expected_evidence_coverage_gain or 0.0) }}</div>
+    {% if plan_score is defined %}<div><b>Plan score:</b> {{ "%.3f"|format(plan_score) }} · <b>Effort:</b> {{ effort_estimate if effort_estimate is defined else 0 }}</div>{% endif %}
+  </div>
+
+  {% set st = (steps if steps is defined and steps is iterable else []) %}
+  <div class="card section-card section-workflow" id="plan-steps" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Ordered Steps</h3>
+    <table class="table mini">
+      <thead><tr><th>Order</th><th>Kind</th><th>Experiment</th><th>Status</th><th>Task</th></tr></thead>
+      <tbody>
+      {% for s in st %}
+        <tr>
+          <td>{{ s.step_order }}</td>
+          <td>{{ s.step_kind|humanize_state }}</td>
+          <td>{% if s.suggested_assay %}{{ s.suggested_assay }}{% elif s.metric_key %}{{ s.metric_key }}{% else %}step{% endif %}</td>
+          <td>{{ s.status|humanize_state }}</td>
+          <td>
+            {% if s.linked_experiment_task_id %}
+              <a href="/programs/{{ plan.program_id }}/workflow">Task #{{ s.linked_experiment_task_id }}</a>
+            {% else %}
+              <span class="muted">Not instantiated</span>
+              <form method="post" action="/plans/steps/{{ s.id }}/instantiate" style="display:inline;margin-left:6px;">
+                <input type="hidden" name="redirect_to" value="/plans/{{ plan.id }}" />
+                <button class="btn mini" type="submit">Instantiate Step</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted empty-state-cell">No steps defined.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% set rc = (recent_completed_tasks if recent_completed_tasks is defined and recent_completed_tasks is iterable else []) %}
+  {% set rev = (recent_evidence if recent_evidence is defined and recent_evidence is iterable else []) %}
+  {% set ebr = (evidence_by_record if evidence_by_record is defined and evidence_by_record is mapping else {}) %}
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Recent Learning Feedback</h3>
+    <div class="muted mini">Completed plan-linked tasks and nearby evidence updates that may change execution priority.</div>
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div class="linked-table-wrap">
+        <table class="table mini">
+          <thead><tr><th>Completed Task</th><th>Linked Result</th><th>Evidence Links</th></tr></thead>
+          <tbody>
+            {% for t in rc %}
+              {% set rid = t.linked_data_record_id %}
+              <tr>
+                <td>#{{ t.id }} · {% if t.suggested_assay %}{{ t.suggested_assay }}{% else %}{{ t.metric_key or "task" }}{% endif %}</td>
+                <td>{% if rid %}<a href="/data/{{ rid }}">Data #{{ rid }}</a>{% else %}<span class="muted">none</span>{% endif %}</td>
+                <td>{% if rid and ebr.get(rid) %}{% for ev_id in ebr.get(rid) %}<a href="/evidence/{{ ev_id }}">#{{ ev_id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span class="muted">none</span>{% endif %}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="muted empty-state-cell">No completed plan-linked tasks yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="linked-table-wrap">
+        <table class="table mini">
+          <thead><tr><th>Recent Evidence</th><th>Type</th><th>Strength</th></tr></thead>
+          <tbody>
+            {% for ev in rev %}
+              <tr>
+                <td><a href="/evidence/{{ ev.id }}">#{{ ev.id }}</a></td>
+                <td>{{ ev.evidence_type }}</td>
+                <td>{{ ev.strength }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="muted empty-state-cell">No recent evidence updates in this scope.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="no-print section-card section-workflow" id="plan-actions" style="margin-top:8px;">
+    <h3 style="margin-top:0;">Execution Actions</h3>
     <form method="post" action="/plans/{{ plan.id }}/transition" style="display:inline-flex;gap:6px;align-items:flex-end;margin-right:8px;">
       <input type="hidden" name="redirect_to" value="/plans/{{ plan.id }}" />
       <label>
@@ -30,37 +163,6 @@
       <input type="hidden" name="redirect_to" value="/plans/{{ plan.id }}" />
       <button class="btn mini primary" type="submit">Instantiate All Steps</button>
     </form>
-  </div>
-
-  {% set st = (steps if steps is defined and steps is iterable else []) %}
-  <div class="card" style="margin-top:10px;">
-    <h3 style="margin-top:0;">Ordered Steps</h3>
-    <table class="table mini">
-      <thead><tr><th>Order</th><th>Kind</th><th>Experiment</th><th>Status</th><th>Task</th></tr></thead>
-      <tbody>
-      {% for s in st %}
-        <tr>
-          <td>{{ s.step_order }}</td>
-          <td>{{ s.step_kind|humanize_state }}</td>
-          <td>{% if s.suggested_assay %}{{ s.suggested_assay }}{% elif s.metric_key %}{{ s.metric_key }}{% else %}step{% endif %}</td>
-          <td>{{ s.status|humanize_state }}</td>
-          <td>
-            {% if s.linked_experiment_task_id %}
-              <a href="/programs/{{ plan.program_id }}/board">Task #{{ s.linked_experiment_task_id }}</a>
-            {% else %}
-              <span class="muted">Not instantiated</span>
-              <form method="post" action="/plans/steps/{{ s.id }}/instantiate" style="display:inline;margin-left:6px;">
-                <input type="hidden" name="redirect_to" value="/plans/{{ plan.id }}" />
-                <button class="btn mini" type="submit">Instantiate Step</button>
-              </form>
-            {% endif %}
-          </td>
-        </tr>
-      {% else %}
-        <tr><td colspan="5" class="muted">No steps defined.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
   </div>
 </div>
 {% endblock %}

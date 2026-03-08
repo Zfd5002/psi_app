@@ -2,21 +2,31 @@
 {% block title %}Portfolios | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1>Portfolios</h1>
-    <a class="btn primary" href="/portfolios/new">New Portfolio</a>
-  </div>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set rows = (portfolios if portfolios is defined and portfolios is iterable else []) %}
+  {% set page_eyebrow = "Legacy Registry" %}
+  {% set page_title = "Legacy Portfolios" %}
+  {% set page_subtitle = "Legacy CRUD surface. Use Portfolio Intelligence for primary portfolio operations." %}
+  {% set page_primary_actions = [{"href": "/portfolio", "label": "Open Portfolio Intelligence"}, {"href": "/portfolios/new", "label": "New Legacy Portfolio"}] %}
+  {% set page_metrics = [{"label": "Legacy Portfolios", "value": (rows|length)}] %}
+  {% include "partials/page_header.html" %}
+  {% if sf.archetype_labels is defined and sf.archetype_labels %}
+    <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if sf.local_nav is defined and sf.local_nav %}
+  <div class="local-subnav no-print">{% for item in sf.local_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}</div>
+  {% endif %}
   <table class="table">
     <thead><tr><th>Name</th><th>Description</th><th>Created</th></tr></thead>
     <tbody>
-      {% for p in portfolios %}
+      {% for p in rows %}
       <tr>
         <td><a href="/portfolios/{{ p.id }}">{{ p.name }}</a></td>
         <td class="muted">{{ p.description or '' }}</td>
         <td class="muted">{{ p.created_at }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="3" class="muted">No portfolios yet.</td></tr>
+      <tr><td colspan="3" class="muted empty-state-cell">No legacy portfolios yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>

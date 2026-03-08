@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from psi.web.deps import get_db, get_storage_cfg, get_templates
+from psi.web import ui_surfaces
 from psi.core.db import get_db as get_db_ctx
 from psi.services import molecules as svc
 from psi.services.computed import run_computed_properties, run_immunogenicity_mhci
@@ -136,6 +137,7 @@ def list_molecules(request: Request, db: Session = Depends(get_db)):
             "molecules": molecules,
             "programs": programs,
             "header_by_molecule_id": header_by_molecule_id,
+            "surface": ui_surfaces.molecules_registry_surface(),
         },
     )
 
@@ -260,6 +262,7 @@ def molecule_detail(molecule_id: int, request: Request, tab: str = "overview", b
         raise HTTPException(404)
     ctx["request"] = request
     ctx["tab"] = tab
+    ctx["surface"] = ui_surfaces.molecule_detail_surface(molecule_id=int(molecule_id))
 
     # v1.2.7: QC-aware batch-first context. Batches render on all tabs.
     qc_mode = str(request.query_params.get("qc_mode") or "all").strip().lower()

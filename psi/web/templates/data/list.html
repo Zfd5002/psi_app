@@ -1,18 +1,26 @@
 {% extends "base.html" %}
-{% block title %}Lab Notebook | PSI{% endblock %}
+{% block title %}Experiment Results | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1>Data Records</h1>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn" href="/data/bulk-import">Bulk import</a>
-      <a class="btn primary" href="/data/new">New Data Record</a>
-    </div>
-  </div>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set rows = (records if records is defined and records is iterable else []) %}
+  {% set page_eyebrow = "Registry" %}
+  {% set page_title = "Experiment Results" %}
+  {% set page_subtitle = "Recorded experimental outputs and measurement entries with evidence-loop handoff." %}
+  {% set page_primary_actions = [{"href": "/data/new", "label": "New Data Record"}] %}
+  {% set page_secondary_actions = [{"href": "/data/bulk-import", "label": "Bulk import"}] %}
+  {% set page_metrics = [{"label": "Data Records", "value": (rows|length)}] %}
+  {% include "partials/page_header.html" %}
+  {% if sf.archetype_labels is defined and sf.archetype_labels %}
+    <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if sf.local_nav is defined and sf.local_nav %}
+  <div class="local-subnav no-print">{% for item in sf.local_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}</div>
+  {% endif %}
   <table class="table">
     <thead><tr><th>ID</th><th>Title</th><th>Program</th><th>Molecule</th><th>Batch</th><th>Domain</th><th>Type/Method</th><th>Run date</th></tr></thead>
     <tbody>
-      {% for r in records %}
+      {% for r in rows %}
       <tr>
         <td class="muted">{{ r.id }}</td>
         <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
@@ -24,7 +32,7 @@
         <td class="muted">{{ r.run_date or '' }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted">No data records yet.</td></tr>
+      <tr><td colspan="8" class="muted empty-state-cell">No data records yet. Start data entry to close execution loops.</td></tr>
       {% endfor %}
     </tbody>
   </table>

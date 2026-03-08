@@ -2,14 +2,24 @@
 {% block title %}Reports | PSI{% endblock %}
 {% block content %}
 <div class="card report-page">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1>Report Runs</h1>
-    <a class="btn primary" href="/reports/new">Generate Report</a>
-  </div>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set rows = (report_runs if report_runs is defined and report_runs is iterable else []) %}
+  {% set page_eyebrow = "Registry" %}
+  {% set page_title = "Reports" %}
+  {% set page_subtitle = "Generated report runs for molecule, program, and comparative views." %}
+  {% set page_primary_actions = [{"href": "/reports/new", "label": "Generate Report"}] %}
+  {% set page_metrics = [{"label": "Report Runs", "value": (rows|length)}] %}
+  {% include "partials/page_header.html" %}
+  {% if sf.archetype_labels is defined and sf.archetype_labels %}
+    <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if sf.local_nav is defined and sf.local_nav %}
+  <div class="local-subnav no-print">{% for item in sf.local_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}</div>
+  {% endif %}
   <table class="table">
     <thead><tr><th>ID</th><th>Type</th><th>As Of</th><th>Created</th></tr></thead>
     <tbody>
-      {% for r in report_runs %}
+      {% for r in rows %}
       <tr>
         <td><a href="/reports/{{ r.id }}">#{{ r.id }}</a></td>
         <td>{{ r.report_type }}</td>
@@ -17,7 +27,7 @@
         <td class="muted">{{ r.created_at }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="muted">No report runs yet.</td></tr>
+      <tr><td colspan="4" class="muted empty-state-cell">No report runs yet. Generate a report to capture cross-surface narratives.</td></tr>
       {% endfor %}
     </tbody>
   </table>

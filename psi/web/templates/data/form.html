@@ -2,131 +2,49 @@
 {% block title %}{% if record %}Edit Data Record{% else %}New Data Record{% endif %} | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>{% if record %}Edit Data Record{% else %}New Data Record{% endif %}</h1>
-  {% if not record and task_context %}
-  <div class="card" style="margin:10px 0;">
-    <h3 style="margin-top:0;">Task Context</h3>
-    <div class="mini muted">Task #{{ task_context.task_id }} | status={{ task_context.status }} | urgency={{ task_context.urgency }}</div>
-    <div class="mini">Molecule ID: {{ task_context.molecule_id }}{% if task_context.metric_key %} | Metric: {{ task_context.metric_key }}{% endif %}{% if task_context.suggested_assay %} | Assay: {{ task_context.suggested_assay }}{% endif %}</div>
-    {% if task_context.owner_text %}<div class="mini">Owner: {{ task_context.owner_text }}</div>{% endif %}
-    {% if task_context.due_date %}<div class="mini">Due: {{ task_context.due_date }}</div>{% endif %}
-    {% if task_context.notes %}<div class="mini muted">Notes: {{ task_context.notes }}</div>{% endif %}
-  </div>
+  {% set page_eyebrow = "Workflow" %}
+  {% set page_title = "Capture Experiment Result" if not record else "Update Experiment Result" %}
+  {% set page_subtitle = "Record experimental output with clear task, molecule, and program context." %}
+  {% set page_primary_actions = [] %}
+  {% set page_secondary_actions = [] %}
+  {% if prefill is defined and prefill.program_id %}
+    {% set page_secondary_actions = page_secondary_actions + [{"href": "/programs/" ~ prefill.program_id ~ "/workflow", "label": "Open Program Workflow Center"}] %}
+    {% set page_secondary_actions = page_secondary_actions + [{"href": "/programs/" ~ prefill.program_id ~ "/board", "label": "Open Development Board"}] %}
   {% endif %}
+  {% if prefill is defined and prefill.molecule_id %}
+    {% set page_secondary_actions = page_secondary_actions + [{"href": "/molecules/" ~ prefill.molecule_id, "label": "Open Molecule Workspace"}] %}
+  {% endif %}
+  {% if record and record.id %}
+    {% set page_secondary_actions = page_secondary_actions + [{"href": "/data/" ~ record.id, "label": "Open Data Record"}] %}
+  {% endif %}
+  {% set page_metrics = [] %}
+  {% if task_context %}
+    {% set page_metrics = page_metrics + [{"label": "Task Link", "value": "#" ~ task_context.task_id}] %}
+    {% set page_metrics = page_metrics + [{"label": "Task Status", "value": (task_context.status or "unknown")}] %}
+    {% set page_metrics = page_metrics + [{"label": "Urgency", "value": (task_context.urgency or "normal")}] %}
+  {% endif %}
+  {% set page_matters_now = [
+    "Capture the run output in a structured way so measurements can be extracted reliably.",
+    "Confirm scope (program/molecule/batch) before saving.",
+    "After saving, review extracted measurements and create or link supporting evidence."
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% include "partials/surface_chrome.html" %}
+  <div class="page-intent-line">This workspace closes the operational loop: <b>Task → Data Entry → Evidence</b>.</div>
+  {% include "partials/data/form_capture_context.html" %}
+  <div class="card section-card section-primary" style="margin:10px 0;">
+    <div class="section-heading"><h3 style="margin:0;">Result Capture Form</h3></div>
+    <div class="muted mini">Capture the experiment run, structured outputs, and any attached files.</div>
+  </div>
   <form id="dataForm" class="form" method="post" action="{% if record %}/data/{{ record.id }}/edit{% else %}/data/new{% endif %}" enctype="multipart/form-data">
     <input type="hidden" name="task_id" value="{{ prefill.task_id if prefill is defined and prefill.task_id is defined and prefill.task_id else '' }}" />
     <input type="hidden" name="action_intent" id="actionIntent" value="save" />
     <input type="hidden" name="actor" value="scientist" />
-    <input type="hidden" name="return_to" value="{{ request.query_params.get('return_to') if request is defined and request.query_params is defined else '' }}" />
-    <div class="grid cols-2">
-      <div class="field">
-        <label>Program</label>
-        <select name="program_id" id="programSel" required>
-          {% for p in programs %}
-            <option value="{{ p.id }}" {% if (record and p.id==record.program_id) or (not record and prefill.program_id and p.id==prefill.program_id) %}selected{% endif %}>{{ p.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label>Run date (optional)</label>
-        <input type="date" name="run_date" value="{{ record.run_date if record and record.run_date else '' }}" />
-      </div>
-    </div>
+    <input type="hidden" name="return_to" value="{{ return_to if return_to is defined else '' }}" />
+    {% include "partials/data/form_core_fields.html" %}
+    {% include "partials/data/form_optional_context.html" %}
 
-    <div class="grid cols-2">
-      <div class="field">
-        <label>Molecule (optional for program-level docs)</label>
-        <select name="molecule_id" id="moleculeSel">
-          <option value="">(none)</option>
-          {% for m in molecules %}
-            <option value="{{ m.id }}" {% if (record and record.molecule_id==m.id) or (not record and prefill.molecule_id and prefill.molecule_id==m.id) %}selected{% endif %}>{{ m.primary_id }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label>Batch (required for most experimental data)</label>
-        <select name="batch_id" id="batchSel">
-          <option value="">(none)</option>
-          {% for b in batches %}
-            <option value="{{ b.id }}" {% if (record and record.batch_id==b.id) or (not record and prefill.batch_id and prefill.batch_id==b.id) %}selected{% endif %}>{{ b.batch_id }}</option>
-          {% endfor %}
-        </select>
-        <div class="help">Enforced by UI registry for experimental data types (Binding, CellAssay, InVivo, CMC_Analytics).</div>
-      </div>
-    </div>
-
-    <div class="field">
-      <label>Title</label>
-      <input name="title" value="{{ record.title if record else (prefill.title or '') }}" required />
-    </div>
-
-    <div class="grid cols-3">
-      <div class="field">
-        <label>Domain</label>
-        <select name="domain" id="domainSel" required>
-          {% for d in domains %}
-            <option value="{{ d }}" {% if (record and record.domain==d) or (not record and prefill.domain==d) %}selected{% endif %}>{{ d }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label>Data type</label>
-        <select name="data_type" id="dataTypeSel" required></select>
-      </div>
-      <div class="field">
-        <label>Method</label>
-        <select name="method" id="methodSel" required></select>
-      </div>
-    </div>
-
-    <div class="grid cols-2">
-      <div class="card" style="margin:0;">
-        <h3>Parameters</h3>
-        <div id="paramsFields"></div>
-      </div>
-      <div class="card" style="margin:0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-          <h3>Results</h3>
-          <button class="btn mini no-print" type="button" id="applyDefaultsBtn">Apply defaults to all rows</button>
-        </div>
-        <div id="resultsFields"></div>
-      </div>
-    </div>
-
-    <input type="hidden" name="params_json" id="paramsJson" value='{{ record.params_json if record and record.params_json else "{}" }}' />
-    <input type="hidden" name="results_json" id="resultsJson" value='{{ record.results_json if record and record.results_json else "{}" }}' />
-
-    <div class="field">
-      <label>Notes</label>
-      <textarea name="notes">{{ record.notes if record else '' }}</textarea>
-    </div>
-
-    <div class="field">
-      <label>Attach files (optional)</label>
-      <input type="file" name="files" multiple />
-      <div class="help">Unlimited files. Stored under <code>./uploads/</code> with SHA256 tracked in SQLite.</div>
-    </div>
-
-    {% if record %}
-    <div class="field">
-      <label>Reason (optional, for audit log)</label>
-      <input name="reason" />
-    </div>
-    {% endif %}
-
-    <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      {# Scientist workflow controls for edit mode: save/cancel + approve/reject entry. #}
-      <button class="btn primary" type="submit" onclick="document.getElementById('actionIntent').value='save'">Save</button>
-      {% if record %}
-        <button class="btn primary" type="submit" onclick="document.getElementById('actionIntent').value='approve'">Approve</button>
-        <button class="btn" type="submit" onclick="document.getElementById('actionIntent').value='reject'">Reject</button>
-      {% endif %}
-      {% if record %}
-        <a class="btn" href="{{ request.query_params.get('return_to') if request is defined and request.query_params is defined and request.query_params.get('return_to') else ('/data/' ~ record.id) }}">Cancel</a>
-      {% else %}
-        <a class="btn" href="/data">Cancel</a>
-      {% endif %}
-    </div>
+    {% include "partials/data/form_actions.html" %}
   </form>
 </div>
 {% endblock %}

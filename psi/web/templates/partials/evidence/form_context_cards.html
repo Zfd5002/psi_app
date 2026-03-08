@@ -1,0 +1,18 @@
+<div class="grid cols-2" style="margin-top:10px;">
+  <div class="card section-card section-workflow" style="margin:0;">
+    <h3 style="margin-top:0;">Scientific Context</h3>
+    <ul class="molecule-cockpit-list">
+      <li>Program scope: {% if prefill is defined and prefill.program_id %}#{{ prefill.program_id }}{% elif ev %}#{{ ev.program_id }}{% else %}<span class="muted">required</span>{% endif %}</li>
+      <li>Molecule scope: {% if prefill is defined and prefill.molecule_id %}#{{ prefill.molecule_id }}{% elif ev and ev.molecule_id %}#{{ ev.molecule_id }}{% else %}<span class="muted">optional</span>{% endif %}</li>
+      <li>Batch scope: {% if prefill is defined and prefill.batch_id %}#{{ prefill.batch_id }}{% elif ev and ev.batch_id %}#{{ ev.batch_id }}{% else %}<span class="muted">optional</span>{% endif %}</li>
+    </ul>
+  </div>
+  <div class="card section-card section-primary" style="margin:0;">
+    <h3 style="margin-top:0;">What Happens Next</h3>
+    <ul class="molecule-cockpit-list">
+      <li>Save evidence with citations.</li>
+      <li>Review evidence detail and linked data records.</li>
+      <li>Return to molecule/program workflow to continue de-risking work.</li>
+    </ul>
+  </div>
+</div>

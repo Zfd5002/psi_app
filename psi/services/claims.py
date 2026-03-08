@@ -466,6 +466,7 @@ def get_claim_detail(db: Session, *, claim_id: int) -> dict[str, Any]:
     task_links = list_claim_tasks(db, claim_id=int(claim_id))
     task_ids = [int(x.experiment_task_id) for x in task_links]
     open_tasks = []
+    done_tasks = []
     if task_ids:
         trows = (
             db.query(ExperimentTask)
@@ -483,6 +484,24 @@ def get_claim_detail(db: Session, *, claim_id: int) -> dict[str, Any]:
                 "suggested_assay": str(t.suggested_assay or ""),
             }
             for t in trows
+        ]
+        done_rows = (
+            db.query(ExperimentTask)
+            .filter(ExperimentTask.id.in_(task_ids))
+            .filter(ExperimentTask.status == "done")
+            .order_by(ExperimentTask.updated_at.desc(), ExperimentTask.id.asc())
+            .limit(5)
+            .all()
+        )
+        done_tasks = [
+            {
+                "task_id": int(t.id),
+                "linked_data_record_id": int(t.linked_data_record_id) if t.linked_data_record_id is not None else None,
+                "metric_key": str(t.metric_key or ""),
+                "suggested_assay": str(t.suggested_assay or ""),
+                "updated_at": str(t.updated_at or ""),
+            }
+            for t in done_rows
         ]
     trajectory_candidates = []
     if c.molecule_id is not None:
@@ -526,13 +545,22 @@ def get_claim_detail(db: Session, *, claim_id: int) -> dict[str, Any]:
                 ],
             }
         )
+    supporting_n = int((support := summarize_claim_support(db, claim_id=int(claim_id))).get("supporting_count") or 0)
+    contradicting_n = int(support.get("contradicting_count") or 0)
+    header_impact = {
+        "recent_evidence_links": int(min(5, len(list_claim_evidence(db, claim_id=int(claim_id))))),
+        "recent_completed_work": int(len(done_tasks)),
+        "interpretation_pending": int(1 if (contradicting_n > supporting_n or len(open_tasks) > 0) else 0),
+    }
     return {
         "claim": c,
         "evidence_links": list_claim_evidence(db, claim_id=int(claim_id)),
         "decision_links": list_claim_decisions(db, claim_id=int(claim_id)),
         "task_links": task_links,
         "open_linked_tasks": open_tasks,
+        "recent_completed_linked_tasks": done_tasks,
         "trajectory_candidates": trajectory_candidates,
         "claim_plans": claim_plans,
         "maturity": summarize_claim_maturity(db, claim_id=int(claim_id)),
+        "header_impact": header_impact,
     }

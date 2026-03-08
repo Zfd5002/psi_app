@@ -1,0 +1,11 @@
+{% for t in awaiting_data_entry %}
+  {% set m = molecule_by_id.get(t.molecule_id) if molecule_by_id is defined else None %}
+  <tr>
+    <td>#{{ t.id }}</td>
+    <td>{% if m %}<a href="/molecules/{{ t.molecule_id }}">{{ m.primary_id }}</a>{% else %}#{{ t.molecule_id }}{% endif %}</td>
+    <td>{% if t.suggested_assay %}{{ t.suggested_assay }}{% else %}{{ t.metric_key or "task" }}{% endif %}</td>
+    <td class="no-print"><a class="btn mini primary" href="/data/new?program_id={{ program.id }}&molecule_id={{ t.molecule_id }}&method={{ (t.suggested_assay or t.metric_key or '') }}&title=Run%20{{ (t.metric_key or 'recommended') }}%20experiment&task_id={{ t.id }}&source=workflow&return_to=/programs/{{ program.id }}/workflow">Start data entry</a></td>
+  </tr>
+{% else %}
+  <tr><td colspan="4" class="muted empty-state-cell">No tasks currently awaiting data entry linkage.</td></tr>
+{% endfor %}

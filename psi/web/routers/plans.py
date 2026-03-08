@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from psi.core.models import Molecule, ScientificClaim
 from psi.services import plans as plans_svc
 from psi.web.deps import get_db, get_templates
+from psi.web import ui_surfaces
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ def plans_list(request: Request, db: Session = Depends(get_db)):
         {
             "request": request,
             "plans": rows,
+            "surface": ui_surfaces.plans_registry_surface(),
         },
     )
 
@@ -108,6 +110,9 @@ def plan_detail(plan_id: int, request: Request, db: Session = Depends(get_db)):
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request
+    plan_obj = ctx.get("plan")
+    pid = int(plan_obj.program_id) if plan_obj is not None and getattr(plan_obj, "program_id", None) is not None else None
+    ctx["surface"] = ui_surfaces.plan_detail_surface(program_id=pid)
     return templates.TemplateResponse("plans/detail.html", ctx)
 
 

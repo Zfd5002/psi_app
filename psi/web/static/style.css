@@ -4,13 +4,30 @@ body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantare
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 .container{max-width:1200px;margin:0 auto;padding:20px}
+.wrap{max-width:1280px;margin:0 auto;padding:14px 20px}
 .nav{position:sticky;top:0;z-index:10;background:rgba(7,13,24,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
 .nav .container{display:flex;align-items:center;gap:14px}
 .brand{font-weight:800;letter-spacing:.4px;color:var(--text)}
 .brand span{color:var(--accent)}
-.nav a{color:var(--text);opacity:.92;padding:10px 8px;border-radius:10px}
+.nav a{display:inline-flex;align-items:center;color:var(--text);opacity:.92;padding:8px 10px;border-radius:10px;white-space:nowrap}
 .nav a.active{background:rgba(51,184,255,.12);border:1px solid rgba(51,184,255,.18)}
 .nav a:hover{background:rgba(255,255,255,.06)}
+.nav-shell{position:sticky;top:0;z-index:15}
+.nav-shell-inner{display:grid;gap:8px;grid-template-columns:1fr;align-items:center}
+.nav-shell-row{display:flex;align-items:center;gap:12px;min-width:0}
+.nav-shell-row-main{justify-content:space-between}
+.nav-shell-row-utility{justify-content:flex-start}
+.nav-brand-group{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.nav-context{opacity:.75}
+.nav-primary,.nav-secondary{display:flex;gap:6px;flex-wrap:nowrap;align-items:center;min-width:0}
+.nav-primary{justify-content:flex-start;flex:1;overflow-x:auto;padding-bottom:2px}
+.nav-secondary{justify-content:flex-start;overflow-x:auto;padding-bottom:2px}
+.nav-primary::-webkit-scrollbar,.nav-secondary::-webkit-scrollbar{height:6px}
+.nav-primary::-webkit-scrollbar-thumb,.nav-secondary::-webkit-scrollbar-thumb{background:rgba(159,176,192,.32);border-radius:999px}
+.nav-primary a{font-weight:650}
+.nav-secondary{padding-top:4px;border-top:1px dashed rgba(159,176,192,.25);width:100%}
+.nav-secondary-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-right:4px}
+.page-shell{padding-top:18px}
 .grid{display:grid;gap:14px}
 .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -284,3 +301,85 @@ body.pdf-mode .narrative-list{gap:3px}
 .molecule-confidence-item-state { text-transform:capitalize; font-size:12px; margin-top:2px; }
 @media (max-width: 900px) { .molecule-confidence-grid { grid-template-columns:1fr; } }
 @media (max-width: 900px) { .molecule-header-grid { grid-template-columns:1fr; } }
+
+/* --- v1.3.0d1: shared scientist-first page scaffolding primitives --- */
+.page-header-scaffold{display:grid;gap:12px;padding:14px;border-radius:16px;border:1px solid rgba(51,184,255,.22);background:linear-gradient(135deg,rgba(16,26,46,.92),rgba(7,13,24,.86))}
+.page-header-main{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.page-title{margin:0;font-size:30px;line-height:1.15}
+.page-subtitle{margin:6px 0 0 0;color:var(--muted)}
+.page-eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.status-strip{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.summary-metric-strip{display:grid;gap:8px;grid-template-columns:repeat(4,minmax(0,1fr))}
+.summary-metric{border:1px solid rgba(159,176,192,.25);border-radius:12px;padding:9px 10px;background:rgba(7,13,24,.35)}
+.summary-metric-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.summary-metric-value{margin-top:2px;font-size:18px;font-weight:700}
+.what-matters-panel{border:1px solid rgba(51,184,255,.22);border-radius:12px;padding:10px;background:rgba(6,16,32,.45)}
+.what-matters-title{font-size:12px;text-transform:uppercase;color:var(--accent);letter-spacing:.08em;margin-bottom:6px}
+.what-matters-grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.action-hierarchy{display:grid;gap:7px;justify-items:end}
+.action-cluster-primary,.action-cluster-secondary{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.action-cluster-secondary .btn{opacity:.9}
+.section-shell{margin-top:12px}
+.section-card{margin-top:12px}
+.section-primary{border-color:rgba(51,184,255,.22)}
+.section-workflow{border-color:rgba(102,255,153,.22)}
+.section-secondary{border-color:rgba(159,176,192,.24)}
+.section-technical{border-color:rgba(159,176,192,.18);background:rgba(7,13,24,.5)}
+.section-heading{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.section-heading h2,.section-heading h3{margin:0}
+.local-subnav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
+.local-subnav a{padding:6px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.local-subnav a:hover{background:rgba(255,255,255,.06);color:var(--text);text-decoration:none}
+.local-subnav a:focus{outline:1px solid rgba(51,184,255,.35);outline-offset:1px}
+.progressive-disclosure{border:1px solid rgba(159,176,192,.24);border-radius:12px;padding:8px 10px;background:rgba(7,13,24,.4)}
+.progressive-disclosure summary{cursor:pointer;font-weight:600}
+.progressive-disclosure[open]{background:rgba(7,13,24,.55)}
+.audit-demoted,.technical-demoted{opacity:.9}
+.audit-demoted .muted,.technical-demoted .muted{opacity:.92}
+.action-bar-utility{display:flex;gap:8px;flex-wrap:wrap}
+.linked-table-wrap{border:1px solid rgba(36,50,74,.7);border-radius:12px;padding:8px;overflow:auto}
+.utility-links{display:flex;gap:8px;flex-wrap:wrap}
+.empty-state{padding:10px 12px;border-radius:12px;border:1px dashed rgba(159,176,192,.38);color:var(--muted);background:rgba(7,13,24,.36)}
+.page-intent-line{margin-top:8px;padding:8px 10px;border-radius:12px;border:1px solid rgba(159,176,192,.24);background:rgba(7,13,24,.35);color:var(--muted);font-size:13px}
+.page-archetype-bar{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.page-archetype-chip{padding:5px 10px;border-radius:999px;border:1px solid rgba(159,176,192,.28);font-size:12px}
+.page-archetype-chip.is-active{border-color:rgba(51,184,255,.35);background:rgba(51,184,255,.12);font-weight:700}
+.section-card > h2,.section-card > h3{margin-top:0}
+.table .empty-state-cell{padding:12px;border:1px dashed rgba(159,176,192,.32);border-radius:10px;background:rgba(7,13,24,.35)}
+
+/* Molecule cockpit top-lane */
+.molecule-cockpit-lane{margin-top:10px;border:1px solid rgba(102,255,153,.24);background:linear-gradient(135deg,rgba(7,20,28,.70),rgba(6,16,32,.55))}
+.molecule-cockpit-grid{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:10px}
+.molecule-cockpit-cell{border:1px solid rgba(159,176,192,.22);border-radius:12px;padding:10px;background:rgba(7,13,24,.33)}
+.molecule-cockpit-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.molecule-cockpit-value{margin-top:4px;font-size:15px;font-weight:700;line-height:1.35}
+.molecule-cockpit-list{margin:6px 0 0 16px;padding:0;display:grid;gap:4px}
+.molecule-cockpit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.molecule-legacy-top{margin-top:12px}
+@media (max-width:1000px){
+  .molecule-cockpit-grid{grid-template-columns:1fr}
+}
+
+/* Program board card scanability */
+.board-card{list-style:none;margin:0 0 10px 0;padding:10px 12px;border:1px solid rgba(159,176,192,.26);border-radius:12px;background:rgba(7,13,24,.36)}
+.board-card-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.board-card .chip{margin:0}
+.board-card-primary-action .btn{font-weight:700}
+.board-actions-overflow summary{font-size:12px;color:var(--muted)}
+.board-column ul{list-style:none;margin:8px 0 0 0;padding:0;display:grid;gap:8px}
+.board-column .muted.mini{line-height:1.35}
+@media (max-width:1000px){
+  .summary-metric-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .what-matters-grid{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .wrap{padding:10px 12px}
+  .page-title{font-size:25px}
+  .nav-shell-row-main{flex-wrap:wrap}
+  .nav-context{display:none}
+  .nav-primary,.nav-secondary{flex-wrap:wrap;overflow-x:visible}
+  .action-hierarchy{justify-items:start}
+  .action-cluster-primary,.action-cluster-secondary{justify-content:flex-start}
+  .summary-metric-strip{grid-template-columns:1fr}
+  .nav-secondary{padding-top:6px}
+}

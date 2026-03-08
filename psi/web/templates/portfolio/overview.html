@@ -2,21 +2,132 @@
 {% block title %}Portfolio Intelligence | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Portfolio Intelligence</h1>
-  <div class="muted">Leadership read-model across programs, molecules, tasks, and insight outputs.</div>
   {% set brief = (narrative_brief if narrative_brief is defined else false) %}
-  <div class="mini muted" style="margin-top:4px;">
-    View: {% if brief %}Brief{% else %}Full{% endif %}
+  {% set s = (portfolio_summary if portfolio_summary is defined and portfolio_summary is mapping else {}) %}
+  {% set page_eyebrow = "Portfolio Command View" %}
+  {% set page_title = "Portfolio Intelligence" %}
+  {% set page_subtitle = "Leadership read-model across programs, molecules, tasks, plans, and insight outputs." %}
+  {% set page_statuses = ["View mode: " ~ ("brief" if brief else "full")] %}
+  {% set page_primary_actions = [
+    {"href": "/portfolio", "label": "Full View"},
+    {"href": "/portfolio?view=brief", "label": "Brief View"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/portfolio/narrative/export", "label": "Export Narrative"},
+    {"href": "/portfolio/export", "label": "Export CSV"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Programs", "value": (s.program_count if s.program_count is defined else 0)},
+    {"label": "Ready Molecules", "value": (s.ready_molecules if s.ready_molecules is defined else 0)},
+    {"label": "Overdue Tasks", "value": (s.tasks_overdue if s.tasks_overdue is defined else 0)},
+    {"label": "Recommended Plans", "value": (s.recommended_plans if s.recommended_plans is defined else 0)}
+  ] %}
+  {% set page_matters_now = [
+    "Attention needed where task burden and missing-data molecules are accumulating",
+    "Use strongest/blocked program lists to direct support and decisions",
+    "Monitor evidence-gap report for recurring missing metrics",
+    "Track near-term inflection points to sequence upcoming milestones"
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
+  {% if sf_labels %}
+    <div class="page-archetype-bar">
+      {% for lbl in sf_labels %}
+        <span class="page-archetype-chip{% if loop.index0 == 0 %} is-active{% endif %}">{{ lbl }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% set rows = (program_summaries if program_summaries is defined and program_summaries is iterable else []) %}
+  {% set attention_programs = [] %}
+  {% set blocked_programs = [] %}
+  {% for r in rows %}
+    {% if (r.blocked_tasks if r.blocked_tasks is defined else 0) > 0 or (r.overdue_tasks if r.overdue_tasks is defined else 0) > 0 or (r.molecules_missing_data if r.molecules_missing_data is defined else 0) > 0 %}
+      {% set _ = attention_programs.append(r) %}
+    {% endif %}
+    {% if (r.blocked_tasks if r.blocked_tasks is defined else 0) > 0 %}
+      {% set _ = blocked_programs.append(r) %}
+    {% endif %}
+  {% endfor %}
+  {% set timeline_rows = (portfolio_timeline if portfolio_timeline is defined and portfolio_timeline is iterable else []) %}
+  {% set latest_timeline = (timeline_rows[0] if timeline_rows else {}) %}
+
+  <div class="mini muted" style="margin-top:6px;">
+    Current mode: <b>{% if brief %}Brief{% else %}Full{% endif %}</b>
     {% if brief %}
       · <a href="/portfolio">Switch to full</a>
     {% else %}
       · <a href="/portfolio?view=brief">Switch to brief</a>
     {% endif %}
-    · <a href="/portfolio/narrative/export">Export narrative</a>
+    · <a href="/portfolio/narrative/export">Narrative export</a>
+    · <a href="/portfolio/export">CSV export</a>
+  </div>
+  <div class="page-intent-line">This page is the canonical portfolio intelligence overview (`/portfolio`).</div>
+  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
+  <div class="local-subnav no-print">
+    {% if sf_nav %}
+      {% for item in sf_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}
+    {% else %}
+      <a href="#portfolio-attention">Attention</a>
+      <a href="#portfolio-summary">Summary</a>
+      <a href="#portfolio-narrative">Narrative</a>
+      <a href="#program-table">Programs</a>
+      <a href="#molecule-leaderboard">Molecules</a>
+      <a href="#evidence-gaps">Evidence Gaps</a>
+      <a href="#portfolio-timeline">Timeline</a>
+    {% endif %}
   </div>
 
-  {% set s = (portfolio_summary if portfolio_summary is defined and portfolio_summary is mapping else {}) %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-primary" id="portfolio-attention" style="margin-top:10px;">
+    <div class="section-heading">
+      <h3 style="margin-top:0;">Portfolio Attention Dashboard</h3>
+      <div class="muted mini">Immediate cross-program triage signals and near-term activity posture.</div>
+    </div>
+    <div class="summary-metric-strip" style="margin-top:8px;">
+      <div class="summary-metric">
+        <div class="summary-metric-label">Programs Needing Attention</div>
+        <div class="summary-metric-value">{{ attention_programs|length }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Programs Blocked</div>
+        <div class="summary-metric-value">{{ blocked_programs|length }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Evidence Gap Burden</div>
+        <div class="summary-metric-value">{{ s.missing_data_molecules if s.missing_data_molecules is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Active Experiments</div>
+        <div class="summary-metric-value">{{ s.tasks_in_progress if s.tasks_in_progress is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Recent Results (latest week)</div>
+        <div class="summary-metric-value">{{ latest_timeline.evidence_created if latest_timeline is mapping and latest_timeline.evidence_created is defined else 0 }}</div>
+      </div>
+    </div>
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div>
+        <div class="muted mini">Top programs needing attention</div>
+        <ul>
+          {% for r in attention_programs[:6] %}
+            <li><a href="/programs/{{ r.program_id }}">{{ r.program_name }}</a> · blocked={{ r.blocked_tasks if r.blocked_tasks is defined else 0 }} · overdue={{ r.overdue_tasks if r.overdue_tasks is defined else 0 }}</li>
+          {% else %}
+            <li class="muted">No immediate attention signals.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Operational quick links</div>
+        <div class="action-bar-utility no-print" style="margin-top:4px;">
+          <a class="btn mini primary" href="#program-table">Open Program Prioritization Table</a>
+          <a class="btn mini" href="#evidence-gaps">Open Evidence Gaps</a>
+          <a class="btn mini" href="#portfolio-timeline">Open Activity Timeline</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card section-card section-primary" id="portfolio-summary" style="margin-top:10px;">
     <h3 style="margin-top:0;">Portfolio Summary</h3>
     <div class="grid cols-4">
       <div><b>Programs:</b> {{ s.program_count if s.program_count is defined else 0 }}</div>
@@ -29,7 +140,7 @@
     </div>
   </div>
   {% set pn = (portfolio_narrative if portfolio_narrative is defined and portfolio_narrative is mapping else {}) %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-workflow" id="portfolio-narrative" style="margin-top:10px;">
     <h3 style="margin-top:0;">Portfolio Narrative</h3>
     <div class="grid cols-2">
       <div>
@@ -122,7 +233,7 @@
     </div>
   </div>
   {% if brief %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-secondary" id="program-table" style="margin-top:10px;">
     <h3 style="margin-top:0;">Leadership Brief</h3>
     {% set pn = (portfolio_narrative if portfolio_narrative is defined and portfolio_narrative is mapping else {}) %}
     <div><b>Portfolio state:</b> {% set pts = (pn.near_term_inflection_points if pn.near_term_inflection_points is defined else []) %}{{ pts[0] if pts else "—" }}</div>
@@ -133,7 +244,7 @@
   {% endif %}
 
   {% if not brief %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-secondary" id="molecule-leaderboard" style="margin-top:10px;">
     <h3 style="margin-top:0;">Global Task Status</h3>
     <div class="grid cols-4">
       <div><b>Tasks in progress:</b> {{ s.tasks_in_progress if s.tasks_in_progress is defined else 0 }}</div>
@@ -143,9 +254,8 @@
     </div>
   </div>
 
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-secondary" id="evidence-gaps" style="margin-top:10px;">
     <h3 style="margin-top:0;">Program Table</h3>
-    {% set rows = (program_summaries if program_summaries is defined and program_summaries is iterable else []) %}
     <table class="table mini">
       <thead>
         <tr>
@@ -185,7 +295,9 @@
     </table>
   </div>
 
-  <div class="card" style="margin-top:10px;">
+  <details class="progressive-disclosure technical-demoted" style="margin-top:10px;">
+    <summary>Deep Analytics and Reports</summary>
+  <div class="card section-card section-technical technical-demoted" id="portfolio-timeline" style="margin-top:10px;">
     <h3 style="margin-top:0;">Molecule Leaderboard</h3>
     {% set lb = (molecule_leaderboard if molecule_leaderboard is defined and molecule_leaderboard is iterable else []) %}
     <table class="table mini">
@@ -361,6 +473,7 @@
       </div>
     </div>
   </div>
+  </details>
   {% endif %}
 </div>
 {% endblock %}

@@ -1,0 +1,60 @@
+{% set _surface = (surface if surface is defined and surface is mapping else {}) %}
+{% set _page_eyebrow = (page_eyebrow if page_eyebrow is defined and page_eyebrow else (_surface.surface_kind|replace('_',' ')|title if _surface.surface_kind is defined and _surface.surface_kind else '')) %}
+{% set _page_title = (page_title if page_title is defined and page_title else (_surface.surface_title if _surface.surface_title is defined else '')) %}
+{% set _page_subtitle = (page_subtitle if page_subtitle is defined and page_subtitle else (_surface.surface_subtitle if _surface.surface_subtitle is defined else '')) %}
+<div class="page-header-scaffold">
+  <div class="page-header-main">
+    <div>
+      {% if _page_eyebrow %}
+        <div class="page-eyebrow">{{ _page_eyebrow }}</div>
+      {% endif %}
+      <h1 class="page-title">{{ _page_title }}</h1>
+      {% if _page_subtitle %}
+        <p class="page-subtitle">{{ _page_subtitle }}</p>
+      {% endif %}
+      {% if page_statuses is defined and page_statuses %}
+        <div class="status-strip">
+          {% for status in page_statuses %}
+            <span class="chip">{{ status }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    <div class="action-hierarchy no-print">
+      {% if page_primary_actions is defined and page_primary_actions %}
+        <div class="action-cluster-primary">
+          {% for a in page_primary_actions %}
+            <a class="btn primary" href="{{ a.href }}">{{ a.label }}</a>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% if page_secondary_actions is defined and page_secondary_actions %}
+        <div class="action-cluster-secondary">
+          {% for a in page_secondary_actions %}
+            <a class="btn" href="{{ a.href }}">{{ a.label }}</a>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  {% if page_metrics is defined and page_metrics %}
+    <div class="summary-metric-strip">
+      {% for m in page_metrics %}
+        <div class="summary-metric">
+          <div class="summary-metric-label">{{ m.label }}</div>
+          <div class="summary-metric-value">{{ m.value }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% if page_matters_now is defined and page_matters_now %}
+    <div class="what-matters-panel">
+      <div class="what-matters-title">What Matters Now</div>
+      <div class="what-matters-grid">
+        {% for item in page_matters_now %}
+          <div>{{ item }}</div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</div>

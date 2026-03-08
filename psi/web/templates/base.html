@@ -7,26 +7,40 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="{{ body_class if body_class is defined else '' }}">
-  <div class="nav">
-    <div class="wrap nav-inner">
-      <a class="brand" href="/">PSI</a>
-      <a href="/programs">Programs</a>
-      <a href="/portfolio">Portfolio</a>
-      <a href="/molecules">Molecules</a>
-      <a href="/claims">Claims</a>
-      <a href="/plans">Plans</a>
-      <a href="/builder">Builder</a>
-      <a href="/batches">Batches</a>
-      <a href="/data">Lab Notebook</a>
-      <a href="/evidence">Evidence</a>
-      <a href="/files">Files</a>
-      <a href="/decisions">Decisions</a>
-      <a href="/reports">Reports</a>
-      <a href="/lineage/programs">Lineage</a>
-      <a href="/search">Search</a>
+  {% set _path = request.url.path if request is defined and request and request.url is defined else '' %}
+  <div class="nav nav-shell">
+    <div class="wrap nav-shell-inner">
+      <div class="nav-shell-row nav-shell-row-main">
+        <div class="nav-brand-group">
+          <a class="brand" href="/">PSI</a>
+          <span class="nav-context muted mini">Scientist-first cockpit</span>
+        </div>
+        <nav class="nav-primary" aria-label="Primary navigation">
+          <a class="{% if _path == '/' %}active{% endif %}" href="/">Home</a>
+          <a class="{% if _path.startswith('/portfolio') %}active{% endif %}" href="/portfolio">Portfolio Intelligence</a>
+          <a class="{% if _path.startswith('/programs') %}active{% endif %}" href="/programs">Programs</a>
+          <a class="{% if _path.startswith('/molecules') %}active{% endif %}" href="/molecules">Molecules</a>
+          <a class="{% if _path.startswith('/builder') %}active{% endif %}" href="/builder">Builder</a>
+          <a class="{% if _path.startswith('/reports') %}active{% endif %}" href="/reports">Reports</a>
+          <a class="{% if _path.startswith('/search') %}active{% endif %}" href="/search">Search</a>
+        </nav>
+      </div>
+      <div class="nav-shell-row nav-shell-row-utility">
+        <nav class="nav-secondary" aria-label="Utility navigation">
+          <span class="nav-secondary-label">Supporting Surfaces</span>
+          <a class="{% if _path.startswith('/claims') %}active{% endif %}" href="/claims">Claims</a>
+          <a class="{% if _path.startswith('/plans') %}active{% endif %}" href="/plans">Plans</a>
+          <a class="{% if _path.startswith('/batches') %}active{% endif %}" href="/batches">Batches</a>
+          <a class="{% if _path.startswith('/data') %}active{% endif %}" href="/data">Results</a>
+          <a class="{% if _path.startswith('/evidence') %}active{% endif %}" href="/evidence">Evidence</a>
+          <a class="{% if _path.startswith('/files') %}active{% endif %}" href="/files">Files</a>
+          <a class="{% if _path.startswith('/decisions') %}active{% endif %}" href="/decisions">Decisions</a>
+          <a class="{% if _path.startswith('/lineage') %}active{% endif %}" href="/lineage/programs">Lineage</a>
+        </nav>
+      </div>
     </div>
   </div>
-  <div class="wrap">
+  <div class="wrap page-shell">
     {% block content %}{% endblock %}
     <div class="footer">PSI {{ PSI_VERSION or '' }} · Local-first (SQLite) · No auth · All changes audited.</div>
   </div>

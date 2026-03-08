@@ -2,23 +2,66 @@
 {% block title %}{{ program.name }} Development Board | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-    <div>
-      <h1>{{ program.name }} Development Board</h1>
-      <div class="muted">Scientist operations surface (deterministic, DI read-only consumption).</div>
-      <div class="muted mini"><b>Estimated outcome (heuristic projection)</b> applies to trajectory hints.</div>
-    </div>
-    <div class="no-print">
-      <a class="btn" href="/programs/{{ program.id }}">Back to Program</a>
-    </div>
-  </div>
   {% set bf = board_filter if board_filter is defined else "all" %}
   {% set bq = board_query if board_query is defined else "" %}
   {% set bo = board_owner_filter if board_owner_filter is defined else "" %}
   {% set bu = board_urgency_filter if board_urgency_filter is defined else "" %}
   {% set bs = board_task_status_filter if board_task_status_filter is defined else "" %}
   {% set bd = board_due_filter if board_due_filter is defined else "" %}
-  <form id="boardSearchForm" method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
+  {% set g = (board.groups if board is defined and board.groups is defined else {}) %}
+  {% set er = (board.execution_rollup if board is defined and board.execution_rollup is defined else {}) %}
+  {% set page_eyebrow = "Program Command Center" %}
+  {% set page_title = program.name ~ " Development Board" %}
+  {% set page_subtitle = "Scientist operations surface (deterministic, DI read-only consumption)." %}
+  {% set page_statuses = ["Estimated outcome (heuristic projection) applies to trajectory hints"] %}
+  {% set page_primary_actions = [
+    {"href": "/programs/" ~ program.id ~ "/workflow", "label": "Open Program Workflow Center"},
+    {"href": "/programs/" ~ program.id, "label": "Back to Program"},
+    {"href": "/molecules?program_id=" ~ program.id, "label": "Program Molecules"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/data?program_id=" ~ program.id, "label": "Results"},
+    {"href": "/evidence?program_id=" ~ program.id, "label": "Evidence"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Ready", "value": ((g.ready|length) if g is mapping and g.ready is defined else 0)},
+    {"label": "Missing Data", "value": ((g.missing_data|length) if g is mapping and g.missing_data is defined else 0)},
+    {"label": "Blocked Tasks", "value": (er.blocked if er is mapping and er.blocked is defined else 0)},
+    {"label": "Overdue Tasks", "value": (er.overdue if er is mapping and er.overdue is defined else 0)}
+  ] %}
+  {% set page_matters_now = [
+    "Prioritize molecules in failed/missing groups with high-urgency open tasks",
+    "Use task creation actions to bridge suggested experiments into tracked execution",
+    "Review unassigned and overdue tasks in execution panel",
+    "Trajectory hints are heuristic and should be validated experimentally"
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
+  {% if sf_labels %}
+    <div class="page-archetype-bar">
+      {% for lbl in sf_labels %}
+        <span class="page-archetype-chip{% if loop.index0 == 1 %} is-active{% endif %}">{{ lbl }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
+  <div class="local-subnav no-print">
+    {% if sf_nav %}
+      {% for item in sf_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}
+    {% else %}
+      <a href="#board-summary">Summary</a>
+      <a href="#board-execution">Execution</a>
+      <a href="#board-ready">Ready</a>
+      <a href="#board-failed">Failed</a>
+      <a href="#board-missing-data">Missing</a>
+      <a href="#board-not-evaluated">Not Evaluated</a>
+    {% endif %}
+  </div>
+  <div class="page-intent-line">Daily command surface: triage molecule posture, assign work, and launch execution without leaving context.</div>
+  <details class="progressive-disclosure no-print" open style="margin-top:10px;">
+    <summary>Search and board filters</summary>
+    <form id="boardSearchForm" method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
     <input type="hidden" name="filter" value="{{ bf }}" />
     <input type="hidden" name="owner" value="{{ bo }}" />
     <input type="hidden" name="urgency" value="{{ bu }}" />
@@ -29,8 +72,8 @@
       <input type="text" name="q" value="{{ bq }}" placeholder="e.g. M-205" />
     </label>
     <button class="btn mini" type="submit">Search</button>
-  </form>
-  <form id="boardTaskFiltersForm" method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+    </form>
+    <form id="boardTaskFiltersForm" method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
     <input type="hidden" name="filter" value="{{ bf }}" />
     <input type="hidden" name="q" value="{{ bq }}" />
     <label>
@@ -66,16 +109,16 @@
       </select>
     </label>
     <button class="btn mini" type="submit">Apply task filters</button>
-  </form>
-  <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+    </form>
+    <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
     <a class="btn mini board-filter-link {% if bf == 'all' %}primary{% endif %}" data-board-filter-value="all" href="/programs/{{ program.id }}/board?filter=all&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">All</a>
     <a class="btn mini board-filter-link {% if bf == 'ready' %}primary{% endif %}" data-board-filter-value="ready" href="/programs/{{ program.id }}/board?filter=ready&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only ready</a>
     <a class="btn mini board-filter-link {% if bf == 'failed' %}primary{% endif %}" data-board-filter-value="failed" href="/programs/{{ program.id }}/board?filter=failed&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only failed</a>
     <a class="btn mini board-filter-link {% if bf == 'missing' %}primary{% endif %}" data-board-filter-value="missing" href="/programs/{{ program.id }}/board?filter=missing&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only missing</a>
-  </div>
+    </div>
+  </details>
 
-  {% set g = (board.groups if board is defined and board.groups is defined else {}) %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-primary" id="board-summary" style="margin-top:10px;">
     <h3 style="margin-top:0;">Program Summary</h3>
     <div class="grid cols-4">
       <div><b>Ready:</b> {{ (g.ready|length) if g is mapping and g.ready is defined else 0 }}</div>
@@ -84,8 +127,7 @@
       <div><b>Not evaluated:</b> {{ (g.not_evaluated|length) if g is mapping and g.not_evaluated is defined else 0 }}</div>
     </div>
   </div>
-  {% set er = (board.execution_rollup if board is defined and board.execution_rollup is defined else {}) %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-workflow" id="board-execution" style="margin-top:10px;">
     <h3 style="margin-top:0;">Execution Panel</h3>
     <div class="grid cols-4">
       <div><b>In progress this week:</b> {{ er.in_progress_this_week if er is mapping and er.in_progress_this_week is defined else 0 }}</div>
@@ -93,15 +135,19 @@
       <div><b>Blocked tasks:</b> {{ er.blocked if er is mapping and er.blocked is defined else 0 }}</div>
       <div><b>Unassigned tasks:</b> {{ er.unassigned if er is mapping and er.unassigned is defined else 0 }}</div>
     </div>
+    <div class="action-bar-utility no-print" style="margin-top:8px;">
+      <a class="btn mini primary" href="/programs/{{ program.id }}/workflow">Open Program Workflow Center</a>
+      <a class="btn mini" href="/programs/{{ program.id }}">Back to Program Strategy</a>
+    </div>
   </div>
   <div class="grid cols-2" style="margin-top:10px;">
-    <section class="card" id="board-ready">
+    <section class="card board-column" id="board-ready">
       <h3 style="margin-top:0;">READY</h3>
       <div class="muted mini">count={{ (g.ready|length) if g is mapping and g.ready is defined else 0 }}</div>
       <ul>
         {% for row in (g.ready if g is mapping and g.ready is defined else []) %}
           <li class="board-card" data-card-link="/molecules/{{ row.molecule_id }}">
-            <div>
+            <div class="board-card-head">
               <a href="/molecules/{{ row.molecule_id }}"><b>{{ row.primary_id }}</b></a>
               {% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
@@ -118,15 +164,21 @@
             {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
+            <div class="mini muted">Evidence freshness: {% if row.latest_evidence_update is defined and row.latest_evidence_update %}{{ row.latest_evidence_update }}{% elif row.snapshot_created_at is defined and row.snapshot_created_at %}{{ row.snapshot_created_at }}{% else %}not available{% endif %}</div>
             {% if row.warnings is defined and row.warnings %}
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                 {% for w in row.warnings %}<span class="chip">⚠ {{ w }}</span>{% endfor %}
               </div>
             {% endif %}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;" class="no-print">
+            <div class="no-print board-card-primary-action" style="margin-top:6px;">
+              <a class="btn mini primary" href="/molecules/{{ row.molecule_id }}">Primary action: {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</a>
+            </div>
+            <details class="progressive-disclosure no-print board-actions-overflow" style="margin-top:6px;">
+              <summary>More actions</summary>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;" class="action-bar-utility">
               {% set mm = (row.missing_metrics[0] if row.missing_metrics is defined and row.missing_metrics else "") %}
               {% if mm %}
-                <a class="btn mini" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Add%20{{ mm }}%20measurement&method={{ mm }}">Add missing measurement</a>
+                <a class="btn mini" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Add%20{{ mm }}%20measurement&method={{ mm }}&source=board&return_to=/programs/{{ program.id }}/board">Add missing measurement</a>
               {% endif %}
               {% set rec = (row.recommended_experiments[0] if row.recommended_experiments is defined and row.recommended_experiments else None) %}
               {% if rec %}
@@ -156,20 +208,21 @@
                 <button class="btn mini" type="submit">Create exploration task + variant</button>
               </form>
               <a class="btn mini" href="/molecules/{{ row.molecule_id }}#sequence-editor">Open sequence editor</a>
-            </div>
+              </div>
+            </details>
           </li>
         {% else %}
           <li class="muted">(none)</li>
         {% endfor %}
       </ul>
     </section>
-    <section class="card" id="board-failed">
+    <section class="card board-column" id="board-failed">
       <h3 style="margin-top:0;">FAILED CRITERIA</h3>
       <div class="muted mini">count={{ (g.failed|length) if g is mapping and g.failed is defined else 0 }}</div>
       <ul>
         {% for row in (g.failed if g is mapping and g.failed is defined else []) %}
           <li class="board-card" data-card-link="/molecules/{{ row.molecule_id }}">
-            <div>
+            <div class="board-card-head">
               <a href="/molecules/{{ row.molecule_id }}"><b>{{ row.primary_id }}</b></a>
               {% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
@@ -186,15 +239,21 @@
             {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
+            <div class="mini muted">Evidence freshness: {% if row.latest_evidence_update is defined and row.latest_evidence_update %}{{ row.latest_evidence_update }}{% elif row.snapshot_created_at is defined and row.snapshot_created_at %}{{ row.snapshot_created_at }}{% else %}not available{% endif %}</div>
             {% if row.warnings is defined and row.warnings %}
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                 {% for w in row.warnings %}<span class="chip">⚠ {{ w }}</span>{% endfor %}
               </div>
             {% endif %}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;" class="no-print">
+            <div class="no-print board-card-primary-action" style="margin-top:6px;">
+              <a class="btn mini primary" href="/molecules/{{ row.molecule_id }}">Primary action: {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</a>
+            </div>
+            <details class="progressive-disclosure no-print board-actions-overflow" style="margin-top:6px;">
+              <summary>More actions</summary>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;" class="action-bar-utility">
               {% set mm = (row.missing_metrics[0] if row.missing_metrics is defined and row.missing_metrics else "") %}
               {% if mm %}
-                <a class="btn mini" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Add%20{{ mm }}%20measurement&method={{ mm }}">Add missing measurement</a>
+                <a class="btn mini" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Add%20{{ mm }}%20measurement&method={{ mm }}&source=board&return_to=/programs/{{ program.id }}/board">Add missing measurement</a>
               {% endif %}
               {% set rec = (row.recommended_experiments[0] if row.recommended_experiments is defined and row.recommended_experiments else None) %}
               {% if rec %}
@@ -224,20 +283,21 @@
                 <button class="btn mini" type="submit">Create exploration task + variant</button>
               </form>
               <a class="btn mini" href="/molecules/{{ row.molecule_id }}#sequence-editor">Open sequence editor</a>
-            </div>
+              </div>
+            </details>
           </li>
         {% else %}
           <li class="muted">(none)</li>
         {% endfor %}
       </ul>
     </section>
-    <section class="card" id="board-missing-data">
+    <section class="card board-column" id="board-missing-data">
       <h3 style="margin-top:0;">MISSING DATA</h3>
       <div class="muted mini">count={{ (g.missing_data|length) if g is mapping and g.missing_data is defined else 0 }}</div>
       <ul>
         {% for row in (g.missing_data if g is mapping and g.missing_data is defined else []) %}
           <li class="board-card" data-card-link="/molecules/{{ row.molecule_id }}">
-            <div>
+            <div class="board-card-head">
               <a href="/molecules/{{ row.molecule_id }}"><b>{{ row.primary_id }}</b></a>
               {% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
@@ -254,15 +314,21 @@
             {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
+            <div class="mini muted">Evidence freshness: {% if row.latest_evidence_update is defined and row.latest_evidence_update %}{{ row.latest_evidence_update }}{% elif row.snapshot_created_at is defined and row.snapshot_created_at %}{{ row.snapshot_created_at }}{% else %}not available{% endif %}</div>
             {% if row.warnings is defined and row.warnings %}
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                 {% for w in row.warnings %}<span class="chip">⚠ {{ w }}</span>{% endfor %}
               </div>
             {% endif %}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;" class="no-print">
+            <div class="no-print board-card-primary-action" style="margin-top:6px;">
+              <a class="btn mini primary" href="/molecules/{{ row.molecule_id }}">Primary action: {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</a>
+            </div>
+            <details class="progressive-disclosure no-print board-actions-overflow" style="margin-top:6px;">
+              <summary>More actions</summary>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;" class="action-bar-utility">
               {% set mm = (row.missing_metrics[0] if row.missing_metrics is defined and row.missing_metrics else "") %}
               {% if mm %}
-                <a class="btn mini" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Add%20{{ mm }}%20measurement&method={{ mm }}">Add missing measurement</a>
+                <a class="btn mini" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Add%20{{ mm }}%20measurement&method={{ mm }}&source=board&return_to=/programs/{{ program.id }}/board">Add missing measurement</a>
               {% endif %}
               {% set rec = (row.recommended_experiments[0] if row.recommended_experiments is defined and row.recommended_experiments else None) %}
               {% if rec %}
@@ -292,20 +358,21 @@
                 <button class="btn mini" type="submit">Create exploration task + variant</button>
               </form>
               <a class="btn mini" href="/molecules/{{ row.molecule_id }}#sequence-editor">Open sequence editor</a>
-            </div>
+              </div>
+            </details>
           </li>
         {% else %}
           <li class="muted">(none)</li>
         {% endfor %}
       </ul>
     </section>
-    <section class="card" id="board-not-evaluated">
+    <section class="card board-column" id="board-not-evaluated">
       <h3 style="margin-top:0;">NOT EVALUATED</h3>
       <div class="muted mini">count={{ (g.not_evaluated|length) if g is mapping and g.not_evaluated is defined else 0 }}</div>
       <ul>
         {% for row in (g.not_evaluated if g is mapping and g.not_evaluated is defined else []) %}
           <li class="board-card" data-card-link="/molecules/{{ row.molecule_id }}">
-            <div>
+            <div class="board-card-head">
               <a href="/molecules/{{ row.molecule_id }}"><b>{{ row.primary_id }}</b></a>
               {% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
@@ -322,15 +389,21 @@
             {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
+            <div class="mini muted">Evidence freshness: {% if row.latest_evidence_update is defined and row.latest_evidence_update %}{{ row.latest_evidence_update }}{% elif row.snapshot_created_at is defined and row.snapshot_created_at %}{{ row.snapshot_created_at }}{% else %}not available{% endif %}</div>
             {% if row.warnings is defined and row.warnings %}
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
                 {% for w in row.warnings %}<span class="chip">⚠ {{ w }}</span>{% endfor %}
               </div>
             {% endif %}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;" class="no-print">
+            <div class="no-print board-card-primary-action" style="margin-top:6px;">
+              <a class="btn mini primary" href="/molecules/{{ row.molecule_id }}">Primary action: {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</a>
+            </div>
+            <details class="progressive-disclosure no-print board-actions-overflow" style="margin-top:6px;">
+              <summary>More actions</summary>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;" class="action-bar-utility">
               {% set mm = (row.missing_metrics[0] if row.missing_metrics is defined and row.missing_metrics else "") %}
               {% if mm %}
-                <a class="btn mini" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Add%20{{ mm }}%20measurement&method={{ mm }}">Add missing measurement</a>
+                <a class="btn mini" href="/data/new?program_id={{ program.id }}&molecule_id={{ row.molecule_id }}&title=Add%20{{ mm }}%20measurement&method={{ mm }}&source=board&return_to=/programs/{{ program.id }}/board">Add missing measurement</a>
               {% endif %}
               {% set rec = (row.recommended_experiments[0] if row.recommended_experiments is defined and row.recommended_experiments else None) %}
               {% if rec %}
@@ -360,7 +433,8 @@
                 <button class="btn mini" type="submit">Create exploration task + variant</button>
               </form>
               <a class="btn mini" href="/molecules/{{ row.molecule_id }}#sequence-editor">Open sequence editor</a>
-            </div>
+              </div>
+            </details>
           </li>
         {% else %}
           <li class="muted">(none)</li>

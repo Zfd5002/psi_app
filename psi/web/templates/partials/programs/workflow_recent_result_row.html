@@ -1,0 +1,6 @@
+{% set rm = molecule_by_id.get(r.molecule_id) if molecule_by_id is defined and r.molecule_id else None %}
+<tr>
+  <td><a href="/data/{{ r.id }}">#{{ r.id }}</a></td>
+  <td>{% if rm %}<a href="/molecules/{{ rm.id }}">{{ rm.primary_id }}</a>{% elif r.molecule_id %}#{{ r.molecule_id }}{% else %}<span class="muted">program-level</span>{% endif %}</td>
+  <td>{{ r.title }}</td>
+</tr>

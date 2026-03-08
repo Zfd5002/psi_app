@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from urllib.parse import urlencode
-
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from psi.core.models import Molecule
 from psi.web.deps import get_db, get_templates
+from psi.web import ui_surfaces
+from psi.web import handoff_context as handoff
 from psi.services import programs as svc
 from psi.services import data_records as data_records_svc
 from psi.services import dev_board as dev_board_svc
 from psi.services import experiment_tasks as experiment_tasks_svc
 from psi.services import narratives as narratives_svc
+from psi.services import workflow_center as workflow_center_svc
 
 router = APIRouter()
 
@@ -22,7 +23,10 @@ router = APIRouter()
 @router.get("/programs", response_class=HTMLResponse)
 def list_programs(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
-    return templates.TemplateResponse("programs/list.html", {"request": request, "programs": svc.list_programs(db)})
+    return templates.TemplateResponse(
+        "programs/list.html",
+        {"request": request, "programs": svc.list_programs(db), "surface": ui_surfaces.programs_registry_surface()},
+    )
 
 
 @router.get("/programs/new", response_class=HTMLResponse)
@@ -56,6 +60,7 @@ def program_detail(program_id: int, request: Request, db: Session = Depends(get_
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request
+    ctx["surface"] = ui_surfaces.program_detail_surface(program_id=int(program_id))
     return templates.TemplateResponse("programs/detail.html", ctx)
 
 
@@ -208,6 +213,34 @@ def program_development_board(program_id: int, request: Request, db: Session = D
             "board_urgency_filter": urgency_filter,
             "board_task_status_filter": status_filter,
             "board_due_filter": due_filter,
+            "surface": ui_surfaces.program_board_surface(program_id=int(program_id)),
+        },
+    )
+
+
+@router.get("/programs/{program_id}/workflow", response_class=HTMLResponse)
+def program_workflow_center(program_id: int, request: Request, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    program = svc.get_program(db, int(program_id))
+    if not program:
+        raise HTTPException(404)
+    flow_ctx = workflow_center_svc.build_program_workflow_center(db, program_id=int(program_id))
+    hctx = handoff.get_handoff_context(request)
+    return templates.TemplateResponse(
+        "programs/workflow.html",
+        {
+            "request": request,
+            "program": program,
+            **flow_ctx,
+            "capture_notice": {
+                "captured": bool(hctx.captured),
+                "updated": bool(hctx.updated),
+                "from_task": bool(hctx.from_task),
+                "next_step": str(hctx.next_step or ""),
+                "return_to": str(hctx.return_to or ""),
+                "message": "Continue triage here: assign ownership, move awaiting-data work, and resolve interpretation backlog.",
+            },
+            "surface": ui_surfaces.program_workflow_surface(program_id=int(program_id)),
         },
     )
 
@@ -569,13 +602,18 @@ def create_task_and_start_data_entry(
     )
     method = str(suggested_assay or metric_key or "").strip()
     title = f"Run {metric_key} experiment".strip() if str(metric_key or "").strip() else "Run recommended experiment"
-    query = urlencode(
-        {
-            "program_id": int(program_id),
-            "molecule_id": int(molecule_id),
-            "method": method,
-            "title": title,
-            "task_id": int(task.id),
-        }
+    return RedirectResponse(
+        url=handoff.with_query(
+            "/data/new",
+            {
+                "program_id": int(program_id),
+                "molecule_id": int(molecule_id),
+                "method": method,
+                "title": title,
+                "task_id": int(task.id),
+                "source": "board",
+                "return_to": f"/programs/{int(program_id)}/workflow",
+            },
+        ),
+        status_code=303,
     )
-    return RedirectResponse(url=f"/data/new?{query}", status_code=303)

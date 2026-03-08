@@ -2,29 +2,75 @@
 {% block title %}Claim #{{ claim.id }} | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Scientific Claim</h1>
-  <div><b>Title:</b> {{ claim.title }}</div>
-  <div><b>Type:</b> {{ claim.claim_type|humanize_state }}</div>
-  <div><b>Status:</b> {{ claim.status|humanize_state }}</div>
-  <div><b>Confidence:</b> {{ claim.confidence_level|humanize_state }}</div>
-  <div><b>Statement:</b> {{ claim.statement }}</div>
-  {% if claim.rationale %}<div><b>Rationale:</b> {{ claim.rationale }}</div>{% endif %}
-  <form method="post" action="/claims/{{ claim.id }}/transition" class="no-print" style="margin-top:10px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-    <input type="hidden" name="redirect_to" value="/claims/{{ claim.id }}" />
-    <label>
-      <div class="muted mini">Transition claim status</div>
-      <select name="status">
-        <option value="emerging">emerging</option>
-        <option value="supported">supported</option>
-        <option value="contradicted">contradicted</option>
-        <option value="archived">archived</option>
-      </select>
-    </label>
-    <button class="btn mini" type="submit">Apply transition</button>
-  </form>
-
   {% set m = (maturity if maturity is defined and maturity is mapping else {}) %}
-  <div class="card" style="margin-top:10px;">
+  {% set page_eyebrow = "Scientific Assertion" %}
+  {% set page_title = claim.title %}
+  {% set page_subtitle = claim.statement %}
+  {% set page_statuses = [
+    "Status: " ~ (claim.status|humanize_state),
+    "Confidence: " ~ (claim.confidence_level|humanize_state),
+    "Type: " ~ (claim.claim_type|humanize_state)
+  ] %}
+  {% set claim_context_href = ("/molecules/" ~ claim.molecule_id) if claim.molecule_id else ("/programs/" ~ claim.program_id) %}
+  {% set claim_context_label = "Molecule Context" if claim.molecule_id else "Program Context" %}
+  {% set page_primary_actions = [
+    {"href": "/claims", "label": "All Claims"},
+    {"href": claim_context_href, "label": claim_context_label}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/programs/" ~ claim.program_id ~ "/workflow", "label": "Open Program Workflow Center"},
+    {"href": "/programs/" ~ claim.program_id, "label": "Program Context"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Supporting", "value": (m.supporting_count if m.supporting_count is defined else 0)},
+    {"label": "Contradicting", "value": (m.contradicting_count if m.contradicting_count is defined else 0)},
+    {"label": "Recent Evidence", "value": (header_impact.recent_evidence_links if header_impact is defined and header_impact else 0)},
+    {"label": "Recent Completed Work", "value": (header_impact.recent_completed_work if header_impact is defined and header_impact else 0)},
+    {"label": "Interpretation Pending", "value": (header_impact.interpretation_pending if header_impact is defined and header_impact else 0)}
+  ] %}
+  {% set page_matters_now = [
+    "Interpret claim support vs conflict from linked evidence",
+    "Use linked tasks and plans to de-risk unresolved uncertainties",
+    "Trajectory candidates are heuristic projections and should be validated experimentally",
+    "Track maturity as evidence and task outcomes accumulate"
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
+  {% if sf_labels %}
+    <div class="page-archetype-bar">
+      {% for lbl in sf_labels %}
+        <span class="page-archetype-chip{% if loop.index0 == 1 %} is-active{% endif %}">{{ lbl }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
+  <div class="local-subnav no-print">
+    {% if sf_nav %}
+      {% for item in sf_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}
+    {% else %}
+      <a href="#claim-interpretation">Interpretation</a>
+      <a href="#claim-maturity">Maturity</a>
+      <a href="#claim-evidence">Evidence</a>
+      <a href="#claim-lifecycle">Lifecycle</a>
+      <a href="#claim-tasks">Tasks</a>
+      <a href="#claim-trajectory">Trajectory</a>
+      <a href="#claim-plans">Plans</a>
+    {% endif %}
+  </div>
+  <div class="page-intent-line">Claim interpretation remains separate from evidence truth; use links below to inspect support and de-risking work.</div>
+
+  <div class="card section-card section-primary" id="claim-interpretation" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Scientific Claim Interpretation</h3>
+    <div><b>Title:</b> {{ claim.title }}</div>
+    <div><b>Type:</b> {{ claim.claim_type|humanize_state }}</div>
+    <div><b>Status:</b> {{ claim.status|humanize_state }}</div>
+    <div><b>Confidence:</b> {{ claim.confidence_level|humanize_state }}</div>
+    <div><b>Statement:</b> {{ claim.statement }}</div>
+    {% if claim.rationale %}<div><b>Rationale:</b> {{ claim.rationale }}</div>{% endif %}
+  </div>
+
+  <div class="card section-card section-primary" id="claim-maturity" style="margin-top:10px;">
     <h3 style="margin-top:0;">Maturity Summary</h3>
     <div class="grid cols-4">
       <div><b>Supporting:</b> {{ m.supporting_count if m.supporting_count is defined else 0 }}</div>
@@ -35,7 +81,7 @@
   </div>
 
   {% set ev = (evidence_links if evidence_links is defined and evidence_links is iterable else []) %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-workflow" id="claim-evidence" style="margin-top:10px;">
     <h3 style="margin-top:0;">Evidence Links</h3>
     <table class="table mini">
       <thead><tr><th>Direction</th><th>DataRecord</th><th>Note</th></tr></thead>
@@ -47,14 +93,66 @@
           <td>{{ r.note or "" }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="3" class="muted">No linked evidence.</td></tr>
+        <tr><td colspan="3" class="muted empty-state-cell">No linked evidence.</td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
 
+  {% set rdone = (recent_completed_linked_tasks if recent_completed_linked_tasks is defined and recent_completed_linked_tasks is iterable else []) %}
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Recent Learning Cues</h3>
+    <div class="muted mini">Recently completed claim-linked tasks and latest evidence anchors.</div>
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div class="linked-table-wrap">
+        <table class="table mini">
+          <thead><tr><th>Completed Task</th><th>Linked Result</th></tr></thead>
+          <tbody>
+            {% for t in rdone %}
+              <tr>
+                <td>#{{ t.task_id }} · {% if t.suggested_assay %}{{ t.suggested_assay }}{% else %}{{ t.metric_key or "task" }}{% endif %}</td>
+                <td>{% if t.linked_data_record_id %}<a href="/data/{{ t.linked_data_record_id }}">Data #{{ t.linked_data_record_id }}</a>{% else %}<span class="muted">No data link</span>{% endif %}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="2" class="muted empty-state-cell">No recently completed claim-linked tasks.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="linked-table-wrap">
+        <table class="table mini">
+          <thead><tr><th>Recent Evidence Anchor</th><th>Direction</th></tr></thead>
+          <tbody>
+            {% for r in ev[:5] %}
+              <tr><td><a href="/data/{{ r.data_record_id }}">Data #{{ r.data_record_id }}</a></td><td>{{ r.direction|humanize_state }}</td></tr>
+            {% else %}
+              <tr><td colspan="2" class="muted empty-state-cell">No evidence anchors linked yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card section-card section-workflow no-print" id="claim-lifecycle" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Claim Lifecycle Actions</h3>
+    <form method="post" action="/claims/{{ claim.id }}/transition" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+      <input type="hidden" name="redirect_to" value="/claims/{{ claim.id }}" />
+      <label>
+        <div class="muted mini">Transition claim status</div>
+        <select name="status">
+          <option value="emerging">emerging</option>
+          <option value="supported">supported</option>
+          <option value="contradicted">contradicted</option>
+          <option value="archived">archived</option>
+        </select>
+      </label>
+      <button class="btn mini" type="submit">Apply transition</button>
+    </form>
+  </div>
+
   {% set dl = (decision_links if decision_links is defined and decision_links is iterable else []) %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-secondary" id="claim-tasks" style="margin-top:10px;">
     <h3 style="margin-top:0;">Decision Links</h3>
     <ul>
       {% for r in dl %}
@@ -66,11 +164,11 @@
   </div>
 
   {% set tl = (task_links if task_links is defined and task_links is iterable else []) %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-technical technical-demoted" id="claim-trajectory" style="margin-top:10px;">
     <h3 style="margin-top:0;">Task Links</h3>
     <ul>
       {% for r in tl %}
-        <li><a href="/programs/{{ claim.program_id }}/board">Task #{{ r.experiment_task_id }}</a> · {{ r.relationship_type|humanize_state }}</li>
+        <li><a href="/programs/{{ claim.program_id }}/workflow">Task #{{ r.experiment_task_id }}</a> · {{ r.relationship_type|humanize_state }}</li>
       {% else %}
         <li class="muted">No linked tasks.</li>
       {% endfor %}
@@ -78,7 +176,7 @@
   </div>
 
   {% set olt = (open_linked_tasks if open_linked_tasks is defined and open_linked_tasks is iterable else []) %}
-  <div class="card" style="margin-top:10px;">
+  <div class="card section-card section-workflow" id="claim-plans" style="margin-top:10px;">
     <h3 style="margin-top:0;">Open Linked Tasks</h3>
     <ul>
       {% for t in olt %}
@@ -103,7 +201,7 @@
           <td>{{ r.confidence_level if r.confidence_level is defined else "low" }} ({{ "%.2f"|format(r.confidence_score if r.confidence_score is defined else 0.0) }})</td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No relevant trajectory candidates.</td></tr>
+        <tr><td colspan="4" class="muted empty-state-cell">No relevant trajectory candidates.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -130,7 +228,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No recommended claim plans available.</td></tr>
+        <tr><td colspan="4" class="muted empty-state-cell">No recommended claim plans available.</td></tr>
       {% endfor %}
       </tbody>
     </table>

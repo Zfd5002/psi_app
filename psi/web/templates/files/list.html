@@ -2,7 +2,20 @@
 {% block title %}Files · PSI{% endblock %}
 
 {% block content %}
-  <h1>Files</h1>
+<div class="card">
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set rows = (files if files is defined and files is iterable else []) %}
+  {% set page_eyebrow = "Registry" %}
+  {% set page_title = "Files" %}
+  {% set page_subtitle = "Search stored assay artifacts and download linked files." %}
+  {% set page_metrics = [{"label": "Matching Files", "value": (rows|length)}] %}
+  {% include "partials/page_header.html" %}
+  {% if sf.archetype_labels is defined and sf.archetype_labels %}
+    <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if sf.local_nav is defined and sf.local_nav %}
+  <div class="local-subnav no-print">{% for item in sf.local_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}</div>
+  {% endif %}
 
   <form method="get" class="row" style="gap:12px; align-items:flex-end;">
     <div>
@@ -28,7 +41,7 @@
     </div>
   </form>
 
-  <div class="card" style="margin-top:16px;">
+  <div class="card section-card section-secondary" style="margin-top:16px;">
     <table class="table">
       <thead>
         <tr>
@@ -56,10 +69,11 @@
             <td class="mono">{{ f.created_at }}</td>
           </tr>
         {% endfor %}
-        {% if not files %}
-          <tr><td colspan="7" class="muted">No files found.</td></tr>
+        {% if not rows %}
+          <tr><td colspan="7" class="muted empty-state-cell">No files found for the current filters.</td></tr>
         {% endif %}
       </tbody>
     </table>
   </div>
+</div>
 {% endblock %}

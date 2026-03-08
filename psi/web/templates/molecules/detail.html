@@ -2,10 +2,167 @@
 {% block title %}{{ molecule.primary_id }} | PSI{% endblock %}
 {% block content %}
 {% set mh = molecule_header_model if molecule_header_model is defined and molecule_header_model else {} %}
+{% set omt = (open_experiment_tasks if open_experiment_tasks is defined and open_experiment_tasks is iterable else []) %}
+{% set mclaims = (molecule_claims if molecule_claims is defined and molecule_claims is iterable else []) %}
+{% set mplans = (molecule_plans if molecule_plans is defined and molecule_plans is iterable else []) %}
 <div class="card molecule-page" data-view-mode="scientist">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+  {% set page_eyebrow = "Molecule Workspace" %}
+  {% set page_title = molecule.primary_id %}
+  {% set page_subtitle = (molecule.title or "Scientific detail, execution context, and evidence traceability.") %}
+  {% set page_statuses = [
+    "Stage: " ~ (mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else "not started"),
+    "Program #" ~ molecule.program_id
+  ] %}
+  {% set page_primary_actions = [
+    {"href": "/batches/new?molecule_id=" ~ molecule.id, "label": "New Batch"},
+    {"href": "/di/run?molecule_id=" ~ molecule.id, "label": "Run DI"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/decisions/new?program_id=" ~ molecule.program_id ~ "&molecule_id=" ~ molecule.id, "label": "Run Legacy YAML (Deprecated)"},
+    {"href": "/molecules/" ~ molecule.id ~ "/edit", "label": "Edit"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Open Tasks", "value": (omt|length)},
+    {"label": "Active Claims", "value": (mclaims|length)},
+    {"label": "Recommended Plans", "value": (mplans|length)},
+    {"label": "Latest DI Snapshot", "value": ("#" ~ mh.latest_di_snapshot_id if mh.latest_di_snapshot_id is defined and mh.latest_di_snapshot_id else "—")}
+  ] %}
+  {% set page_matters_now = [
+    "Key signal: " ~ (mh.drift_summary_plain if mh.drift_summary_plain is defined and mh.drift_summary_plain else "No drift summary available"),
+    "Open execution burden: " ~ ((omt|length) ~ " operational tasks"),
+    "Next scientific action: use suggested experiments and top plans to create/advance tasks",
+    "Use evidence and decision history sections to validate trajectory and readiness"
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
+  {% if sf_labels %}
+    <div class="page-archetype-bar">
+      {% for lbl in sf_labels %}
+        <span class="page-archetype-chip{% if loop.index0 == 1 %} is-active{% endif %}">{{ lbl }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
+  <div class="local-subnav no-print">
+    {% if sf_nav %}
+      {% for item in sf_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}
+    {% else %}
+      <a href="#zone-overview">Overview</a>
+      <a href="#workflow-loop">Workflow Loop</a>
+      <a href="#zone-execution">Execution</a>
+      <a href="#zone-rationale">Scientific Rationale</a>
+      <a href="#zone-evidence-data">Evidence &amp; Data</a>
+      <a href="#zone-sequence-annotations">Sequence &amp; Annotations</a>
+      <a href="#zone-history-audit">History &amp; Audit</a>
+    {% endif %}
+  </div>
+  <div class="page-intent-line">Molecule cockpit: interpret signal, decide next experiment bundle, and execute through tracked tasks.</div>
+  {% set capture_notice = {
+    "captured": (request.query_params.get("captured") if request is defined and request.query_params is defined else ""),
+    "updated": (request.query_params.get("evidence") if request is defined and request.query_params is defined else ""),
+    "return_to": ("/programs/" ~ molecule.program_id ~ "/workflow"),
+    "message": "Continue in Program Workflow Center to unblock, assign, and close the next work item."
+  } %}
+  {% include "partials/capture_notice.html" %}
+  <div id="zone-overview" class="section-heading" style="margin-top:10px;">
+    <h2>Overview</h2>
+    <div class="muted mini">Identity, stage, confidence, and key scientific signal.</div>
+  </div>
+
+  {% set next_claim = (mclaims[0] if mclaims and (mclaims|length) > 0 else None) %}
+  {% set next_plan = (mplans[0] if mplans and (mplans|length) > 0 else None) %}
+  {% set next_task = (omt[0] if omt and (omt|length) > 0 else None) %}
+  {% set blocker_text = (
+      mh.progress_stage_advisory.blocked_by_text
+      if mh.progress_stage_advisory is defined and mh.progress_stage_advisory and mh.progress_stage_advisory.blocked_by_text is defined and mh.progress_stage_advisory.blocked_by_text
+      else (mh.drift_summary_plain if mh.drift_summary_plain is defined and mh.drift_summary_plain else "No explicit blocker recorded")
+  ) %}
+  <div class="card molecule-cockpit-lane section-primary">
+    <div class="section-heading">
+      <h2>Scientist Working Lane</h2>
+      <div class="muted mini">Current state, key signal, open work, and next step</div>
+    </div>
+    <div class="molecule-cockpit-grid">
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Current State</div>
+        <div class="molecule-cockpit-value">{{ mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else "not started" }}</div>
+        <div class="muted mini">Confidence: {{ mh.confidence_model.scalar_label if mh.confidence_model is defined and mh.confidence_model and mh.confidence_model.scalar_label is defined else "not assessed" }}</div>
+      </div>
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Key Signal / Blocker</div>
+        <div class="molecule-cockpit-value">{{ blocker_text }}</div>
+        <div class="muted mini">Signal source: latest DI + recorded measurements (read-only interpretation)</div>
+      </div>
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Open Work</div>
+        <div class="molecule-cockpit-value">{{ omt|length }} open operational task{{ "" if (omt|length) == 1 else "s" }}</div>
+        <ul class="molecule-cockpit-list muted mini">
+          <li>Claims in focus: {{ mclaims|length }}</li>
+          <li>Recommended plans: {{ mplans|length }}</li>
+          <li>{% if next_task %}Next task: #{{ next_task.id }}{% else %}No active task queued{% endif %}</li>
+        </ul>
+      </div>
+    </div>
+    <div class="molecule-cockpit-actions no-print">
+      <a class="btn primary" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow Center</a>
+      {% if next_plan %}
+        <a class="btn" href="/plans/{{ next_plan.plan_id }}">Open top plan</a>
+      {% else %}
+        <a class="btn" href="/plans/new?scope_type=molecule&molecule_id={{ molecule.id }}">Create plan</a>
+      {% endif %}
+      {% if next_claim %}
+        <a class="btn" href="/claims/{{ next_claim.claim_id }}">Open top claim</a>
+      {% else %}
+        <a class="btn" href="/claims/new?molecule_id={{ molecule.id }}">Create claim</a>
+      {% endif %}
+      <a class="btn" href="#operational-tasks">Review execution tasks</a>
+      <a class="btn" href="#scientific-trajectory">Review trajectory</a>
+    </div>
+  </div>
+  {% set evidence_count = (evidence|length) if evidence is defined and evidence is iterable else 0 %}
+  <div class="card section-card section-workflow" id="workflow-loop" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Workflow Loop</h2>
+      <div class="muted mini">Evidence → Claim → Plan → Task → Experiment → Evidence</div>
+    </div>
+    <div class="grid cols-3" style="margin-top:8px;">
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Current Posture</div>
+        <ul class="molecule-cockpit-list mini">
+          <li>Evidence rows: {{ evidence_count }}</li>
+          <li>Claims in focus: {{ mclaims|length }}</li>
+          <li>Recommended plans: {{ mplans|length }}</li>
+          <li>Open tasks: {{ omt|length }}</li>
+        </ul>
+      </div>
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Transition Available Next</div>
+        <ul class="molecule-cockpit-list mini">
+          <li>{% if mclaims|length == 0 %}Create an explicit claim for this molecule{% else %}Review top claim support/conflict{% endif %}</li>
+          <li>{% if mplans|length == 0 %}Create a readiness or de-risking plan{% else %}Open top plan and instantiate steps{% endif %}</li>
+          <li>{% if omt|length == 0 %}Create tracked task from suggestion{% else %}Advance highest-priority open task{% endif %}</li>
+          <li>Run experiment and record evidence to close loop</li>
+        </ul>
+      </div>
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Execution Entry Points</div>
+        <div class="molecule-cockpit-actions no-print">
+          <a class="btn mini" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow Center</a>
+          <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&source=molecule&return_to=/molecules/{{ molecule.id }}#execution">Start data entry</a>
+          <a class="btn mini" href="/builder/suggested-task/new?molecule_id={{ molecule.id }}">Create task from suggestion</a>
+          <a class="btn mini" href="/plans/new?scope_type=molecule&molecule_id={{ molecule.id }}">Create molecule plan</a>
+          <a class="btn mini" href="/claims/new?molecule_id={{ molecule.id }}">Create molecule claim</a>
+          <a class="btn mini" href="#evidence">Review recent evidence</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="molecule-legacy-top section-secondary" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
     <div>
-      <h1>{{ molecule.primary_id }}</h1>
+      <h2 style="margin:0;">Detailed Molecule Controls</h2>
+      <div class="muted mini">Advanced controls and legacy grouped actions remain available below.</div>
       <div class="tabs">
         <a class="tab {% if tab != 'experimental' %}active{% endif %}" href="/molecules/{{ molecule.id }}?tab=overview">Overview</a>
         <a class="tab {% if tab == 'experimental' %}active{% endif %}" href="/molecules/{{ molecule.id }}?tab=experimental">Experimental</a>
@@ -29,9 +186,9 @@
                 <tr>
                   <td><a href="/batches/{{ b.id }}"><strong>{{ b.batch_id }}</strong></a></td>
                   <td style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=CMC&data_type=CMC_Analytics&method=SEC_HPLC&title=SEC-HPLC">Add SEC-HPLC</a>
-                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=Biological&data_type=Binding&method=BLI&title=BLI%20binding">Add BLI/SPR</a>
-                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=CMC&data_type=CMC_Analytics&method=Endotoxin&title=Endotoxin">Add endotoxin</a>
+                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=CMC&data_type=CMC_Analytics&method=SEC_HPLC&title=SEC-HPLC&source=molecule&return_to=/molecules/{{ molecule.id }}#evidence-data">Add SEC-HPLC</a>
+                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=Biological&data_type=Binding&method=BLI&title=BLI%20binding&source=molecule&return_to=/molecules/{{ molecule.id }}#evidence-data">Add BLI/SPR</a>
+                    <a class="btn mini primary" href="/data/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}&batch_id={{ b.id }}&domain=CMC&data_type=CMC_Analytics&method=Endotoxin&title=Endotoxin&source=molecule&return_to=/molecules/{{ molecule.id }}#evidence-data">Add endotoxin</a>
                   </td>
                   <td class="muted">{{ b.title or "" }}</td>
                 </tr>
@@ -55,13 +212,16 @@
     <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
       <a class="btn primary" href="/batches/new?molecule_id={{ molecule.id }}">New Batch</a>
       <a class="btn primary" href="/di/run?molecule_id={{ molecule.id }}">Run DI for this molecule</a>
-      <a class="btn" href="/decisions/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}">Run Legacy YAML</a>
+      <a class="btn" href="/decisions/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}">Run Legacy YAML (Deprecated)</a>
       <a class="btn" href="/molecules/{{ molecule.id }}/edit">Edit</a>
     </div>
   </div>
 
-  {% set omt = (open_experiment_tasks if open_experiment_tasks is defined and open_experiment_tasks is iterable else []) %}
-  <div class="card" style="margin-top:12px;">
+  <div id="zone-execution" class="section-heading" style="margin-top:12px;">
+    <h2>Execution</h2>
+    <div class="muted mini">Current work queue and immediate operational actions.</div>
+  </div>
+  <div class="card section-card section-workflow" id="operational-tasks" style="margin-top:8px;">
     <h2 style="margin-top:0;">Operational Tasks</h2>
     <div class="muted mini">Open experiment/exploration tasks linked to this molecule.</div>
     <table class="table mini" style="margin-top:8px;">
@@ -77,28 +237,31 @@
           <td>{{ t.due_date or "—" }}</td>
           <td class="no-print">
             <form method="post" action="/programs/{{ molecule.program_id }}/tasks/{{ t.id }}/start" style="display:inline;">
-              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
+              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}#operational-tasks" />
               <button class="btn mini" type="submit">Start</button>
             </form>
             <form method="post" action="/programs/{{ molecule.program_id }}/tasks/{{ t.id }}/block" style="display:inline;">
-              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
+              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}#operational-tasks" />
               <button class="btn mini" type="submit">Block</button>
             </form>
             <form method="post" action="/programs/{{ molecule.program_id }}/tasks/{{ t.id }}/done" style="display:inline;">
-              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
+              <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}#operational-tasks" />
               <button class="btn mini primary" type="submit">Done</button>
             </form>
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="7" class="muted">No open tasks.</td></tr>
+        <tr><td colspan="7" class="muted empty-state-cell">No open tasks.</td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
 
-  {% set mclaims = (molecule_claims if molecule_claims is defined and molecule_claims is iterable else []) %}
-  <div class="card" style="margin-top:12px;">
+  <div id="zone-rationale" class="section-heading" style="margin-top:12px;">
+    <h2>Scientific Rationale</h2>
+    <div class="muted mini">Claims, plans, trajectory projections, and interpretation guidance.</div>
+  </div>
+  <div class="card section-card section-primary" id="scientific-claims" style="margin-top:8px;">
     <h2 style="margin-top:0;">Scientific Claims</h2>
     <div class="muted mini">Top active scientific assertions for this molecule.</div>
     <table class="table mini" style="margin-top:8px;">
@@ -115,14 +278,13 @@
           <td>{{ c.next_task_label if c.next_task_label else "—" }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="7" class="muted">No active claims linked to this molecule.</td></tr>
+        <tr><td colspan="7" class="muted empty-state-cell">No active claims linked to this molecule.</td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
 
-  {% set mplans = (molecule_plans if molecule_plans is defined and molecule_plans is iterable else []) %}
-  <div class="card" style="margin-top:12px;">
+  <div class="card section-card section-workflow" id="recommended-plans" style="margin-top:12px;">
     <h2 style="margin-top:0;">Recommended Plans</h2>
     <div class="muted mini">Deterministic work bundles generated from trajectory, evidence gaps, and task context.</div>
     <table class="table mini" style="margin-top:8px;">
@@ -143,7 +305,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No recommended plans available.</td></tr>
+        <tr><td colspan="4" class="muted empty-state-cell">No recommended plans available.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -300,7 +462,7 @@
     </div>
   </div>
 
-  <div class="card" style="margin-top:12px;">
+  <div class="card section-card section-workflow" id="scientific-trajectory" style="margin-top:12px;">
     <h2 style="margin-top:0;">Lineage</h2>
     {% if lineage_parent %}
       <div style="margin-bottom:8px;">
@@ -352,7 +514,7 @@
           <td>{{ r.confidence_level if r.confidence_level is defined else "low" }} ({{ "%.2f"|format(r.confidence_score if r.confidence_score is defined else 0.0) }})</td>
         </tr>
       {% else %}
-        <tr><td colspan="5" class="muted">No projected trajectory candidates available.</td></tr>
+        <tr><td colspan="5" class="muted empty-state-cell">No projected trajectory candidates available.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -360,9 +522,9 @@
 
   {% set tt = (trajectory_tree if trajectory_tree is defined and trajectory_tree is mapping else {}) %}
   {% set nodes = (tt.nodes if tt.nodes is defined and tt.nodes is iterable else []) %}
-  <div class="card" style="margin-top:12px;">
-    <h2 style="margin-top:0;">Trajectory Graph</h2>
-    <div class="muted mini">Current state to projected states (derived, deterministic, read-only).</div>
+  <details class="card section-card section-technical technical-demoted progressive-disclosure" style="margin-top:12px;" data-psi-details-key="trajectory_graph_details">
+    <summary>Trajectory Graph (technical view)</summary>
+    <div class="muted mini" style="margin-top:6px;">Current state to projected states (derived, deterministic, read-only).</div>
     <div style="margin-top:8px;">
       {% for n in nodes %}
         {% if n.node_id == "root" %}
@@ -379,8 +541,17 @@
         <div class="muted">No trajectory graph nodes available.</div>
       {% endfor %}
     </div>
-  </div>
+  </details>
 
+  <div id="zone-sequence-annotations" class="section-heading" style="margin-top:12px;">
+    <h2>Sequence &amp; Annotations</h2>
+    <div class="muted mini">Sequence editing, annotation review, and sequence-linked context.</div>
+    <div class="action-bar-utility no-print">
+      <a class="btn mini" href="#sequence-editor">Open sequence editor</a>
+      <a class="btn mini" href="#annotations">Jump to annotations</a>
+      <a class="btn mini" href="#files">Jump to files</a>
+    </div>
+  </div>
   {% include "molecules/_sequence_editor.html" %}
 
   {% set ib = molecule_insight_bundle if molecule_insight_bundle is defined and molecule_insight_bundle else {} %}
@@ -450,9 +621,9 @@
 
   {% set ibg = molecule_insight_governance if molecule_insight_governance is defined and molecule_insight_governance else {} %}
   {% set ibs = molecule_insight_source if molecule_insight_source is defined and molecule_insight_source else {} %}
-  <div class="card" style="margin-top:12px;" data-molecule-mode-panel="governance">
-    <h2 style="margin-top:0;">Insight Governance Detail</h2>
-    <div class="muted mini">Governance mode only: policy/snapshot provenance for scientist interpretation surfaces.</div>
+  <details class="card section-card section-technical technical-demoted progressive-disclosure" style="margin-top:12px;" data-molecule-mode-panel="governance" data-psi-details-key="insight_governance_details">
+    <summary>Insight Governance Detail</summary>
+    <div class="muted mini" style="margin-top:8px;">Governance mode only: policy/snapshot provenance for scientist interpretation surfaces.</div>
     <div class="grid cols-2" style="margin-top:8px;gap:12px;">
       <div>
         <div><b>Snapshot ID:</b> {{ ibs.snapshot_id if ibs is mapping and ibs.snapshot_id is defined and ibs.snapshot_id else "—" }}</div>
@@ -474,12 +645,12 @@
           {% for row in (ibg.gate_outcomes if ibg is mapping and ibg.gate_outcomes is defined else []) %}
             <tr><td>{{ row.gate_key if row.gate_key is defined else "—" }}</td><td>{{ row.status if row.status is defined and row.status else "unknown" }}</td></tr>
           {% else %}
-            <tr><td colspan="2" class="muted">No gate outcomes available.</td></tr>
+            <tr><td colspan="2" class="muted empty-state-cell">No gate outcomes available.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-  </div>
+  </details>
 
   {% set mt = molecule_trends if molecule_trends is defined and molecule_trends else {"metric_keys": [], "series": {}} %}
   <div class="card" style="margin-top:12px;" data-molecule-mode-panel="scientist">
@@ -564,6 +735,10 @@
   </div>
 {% endif %}
 
+  <div id="zone-evidence-data" class="section-heading" style="margin-top:12px;">
+    <h2>Evidence &amp; Data</h2>
+    <div class="muted mini">Batch-first records, data tables, and evidence snapshots.</div>
+  </div>
 <h2 id="batches">Batches</h2>
   <p class="muted">Batch-first view. Expand a batch to see all experiments grouped by assay and structured condition (buffer/NaCl/etc). Results are shown first; metadata is secondary.</p>
 
@@ -754,11 +929,16 @@
   </div>
 </div>
   
+<div id="zone-history-audit" class="section-heading" style="margin-top:12px;">
+  <h2>History &amp; Audit</h2>
+  <div class="muted mini">Decision lineage, technical history, and audit traceability.</div>
+</div>
 <h2 id="di_history">Decision history</h2>
 <p class="muted">All DI snapshots across all batches for this molecule (read-only).</p>
 
 {% if di_history and di_history|length %}
   <div class="card" style="margin-top:10px;">
+    <div class="linked-table-wrap">
     <table class="table">
       <thead>
         <tr>
@@ -820,6 +1000,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 {% else %}
   <div class="muted">No DI snapshots found for this molecule.</div>
@@ -831,6 +1012,7 @@
   <div class="card" style="margin:10px 0;">
     <h3 style="margin-top:0;">Pending Evidence Preview</h3>
     <p class="muted">Presentation-only comparison of pending entry metrics against the latest DI snapshot for this molecule.</p>
+    <div class="linked-table-wrap">
     <table class="table mini">
       <thead><tr><th>Created</th><th>Entry</th><th>Assay</th><th>Evidence preview</th></tr></thead>
       <tbody>
@@ -847,9 +1029,11 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 {% endif %}
 <h2 id="evidence">Recent evidence</h2>
+  <div class="linked-table-wrap">
   <table class="table">
     <thead><tr><th>Evidence type</th><th>Domain</th><th>Strength</th><th>Summary</th></tr></thead>
     <tbody>
@@ -865,6 +1049,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 
   <h2 id="computed">Computed Results</h2>
   <p class="muted">Computed results are generated automatically and never overwrite experimental data.</p>
@@ -1621,7 +1806,10 @@
   </table>
 
   <h2 id="audit">Audit</h2>
-  {% include "partials/audit_table.html" %}
+  <details class="progressive-disclosure audit-demoted">
+    <summary>Show audit and technical history</summary>
+    {% include "partials/audit_table.html" %}
+  </details>
 </div>
 
 <script>

@@ -2,8 +2,14 @@
 {% block title %}Suggested Experiment Task | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Create Task from Suggested Experiment</h1>
-  <div class="muted mini">Prefilled from molecule insight recommendations. Task creation remains explicit.</div>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set page_eyebrow = "Execution Handoff" %}
+  {% set page_title = "Create Task from Suggested Experiment" %}
+  {% set page_subtitle = "Prefilled from molecule insight recommendations. Task creation remains explicit." %}
+  {% set page_secondary_actions = [{"href": "/molecules/" ~ molecule.id, "label": "Back to Molecule"}, {"href": "/programs/" ~ molecule.program_id ~ "/workflow", "label": "Open Program Workflow Center"}] %}
+  {% include "partials/page_header.html" %}
+  {% set surface_chrome_active_index = 0 %}
+  {% include "partials/surface_chrome.html" %}
 
   <div style="margin-top:8px;">
     <div><b>Molecule:</b> <a href="/molecules/{{ molecule.id }}">{{ molecule.primary_id }}</a></div>
@@ -24,6 +30,7 @@
     <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
     <div style="display:flex;gap:8px;">
       <button class="btn primary" type="submit">Create task</button>
+      <a class="btn" href="/programs/{{ molecule.program_id }}/workflow">Open Program Workflow Center</a>
       <a class="btn" href="/molecules/{{ molecule.id }}">Cancel</a>
     </div>
   </form>

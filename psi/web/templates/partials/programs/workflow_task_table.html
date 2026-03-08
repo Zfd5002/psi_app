@@ -1,0 +1,38 @@
+<div class="linked-table-wrap" id="{{ section_id }}" style="margin-top:8px;">
+  <table class="table mini">
+    <thead><tr><th>Task</th><th>Molecule</th><th>Status</th><th>Urgency</th><th>Owner</th><th>Due</th><th>Origin</th><th>Focus</th><th class="no-print">Actions</th></tr></thead>
+    <tbody>
+    {% for t in rows %}
+      {% set m = molecule_by_id.get(t.molecule_id) if molecule_by_id is defined else None %}
+      <tr>
+        <td>#{{ t.id }}</td>
+        <td>
+          {% if m %}<a href="/molecules/{{ t.molecule_id }}">{{ m.primary_id }}</a>{% else %}#{{ t.molecule_id }}{% endif %}
+        </td>
+        <td>{{ t.status|humanize_state }}</td>
+        <td>{{ t.urgency|humanize_state }}</td>
+        <td>{{ t.owner_text or "unassigned" }}</td>
+        <td>{{ t.due_date or "—" }}</td>
+        <td>{{ (t.source_kind or "manual")|humanize_state }}</td>
+        <td>{% if t.suggested_assay %}{{ t.suggested_assay }}{% elif t.metric_key %}{{ t.metric_key }}{% else %}task{% endif %}</td>
+        <td class="no-print">
+          <form method="post" action="/programs/{{ program.id }}/tasks/{{ t.id }}/start" style="display:inline;">
+            <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/workflow" />
+            <button class="btn mini" type="submit">Start</button>
+          </form>
+          <form method="post" action="/programs/{{ program.id }}/tasks/{{ t.id }}/block" style="display:inline;">
+            <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/workflow" />
+            <button class="btn mini" type="submit">Block</button>
+          </form>
+          <form method="post" action="/programs/{{ program.id }}/tasks/{{ t.id }}/done" style="display:inline;">
+            <input type="hidden" name="redirect_to" value="/programs/{{ program.id }}/workflow" />
+            <button class="btn mini primary" type="submit">Done</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="muted empty-state-cell">{{ empty_text }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>

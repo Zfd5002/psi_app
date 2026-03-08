@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from psi.services import evidence as svc
 from psi.core.models import EvidenceCitation
 from psi.web.deps import get_db, get_rules_path, get_storage_cfg, get_templates
+from psi.web import ui_surfaces
+from psi.web import handoff_context as handoff
 
 router = APIRouter()
 
@@ -21,6 +23,7 @@ def list_evidence(request: Request, db: Session = Depends(get_db), rules_path=De
     form_ctx = svc.get_evidence_form_context(db, str(rules_path))
     ctx.update({"domains": form_ctx["domains"]})
     ctx["request"] = request
+    ctx["surface"] = ui_surfaces.evidence_registry_surface()
     return templates.TemplateResponse("evidence/list.html", ctx)
 
 
@@ -30,12 +33,25 @@ def new_evidence(
     program_id: Optional[int] = None,
     molecule_id: Optional[int] = None,
     batch_id: Optional[int] = None,
+    return_to: Optional[str] = None,
     db: Session = Depends(get_db),
     rules_path=Depends(get_rules_path),
 ):
     templates = get_templates(request)
     ctx = svc.get_evidence_form_context(db, str(rules_path))
-    ctx.update({"request": request, "ev": None, "prefill": {"program_id": program_id, "molecule_id": molecule_id, "batch_id": batch_id}})
+    ctx.update(
+        {
+            "request": request,
+            "ev": None,
+            "prefill": {"program_id": program_id, "molecule_id": molecule_id, "batch_id": batch_id},
+            "return_to": str(return_to or "").strip(),
+        }
+    )
+    ctx["surface"] = ui_surfaces.evidence_entry_surface(
+        program_id=int(program_id) if program_id is not None else None,
+        molecule_id=int(molecule_id) if molecule_id is not None else None,
+        batch_id=int(batch_id) if batch_id is not None else None,
+    )
     return templates.TemplateResponse("evidence/form.html", ctx)
 
 
@@ -59,6 +75,7 @@ def create_evidence(
     dr_run_date: str = Form(""),
     dr_params_json: str = Form("{}"),
     dr_results_json: str = Form("{}"),
+    return_to: str = Form(""),
     dr_files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     storage=Depends(get_storage_cfg),
@@ -95,7 +112,9 @@ def create_evidence(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    return RedirectResponse(url=f"/evidence/{ev.id}", status_code=303)
+    rt = str(return_to or "").strip()
+    target = rt if rt else handoff.build_return_url(f"/evidence/{ev.id}", captured=True)
+    return RedirectResponse(url=target, status_code=303)
 
 
 @router.get("/evidence/{evidence_id}", response_class=HTMLResponse)
@@ -106,6 +125,18 @@ def evidence_detail(evidence_id: int, request: Request, db: Session = Depends(ge
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request
+    hctx = handoff.get_handoff_context(request)
+    ctx["detail_handoff"] = {
+        "captured": bool(hctx.captured),
+        "updated": bool(hctx.updated),
+        "return_to": str(hctx.return_to or ""),
+    }
+    ev = ctx.get("ev")
+    ctx["surface"] = ui_surfaces.evidence_detail_surface(
+        evidence_id=int(evidence_id),
+        program_id=int(ev.program_id) if ev is not None and getattr(ev, "program_id", None) is not None else None,
+        molecule_id=int(ev.molecule_id) if ev is not None and getattr(ev, "molecule_id", None) is not None else None,
+    )
     return templates.TemplateResponse("evidence/detail.html", ctx)
 
 
@@ -120,7 +151,12 @@ def edit_evidence(evidence_id: int, request: Request, db: Session = Depends(get_
     # restore
     ctx["domain_evidence_types"] = citations
     cited = [c.data_record_id for c in db.query(EvidenceCitation).filter(EvidenceCitation.evidence_id == evidence_id).all()]
-    ctx.update({"request": request, "ev": ev, "prefill": {}, "cited_ids": cited})
+    ctx.update({"request": request, "ev": ev, "prefill": {}, "cited_ids": cited, "return_to": str(request.query_params.get("return_to") or "").strip()})
+    ctx["surface"] = ui_surfaces.evidence_entry_surface(
+        program_id=int(ev.program_id) if getattr(ev, "program_id", None) is not None else None,
+        molecule_id=int(ev.molecule_id) if getattr(ev, "molecule_id", None) is not None else None,
+        batch_id=int(ev.batch_id) if getattr(ev, "batch_id", None) is not None else None,
+    )
     return templates.TemplateResponse("evidence/form.html", ctx)
 
 
@@ -137,6 +173,7 @@ def update_evidence(
     details: str = Form(""),
     citation_data_record_ids: str = Form(""),
     reason: str = Form(""),
+    return_to: str = Form(""),
     db: Session = Depends(get_db),
 ):
     try:
@@ -159,4 +196,6 @@ def update_evidence(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    return RedirectResponse(url=f"/evidence/{ev.id}", status_code=303)
+    rt = str(return_to or "").strip()
+    target = rt if rt else handoff.build_return_url(f"/evidence/{ev.id}", updated=True)
+    return RedirectResponse(url=target, status_code=303)

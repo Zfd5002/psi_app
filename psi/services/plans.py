@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from psi.core.models import DecisionSnapshot, ExperimentTask, Molecule, ScientificClaim, ScientificPlan, ScientificPlanStep
+from psi.core.models import DecisionSnapshot, Evidence, EvidenceCitation, ExperimentTask, Molecule, ScientificClaim, ScientificPlan, ScientificPlanStep
 from psi.core.utils import now_utc
 from psi.services import claims as claims_svc
 from psi.services import experiment_tasks as task_svc
@@ -326,7 +326,55 @@ def build_plan_detail(db: Session, *, plan_id: int) -> dict[str, Any]:
     if p is None:
         raise KeyError("ScientificPlan not found")
     steps = list_plan_steps(db, plan_id=int(plan_id))
-    return {"plan": p, "steps": steps, "plan_score": score_plan(db, p), "effort_estimate": estimate_plan_effort(db, p)}
+    linked_task_ids = [int(s.linked_experiment_task_id) for s in steps if s.linked_experiment_task_id is not None]
+    recent_completed_tasks: list[ExperimentTask] = []
+    if linked_task_ids:
+        recent_completed_tasks = (
+            db.query(ExperimentTask)
+            .filter(ExperimentTask.id.in_(linked_task_ids))
+            .filter(ExperimentTask.status == "done")
+            .order_by(ExperimentTask.updated_at.desc(), ExperimentTask.id.asc())
+            .limit(6)
+            .all()
+        )
+    recent_evidence: list[Evidence] = []
+    if p.program_id is not None:
+        q = db.query(Evidence).filter(Evidence.program_id == int(p.program_id))
+        if p.molecule_id is not None:
+            q = q.filter((Evidence.molecule_id == int(p.molecule_id)) | (Evidence.molecule_id.is_(None)))
+        recent_evidence = q.order_by(Evidence.created_at.desc(), Evidence.id.desc()).limit(6).all()
+
+    linked_record_ids = [int(t.linked_data_record_id) for t in recent_completed_tasks if t.linked_data_record_id is not None]
+    evidence_by_record: dict[int, list[int]] = {}
+    if linked_record_ids:
+        rows = (
+            db.query(EvidenceCitation.data_record_id, EvidenceCitation.evidence_id)
+            .filter(EvidenceCitation.data_record_id.in_(linked_record_ids))
+            .all()
+        )
+        for dr_id, ev_id in rows:
+            if dr_id is None or ev_id is None:
+                continue
+            evidence_by_record.setdefault(int(dr_id), []).append(int(ev_id))
+        for dr_id in list(evidence_by_record.keys()):
+            evidence_by_record[int(dr_id)] = sorted(set(evidence_by_record[int(dr_id)]))
+    pending_evidence_links = sum(1 for rid in linked_record_ids if int(rid) not in evidence_by_record)
+    header_impact = {
+        "new_results_affecting_plan": int(pending_evidence_links),
+        "evidence_updates": int(len(recent_evidence)),
+        "recent_execution_activity": int(len(recent_completed_tasks)),
+    }
+
+    return {
+        "plan": p,
+        "steps": steps,
+        "plan_score": score_plan(db, p),
+        "effort_estimate": estimate_plan_effort(db, p),
+        "recent_completed_tasks": recent_completed_tasks,
+        "recent_evidence": recent_evidence,
+        "evidence_by_record": evidence_by_record,
+        "header_impact": header_impact,
+    }
 
 
 def estimate_plan_effort(db: Session, plan: ScientificPlan | int) -> int:

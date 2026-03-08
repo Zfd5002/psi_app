@@ -1,0 +1,12 @@
+<div style="display:flex;gap:10px;flex-wrap:wrap;">
+  <button class="btn primary" type="submit" onclick="document.getElementById('actionIntent').value='save'">Save</button>
+  {% if record %}
+    <button class="btn primary" type="submit" onclick="document.getElementById('actionIntent').value='approve'">Approve</button>
+    <button class="btn" type="submit" onclick="document.getElementById('actionIntent').value='reject'">Reject</button>
+  {% endif %}
+  {% if record %}
+    <a class="btn" href="{{ return_to if return_to is defined and return_to else ('/data/' ~ record.id) }}">Cancel</a>
+  {% else %}
+    <a class="btn" href="/data">Cancel</a>
+  {% endif %}
+</div>

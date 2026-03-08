@@ -1,0 +1,18 @@
+<details class="progressive-disclosure section-secondary" style="margin-top:8px;">
+  <summary>Additional context and attachments (optional)</summary>
+  <div class="field" style="margin-top:8px;">
+    <label>Scientist Notes</label>
+    <textarea name="notes">{{ record.notes if record else '' }}</textarea>
+  </div>
+  <div class="field">
+    <label>Attach supporting files</label>
+    <input type="file" name="files" multiple />
+    <div class="help">Files are stored under <code>./uploads/</code> with SHA256 traceability.</div>
+  </div>
+  {% if record %}
+  <div class="field">
+    <label>Audit reason for update</label>
+    <input name="reason" />
+  </div>
+  {% endif %}
+</details>

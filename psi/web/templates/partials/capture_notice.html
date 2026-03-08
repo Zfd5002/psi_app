@@ -1,0 +1,23 @@
+{% set _cn = (capture_notice if capture_notice is defined and capture_notice is mapping else {}) %}
+{% set _captured = (_cn.captured if _cn.captured is defined else false) %}
+{% set _updated = (_cn.updated if _cn.updated is defined else false) %}
+{% set _from_task = (_cn.from_task if _cn.from_task is defined else false) %}
+{% set _next_step = (_cn.next_step if _cn.next_step is defined and _cn.next_step else "") %}
+{% set _return_to = (_cn.return_to if _cn.return_to is defined and _cn.return_to else "") %}
+{% set _message = (_cn.message if _cn.message is defined and _cn.message else "") %}
+{% if _captured or _updated or _from_task or _next_step or _return_to or _message %}
+<div class="notice" style="margin-top:10px;border-color:rgba(102,255,153,.38);background:rgba(102,255,153,.10);">
+  {% if _captured %}<b>Capture recorded.</b> {% endif %}
+  {% if _updated %}<b>Update recorded.</b> {% endif %}
+  {% if _from_task %}<b>Task-linked flow.</b> {% endif %}
+  {% if _message %}
+    {{ _message }}
+  {% elif _next_step == "evidence" %}
+    Recommended next step: create or link evidence from this result.
+  {% else %}
+    Continue in workflow to keep the scientific loop moving.
+  {% endif %}
+  {% if _return_to %} <a href="{{ _return_to }}">Return to prior context</a>.{% endif %}
+</div>
+{% endif %}
+

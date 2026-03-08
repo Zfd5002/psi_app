@@ -26,6 +26,7 @@ from psi.services.builder_ops import (
 from psi.core.models import BuilderVariantSet, BuilderVariantSetMember, Molecule, MoleculeComponent, MoleculeDerivation, Program
 from psi.services import experiment_tasks as experiment_tasks_svc
 from psi.web.deps import get_db, get_templates
+from psi.web import ui_surfaces
 
 router = APIRouter()
 
@@ -154,6 +155,7 @@ def builder_home(request: Request, db: Session = Depends(get_db)):
         {
             "request": request,
             "molecules": molecules,
+            "surface": ui_surfaces.builder_home_surface(),
         },
     )
 
@@ -174,6 +176,7 @@ def builder_clone_page(request: Request, db: Session = Depends(get_db)):
             "draft": None,
             "form_data": {},
             "error": "",
+            "surface": ui_surfaces.builder_clone_surface(),
         },
     )
 
@@ -216,6 +219,7 @@ async def builder_clone_build_draft(request: Request, db: Session = Depends(get_
                 "rationale": rationale,
             },
             "error": "",
+            "surface": ui_surfaces.builder_clone_surface(),
         },
     )
 
@@ -263,6 +267,7 @@ def builder_point_mutation_page(request: Request, db: Session = Depends(get_db))
             "draft": None,
             "form_data": {},
             "error": "",
+            "surface": ui_surfaces.builder_point_mutation_surface(),
         },
     )
 
@@ -283,6 +288,7 @@ def builder_cdr_builder_page(request: Request, db: Session = Depends(get_db)):
             "draft": None,
             "form_data": {},
             "error": "",
+            "surface": ui_surfaces.builder_cdr_surface(),
         },
     )
 
@@ -303,6 +309,7 @@ def builder_variant_set_page(request: Request, db: Session = Depends(get_db)):
             "draft": None,
             "form_data": {},
             "error": "",
+            "surface": ui_surfaces.builder_variant_set_surface(),
         },
     )
 
@@ -332,6 +339,10 @@ def builder_suggested_task_new(
                 suggested_assay=str(suggested_assay or ""),
                 suggested_rationale=str(suggested_rationale or ""),
                 source_kind="insight",
+            ),
+            "surface": ui_surfaces.builder_suggested_task_surface(
+                molecule_id=int(mol.id),
+                program_id=int(mol.program_id),
             ),
         },
     )
@@ -434,6 +445,7 @@ async def builder_variant_set_build_draft(request: Request, db: Session = Depend
                 **cdrs,
             },
             "error": "",
+            "surface": ui_surfaces.builder_variant_set_surface(),
         },
     )
 
@@ -548,6 +560,7 @@ def builder_variant_set_detail(variant_set_id: int, request: Request, db: Sessio
             "request": request,
             "variant_set": vset,
             "members": member_rows,
+            "surface": ui_surfaces.builder_variant_set_detail_surface(variant_set_id=int(variant_set_id)),
         },
     )
 
@@ -604,6 +617,7 @@ async def builder_cdr_builder_build_draft(request: Request, db: Session = Depend
                 **op,
             },
             "error": "",
+            "surface": ui_surfaces.builder_cdr_surface(),
         },
     )
 
@@ -669,6 +683,7 @@ async def builder_point_mutation_build_draft(request: Request, db: Session = Dep
                 "mutation_validation_errors": mutation_validation_errors,
             },
             "error": "",
+            "surface": ui_surfaces.builder_point_mutation_surface(),
         },
     )
 

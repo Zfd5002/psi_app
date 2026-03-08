@@ -1,0 +1,28 @@
+<div class="grid cols-2" style="margin-top:8px;">
+  <div class="linked-table-wrap">
+    <h3 style="margin:0 0 6px 0;">Recent Results</h3>
+    <table class="table mini">
+      <thead><tr><th>Record</th><th>Molecule</th><th>Title</th></tr></thead>
+      <tbody>
+        {% for r in recent_data_records %}
+          {% include "partials/programs/workflow_recent_result_row.html" %}
+        {% else %}
+          <tr><td colspan="3" class="muted empty-state-cell">No recent results captured in this program.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="linked-table-wrap">
+    <h3 style="margin:0 0 6px 0;">Recent Evidence</h3>
+    <table class="table mini">
+      <thead><tr><th>Evidence</th><th>Type</th><th>Strength</th></tr></thead>
+      <tbody>
+        {% for ev in recent_evidence %}
+          {% include "partials/programs/workflow_recent_evidence_row.html" %}
+        {% else %}
+          <tr><td colspan="3" class="muted empty-state-cell">No recent evidence entries in this program.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

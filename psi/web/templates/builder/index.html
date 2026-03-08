@@ -2,11 +2,16 @@
 {% block title %}Molecule Builder | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Molecule Builder</h1>
-  <p class="muted">
-    Standalone engineering workspace for deterministic molecule derivation.
-    Builder flows do not execute DI, create decisions, or attach molecules to programs.
-  </p>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set page_eyebrow = "Builder Workspace" %}
+  {% set page_title = (sf.surface_title if sf.surface_title is defined and sf.surface_title else "Molecule Builder") %}
+  {% set page_subtitle = "Standalone engineering workspace for deterministic molecule derivation." %}
+  {% set page_metrics = [{"label": "Available Parent Molecules", "value": ((molecules|length) if molecules is defined and molecules is iterable else 0)}] %}
+  {% set page_matters_now = ["Builder flows are deterministic and do not mutate DI semantics directly.", "Use builder outputs to create tracked tasks and then evidence in molecule/program workflows."] %}
+  {% include "partials/page_header.html" %}
+  {% set surface_chrome_active_index = 0 %}
+  {% include "partials/surface_chrome.html" %}
+  <p class="muted">Builder flows do not execute DI, create decisions, or attach molecules to programs.</p>
 
   <div class="grid cols-2">
     <div class="card">

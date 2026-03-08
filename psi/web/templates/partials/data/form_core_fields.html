@@ -1,0 +1,77 @@
+<div class="grid cols-2">
+  <div class="field">
+    <label>Program</label>
+    <select name="program_id" id="programSel" required>
+      {% for p in programs %}
+        <option value="{{ p.id }}" {% if (record and p.id==record.program_id) or (not record and prefill.program_id and p.id==prefill.program_id) %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Run date (optional)</label>
+    <input type="date" name="run_date" value="{{ record.run_date if record and record.run_date else '' }}" />
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="field">
+    <label>Molecule (optional for program-level docs)</label>
+    <select name="molecule_id" id="moleculeSel">
+      <option value="">(none)</option>
+      {% for m in molecules %}
+        <option value="{{ m.id }}" {% if (record and record.molecule_id==m.id) or (not record and prefill.molecule_id and prefill.molecule_id==m.id) %}selected{% endif %}>{{ m.primary_id }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Batch (required for most experimental data)</label>
+    <select name="batch_id" id="batchSel">
+      <option value="">(none)</option>
+      {% for b in batches %}
+        <option value="{{ b.id }}" {% if (record and record.batch_id==b.id) or (not record and prefill.batch_id and prefill.batch_id==b.id) %}selected{% endif %}>{{ b.batch_id }}</option>
+      {% endfor %}
+    </select>
+    <div class="help">Enforced by UI registry for experimental data types (Binding, CellAssay, InVivo, CMC_Analytics).</div>
+  </div>
+</div>
+
+<div class="field">
+  <label>Title</label>
+  <input name="title" value="{{ record.title if record else (prefill.title or '') }}" required />
+</div>
+
+<div class="grid cols-3">
+  <div class="field">
+    <label>Domain</label>
+    <select name="domain" id="domainSel" required>
+      {% for d in domains %}
+        <option value="{{ d }}" {% if (record and record.domain==d) or (not record and prefill.domain==d) %}selected{% endif %}>{{ d }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Data type</label>
+    <select name="data_type" id="dataTypeSel" required></select>
+  </div>
+  <div class="field">
+    <label>Method</label>
+    <select name="method" id="methodSel" required></select>
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card" style="margin:0;">
+    <h3>Parameters</h3>
+    <div id="paramsFields"></div>
+  </div>
+  <div class="card" style="margin:0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <h3>Results</h3>
+      <button class="btn mini no-print" type="button" id="applyDefaultsBtn">Apply defaults to all rows</button>
+    </div>
+    <div id="resultsFields"></div>
+  </div>
+</div>
+
+<input type="hidden" name="params_json" id="paramsJson" value='{{ record.params_json if record and record.params_json else "{}" }}' />
+<input type="hidden" name="results_json" id="resultsJson" value='{{ record.results_json if record and record.results_json else "{}" }}' />

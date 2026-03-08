@@ -2,24 +2,44 @@
 {% block title %}Evidence #{{ ev.id }} | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
-    <div>
-      <h1 style="margin:0;">Evidence #{{ ev.id }}</h1>
-      <div class="muted">{{ ev.domain }} · {{ ev.evidence_type }} · strength {{ ev.strength }}</div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn" href="/evidence">Back</a>
-      <a class="btn" href="/evidence/{{ ev.id }}/edit">Edit</a>
-      <a class="btn" href="/data/new?program_id={{ ev.program_id }}{% if ev.molecule_id %}&molecule_id={{ ev.molecule_id }}{% endif %}{% if ev.batch_id %}&batch_id={{ ev.batch_id }}{% endif %}">New Data Record (same scope)</a>
-    </div>
-  </div>
+  {% set page_eyebrow = "Scientific Support Object" %}
+  {% set page_title = "Evidence #" ~ ev.id %}
+  {% set page_subtitle = ev.domain ~ " · " ~ ev.evidence_type ~ " · strength " ~ ev.strength %}
+  {% set page_primary_actions = [{"href": "/evidence/" ~ ev.id ~ "/edit", "label": "Edit Evidence"}] %}
+  {% set page_secondary_actions = [
+    {"href": "/data/new?program_id=" ~ ev.program_id ~ (("&molecule_id=" ~ ev.molecule_id) if ev.molecule_id else "") ~ (("&batch_id=" ~ ev.batch_id) if ev.batch_id else ""), "label": "Capture Related Data"},
+    {"href": "/programs/" ~ ev.program_id ~ "/workflow", "label": "Continue in Program Workflow Center"},
+    {"href": "/evidence", "label": "Back to Evidence"}
+  ] %}
+  {% if ev.molecule_id %}{% set page_secondary_actions = page_secondary_actions + [{"href": "/molecules/" ~ ev.molecule_id, "label": "Open Molecule Workspace"}] %}{% endif %}
+  {% set page_metrics = [
+    {"label": "Cited Data Records", "value": (data_records|length)},
+    {"label": "Program", "value": ("#" ~ ev.program_id)},
+    {"label": "Created", "value": ev.created_at},
+    {"label": "Updated", "value": ev.updated_at}
+  ] %}
+  {% set page_matters_now = [
+    "Confirm this evidence statement is scientifically clear and actionable.",
+    "Review cited data records for scope and quality fit.",
+    "Use workflow links to return to claim/plan or program execution context."
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% include "partials/surface_chrome.html" %}
+  <div class="page-intent-line">Evidence bridges measured data to scientific interpretation and program decisions.</div>
+  {% set capture_notice = {
+    "captured": (detail_handoff.captured if detail_handoff is defined and detail_handoff else false),
+    "updated": (detail_handoff.updated if detail_handoff is defined and detail_handoff else false),
+    "return_to": (detail_handoff.return_to if detail_handoff is defined and detail_handoff else ""),
+    "message": "Recommended next step: review linked data and return to molecule/program workflow to continue de-risking."
+  } %}
+  {% include "partials/capture_notice.html" %}
 
   <hr class="sep" />
 
   <div class="grid cols-2">
     <div>
-      <div class="kv"><div class="k">Program</div><div class="v">#{{ ev.program_id }}</div></div>
-      <div class="kv"><div class="k">Molecule</div><div class="v">{% if ev.molecule_id %}#{{ ev.molecule_id }}{% else %}<span class="muted">(program-level)</span>{% endif %}</div></div>
+      <div class="kv"><div class="k">Program</div><div class="v"><a href="/programs/{{ ev.program_id }}">#{{ ev.program_id }}</a></div></div>
+      <div class="kv"><div class="k">Molecule</div><div class="v">{% if ev.molecule_id %}<a href="/molecules/{{ ev.molecule_id }}">#{{ ev.molecule_id }}</a>{% else %}<span class="muted">(program-level)</span>{% endif %}</div></div>
       <div class="kv"><div class="k">Batch</div><div class="v">{% if ev.batch_id %}#{{ ev.batch_id }}{% else %}<span class="muted">(none)</span>{% endif %}</div></div>
     </div>
     <div>
@@ -64,11 +84,13 @@
     </div>
     <div class="muted" style="margin-top:8px;">Files are attached to the cited Data Records (see each record for raw files).</div>
   {% else %}
-    <div class="notice" style="border-color:var(--warn);">No cited data records found. (This should not happen; Evidence requires citations.)</div>
+    <div class="empty-state">No cited data records are linked yet. Add citations in edit mode to complete scientific traceability.</div>
   {% endif %}
 
-  <h2 style="margin-top:18px;">Audit</h2>
-  {% include "partials/audit_table.html" %}
+  <details class="progressive-disclosure audit-demoted" style="margin-top:18px;">
+    <summary>Audit</summary>
+    {% include "partials/audit_table.html" %}
+  </details>
 
 </div>
 {% endblock %}

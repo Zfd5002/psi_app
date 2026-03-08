@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from psi.core.models import Molecule
 from psi.services import claims as claims_svc
 from psi.web.deps import get_db, get_templates
+from psi.web import ui_surfaces
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ def claims_list(request: Request, db: Session = Depends(get_db)):
         {
             "request": request,
             "claims": rows,
+            "surface": ui_surfaces.claims_registry_surface(),
         },
     )
 
@@ -97,4 +99,7 @@ def claim_detail(claim_id: int, request: Request, db: Session = Depends(get_db))
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request
+    claim_obj = ctx.get("claim")
+    pid = int(claim_obj.program_id) if claim_obj is not None and getattr(claim_obj, "program_id", None) is not None else None
+    ctx["surface"] = ui_surfaces.claim_detail_surface(program_id=pid)
     return templates.TemplateResponse("claims/detail.html", ctx)

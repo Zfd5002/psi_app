@@ -2,8 +2,14 @@
 {% block title %}Builder Variant Set | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Builder: Variant Set Builder</h1>
-  <p class="muted">Design a controlled, deterministic family of variants before saving any molecules.</p>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set page_eyebrow = "Builder Workspace" %}
+  {% set page_title = "Builder: Variant Set Builder" %}
+  {% set page_subtitle = "Design a controlled, deterministic family of variants before saving molecules." %}
+  {% set page_secondary_actions = [{"href": "/builder", "label": "Builder Home"}, {"href": "/builder/point-mutation", "label": "Point Mutation"}, {"href": "/programs", "label": "Programs"}] %}
+  {% include "partials/page_header.html" %}
+  {% set surface_chrome_active_index = 1 %}
+  {% include "partials/surface_chrome.html" %}
 
   <form method="post" action="/builder/variant-set/draft">
     {% set selected_program = (form_data.parent_program_id if form_data is defined and form_data.parent_program_id is defined else None) %}
@@ -154,6 +160,17 @@
   </form>
   {% endif %}
   {% endif %}
+  <div class="card section-card section-workflow" style="margin-top:12px;">
+    <h3 style="margin-top:0;">Next Actions</h3>
+    <div class="action-bar-utility no-print">
+      {% if form_data is defined and form_data.parent_program_id is defined and form_data.parent_program_id %}
+      <a class="btn mini primary" href="/programs/{{ form_data.parent_program_id }}/workflow">Open Program Workflow Center</a>
+      <a class="btn mini" href="/programs/{{ form_data.parent_program_id }}/board">Open Development Board</a>
+      {% endif %}
+      <a class="btn mini" href="/builder/point-mutation">Open Point Mutation Builder</a>
+      <a class="btn mini" href="/builder">Back to Builder Home</a>
+    </div>
+  </div>
 </div>
 <script>
 (function () {

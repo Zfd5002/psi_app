@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from psi.services import portfolios as svc
 from psi.web.deps import get_db, get_templates
+from psi.web import ui_surfaces
 
 router = APIRouter()
 
@@ -13,7 +14,14 @@ router = APIRouter()
 @router.get("/portfolios", response_class=HTMLResponse)
 def list_portfolios(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
-    return templates.TemplateResponse("portfolios/list.html", {"request": request, "portfolios": svc.list_portfolios(db)})
+    return templates.TemplateResponse(
+        "portfolios/list.html",
+        {
+            "request": request,
+            "portfolios": svc.list_portfolios(db),
+            "surface": ui_surfaces.legacy_portfolios_registry_surface(),
+        },
+    )
 
 
 @router.get("/portfolios/new", response_class=HTMLResponse)

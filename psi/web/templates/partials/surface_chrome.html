@@ -1,0 +1,18 @@
+{% set _sf = (surface if surface is defined and surface is mapping else {}) %}
+{% set _labels = (_sf.archetype_labels if _sf.archetype_labels is defined and _sf.archetype_labels is iterable else []) %}
+{% set _active_idx = (surface_chrome_active_index if surface_chrome_active_index is defined else 0) %}
+{% if _labels %}
+<div class="page-archetype-bar">
+  {% for lbl in _labels %}
+    <span class="page-archetype-chip{% if loop.index0 == _active_idx %} is-active{% endif %}">{{ lbl }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+{% set _nav = (_sf.local_nav if _sf.local_nav is defined and _sf.local_nav is iterable else []) %}
+{% if _nav %}
+<div class="local-subnav no-print">
+  {% for item in _nav %}
+    <a href="{{ item.href }}">{{ item.label }}</a>
+  {% endfor %}
+</div>
+{% endif %}

@@ -2,14 +2,193 @@
 {% block title %}{{ program.name }} | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-    <div>
-      <h1>{{ program.name }}</h1>
-      <p class="muted">{{ program.description or '' }}</p>
+  {% set pd = (program_dashboard if program_dashboard is defined and program_dashboard is mapping else {}) %}
+  {% set opt = (open_experiment_tasks_preview if open_experiment_tasks_preview is defined and open_experiment_tasks_preview is iterable else []) %}
+  {% set page_eyebrow = "Program Workspace" %}
+  {% set page_title = program.name %}
+  {% set page_subtitle = program.description or "Program execution and scientific strategy surface." %}
+  {% set page_statuses = [
+    "Posture: " ~ (pd.posture_label if pd.posture_label is defined else "UNKNOWN"),
+    "Progress: " ~ ((pd.progress_percent if pd.progress_percent is defined else 0) ~ "%")
+  ] %}
+  {% set page_primary_actions = [
+    {"href": "/programs/" ~ program.id ~ "/workflow", "label": "Open Program Workflow Center"},
+    {"href": "/programs/" ~ program.id ~ "/board", "label": "Open Development Board"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/molecules/new?program_id=" ~ program.id, "label": "New Molecule"},
+    {"href": "/programs/" ~ program.id ~ "/edit", "label": "Edit Program"},
+    {"href": "/data?program_id=" ~ program.id, "label": "Results"},
+    {"href": "/evidence?program_id=" ~ program.id, "label": "Evidence"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Program Molecules", "value": (pd.molecule_count if pd.molecule_count is defined else 0)},
+    {"label": "Open Tasks", "value": (opt|length)},
+    {"label": "Pending Entries", "value": (pd.pending_entry_count if pd.pending_entry_count is defined else 0)},
+    {"label": "Confidence", "value": ((pd.confidence_percent if pd.confidence_percent is defined else 0) ~ "%")}
+  ] %}
+  {% set page_matters_now = [
+    "Current blocker posture: " ~ (pd.posture_label if pd.posture_label is defined else "unknown"),
+    "Execution entry point: Development Board and open operational tasks",
+    "Review burden: " ~ ((pd.pending_entry_count if pd.pending_entry_count is defined else 0) ~ " pending entries"),
+    "Next action: focus role assignments and highest urgency tasks"
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set sf_labels = (sf.archetype_labels if sf.archetype_labels is defined and sf.archetype_labels is iterable else []) %}
+  {% if sf_labels %}
+    <div class="page-archetype-bar">
+      {% for lbl in sf_labels %}
+        <span class="page-archetype-chip{% if loop.index0 == 0 %} is-active{% endif %}">{{ lbl }}</span>
+      {% endfor %}
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
-      <a class="btn primary" href="/molecules/new?program_id={{ program.id }}">New Molecule</a>
-      <a class="btn" href="/programs/{{ program.id }}/edit">Edit</a>
+  {% endif %}
+  {% set capture_notice = {
+    "captured": (request.query_params.get("captured") if request is defined and request.query_params is defined else ""),
+    "updated": (request.query_params.get("evidence") if request is defined and request.query_params is defined else ""),
+    "return_to": ("/programs/" ~ program.id ~ "/workflow"),
+    "message": "Re-enter Program Workflow Center to continue task progression."
+  } %}
+  {% include "partials/capture_notice.html" %}
+  {% set blocker_rows = (di_dashboard.top_blockers if di_dashboard is defined and di_dashboard and di_dashboard.top_blockers is defined else []) %}
+  {% set recent_evidence_count = (recent_evidence|length) if recent_evidence is defined and recent_evidence is iterable else 0 %}
+  <div class="card section-card section-primary" id="program-state-header" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Program State</h2>
+      <div class="muted mini">Strategic summary before execution detail</div>
+    </div>
+    <div class="summary-metric-strip" style="margin-top:8px;">
+      <div class="summary-metric">
+        <div class="summary-metric-label">Program stage</div>
+        <div class="summary-metric-value">{{ pd.progress_label if pd.progress_label is defined else "early" }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Active molecules</div>
+        <div class="summary-metric-value">{{ pd.active_contender_count if pd.active_contender_count is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Open tasks</div>
+        <div class="summary-metric-value">{{ opt|length }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Recent evidence</div>
+        <div class="summary-metric-value">{{ recent_evidence_count }}</div>
+      </div>
+    </div>
+    <div class="grid cols-2" style="margin-top:10px;">
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Key blockers</div>
+        <ul class="molecule-cockpit-list mini">
+          {% for b in blocker_rows[:4] %}
+            <li>{{ b[0]|humanize_key }} ({{ b[1] }})</li>
+          {% else %}
+            <li class="muted">No dominant blockers detected.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Recent evidence signals</div>
+        <ul class="molecule-cockpit-list mini">
+          {% for e in (recent_evidence[:4] if recent_evidence is defined and recent_evidence else []) %}
+            <li><a href="/evidence/{{ e.id }}">{{ e.evidence_type }}</a> · s={{ e.strength }}</li>
+          {% else %}
+            <li class="muted">No recent evidence captured.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% set pcs_top = (program_claim_summary if program_claim_summary is defined and program_claim_summary is mapping else {}) %}
+  {% set pps_top = (program_plan_summary if program_plan_summary is defined and program_plan_summary is mapping else {}) %}
+  {% set urgent_claims = (pcs_top.hypothesis_or_emerging if pcs_top.hypothesis_or_emerging is defined else 0) + (pcs_top.contradicted if pcs_top.contradicted is defined else 0) %}
+  <div class="card section-card section-workflow" id="attention-now" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Attention Now</h2>
+      <div class="muted mini">Highest-priority program signals to address today</div>
+    </div>
+    <div class="summary-metric-strip" style="margin-top:8px;">
+      <div class="summary-metric">
+        <div class="summary-metric-label">Blocked molecules</div>
+        <div class="summary-metric-value">{{ di_dashboard.counts.BLOCKED if di_dashboard is defined and di_dashboard and di_dashboard.counts is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Missing evidence signals</div>
+        <div class="summary-metric-value">{{ (di_dashboard.top_missing_metrics|length) if di_dashboard is defined and di_dashboard and di_dashboard.top_missing_metrics is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Urgent claims</div>
+        <div class="summary-metric-value">{{ urgent_claims }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Ready plans / tasks</div>
+        <div class="summary-metric-value">{{ pps_top.recommended if pps_top.recommended is defined else 0 }} / {{ opt|length }}</div>
+      </div>
+    </div>
+  </div>
+  {% set molecules_top = (molecules if molecules is defined and molecules is iterable else []) %}
+  <div class="card section-card section-primary" id="scientific-priorities" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Scientific Priorities</h2>
+      <div class="muted mini">Prioritized molecule and hypothesis focus for this program</div>
+    </div>
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Priority molecules</div>
+        <ul class="molecule-cockpit-list mini">
+          {% for m in molecules_top[:6] %}
+            <li><a href="/molecules/{{ m.id }}">{{ m.primary_id }}</a>{% if m.title %} · <span class="muted">{{ m.title }}</span>{% endif %}</li>
+          {% else %}
+            <li class="muted">No program molecules available.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="molecule-cockpit-cell">
+        <div class="molecule-cockpit-label">Priority claims and plans</div>
+        <ul class="molecule-cockpit-list mini">
+          <li>Claims in active focus: {{ urgent_claims }}</li>
+          <li>Supported claims: {{ pcs_top.supported if pcs_top.supported is defined else 0 }}</li>
+          <li>Recommended plans: {{ pps_top.recommended if pps_top.recommended is defined else 0 }}</li>
+          <li>Accepted plans: {{ pps_top.accepted if pps_top.accepted is defined else 0 }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% set msb_top = (program_molecule_status_board if program_molecule_status_board is defined and program_molecule_status_board is iterable else []) %}
+  <div class="card section-card section-primary" id="priority-molecules" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Priority Molecules</h2>
+      <div class="muted mini">Highest-value molecule posture and blockers at a glance</div>
+    </div>
+    <div class="linked-table-wrap" style="margin-top:8px;">
+      <table class="table mini">
+        <thead><tr><th>Molecule</th><th>Role</th><th>Status</th><th>Key blocker</th><th>Last evidence update</th></tr></thead>
+        <tbody>
+          {% for row in msb_top[:8] %}
+            <tr>
+              <td><a href="/molecules/{{ row.molecule_id }}">{{ row.primary_id }}</a>{% if row.title %} <span class="muted">{{ row.title }}</span>{% endif %}</td>
+              <td>{{ row.role|humanize_state }}</td>
+              <td>{{ row.readiness_state|humanize_state }}</td>
+              <td>{{ (row.key_blocker|humanize_key) if row.key_blocker else "None recorded" }}</td>
+              <td class="muted">{{ row.latest_evidence_update if row.latest_evidence_update else "Not available" }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="muted empty-state-cell">No molecule status rows available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card section-card section-workflow" id="execution-links" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Execution Links</h2>
+      <div class="muted mini">Use these entry points to move strategy into tracked work</div>
+    </div>
+    <div class="action-bar-utility no-print" style="margin-top:8px;">
+      <a class="btn primary" href="/programs/{{ program.id }}/workflow">Open Program Workflow Center</a>
+      <a class="btn primary" href="/programs/{{ program.id }}/board">Open Development Board</a>
+      <a class="btn" href="#open-tasks">Open Operational Tasks</a>
+      <a class="btn" href="/molecules/new?program_id={{ program.id }}">Add Molecule</a>
+      <a class="btn" href="/data?program_id={{ program.id }}">Program Data Entry</a>
     </div>
   </div>
 
@@ -17,9 +196,35 @@
     <a class="tab active" href="#overview">Overview</a>
     <a class="tab" href="#audit">Audit</a>
   </div>
+  {% set sf_nav = (sf.local_nav if sf.local_nav is defined and sf.local_nav is iterable else []) %}
+  <div class="local-subnav no-print">
+    {% if sf_nav %}
+      {% for item in sf_nav %}
+        <a href="{{ item.href }}">{{ item.label }}</a>
+      {% endfor %}
+      <a href="#program-narrative">Narrative</a>
+      <a href="#secondary-ops">Secondary Ops</a>
+      <a href="#review-queue">Review Queue</a>
+      <a href="#program-governance">Governance</a>
+      <a href="#audit">Audit</a>
+    {% else %}
+      <a href="#overview">Overview</a>
+      <a href="#program-state-header">Program State</a>
+      <a href="#attention-now">Attention Now</a>
+      <a href="#scientific-priorities">Priorities</a>
+      <a href="#execution-links">Execution Links</a>
+      <a href="/programs/{{ program.id }}/workflow">Program Workflow Center</a>
+      <a href="#open-tasks">Open Tasks</a>
+      <a href="#program-narrative">Narrative</a>
+      <a href="#secondary-ops">Secondary Ops</a>
+      <a href="#review-queue">Review Queue</a>
+      <a href="#program-governance">Governance</a>
+      <a href="#audit">Audit</a>
+    {% endif %}
+  </div>
+  <div class="page-intent-line">Program strategy, execution burden, and governance context in one workspace.</div>
 
   <h2 id="overview">Program dashboard</h2>
-  {% set pd = (program_dashboard if program_dashboard is defined and program_dashboard is mapping else {}) %}
   <div class="grid cols-3">
     <div class="card">
       <div class="muted">Program Molecules</div>
@@ -65,8 +270,7 @@
     <a class="btn mini" href="/decisions?program_id={{ program.id }}">Program decisions</a>
     <a class="btn mini" href="/reports/new?report_type=program_report&subject_ids={{ program.id }}">Generate program report</a>
   </div>
-  {% set opt = (open_experiment_tasks_preview if open_experiment_tasks_preview is defined and open_experiment_tasks_preview is iterable else []) %}
-  <h3>Open Operational Tasks</h3>
+  <h3 id="open-tasks">Open Operational Tasks</h3>
   <table class="table mini">
     <thead><tr><th>Task</th><th>Molecule</th><th>Status</th><th>Urgency</th><th>Owner</th><th>Due</th><th>Focus</th></tr></thead>
     <tbody>
@@ -81,12 +285,12 @@
         <td>{% if t.suggested_assay %}{{ t.suggested_assay }}{% elif t.metric_key %}{{ t.metric_key }}{% else %}task{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="muted">No open operational tasks.</td></tr>
+      <tr><td colspan="7" class="muted empty-state-cell">No open operational tasks.</td></tr>
       {% endfor %}
     </tbody>
   </table>
   {% set pn = (program_narrative if program_narrative is defined and program_narrative is mapping else {}) %}
-  <h3>Program Narrative</h3>
+  <h3 id="program-narrative">Program Narrative</h3>
   <div class="card">
     <div><b>Scientific thesis:</b> {{ pn.scientific_thesis if pn.scientific_thesis is defined else "—" }}</div>
     <div><b>Current state:</b> {{ pn.current_state_summary if pn.current_state_summary is defined else "—" }}</div>
@@ -166,6 +370,8 @@
     </div>
     {% endfor %}
   </div>
+  <details class="card section-card section-secondary progressive-disclosure" data-psi-details-key="program_secondary_registry">
+    <summary>Secondary program registry and evidence operations</summary>
   <h3>V3 Governance Membership (molecules)</h3>
   <div class="muted">Deterministic order: <code>(sort_index, membership_id)</code>. This is additive governance membership and does not change DI snapshot semantics.</div>
   <table class="table mini" style="margin-top:8px;">
@@ -356,8 +562,13 @@
       </ul>
     </div>
   </div>
+  </details>
 
-  <h2>Review data entries</h2>
+  <div id="secondary-ops" class="section-heading" style="margin-top:12px;">
+    <h2>Secondary Operations &amp; Governance</h2>
+    <div class="muted mini">QC queue, membership management, lineage, governance, and audit remain accessible below.</div>
+  </div>
+  <h2 id="review-queue">Review data entries</h2>
   <div class="muted">Pending entry queue grouped by molecule (QC not fully approved).</div>
   {% set pending_records_total = (review_queue_by_molecule | map(attribute='records') | map('length') | sum) %}
   {% if pending_records_total > 0 %}
@@ -421,8 +632,8 @@
     <span class="mini muted" style="margin-left:8px;">Governance details are hidden by default on scientist surfaces.</span>
   </div>
 
-  <div id="program-governance-panel" data-program-governance-panel="true" style="display:none;" aria-hidden="true">
-  <h2>DI portfolio status (latest snapshot per molecule)</h2>
+  <div id="program-governance-panel" class="technical-demoted" data-program-governance-panel="true" style="display:none;" aria-hidden="true">
+  <h2 id="program-governance">DI portfolio status (latest snapshot per molecule)</h2>
   <div class="grid cols-3">
     <div class="card">
       <div class="muted">READY</div>
@@ -612,16 +823,17 @@
     </tbody>
   </table>
 
-  <h2 style="margin-top:12px;">DI Snapshot Lineage</h2>
-  <p class="muted">
-    Recent DI snapshots for this program (read-only).
-    {% if di_dashboard.lineage_verify_enabled %}
-      <a href="/programs/{{ program.id }}{% if di_dashboard.policy_version_filter %}?policy_version={{ di_dashboard.policy_version_filter | urlencode }}{% endif %}">Hide verification</a>
-    {% else %}
-      <a href="/programs/{{ program.id }}?verify=1{% if di_dashboard.policy_version_filter %}&policy_version={{ di_dashboard.policy_version_filter | urlencode }}{% endif %}">Show verification</a>
-    {% endif %}
-  </p>
-  <div class="card" style="margin-top:8px;">
+  <details class="card section-card section-technical technical-demoted progressive-disclosure" style="margin-top:12px;" data-psi-details-key="program_di_lineage">
+    <summary>DI Snapshot Lineage</summary>
+    <p class="muted" style="margin-top:8px;">
+      Recent DI snapshots for this program (read-only).
+      {% if di_dashboard.lineage_verify_enabled %}
+        <a href="/programs/{{ program.id }}{% if di_dashboard.policy_version_filter %}?policy_version={{ di_dashboard.policy_version_filter | urlencode }}{% endif %}">Hide verification</a>
+      {% else %}
+        <a href="/programs/{{ program.id }}?verify=1{% if di_dashboard.policy_version_filter %}&policy_version={{ di_dashboard.policy_version_filter | urlencode }}{% endif %}">Show verification</a>
+      {% endif %}
+    </p>
+    <div class="card" style="margin-top:8px;">
     <table class="table">
       <thead>
         <tr>
@@ -689,11 +901,15 @@
       </tbody>
     </table>
   </div>
+  </details>
 
   </div>
 
   <h2 id="audit">Audit</h2>
-{% include "partials/audit_table.html" %}
+  <details class="progressive-disclosure audit-demoted" data-psi-details-key="program_audit_details">
+    <summary>Show audit trail</summary>
+    {% include "partials/audit_table.html" %}
+  </details>
 </div>
 
 <script>

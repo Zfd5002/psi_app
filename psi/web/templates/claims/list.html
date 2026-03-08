@@ -2,12 +2,20 @@
 {% block title %}Scientific Claims | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
-    <h1>Scientific Claims</h1>
-    <a class="btn primary no-print" href="/claims/new">New claim</a>
-  </div>
-  <div class="muted mini">Disciplined scientific assertion layer across molecules and programs.</div>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
   {% set rows = (claims if claims is defined and claims is iterable else []) %}
+  {% set page_eyebrow = "Registry" %}
+  {% set page_title = "Scientific Claims" %}
+  {% set page_subtitle = "Disciplined scientific assertion layer across molecules and programs." %}
+  {% set page_primary_actions = [{"href": "/claims/new", "label": "New Claim"}] %}
+  {% set page_metrics = [{"label": "Active Claims", "value": (rows|length)}] %}
+  {% include "partials/page_header.html" %}
+  {% if sf.archetype_labels is defined and sf.archetype_labels %}
+    <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if sf.local_nav is defined and sf.local_nav %}
+  <div class="local-subnav no-print">{% for item in sf.local_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}</div>
+  {% endif %}
   <table class="table mini" style="margin-top:8px;">
     <thead><tr><th>ID</th><th>Title</th><th>Scope</th><th>Type</th><th>Status</th><th>Confidence</th></tr></thead>
     <tbody>
@@ -21,7 +29,7 @@
         <td>{{ c.confidence_level|humanize_state }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="muted">No active claims.</td></tr>
+      <tr><td colspan="6" class="muted empty-state-cell">No active claims. Create one to formalize scientific assertions.</td></tr>
       {% endfor %}
     </tbody>
   </table>

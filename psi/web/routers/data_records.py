@@ -12,6 +12,8 @@ from psi.services import data_records as svc
 from psi.services import bulk_import as bulk_import_svc
 from psi.core.models import ExperimentTask
 from psi.web.deps import get_db, get_rules_path, get_storage_cfg, get_templates
+from psi.web import ui_surfaces
+from psi.web import handoff_context as handoff
 
 router = APIRouter()
 
@@ -21,6 +23,7 @@ def list_data(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)
     ctx = svc.list_data_records(db)
     ctx["request"] = request
+    ctx["surface"] = ui_surfaces.data_registry_surface()
     return templates.TemplateResponse("data/list.html", ctx)
 
 
@@ -115,11 +118,13 @@ def new_data(
     data_type: Optional[str] = None,
     method: Optional[str] = None,
     title: Optional[str] = None,
+    source: Optional[str] = None,
     task_id: Optional[int] = None,
     db: Session = Depends(get_db),
     rules_path=Depends(get_rules_path),
 ):
     templates = get_templates(request)
+    hctx = handoff.get_handoff_context(request)
     base = svc.get_form_context(db)
     rules = load_rules_legacy_yaml(str(rules_path))
     domains = list(rules["domains"].keys())
@@ -174,8 +179,16 @@ def new_data(
             "method": method,
             "title": title,
             "task_id": task_id,
+            "source": source,
         },
         "task_context": task_ctx,
+        "handoff_source": str(source or ("task" if task_ctx is not None else "manual")).strip().lower(),
+        "return_to": str(hctx.return_to or "").strip(),
+        "surface": ui_surfaces.data_entry_surface(
+            program_id=int(program_id) if program_id is not None else None,
+            molecule_id=int(molecule_id) if molecule_id is not None else None,
+            from_task=task_ctx is not None,
+        ),
     }
     return templates.TemplateResponse("data/form.html", ctx)
 
@@ -190,6 +203,7 @@ def create_data(
     method: str = Form(...),
     title: str = Form(...),
     task_id: Optional[int] = Form(None),
+    return_to: str = Form(""),
     notes: str = Form(""),
     run_date: str = Form(""),
     params_json: str = Form("{}"),
@@ -240,7 +254,14 @@ def create_data(
         except ValueError as e:
             raise HTTPException(400, str(e))
 
-    return RedirectResponse(url=f"/data/{rec.id}", status_code=303)
+    target = handoff.build_return_url(
+        f"/data/{rec.id}",
+        return_to=str(return_to or "").strip(),
+        captured=True,
+        from_task=(task_id is not None),
+        next_step=("evidence" if task_id is not None else ""),
+    )
+    return RedirectResponse(url=target, status_code=303)
 
 
 @router.get("/data/{record_id}", response_class=HTMLResponse)
@@ -251,12 +272,26 @@ def detail_data(record_id: int, request: Request, db: Session = Depends(get_db))
     except KeyError:
         raise HTTPException(404)
     ctx["request"] = request
+    rec = ctx.get("record")
+    hctx = handoff.get_handoff_context(request)
+    ctx["detail_handoff"] = {
+        "captured": bool(hctx.captured),
+        "from_task": bool(hctx.from_task),
+        "next": str(hctx.next_step or ""),
+        "return_to": str(hctx.return_to or ""),
+    }
+    ctx["surface"] = ui_surfaces.data_detail_surface(
+        record_id=int(record_id),
+        program_id=int(rec.program_id) if rec is not None and getattr(rec, "program_id", None) is not None else None,
+        molecule_id=int(rec.molecule_id) if rec is not None and getattr(rec, "molecule_id", None) is not None else None,
+    )
     return templates.TemplateResponse("data/detail.html", ctx)
 
 
 @router.get("/data/{record_id}/edit", response_class=HTMLResponse)
 def edit_data(record_id: int, request: Request, db: Session = Depends(get_db), rules_path=Depends(get_rules_path)):
     templates = get_templates(request)
+    hctx = handoff.get_handoff_context(request)
     rec = svc.get_data_record(db, record_id)
     if not rec:
         raise HTTPException(404)
@@ -265,7 +300,20 @@ def edit_data(record_id: int, request: Request, db: Session = Depends(get_db), r
     domains = list(rules["domains"].keys())
     return templates.TemplateResponse(
         "data/form.html",
-        {"request": request, "record": rec, **base, "domains": domains, "prefill": {}},
+        {
+            "request": request,
+            "record": rec,
+            **base,
+            "domains": domains,
+            "prefill": {},
+            "task_context": None,
+            "return_to": str(hctx.return_to or "").strip(),
+            "surface": ui_surfaces.data_entry_surface(
+                program_id=int(rec.program_id) if getattr(rec, "program_id", None) is not None else None,
+                molecule_id=int(rec.molecule_id) if getattr(rec, "molecule_id", None) is not None else None,
+                from_task=False,
+            ),
+        },
     )
 
 

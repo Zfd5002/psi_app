@@ -2,14 +2,24 @@
 {% block title %}Batches | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <h1>Batches</h1>
-    <a class="btn primary" href="/batches/new">New Batch</a>
-  </div>
+  {% set sf = (surface if surface is defined and surface is mapping else {}) %}
+  {% set rows = (batches if batches is defined and batches is iterable else []) %}
+  {% set page_eyebrow = "Registry" %}
+  {% set page_title = "Batches" %}
+  {% set page_subtitle = "Material batch context linked to molecules and evidence capture." %}
+  {% set page_primary_actions = [{"href": "/batches/new", "label": "New Batch"}] %}
+  {% set page_metrics = [{"label": "Batches", "value": (rows|length)}] %}
+  {% include "partials/page_header.html" %}
+  {% if sf.archetype_labels is defined and sf.archetype_labels %}
+    <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if sf.local_nav is defined and sf.local_nav %}
+  <div class="local-subnav no-print">{% for item in sf.local_nav %}<a href="{{ item.href }}">{{ item.label }}</a>{% endfor %}</div>
+  {% endif %}
   <table class="table">
     <thead><tr><th>Batch ID</th><th>Molecule</th><th>Title</th><th>Created</th></tr></thead>
     <tbody>
-      {% for b in batches %}
+      {% for b in rows %}
       <tr>
         <td><a href="/batches/{{ b.id }}">{{ b.batch_id }}</a></td>
         <td class="muted"><a href="/molecules/{{ b.molecule.id }}">{{ b.molecule.primary_id }}</a></td>
@@ -17,7 +27,7 @@
         <td class="muted">{{ b.created_at }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="muted">No batches yet.</td></tr>
+      <tr><td colspan="4" class="muted empty-state-cell">No batches yet. Create a batch to track material lineage.</td></tr>
       {% endfor %}
     </tbody>
   </table>
