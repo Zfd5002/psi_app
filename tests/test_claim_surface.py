@@ -25,6 +25,7 @@ def test_claim_detail_template_renders_sections() -> None:
         task_links=[SimpleNamespace(experiment_task_id=66, relationship_type="tests")],
         open_linked_tasks=[SimpleNamespace(task_id=66, status="planned", urgency="high", suggested_assay="BLI", metric_key="kd_nM")],
         trajectory_candidates=[{"suggested_assay": "BLI", "metric_key": "kd_nM", "expected_readiness_gain": 1, "confidence_level": "high", "confidence_score": 0.81}],
+        claim_plans=[{"plan_id": 71, "title": "Claim plan", "plan_type": "claim_de_risking", "expected_readiness_gain": 0.2, "expected_claim_support_gain": 0.9, "expected_evidence_coverage_gain": 0.5, "steps": [{"step_order": 1, "step_kind": "claim_test", "metric_key": "kd_nM", "suggested_assay": "SPR"}]}],
     )
     assert "Scientific Claim" in html
     assert "Maturity Summary" in html
@@ -33,6 +34,8 @@ def test_claim_detail_template_renders_sections() -> None:
     assert "Task Links" in html
     assert "Open Linked Tasks" in html
     assert "Relevant Trajectory Candidates" in html
+    assert "Recommended Claim Plans" in html
+    assert "/plans/71" in html
     assert "/claims/" not in html or True
 
 

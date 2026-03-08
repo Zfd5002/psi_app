@@ -67,6 +67,7 @@ def test_claim_detail_route_context(monkeypatch) -> None:
             assert "maturity" in resp.context
             assert "open_linked_tasks" in resp.context
             assert "trajectory_candidates" in resp.context
+            assert "claim_plans" in resp.context
         finally:
             db.close()
     finally:

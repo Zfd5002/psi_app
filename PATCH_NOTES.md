@@ -11570,3 +11570,296 @@ Behavior:
 
 Gates:
 - PASS
+
+## 2026-03-07 — v1.3.0c91
+Intent:
+- Add ScientificPlan/ScientificPlanStep additive model and schema foundation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/core/models.py`
+- `psi/core/db.py`
+- `tests/test_scientific_plan_model.py`
+
+Behavior:
+- Added persisted planning entities `ScientificPlan` and `ScientificPlanStep` with deterministic indexes and ORM relationships.
+- Extended `ensure_schema` with additive table/column coverage and plan indexes.
+- Added model/schema tests validating lifecycle and additive behavior.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c92
+Intent:
+- Add deterministic ScientificPlan service layer and step operations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/plans.py`
+- `tests/test_plans_service.py`
+
+Behavior:
+- Added plan CRUD/list/top helpers for molecule/claim/program scopes.
+- Added step operations for add/list/status update with stable ordering and timestamps.
+- Added service tests for lifecycle, ordering behavior, and step operations.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c93
+Intent:
+- Harden ScientificPlan and ScientificPlanStep status transitions and ordering semantics.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/plans.py`
+- `tests/test_plans_service.py`
+
+Behavior:
+- Added explicit plan and step transition matrices and transition validators.
+- Enforced one-way lifecycle transitions and terminal states for plans/steps.
+- Added deterministic step ordering by status then step_order/id with transition tests.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c94
+Intent:
+- Add disciplined plan_type/step_kind helpers and rationale rendering for ScientificPlan.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/plans.py`
+- `tests/test_plans_service.py`
+
+Behavior:
+- Added enumerated plan types and step kinds with normalization helpers.
+- Added deterministic plan-type rationale templates and formatting fallback helper.
+- Added tests covering type discipline and rendering helper behavior.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c95
+Intent:
+- Add deterministic ScientificPlan generation core for molecule and claim scopes.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/plans.py`
+- `tests/test_plan_generation.py`
+
+Behavior:
+- Added `generate_plan_for_molecule(...)` and `generate_plan_for_claim(...)` using insight, trajectory, claim support, and open-task context.
+- Added deterministic step synthesis with ordered proposed steps and expected gain fields.
+- Added generation tests for deterministic reuse and claim-linked de-risking plan creation.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c96
+Intent:
+- Add explicit molecule readiness plan generation refinement.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/plans.py`
+- `tests/test_plan_generation.py`
+
+Behavior:
+- Added `generate_readiness_plan_for_molecule(...)` with deterministic step ranking: missing gating evidence, highest-impact trajectory, then confirmatory follow-up.
+- Updated molecule plan generation to delegate to readiness-focused builder.
+- Added tests covering prioritized missing metrics and confirmatory step inclusion.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c97
+Intent:
+- Add explicit claim de-risking plan generation behavior with contradiction-aware follow-up.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/plans.py`
+- `tests/test_plan_generation.py`
+
+Behavior:
+- Added `generate_claim_derisking_plan_for_claim(...)` and routed `generate_plan_for_claim(...)` through it.
+- Added deterministic contradiction-aware confirmatory step insertion for claims with contradicting evidence links.
+- Extended tests to validate claim-test plus confirmatory step composition.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c98
+Intent:
+- Add deterministic plan scoring and ranking helpers for planning-layer prioritization.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/plans.py`
+- `tests/test_plan_ranking.py`
+
+Behavior:
+- Added effort estimation and weighted plan scoring from readiness/claim/evidence gains with effort and step-count penalties.
+- Added `rank_plans(...)` and wired top-plan helpers to ranking output.
+- Added tests for deterministic plan scoring/ranking and top-plan consistency.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c99
+Intent:
+- Add molecule recommended planning surface.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_plan_surface.py`
+
+Behavior:
+- Added molecule-level recommended plan context in molecule detail service with top plan summaries and step previews.
+- Added a compact "Recommended Plans" panel to molecule detail template.
+- Added molecule planning surface tests for context and rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c100
+Intent:
+- Add claim-facing planning panel with recommended de-risking plans.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/claims.py`
+- `psi/web/templates/claims/detail.html`
+- `tests/test_claim_router.py`
+- `tests/test_claim_surface.py`
+- `tests/test_claim_plan_surface.py`
+
+Behavior:
+- Extended claim detail service context with recommended claim plans and step previews.
+- Added "Recommended Claim Plans" section to claim detail template with expected gains.
+- Added/updated tests for claim plan context and rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c101
+Intent:
+- Add server-rendered plan detail route and template.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/app.py`
+- `psi/web/routers/plans.py`
+- `psi/web/templates/plans/detail.html`
+- `tests/test_plan_router.py`
+- `tests/test_plan_surface.py`
+
+Behavior:
+- Added `/plans/{plan_id}` route backed by plan detail service context.
+- Added plan detail template with scope links, expected gains, ordered steps, and task instantiation status.
+- Registered plans router in app and added route/template tests.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c102
+Intent:
+- Add explicit plan step/full-plan task instantiation bridge.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/plans.py`
+- `psi/web/routers/plans.py`
+- `psi/web/templates/plans/detail.html`
+- `tests/test_plan_router.py`
+- `tests/test_plan_task_instantiation.py`
+
+Behavior:
+- Added `create_task_from_plan_step(...)` and `create_tasks_from_plan(...)` to instantiate proposed plan steps into ExperimentTasks by explicit action only.
+- Linked created tasks back to plan steps and marked step status as `task_created`.
+- Added POST routes and UI actions for explicit step/plan instantiation plus tests.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c103
+Intent:
+- Add program and portfolio planning rollups.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/services/portfolio.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_program_claim_summary.py`
+- `tests/test_program_plan_summary.py`
+- `tests/test_portfolio_router.py`
+- `tests/test_portfolio_service.py`
+- `tests/test_portfolio_surface.py`
+
+Behavior:
+- Added program-level plan summary/preview in program detail context and template.
+- Added portfolio-level plan insights and summary counters (most actionable, accepted, awaiting instantiation, bottleneck-targeting).
+- Extended router/template/service tests for program and portfolio planning rollups.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c104
+Intent:
+- Add explicit planning-layer regression boundary coverage.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_plan_regression_boundaries.py`
+
+Behavior:
+- Added regression tests ensuring plan generation does not mutate DI snapshot payloads, task status truth, claim truth, or create fake evidence.
+- Added deterministic ordering/summary regression checks for plan ranking/detail outputs.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c105
+Intent:
+- Add Trajectory-to-Planning documentation and final scientist-facing polish.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/TRAJECTORY_TO_PLANNING_LAYER.md`
+- `psi/services/plans.py`
+- `psi/web/routers/plans.py`
+- `psi/web/templates/base.html`
+- `psi/web/templates/plans/list.html`
+- `tests/test_base_navigation.py`
+- `tests/test_plan_router.py`
+- `tests/test_plan_surface.py`
+
+Behavior:
+- Added planning layer documentation with boundaries, determinism, generated-vs-instantiated semantics, and extension points.
+- Added `/plans` list route/template and navigation entry for discoverability.
+- Added tests for plans list/nav rendering and route registration.
+
+Gates:
+- PASS

@@ -95,5 +95,32 @@
       </tbody>
     </table>
   </div>
+
+  {% set cp = (claim_plans if claim_plans is defined and claim_plans is iterable else []) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Recommended Claim Plans</h3>
+    <table class="table mini">
+      <thead><tr><th>Plan</th><th>Type</th><th>Expected gains</th><th>Proposed steps</th></tr></thead>
+      <tbody>
+      {% for p in cp %}
+        <tr>
+          <td><a href="/plans/{{ p.plan_id }}">{{ p.title }}</a></td>
+          <td>{{ p.plan_type|humanize_state }}</td>
+          <td>R {{ "%.2f"|format(p.expected_readiness_gain) }} · C {{ "%.2f"|format(p.expected_claim_support_gain) }} · E {{ "%.2f"|format(p.expected_evidence_coverage_gain) }}</td>
+          <td>
+            {% set st = (p.steps if p.steps is defined and p.steps is iterable else []) %}
+            {% for s in st %}
+              <div>{{ s.step_order }}. {% if s.suggested_assay %}{{ s.suggested_assay }}{% else %}{{ s.metric_key }}{% endif %} ({{ s.step_kind|humanize_state }})</div>
+            {% else %}
+              <span class="muted">No proposed steps.</span>
+            {% endfor %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No recommended claim plans available.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

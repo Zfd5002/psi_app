@@ -21,6 +21,9 @@ def test_portfolio_overview_template_sections() -> None:
         portfolio_summary={
             "program_count": 2,
             "molecule_count": 10,
+            "plan_count": 5,
+            "recommended_plans": 3,
+            "accepted_plans": 1,
             "task_count": 8,
             "overdue_tasks": 2,
             "blocked_tasks": 1,
@@ -82,6 +85,12 @@ def test_portfolio_overview_template_sections() -> None:
             "most_evidence_starved_claims": [{"claim_id": 6, "title": "Mechanism claim", "status": "hypothesis"}],
             "highest_task_burden_claims": [{"claim_id": 7, "title": "Readiness claim", "task_burden": 4}],
         },
+        portfolio_plan_summary={
+            "most_actionable_plans": [{"plan_id": 8, "title": "Readiness bundle", "score": 1.2}],
+            "accepted_plans": [{"plan_id": 9, "title": "Claim bundle", "score": 0.9}],
+            "awaiting_task_instantiation_plans": [{"plan_id": 8, "title": "Readiness bundle", "proposed_steps": 2}],
+            "bottleneck_targeting_plans": [{"plan_id": 8, "title": "Readiness bundle"}],
+        },
     )
     assert "Portfolio Intelligence" in html
     assert "Portfolio Summary" in html
@@ -92,7 +101,9 @@ def test_portfolio_overview_template_sections() -> None:
     assert "Portfolio Timeline" in html
     assert "Portfolio Trajectory Insights" in html
     assert "Portfolio Claim Insights" in html
+    assert "Portfolio Plan Insights" in html
     assert "Affinity claim" in html
+    assert "Readiness bundle" in html
     assert "kd_nM" in html
     assert "/molecules/7" in html
     assert "2026-03-02" in html

@@ -30,6 +30,7 @@ class Program(Base):
     molecule_statuses = relationship("ProgramMoleculeStatus", back_populates="program", cascade="all, delete-orphan")
     portfolio_memberships = relationship("PortfolioMembership", back_populates="program", cascade="all, delete-orphan")
     scientific_claims = relationship("ScientificClaim", back_populates="program", cascade="all, delete-orphan")
+    scientific_plans = relationship("ScientificPlan", back_populates="program", cascade="all, delete-orphan")
 
 
 class Molecule(Base):
@@ -82,6 +83,7 @@ class Molecule(Base):
     )
     variant_set_memberships = relationship("BuilderVariantSetMember", back_populates="molecule", cascade="all, delete-orphan")
     scientific_claims = relationship("ScientificClaim", back_populates="molecule", cascade="all, delete-orphan")
+    scientific_plans = relationship("ScientificPlan", back_populates="molecule", cascade="all, delete-orphan")
 
 
 class Portfolio(Base):
@@ -455,6 +457,7 @@ class ExperimentTask(Base):
     source_snapshot = relationship("DecisionSnapshot", back_populates="experiment_tasks")
     linked_data_record = relationship("DataRecord", back_populates="linked_experiment_tasks")
     scientific_claim_links = relationship("ScientificClaimTaskLink", back_populates="experiment_task", cascade="all, delete-orphan")
+    scientific_plan_steps = relationship("ScientificPlanStep", back_populates="linked_experiment_task")
 
 
 class ScientificClaim(Base):
@@ -484,6 +487,7 @@ class ScientificClaim(Base):
     evidence_links = relationship("ScientificClaimEvidenceLink", back_populates="claim", cascade="all, delete-orphan")
     decision_links = relationship("ScientificClaimDecisionLink", back_populates="claim", cascade="all, delete-orphan")
     task_links = relationship("ScientificClaimTaskLink", back_populates="claim", cascade="all, delete-orphan")
+    scientific_plans = relationship("ScientificPlan", back_populates="claim", cascade="all, delete-orphan")
 
 
 class ScientificClaimEvidenceLink(Base):
@@ -539,6 +543,62 @@ class ScientificClaimTaskLink(Base):
 
     claim = relationship("ScientificClaim", back_populates="task_links")
     experiment_task = relationship("ExperimentTask", back_populates="scientific_claim_links")
+
+
+class ScientificPlan(Base):
+    __tablename__ = "scientific_plans"
+    __table_args__ = (
+        Index("ix_scientific_plans_scope_status", "scope_type", "status"),
+        Index("ix_scientific_plans_molecule_status", "molecule_id", "status"),
+        Index("ix_scientific_plans_program_status", "program_id", "status"),
+        Index("ix_scientific_plans_claim_status", "claim_id", "status"),
+        Index("ix_scientific_plans_type_status", "plan_type", "status"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    scope_type = Column(Text, nullable=False, default="molecule")
+    molecule_id = Column(Integer, ForeignKey("molecules.id"), nullable=True)
+    program_id = Column(Integer, ForeignKey("programs.id"), nullable=True)
+    claim_id = Column(Integer, ForeignKey("scientific_claims.id"), nullable=True)
+    title = Column(Text, nullable=False)
+    plan_type = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="draft")
+    rationale = Column(Text, nullable=True)
+    expected_readiness_gain = Column(Float, nullable=False, default=0.0)
+    expected_claim_support_gain = Column(Float, nullable=False, default=0.0)
+    expected_evidence_coverage_gain = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    molecule = relationship("Molecule", back_populates="scientific_plans")
+    program = relationship("Program", back_populates="scientific_plans")
+    claim = relationship("ScientificClaim", back_populates="scientific_plans")
+    steps = relationship("ScientificPlanStep", back_populates="plan", cascade="all, delete-orphan")
+
+
+class ScientificPlanStep(Base):
+    __tablename__ = "scientific_plan_steps"
+    __table_args__ = (
+        UniqueConstraint("plan_id", "step_order", name="uq_scientific_plan_step_order"),
+        Index("ix_scientific_plan_steps_plan_status", "plan_id", "status"),
+        Index("ix_scientific_plan_steps_task", "linked_experiment_task_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    plan_id = Column(Integer, ForeignKey("scientific_plans.id"), nullable=False)
+    step_order = Column(Integer, nullable=False)
+    metric_key = Column(Text, nullable=True)
+    suggested_assay = Column(Text, nullable=True)
+    step_kind = Column(Text, nullable=False, default="experiment")
+    rationale = Column(Text, nullable=True)
+    expected_effect_summary = Column(Text, nullable=True)
+    linked_experiment_task_id = Column(Integer, ForeignKey("program_experiment_tasks.id"), nullable=True)
+    status = Column(Text, nullable=False, default="proposed")
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    plan = relationship("ScientificPlan", back_populates="steps")
+    linked_experiment_task = relationship("ExperimentTask", back_populates="scientific_plan_steps")
 
 
 class Evidence(Base):

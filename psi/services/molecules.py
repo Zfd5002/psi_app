@@ -59,6 +59,7 @@ from psi.services.insight_engine import build_insight_bundle, summarize_trend_si
 from psi.services.trends import build_molecule_trends
 from psi.services.trajectory import build_trajectory_tree, generate_trajectory_candidates, rank_trajectory_candidates
 from psi.services import claims as claims_svc
+from psi.services import plans as plans_svc
 
 
 def _pack_segments(segments: list[dict]) -> list[list[dict]]:
@@ -521,6 +522,36 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         generate_trajectory_candidates(db, molecule_id=int(molecule_id))
     )[:5]
     trajectory_tree = build_trajectory_tree(db, molecule_id=int(molecule_id), max_depth=2, branch_limit=4)
+    top_plan_rows = plans_svc.top_plans_for_molecule(db, molecule_id=int(molecule_id), limit=3)
+    if not top_plan_rows:
+        try:
+            plans_svc.generate_plan_for_molecule(db, molecule_id=int(molecule_id))
+        except Exception:
+            pass
+        top_plan_rows = plans_svc.top_plans_for_molecule(db, molecule_id=int(molecule_id), limit=3)
+    molecule_plans = []
+    for p in top_plan_rows:
+        steps = plans_svc.list_plan_steps(db, plan_id=int(p.id))
+        molecule_plans.append(
+            {
+                "plan_id": int(p.id),
+                "title": str(p.title or ""),
+                "plan_type": str(p.plan_type or ""),
+                "status": str(p.status or ""),
+                "expected_readiness_gain": float(p.expected_readiness_gain or 0.0),
+                "expected_claim_support_gain": float(p.expected_claim_support_gain or 0.0),
+                "expected_evidence_coverage_gain": float(p.expected_evidence_coverage_gain or 0.0),
+                "steps": [
+                    {
+                        "step_order": int(s.step_order),
+                        "step_kind": str(s.step_kind or ""),
+                        "metric_key": str(s.metric_key or ""),
+                        "suggested_assay": str(s.suggested_assay or ""),
+                    }
+                    for s in steps[:3]
+                ],
+            }
+        )
     top_claim_rows = claims_svc.top_claims_for_molecule(db, molecule_id=int(molecule_id), limit=5)
     molecule_claims = []
     for c in top_claim_rows:
@@ -580,6 +611,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "open_experiment_tasks": open_experiment_tasks,
         "trajectory_candidates": trajectory_candidates,
         "trajectory_tree": trajectory_tree,
+        "molecule_plans": molecule_plans,
         "molecule_claims": molecule_claims,
         "pdl1_allowed_mismatches": int(pdl1_allowed_mismatches or 0),
         "property_runs": runs,

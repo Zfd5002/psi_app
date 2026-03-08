@@ -489,6 +489,38 @@ def get_claim_detail(db: Session, *, claim_id: int) -> dict[str, Any]:
             trajectory_candidates = [r for r in all_cands if str(r.get("metric_key") or "") in hints][:5]
         else:
             trajectory_candidates = all_cands[:5]
+    from psi.services import plans as plans_svc
+
+    claim_plan_rows = plans_svc.top_plans_for_claim(db, claim_id=int(claim_id), limit=3)
+    if not claim_plan_rows and c.molecule_id is not None:
+        try:
+            plans_svc.generate_plan_for_claim(db, claim_id=int(claim_id))
+        except Exception:
+            pass
+        claim_plan_rows = plans_svc.top_plans_for_claim(db, claim_id=int(claim_id), limit=3)
+    claim_plans = []
+    for p in claim_plan_rows:
+        steps = plans_svc.list_plan_steps(db, plan_id=int(p.id))
+        claim_plans.append(
+            {
+                "plan_id": int(p.id),
+                "title": str(p.title or ""),
+                "plan_type": str(p.plan_type or ""),
+                "status": str(p.status or ""),
+                "expected_readiness_gain": float(p.expected_readiness_gain or 0.0),
+                "expected_claim_support_gain": float(p.expected_claim_support_gain or 0.0),
+                "expected_evidence_coverage_gain": float(p.expected_evidence_coverage_gain or 0.0),
+                "steps": [
+                    {
+                        "step_order": int(s.step_order),
+                        "step_kind": str(s.step_kind or ""),
+                        "metric_key": str(s.metric_key or ""),
+                        "suggested_assay": str(s.suggested_assay or ""),
+                    }
+                    for s in steps[:3]
+                ],
+            }
+        )
     return {
         "claim": c,
         "evidence_links": list_claim_evidence(db, claim_id=int(claim_id)),
@@ -496,5 +528,6 @@ def get_claim_detail(db: Session, *, claim_id: int) -> dict[str, Any]:
         "task_links": task_links,
         "open_linked_tasks": open_tasks,
         "trajectory_candidates": trajectory_candidates,
+        "claim_plans": claim_plans,
         "maturity": summarize_claim_maturity(db, claim_id=int(claim_id)),
     }

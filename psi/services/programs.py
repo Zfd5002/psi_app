@@ -28,6 +28,7 @@ from psi.services.metric_catalog import metric_catalog_entry, metric_group_for_k
 from psi.services.evidence_preview import build_record_evidence_preview
 from psi.web.ui_labels import humanize_key
 from psi.services import claims as claims_svc
+from psi.services import plans as plans_svc
 
 PROGRAM_MOLECULE_ROLES: tuple[str, ...] = (
     "lead",
@@ -701,6 +702,40 @@ def get_program_detail(
                 "contradicting_count": int(msum.get("contradicting_count") or 0),
             }
         )
+    plan_rows = plans_svc.list_plans_for_program(db, program_id=int(program_id), include_archived=True)
+    plan_preview_rows = plans_svc.top_plans_for_program(db, program_id=int(program_id), limit=10)
+    plan_summary = {
+        "recommended": 0,
+        "accepted": 0,
+        "awaiting_task_instantiation": 0,
+        "bottleneck_targeting": 0,
+    }
+    for prow in plan_rows:
+        st = str(prow.status or "")
+        if st == "recommended":
+            plan_summary["recommended"] += 1
+        if st == "accepted":
+            plan_summary["accepted"] += 1
+        steps = plans_svc.list_plan_steps(db, plan_id=int(prow.id))
+        if any(str(s.status or "") == "proposed" for s in steps):
+            plan_summary["awaiting_task_instantiation"] += 1
+        if any(str(s.metric_key or "").strip() for s in steps):
+            plan_summary["bottleneck_targeting"] += 1
+    plan_preview = []
+    for prow in plan_preview_rows:
+        steps = plans_svc.list_plan_steps(db, plan_id=int(prow.id))
+        plan_preview.append(
+            {
+                "plan_id": int(prow.id),
+                "title": str(prow.title or ""),
+                "plan_type": str(prow.plan_type or ""),
+                "status": str(prow.status or ""),
+                "expected_readiness_gain": float(prow.expected_readiness_gain or 0.0),
+                "expected_claim_support_gain": float(prow.expected_claim_support_gain or 0.0),
+                "expected_evidence_coverage_gain": float(prow.expected_evidence_coverage_gain or 0.0),
+                "proposed_steps": int(sum(1 for s in steps if str(s.status or "") == "proposed")),
+            }
+        )
 
     return {
         "program": p,
@@ -742,6 +777,8 @@ def get_program_detail(
         "program_suggested_experiments": program_suggested_experiments,
         "program_claim_summary": claim_summary_counts,
         "program_claims_preview": claim_preview[:10],
+        "program_plan_summary": plan_summary,
+        "program_plans_preview": plan_preview[:10],
         "program_dashboard": program_dashboard,
         "di_dashboard": di_dashboard,
         "audits": audits,

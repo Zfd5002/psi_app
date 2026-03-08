@@ -16,3 +16,4 @@ def test_base_navigation_includes_portfolio_link() -> None:
     html = tpl.render(request=SimpleNamespace(), PSI_VERSION="v-test")
     assert 'href="/portfolio"' in html
     assert 'href="/claims"' in html
+    assert 'href="/plans"' in html

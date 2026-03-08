@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from psi.core.models import DataRecord, DecisionSnapshot, ExperimentTask, Molecule, Program, ScientificClaim
+from psi.core.models import DataRecord, DecisionSnapshot, ExperimentTask, Molecule, Program, ScientificClaim, ScientificPlan
 from psi.services.dev_board import build_development_board
 from psi.services.insight_engine import build_insight_bundle
 from psi.services import claims as claims_svc
@@ -30,6 +30,7 @@ def build_portfolio_summary(db: Session) -> dict[str, int]:
     programs = int(db.query(Program).count())
     molecules = int(db.query(Molecule).count())
     tasks = db.query(ExperimentTask).order_by(ExperimentTask.id.asc()).all()
+    plans = db.query(ScientificPlan).order_by(ScientificPlan.id.asc()).all()
     overdue = 0
     blocked = 0
     in_progress = 0
@@ -56,6 +57,9 @@ def build_portfolio_summary(db: Session) -> dict[str, int]:
         "program_count": int(programs),
         "molecule_count": int(molecules),
         "task_count": int(len(tasks)),
+        "plan_count": int(len(plans)),
+        "recommended_plans": int(sum(1 for p in plans if str(p.status or "") == "recommended")),
+        "accepted_plans": int(sum(1 for p in plans if str(p.status or "") == "accepted")),
         "overdue_tasks": int(overdue),
         "blocked_tasks": int(blocked),
         "tasks_in_progress": int(in_progress),
@@ -415,4 +419,60 @@ def build_portfolio_claim_summary(db: Session, *, limit: int = 20) -> dict[str, 
         "most_at_risk_claims": at_risk,
         "most_evidence_starved_claims": evidence_starved,
         "highest_task_burden_claims": highest_task_burden,
+    }
+
+
+def build_portfolio_plan_summary(db: Session, *, limit: int = 20) -> dict[str, list[dict[str, int | float | str]]]:
+    from psi.services import plans as plans_svc
+
+    rows = (
+        db.query(ScientificPlan)
+        .filter(ScientificPlan.status != "archived")
+        .filter(ScientificPlan.status != "superseded")
+        .order_by(ScientificPlan.updated_at.desc(), ScientificPlan.id.asc())
+        .all()
+    )
+    top_gap_metrics = {str(x.get("metric_key") or "") for x in build_evidence_gap_report(db, limit=5)}
+    flat: list[dict[str, int | float | str]] = []
+    for p in rows:
+        steps = plans_svc.list_plan_steps(db, plan_id=int(p.id))
+        proposed = int(sum(1 for s in steps if str(s.status or "") == "proposed"))
+        bottleneck_targeting = int(
+            any(str(s.metric_key or "").strip() in top_gap_metrics for s in steps if str(s.metric_key or "").strip())
+        )
+        flat.append(
+            {
+                "plan_id": int(p.id),
+                "title": str(p.title or ""),
+                "plan_type": str(p.plan_type or ""),
+                "status": str(p.status or ""),
+                "program_id": int(p.program_id) if p.program_id is not None else 0,
+                "molecule_id": int(p.molecule_id) if p.molecule_id is not None else 0,
+                "score": float(plans_svc.score_plan(db, p)),
+                "proposed_steps": proposed,
+                "bottleneck_targeting": bottleneck_targeting,
+            }
+        )
+
+    most_actionable = sorted(
+        [r for r in flat if str(r.get("status") or "") in {"recommended", "accepted"}],
+        key=lambda r: (-float(r["score"]), -int(r["proposed_steps"]), int(r["plan_id"])),
+    )[: max(1, int(limit))]
+    accepted = sorted(
+        [r for r in flat if str(r.get("status") or "") == "accepted"],
+        key=lambda r: (-float(r["score"]), int(r["plan_id"])),
+    )[: max(1, int(limit))]
+    awaiting = sorted(
+        [r for r in flat if int(r["proposed_steps"]) > 0],
+        key=lambda r: (-int(r["proposed_steps"]), -float(r["score"]), int(r["plan_id"])),
+    )[: max(1, int(limit))]
+    bottleneck = sorted(
+        [r for r in flat if int(r["bottleneck_targeting"]) == 1],
+        key=lambda r: (-float(r["score"]), int(r["plan_id"])),
+    )[: max(1, int(limit))]
+    return {
+        "most_actionable_plans": most_actionable,
+        "accepted_plans": accepted,
+        "awaiting_task_instantiation_plans": awaiting,
+        "bottleneck_targeting_plans": bottleneck,
     }

@@ -24,6 +24,7 @@ def portfolio_overview(request: Request, db: Session = Depends(get_db)):
     timeline = portfolio_svc.build_portfolio_timeline(db, weeks=12)
     portfolio_trajectory = trajectory_svc.build_portfolio_trajectory(db, limit=20)
     claim_summary = portfolio_svc.build_portfolio_claim_summary(db, limit=20)
+    plan_summary = portfolio_svc.build_portfolio_plan_summary(db, limit=20)
     return templates.TemplateResponse(
         "portfolio/overview.html",
         {
@@ -35,6 +36,7 @@ def portfolio_overview(request: Request, db: Session = Depends(get_db)):
             "portfolio_timeline": timeline,
             "portfolio_trajectory": portfolio_trajectory.get("experiments") or [],
             "portfolio_claim_summary": claim_summary,
+            "portfolio_plan_summary": plan_summary,
         },
     )
 

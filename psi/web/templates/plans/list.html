@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Scientific Plans | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Scientific Plans</h1>
+  <div class="muted">Deterministic recommended work bundles derived from trajectory, claims, and evidence gaps.</div>
+  {% set rows = (plans if plans is defined and plans is iterable else []) %}
+  <table class="table mini" style="margin-top:8px;">
+    <thead><tr><th>Plan</th><th>Type</th><th>Status</th><th>Scope</th><th>Expected gains</th></tr></thead>
+    <tbody>
+    {% for p in rows %}
+      <tr>
+        <td><a href="/plans/{{ p.id }}">{{ p.title }}</a></td>
+        <td>{{ p.plan_type|humanize_state }}</td>
+        <td>{{ p.status|humanize_state }}</td>
+        <td>{{ p.scope_type|humanize_state }}</td>
+        <td>R {{ "%.2f"|format(p.expected_readiness_gain or 0.0) }} · C {{ "%.2f"|format(p.expected_claim_support_gain or 0.0) }} · E {{ "%.2f"|format(p.expected_evidence_coverage_gain or 0.0) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No plans available.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

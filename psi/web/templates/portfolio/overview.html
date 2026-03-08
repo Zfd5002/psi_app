@@ -13,6 +13,9 @@
       <div><b>Molecules:</b> {{ s.molecule_count if s.molecule_count is defined else 0 }}</div>
       <div><b>Ready molecules:</b> {{ s.ready_molecules if s.ready_molecules is defined else 0 }}</div>
       <div><b>Missing-data molecules:</b> {{ s.missing_data_molecules if s.missing_data_molecules is defined else 0 }}</div>
+      <div><b>Plans:</b> {{ s.plan_count if s.plan_count is defined else 0 }}</div>
+      <div><b>Recommended plans:</b> {{ s.recommended_plans if s.recommended_plans is defined else 0 }}</div>
+      <div><b>Accepted plans:</b> {{ s.accepted_plans if s.accepted_plans is defined else 0 }}</div>
     </div>
   </div>
 
@@ -190,6 +193,55 @@
             <li><a href="/claims/{{ r.claim_id }}">{{ r.title }}</a> (tasks={{ r.task_burden }})</li>
           {% else %}
             <li class="muted">No claims.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  {% set pps = (portfolio_plan_summary if portfolio_plan_summary is defined and portfolio_plan_summary is mapping else {}) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Portfolio Plan Insights</h3>
+    <div class="grid cols-2">
+      <div>
+        <div class="muted mini">Most actionable plans</div>
+        <ul>
+          {% for r in (pps.most_actionable_plans if pps.most_actionable_plans is defined else []) %}
+            <li><a href="/plans/{{ r.plan_id }}">{{ r.title }}</a> (score={{ "%.2f"|format(r.score) }})</li>
+          {% else %}
+            <li class="muted">No plans.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Accepted plans</div>
+        <ul>
+          {% for r in (pps.accepted_plans if pps.accepted_plans is defined else []) %}
+            <li><a href="/plans/{{ r.plan_id }}">{{ r.title }}</a> (score={{ "%.2f"|format(r.score) }})</li>
+          {% else %}
+            <li class="muted">No accepted plans.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="grid cols-2">
+      <div>
+        <div class="muted mini">Awaiting task instantiation</div>
+        <ul>
+          {% for r in (pps.awaiting_task_instantiation_plans if pps.awaiting_task_instantiation_plans is defined else []) %}
+            <li><a href="/plans/{{ r.plan_id }}">{{ r.title }}</a> (proposed={{ r.proposed_steps }})</li>
+          {% else %}
+            <li class="muted">No awaiting plans.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Bottleneck-targeting plans</div>
+        <ul>
+          {% for r in (pps.bottleneck_targeting_plans if pps.bottleneck_targeting_plans is defined else []) %}
+            <li><a href="/plans/{{ r.plan_id }}">{{ r.title }}</a></li>
+          {% else %}
+            <li class="muted">No bottleneck-targeting plans.</li>
           {% endfor %}
         </ul>
       </div>

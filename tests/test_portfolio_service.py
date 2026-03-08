@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from psi.core.db import ensure_schema
 from psi.core.models import Base, DataRecord, DecisionSnapshot, ExperimentTask, Molecule, Program
+from psi.services import plans as plans_svc
 from psi.services.portfolio import (
     build_portfolio_summary,
     build_program_portfolio_summary,
@@ -17,6 +18,7 @@ from psi.services.portfolio import (
     build_portfolio_timeline,
     build_portfolio_export_rows,
     build_portfolio_claim_summary,
+    build_portfolio_plan_summary,
 )
 
 
@@ -264,6 +266,39 @@ def test_evidence_gap_report_counts_missing_metrics() -> None:
             rows = build_evidence_gap_report(db, limit=10)
             assert rows[0]["metric_key"] == "kd_nM"
             assert int(rows[0]["missing_molecule_count"]) == 2
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_portfolio_plan_summary_rollup() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 7)
+            p = Program(name="PP-plan", created_at=now, updated_at=now)
+            db.add(p); db.commit(); db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="PP-M1", title="", created_at=now, updated_at=now)
+            db.add(m); db.commit(); db.refresh(m)
+            db.add(
+                DecisionSnapshot(
+                    program_id=int(p.id), molecule_id=int(m.id), batch_id=None, decision_key="advance_to_in_vivo", rules_version="v1",
+                    inputs_json="{}", outputs_json=json.dumps({"decision_state":"not_ready","gate_outcomes":{"G":{"status":"fail","missing":["kd_nM"],"failed_metrics":[]}},"blockers":[]}), evidence_ids_json="[]", is_superseded=0, created_at=now,
+                )
+            )
+            db.commit()
+            p1 = plans_svc.create_plan(db, scope_type="molecule", molecule_id=int(m.id), program_id=int(p.id), claim_id=None, title="Plan A", plan_type="readiness_advancement", status="recommended", expected_readiness_gain=1.0)
+            p2 = plans_svc.create_plan(db, scope_type="molecule", molecule_id=int(m.id), program_id=int(p.id), claim_id=None, title="Plan B", plan_type="evidence_completion", status="accepted", expected_evidence_coverage_gain=0.8)
+            plans_svc.add_plan_step(db, plan_id=int(p1.id), metric_key="kd_nM", suggested_assay="SPR", step_kind="experiment", status="proposed")
+            plans_svc.add_plan_step(db, plan_id=int(p2.id), metric_key="kd_nM", suggested_assay="SPR", step_kind="experiment", status="task_created")
+            out = build_portfolio_plan_summary(db, limit=10)
+            assert "most_actionable_plans" in out
+            assert "accepted_plans" in out
+            assert "awaiting_task_instantiation_plans" in out
+            assert len(out["most_actionable_plans"]) >= 1
+            assert any(int(r["plan_id"]) == int(p2.id) for r in out["accepted_plans"])
         finally:
             db.close()
     finally:

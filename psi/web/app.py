@@ -24,6 +24,7 @@ from psi.web.routers import (
     portfolios,
     portfolio,
     claims,
+    plans,
     programs,
     search,
     data_records,
@@ -81,6 +82,7 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
     app.include_router(portfolios.router)
     app.include_router(portfolio.router)
     app.include_router(claims.router)
+    app.include_router(plans.router)
     app.include_router(reports.router)
     app.include_router(lineage.router)
     app.include_router(molecules.router)

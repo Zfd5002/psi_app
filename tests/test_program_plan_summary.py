@@ -7,7 +7,6 @@ from sqlalchemy.orm import sessionmaker
 
 from psi.core.db import ensure_schema
 from psi.core.models import Base, Molecule, Program
-from psi.services import claims as claims_svc
 from psi.services import plans as plans_svc
 from psi.services import programs as program_svc
 
@@ -20,40 +19,30 @@ def _mkdb():
     return eng, SessionTmp
 
 
-def test_program_detail_includes_claim_summary_and_preview() -> None:
+def test_program_detail_includes_plan_summary_and_preview() -> None:
     eng, SessionTmp = _mkdb()
     try:
         db = SessionTmp()
         try:
             now = datetime(2026, 3, 7)
-            p = Program(name="P-pcs", created_at=now, updated_at=now)
+            p = Program(name="P-pps", created_at=now, updated_at=now)
             db.add(p); db.commit(); db.refresh(p)
-            m = Molecule(program_id=int(p.id), primary_id="M-pcs", title="", created_at=now, updated_at=now)
+            m = Molecule(program_id=int(p.id), primary_id="M-pps", title="", created_at=now, updated_at=now)
             db.add(m); db.commit(); db.refresh(m)
-            claims_svc.create_claim(db, scope_type="molecule", molecule_id=int(m.id), program_id=int(p.id), title="C1", claim_type="affinity", statement="x", status="emerging")
-            claims_svc.create_claim(db, scope_type="program", molecule_id=None, program_id=int(p.id), title="C2", claim_type="in_vivo_readiness", statement="x", status="supported")
-            plan = plans_svc.create_plan(db, scope_type="molecule", molecule_id=int(m.id), program_id=int(p.id), claim_id=None, title="P1", plan_type="readiness_advancement", status="recommended")
+            plan = plans_svc.create_plan(db, scope_type="molecule", molecule_id=int(m.id), program_id=int(p.id), claim_id=None, title="Plan", plan_type="readiness_advancement", status="recommended")
             plans_svc.add_plan_step(db, plan_id=int(plan.id), metric_key="kd_nM", suggested_assay="SPR", step_kind="experiment", status="proposed")
             old_sql = program_svc.PROGRAM_EVIDENCE_ROWS_SQL
             program_svc.PROGRAM_EVIDENCE_ROWS_SQL = """
-            SELECT
-              dr.molecule_id AS molecule_id,
-              dm.name AS metric_key
+            SELECT dr.molecule_id AS molecule_id, dm.name AS metric_key
             FROM data_records dr
             JOIN data_measurements dm ON dm.data_record_id = dr.id
-            WHERE dr.program_id = :pid
-              AND dr.molecule_id IS NOT NULL
+            WHERE dr.program_id = :pid AND dr.molecule_id IS NOT NULL
             ORDER BY dr.molecule_id ASC, dm.name ASC, dm.id ASC
             """
             ctx = program_svc.get_program_detail(db, int(p.id))
             program_svc.PROGRAM_EVIDENCE_ROWS_SQL = old_sql
-            assert "program_claim_summary" in ctx
-            assert "program_claims_preview" in ctx
             assert "program_plan_summary" in ctx
             assert "program_plans_preview" in ctx
-            assert int(ctx["program_claim_summary"]["hypothesis_or_emerging"]) >= 1
-            assert int(ctx["program_claim_summary"]["supported"]) >= 1
-            assert len(ctx["program_claims_preview"]) >= 2
             assert int(ctx["program_plan_summary"]["recommended"]) >= 1
             assert len(ctx["program_plans_preview"]) >= 1
         finally:

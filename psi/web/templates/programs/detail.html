@@ -110,6 +110,31 @@
       {% endfor %}
     </tbody>
   </table>
+  {% set pps = (program_plan_summary if program_plan_summary is defined and program_plan_summary is mapping else {}) %}
+  {% set ppr = (program_plans_preview if program_plans_preview is defined and program_plans_preview is iterable else []) %}
+  <h3>Scientific Plan Summary</h3>
+  <div class="grid cols-4">
+    <div class="card"><div class="muted mini">Recommended</div><div style="font-size:24px;font-weight:700;">{{ pps.recommended if pps.recommended is defined else 0 }}</div></div>
+    <div class="card"><div class="muted mini">Accepted</div><div style="font-size:24px;font-weight:700;">{{ pps.accepted if pps.accepted is defined else 0 }}</div></div>
+    <div class="card"><div class="muted mini">Awaiting task instantiation</div><div style="font-size:24px;font-weight:700;">{{ pps.awaiting_task_instantiation if pps.awaiting_task_instantiation is defined else 0 }}</div></div>
+    <div class="card"><div class="muted mini">Bottleneck-targeting</div><div style="font-size:24px;font-weight:700;">{{ pps.bottleneck_targeting if pps.bottleneck_targeting is defined else 0 }}</div></div>
+  </div>
+  <table class="table mini" style="margin-top:8px;">
+    <thead><tr><th>Plan</th><th>Type</th><th>Status</th><th>Expected gains</th><th>Proposed steps</th></tr></thead>
+    <tbody>
+      {% for r in ppr %}
+      <tr>
+        <td><a href="/plans/{{ r.plan_id }}">{{ r.title }}</a></td>
+        <td>{{ r.plan_type|humanize_state }}</td>
+        <td>{{ r.status|humanize_state }}</td>
+        <td>R {{ "%.2f"|format(r.expected_readiness_gain) }} · C {{ "%.2f"|format(r.expected_claim_support_gain) }} · E {{ "%.2f"|format(r.expected_evidence_coverage_gain) }}</td>
+        <td>{{ r.proposed_steps }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No program plans available.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
   {% set cs = (candidate_set if candidate_set is defined and candidate_set is mapping else {}) %}
   <h3>Candidate Set</h3>
   <div class="grid cols-3">
