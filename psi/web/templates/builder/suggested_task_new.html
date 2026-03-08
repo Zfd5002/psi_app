@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Suggested Experiment Task | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Create Task from Suggested Experiment</h1>
+  <div class="muted mini">Prefilled from molecule insight recommendations. Task creation remains explicit.</div>
+
+  <div style="margin-top:8px;">
+    <div><b>Molecule:</b> <a href="/molecules/{{ molecule.id }}">{{ molecule.primary_id }}</a></div>
+    <div><b>Metric:</b> {{ prefill.metric_key if prefill.metric_key else "—" }}</div>
+    <div><b>Suggested assay:</b> {{ prefill.suggested_assay if prefill.suggested_assay else "—" }}</div>
+    {% if prefill.suggested_rationale %}<div><b>Rationale:</b> {{ prefill.suggested_rationale }}</div>{% endif %}
+  </div>
+
+  <form method="post" action="/programs/{{ prefill.program_id }}/tasks/create" style="display:grid;gap:8px;max-width:680px;margin-top:10px;">
+    <input type="hidden" name="molecule_id" value="{{ prefill.molecule_id }}" />
+    <input type="hidden" name="metric_key" value="{{ prefill.metric_key }}" />
+    <input type="hidden" name="suggested_assay" value="{{ prefill.suggested_assay }}" />
+    <input type="hidden" name="source_kind" value="insight" />
+    <label>
+      <div class="muted mini">Notes</div>
+      <textarea name="notes" rows="3" placeholder="Optional execution notes">{{ prefill.suggested_rationale or "" }}</textarea>
+    </label>
+    <input type="hidden" name="redirect_to" value="/molecules/{{ molecule.id }}" />
+    <div style="display:flex;gap:8px;">
+      <button class="btn primary" type="submit">Create task</button>
+      <a class="btn" href="/molecules/{{ molecule.id }}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

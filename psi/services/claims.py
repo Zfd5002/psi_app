@@ -14,6 +14,7 @@ from psi.core.models import (
     ScientificClaimTaskLink,
 )
 from psi.core.utils import now_utc
+from psi.services.dev_board import invalidate_program_board_cache
 from psi.services import trajectory as trajectory_svc
 
 CLAIM_STATUSES: tuple[str, ...] = (
@@ -137,6 +138,8 @@ def create_claim(
     db.add(c)
     db.commit()
     db.refresh(c)
+    if c.program_id is not None:
+        invalidate_program_board_cache(program_id=int(c.program_id))
     return c
 
 
@@ -199,6 +202,8 @@ def update_claim_status(db: Session, *, claim_id: int, status: str) -> Scientifi
     db.add(c)
     db.commit()
     db.refresh(c)
+    if c.program_id is not None:
+        invalidate_program_board_cache(program_id=int(c.program_id))
     return c
 
 

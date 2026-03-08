@@ -23,7 +23,7 @@ def test_bulk_import_template_renders_validate_and_confirm_forms() -> None:
     html = tpl.render(
         request=SimpleNamespace(),
         pasted_text="",
-        validated_rows=[{"row_num": 2, "molecule_id": 1, "batch_label": "B-1", "metric_key": "kd_nM", "value_num": 9.0, "unit": "nM"}],
+        validated_rows=[{"row_num": 2, "molecule_id": 1, "molecule_primary_id": "M-1", "batch_label": "B-1", "metric_key": "kd_nM", "value_num": 9.0, "unit": "nM"}],
         errors=[],
         validated_json="[]",
         imported_count=None,
@@ -33,3 +33,4 @@ def test_bulk_import_template_renders_validate_and_confirm_forms() -> None:
     assert 'action="/data/bulk-import"' in html
     assert "Validate rows" in html
     assert "Confirm import" in html
+    assert "M-1" in html

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}New Claim | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>New Scientific Claim</h1>
+  <div class="muted mini">Create a disciplined claim linked to a molecule context.</div>
+
+  {% if error %}
+    <div class="notice" style="margin-top:8px;">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/claims/new" style="margin-top:10px;display:grid;gap:10px;max-width:720px;">
+    <label>
+      <div class="muted mini">Molecule</div>
+      <select name="molecule_id" required>
+        {% for m in (molecules if molecules is defined and molecules is iterable else []) %}
+          <option value="{{ m.id }}">{{ m.primary_id }}{% if m.title %} — {{ m.title }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <div class="muted mini">Title</div>
+      <input type="text" name="title" placeholder="e.g. Molecule has high-affinity target binding" required />
+    </label>
+    <label>
+      <div class="muted mini">Claim type</div>
+      <select name="claim_type">
+        {% for ct in (claim_types if claim_types is defined and claim_types is iterable else []) %}
+          <option value="{{ ct }}">{{ ct|humanize_state }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <div class="muted mini">Description</div>
+      <textarea name="description" rows="4" placeholder="Statement and scientific rationale" required></textarea>
+    </label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn primary" type="submit">Create claim</button>
+      <a class="btn" href="/claims">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

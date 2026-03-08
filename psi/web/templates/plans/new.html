@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}New Plan | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>New Scientific Plan</h1>
+  <div class="muted mini">Create a scoped operational plan from molecule or claim context.</div>
+
+  <form method="post" action="/plans/new" style="margin-top:10px;display:grid;gap:10px;max-width:760px;">
+    <label>
+      <div class="muted mini">Scope type</div>
+      <select name="scope_type">
+        <option value="molecule">molecule</option>
+        <option value="claim">claim</option>
+      </select>
+    </label>
+    <label>
+      <div class="muted mini">Molecule (for molecule scope)</div>
+      <select name="molecule_id">
+        {% for m in (molecules if molecules is defined and molecules is iterable else []) %}
+          <option value="{{ m.id }}">{{ m.primary_id }}{% if m.title %} — {{ m.title }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <div class="muted mini">Claim (for claim scope)</div>
+      <select name="claim_id">
+        <option value="">none</option>
+        {% for c in (claims if claims is defined and claims is iterable else []) %}
+          <option value="{{ c.id }}">#{{ c.id }} — {{ c.title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <div class="muted mini">Title</div>
+      <input type="text" name="title" required />
+    </label>
+    <label>
+      <div class="muted mini">Plan type</div>
+      <select name="plan_type">
+        {% for pt in (plan_types if plan_types is defined and plan_types is iterable else []) %}
+          <option value="{{ pt }}">{{ pt|humanize_state }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <div class="muted mini">Rationale</div>
+      <textarea name="rationale" rows="4" placeholder="Why this plan should be run now"></textarea>
+    </label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn primary" type="submit">Create plan</button>
+      <a class="btn" href="/plans">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

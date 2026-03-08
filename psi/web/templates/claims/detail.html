@@ -9,6 +9,19 @@
   <div><b>Confidence:</b> {{ claim.confidence_level|humanize_state }}</div>
   <div><b>Statement:</b> {{ claim.statement }}</div>
   {% if claim.rationale %}<div><b>Rationale:</b> {{ claim.rationale }}</div>{% endif %}
+  <form method="post" action="/claims/{{ claim.id }}/transition" class="no-print" style="margin-top:10px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+    <input type="hidden" name="redirect_to" value="/claims/{{ claim.id }}" />
+    <label>
+      <div class="muted mini">Transition claim status</div>
+      <select name="status">
+        <option value="emerging">emerging</option>
+        <option value="supported">supported</option>
+        <option value="contradicted">contradicted</option>
+        <option value="archived">archived</option>
+      </select>
+    </label>
+    <button class="btn mini" type="submit">Apply transition</button>
+  </form>
 
   {% set m = (maturity if maturity is defined and maturity is mapping else {}) %}
   <div class="card" style="margin-top:10px;">

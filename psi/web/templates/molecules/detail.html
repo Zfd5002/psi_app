@@ -339,6 +339,7 @@
   <div class="card" style="margin-top:12px;">
     <h2 style="margin-top:0;">Scientific Trajectory</h2>
     <div class="muted mini">Derived projection layer. No DI, DataRecord, or task state is mutated.</div>
+    <div class="muted mini"><b>Estimated outcome (heuristic projection)</b></div>
     <table class="table mini" style="margin-top:8px;">
       <thead><tr><th>Experiment</th><th>Metric</th><th>Expected readiness gain</th><th>Gate impact</th><th>Confidence</th></tr></thead>
       <tbody>
@@ -433,7 +434,13 @@
       <div class="muted mini">Suggested experiments</div>
       <ul class="clean" style="margin-top:4px;">
         {% for row in (ib.recommended_experiments if ib is mapping and ib.recommended_experiments is defined else []) %}
-          <li>{{ row.suggested_assay if row.suggested_assay is defined else "" }}</li>
+          {% set assay = (row.suggested_assay if row.suggested_assay is defined else "") %}
+          {% set mk = (row.metric_key if row.metric_key is defined else "") %}
+          {% set why = (row.reason if row.reason is defined else "") %}
+          <li>
+            {{ assay }}
+            <a class="btn mini no-print" href="/builder/suggested-task/new?molecule_id={{ molecule.id }}&metric_key={{ mk|replace(' ', '%20') }}&suggested_assay={{ assay|replace(' ', '%20') }}&suggested_rationale={{ why|replace(' ', '%20') }}">Create Task</a>
+          </li>
         {% else %}
           <li class="muted">No immediate experiment suggestions available.</li>
         {% endfor %}

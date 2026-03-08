@@ -87,6 +87,7 @@ def validate_bulk_import_rows(db: Session, *, parsed_rows: list[dict[str, str]])
                 "row_num": rn,
                 "program_id": int(mol.program_id),
                 "molecule_id": int(mol.id),
+                "molecule_primary_id": str(mol.primary_id or ""),
                 "batch_id": int(batch.id),
                 "batch_label": str(batch.batch_id or ""),
                 "metric_key": metric_key,
@@ -103,4 +104,3 @@ def validate_bulk_import_rows(db: Session, *, parsed_rows: list[dict[str, str]])
         "validated_rows": sorted(validated, key=lambda x: (int(x["row_num"]), int(x["molecule_id"]), int(x["batch_id"]), str(x["metric_key"]))),
         "errors": sorted(errors, key=lambda x: (int(x["row_num"]), str(x["error"]))),
     }
-

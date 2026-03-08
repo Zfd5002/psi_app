@@ -12153,3 +12153,234 @@ Behavior:
 
 Gates:
 - PASS
+
+## 2026-03-08 — v1.3.0c121
+Intent:
+- Fix board cache invalidation coverage for ExperimentTask/ScientificClaim/ScientificPlan write flows.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/experiment_tasks.py`
+- `psi/services/claims.py`
+- `psi/services/plans.py`
+- `tests/test_board_cache_invalidation.py`
+
+Behavior:
+- Board cache invalidation now runs after task create/status/owner/due/urgency/notes/link updates.
+- Board cache invalidation now runs after claim create and claim status transitions.
+- Board cache invalidation now runs after plan create, plan status transitions, and plan step status changes.
+- Added regression coverage for invalidation calls across task/claim/plan write paths.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c122
+Intent:
+- Correct readiness projection logic to avoid optimistic READY prediction when other required gates still fail.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_readiness_prediction.py`
+
+Behavior:
+- `predict_readiness_shift` now evaluates required/failing gate sets and only returns `ready` when failing gate count reaches zero.
+- `simulate_experiment_outcome` now passes required gate context from current blockers into readiness projection.
+- Added targeted readiness prediction tests for partial, multi-fail, and full-pass gate scenarios.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c123
+Intent:
+- Add explicit claim creation UX and route flow for scientist-managed claims.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/claims.py`
+- `psi/web/templates/claims/list.html`
+- `psi/web/templates/claims/new.html`
+- `tests/test_claim_create_route.py`
+
+Behavior:
+- Added `GET /claims/new` and `POST /claims/new`.
+- Added server-rendered claim creation form with molecule, title, claim type, and description fields.
+- Claim creation persists molecule-scoped claims and redirects to claim detail.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c124
+Intent:
+- Add explicit claim lifecycle transition endpoint to support scientist-driven claim state management.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/claims.py`
+- `psi/web/templates/claims/detail.html`
+- `tests/test_claim_transition_route.py`
+
+Behavior:
+- Added `POST /claims/{claim_id}/transition`.
+- Valid transitions apply via existing claim state machine; invalid transitions return `400`.
+- Added claim detail transition control and route tests for valid/invalid transitions.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c125
+Intent:
+- Add explicit scientist-facing plan creation routes and form.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/plans.py`
+- `psi/web/templates/plans/list.html`
+- `psi/web/templates/plans/new.html`
+- `tests/test_plan_create_route.py`
+
+Behavior:
+- Added `GET /plans/new` and `POST /plans/new`.
+- Added scoped plan creation form supporting molecule or claim scope.
+- Plan list now includes direct “New plan” action.
+- Added route tests for molecule-scope and claim-scope plan creation.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c126
+Intent:
+- Add explicit plan status transition endpoint and scientist-facing transition control.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/plans.py`
+- `psi/web/templates/plans/detail.html`
+- `tests/test_plan_transition_route.py`
+
+Behavior:
+- Added `POST /plans/{plan_id}/transition`.
+- Plan transitions now route through existing lifecycle validation and reject invalid transitions with `400`.
+- Added detail-page transition control for draft/recommended/accepted progression management.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c127
+Intent:
+- Close the suggested-experiment loop with explicit prefilled task creation from molecule insight recommendations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/builder.py`
+- `psi/web/templates/builder/suggested_task_new.html`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_suggested_experiment_task_creation.py`
+
+Behavior:
+- Added `GET /builder/suggested-task/new` handoff page with prefilled molecule/metric/assay/rationale context.
+- Added “Create Task” action beside suggested experiments on molecule detail.
+- Added tests for route availability, prefill payload mapping, and molecule suggested-experiment task link rendering.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c128
+Intent:
+- Add deterministic task prefill helper for suggested-experiment handoffs.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/experiment_tasks.py`
+- `psi/web/routers/builder.py`
+- `tests/test_task_prefill_from_suggestion.py`
+
+Behavior:
+- Added `build_task_prefill_from_suggestion()` helper with deterministic normalization for metric/assay/rationale/source mappings.
+- Updated builder suggested-task prefill route to use shared helper.
+- Added tests for deterministic mapping and fallback behavior.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c129
+Intent:
+- Improve bulk import confirmation readability by showing molecule primary IDs instead of internal numeric IDs.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/bulk_import.py`
+- `psi/web/templates/data/bulk_import.html`
+- `tests/test_bulk_import_template.py`
+
+Behavior:
+- Validation rows now carry `molecule_primary_id`.
+- Bulk import confirmation table now renders `molecule_primary_id` (fallback to ID if unavailable).
+- Added template coverage for readable molecule label display.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c130
+Intent:
+- Improve trust signaling by explicitly labeling trajectory outputs as heuristic estimates.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/programs/board.html`
+- `tests/test_trajectory_labeling.py`
+
+Behavior:
+- Molecule trajectory section now displays “Estimated outcome (heuristic projection)”.
+- Board trajectory hints now include explicit estimated-outcome labeling.
+- Added tests to enforce trajectory heuristic labeling on molecule and board surfaces.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c131
+Intent:
+- Standardize primary navigation to canonical `/portfolio` path and remove confusing duplicate nav entry.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/base.html`
+- `tests/test_base_navigation.py`
+- `tests/test_nav_cleanup.py`
+
+Behavior:
+- Main navigation now points only to `/portfolio` (removed `/portfolios` nav link).
+- Added tests enforcing canonical portfolio nav path and preventing duplicate nav reintroduction.
+
+Gates:
+- PASS
+
+## 2026-03-08 — v1.3.0c132
+Intent:
+- Persist board filters across reload/navigation for better daily command-surface usability.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_board_filter_persistence.py`
+
+Behavior:
+- Added localStorage-backed persistence for board filter state (`filter`, `q`, `owner`, `urgency`, `task_status`, `due`) keyed by program.
+- Added deterministic restoration wiring on board load and persistence hooks on form submit/filter-link click.
+- Added template-level regression test for persistence script presence.
+
+Gates:
+- PASS

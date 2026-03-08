@@ -11,6 +11,7 @@ from psi.services import claims as claims_svc
 from psi.services import experiment_tasks as task_svc
 from psi.services.insight_engine import build_insight_bundle
 from psi.services import trajectory as trajectory_svc
+from psi.services.dev_board import invalidate_program_board_cache
 
 PLAN_STATUSES: tuple[str, ...] = ("draft", "recommended", "accepted", "archived", "superseded")
 PLAN_SCOPE_TYPES: tuple[str, ...] = ("molecule", "claim", "program")
@@ -158,6 +159,9 @@ def create_plan(
     db.add(row)
     db.commit()
     db.refresh(row)
+    pid = _program_id_for_plan(db, row)
+    if pid is not None:
+        invalidate_program_board_cache(program_id=int(pid))
     return row
 
 
@@ -215,6 +219,9 @@ def update_plan_status(db: Session, *, plan_id: int, status: str) -> ScientificP
         db.add(row)
         db.commit()
         db.refresh(row)
+        pid = _program_id_for_plan(db, row)
+        if pid is not None:
+            invalidate_program_board_cache(program_id=int(pid))
     return row
 
 
@@ -271,6 +278,9 @@ def add_plan_step(
     db.add(plan)
     db.commit()
     db.refresh(row)
+    pid = _program_id_for_plan(db, plan if plan is not None else row.plan_id)
+    if pid is not None:
+        invalidate_program_board_cache(program_id=int(pid))
     return row
 
 
@@ -393,6 +403,9 @@ def create_task_from_plan_step(db: Session, *, step_id: int) -> ExperimentTask:
     db.add(plan)
     db.commit()
     db.refresh(step)
+    pid = _program_id_for_plan(db, plan)
+    if pid is not None:
+        invalidate_program_board_cache(program_id=int(pid))
     return task
 
 
@@ -407,6 +420,23 @@ def create_tasks_from_plan(db: Session, *, plan_id: int) -> list[ExperimentTask]
             continue
         created.append(create_task_from_plan_step(db, step_id=int(s.id)))
     return created
+
+
+def _program_id_for_plan(db: Session, plan: ScientificPlan | int) -> int | None:
+    row = plan if isinstance(plan, ScientificPlan) else get_plan(db, plan_id=int(plan))
+    if row is None:
+        return None
+    if row.program_id is not None:
+        return int(row.program_id)
+    if row.claim_id is not None:
+        claim = db.get(ScientificClaim, int(row.claim_id))
+        if claim is not None and claim.program_id is not None:
+            return int(claim.program_id)
+    if row.molecule_id is not None:
+        mol = db.get(Molecule, int(row.molecule_id))
+        if mol is not None and mol.program_id is not None:
+            return int(mol.program_id)
+    return None
 
 
 def _find_existing_recommended_plan(
@@ -540,7 +570,10 @@ def _rank_molecule_readiness_steps(
             break
 
     # Third: deterministic confirmatory follow-up when readiness impact is expected.
-    if any(int(r.get("expected_readiness_gain") or 0) > 0 for r in rows):
+    if any(
+        (int(r.get("expected_readiness_gain") or 0) > 0) or (int(r.get("gate_impact") or 0) > 0)
+        for r in rows
+    ):
         top = rows[0] if rows else None
         if isinstance(top, dict):
             mk = str(top.get("metric_key") or "").strip()

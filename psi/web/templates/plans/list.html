@@ -2,7 +2,10 @@
 {% block title %}Scientific Plans | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Scientific Plans</h1>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+    <h1>Scientific Plans</h1>
+    <a class="btn primary no-print" href="/plans/new">New plan</a>
+  </div>
   <div class="muted">Deterministic recommended work bundles derived from trajectory, claims, and evidence gaps.</div>
   {% set rows = (plans if plans is defined and plans is iterable else []) %}
   <table class="table mini" style="margin-top:8px;">

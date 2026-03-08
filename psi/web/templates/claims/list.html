@@ -2,7 +2,10 @@
 {% block title %}Scientific Claims | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Scientific Claims</h1>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+    <h1>Scientific Claims</h1>
+    <a class="btn primary no-print" href="/claims/new">New claim</a>
+  </div>
   <div class="muted mini">Disciplined scientific assertion layer across molecules and programs.</div>
   {% set rows = (claims if claims is defined and claims is iterable else []) %}
   <table class="table mini" style="margin-top:8px;">

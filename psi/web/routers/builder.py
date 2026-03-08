@@ -307,6 +307,36 @@ def builder_variant_set_page(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/builder/suggested-task/new", response_class=HTMLResponse)
+def builder_suggested_task_new(
+    request: Request,
+    molecule_id: int,
+    metric_key: str = "",
+    suggested_assay: str = "",
+    suggested_rationale: str = "",
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    mol = db.get(Molecule, int(molecule_id))
+    if mol is None:
+        raise HTTPException(404)
+    return templates.TemplateResponse(
+        "builder/suggested_task_new.html",
+        {
+            "request": request,
+            "molecule": mol,
+            "prefill": experiment_tasks_svc.build_task_prefill_from_suggestion(
+                program_id=int(mol.program_id),
+                molecule_id=int(mol.id),
+                metric_key=str(metric_key or ""),
+                suggested_assay=str(suggested_assay or ""),
+                suggested_rationale=str(suggested_rationale or ""),
+                source_kind="insight",
+            ),
+        },
+    )
+
+
 @router.post("/builder/variant-set/draft", response_class=HTMLResponse)
 async def builder_variant_set_build_draft(request: Request, db: Session = Depends(get_db)):
     templates = get_templates(request)

@@ -99,14 +99,50 @@ def predict_readiness_shift(
     metric_changes: list[dict[str, Any]],
     *,
     readiness_before: str,
+    required_gate_keys: list[str] | None = None,
+    failing_gate_keys_before: list[str] | None = None,
 ) -> dict[str, str]:
     before = str(readiness_before or "not_assessed").strip().lower() or "not_assessed"
-    improved_gates = any(str(x.get("delta") or "") == "improved" for x in gate_changes if isinstance(x, dict))
     changed_metrics = any(str(x.get("metric_key") or "").strip() for x in metric_changes if isinstance(x, dict))
+    gate_rows = [x for x in gate_changes if isinstance(x, dict)]
+    required = sorted({str(x).strip() for x in (required_gate_keys or []) if str(x).strip()})
+    if not required:
+        required = sorted({str(x.get("gate_key") or "").strip() for x in gate_rows if str(x.get("gate_key") or "").strip()})
+
+    status_before: dict[str, str] = {}
+    status_after: dict[str, str] = {}
+    for gk in required:
+        status_before[gk] = "fail_or_hold"
+        status_after[gk] = "fail_or_hold"
+    for row in gate_rows:
+        gk = str(row.get("gate_key") or "").strip()
+        if not gk:
+            continue
+        gb = str(row.get("gate_before") or "fail_or_hold").strip().lower() or "fail_or_hold"
+        raw_after = str(row.get("gate_after") or "").strip().lower()
+        if raw_after:
+            ga = raw_after
+        elif str(row.get("delta") or "").strip().lower() == "improved":
+            ga = "pass"
+        else:
+            ga = gb
+        status_before[gk] = gb
+        status_after[gk] = ga
+
+    failing_before_set = {str(x).strip() for x in (failing_gate_keys_before or []) if str(x).strip()}
+    if failing_before_set:
+        for gk in failing_before_set:
+            status_before[gk] = "fail_or_hold"
+            if gk not in status_after:
+                status_after[gk] = "fail_or_hold"
+        required = sorted(set(required) | failing_before_set)
+
+    failing_before = sum(1 for gk in required if str(status_before.get(gk) or "").lower() != "pass")
+    failing_after = sum(1 for gk in required if str(status_after.get(gk) or "").lower() != "pass")
     after = before
     if before == "ready":
         after = "ready"
-    elif before != "not_assessed" and improved_gates and changed_metrics:
+    elif before != "not_assessed" and changed_metrics and failing_before > 0 and failing_after == 0:
         after = "ready"
     return {"readiness_before": before, "readiness_after": after}
 
@@ -158,6 +194,14 @@ def simulate_experiment_outcome(
 
     addressed_blocker = mk in set(blocking_metrics)
     unresolved_after = [x for x in blocking_metrics if x != mk]
+    failing_gate_keys_before = sorted(
+        {
+            str(g)
+            for x in (missing_rows + failing_rows)
+            for g in (x.get("related_gates") or ([x.get("gate_key")] if x.get("gate_key") else []))
+            if str(g).strip()
+        }
+    )
     gate_context = {mk: related_gates} if mk else {}
     metric_changes = [{"metric_key": mk, "simulated_value": simulated_value}]
     predicted_gate_changes = predict_gate_transitions(
@@ -168,6 +212,8 @@ def simulate_experiment_outcome(
         predicted_gate_changes,
         metric_changes,
         readiness_before=before if addressed_blocker and not unresolved_after else before,
+        required_gate_keys=failing_gate_keys_before,
+        failing_gate_keys_before=failing_gate_keys_before,
     )
 
     assumptions_count = 0 if addressed_blocker else 2

@@ -40,7 +40,7 @@
         {% for r in validated_rows %}
           <tr>
             <td>{{ r.row_num }}</td>
-            <td>{{ r.molecule_id }}</td>
+            <td>{{ r.molecule_primary_id if r.molecule_primary_id is defined and r.molecule_primary_id else r.molecule_id }}</td>
             <td>{{ r.batch_label }}</td>
             <td>{{ r.metric_key }}</td>
             <td>{{ r.value_num }}</td>

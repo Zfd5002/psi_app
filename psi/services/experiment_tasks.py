@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from psi.core.models import DataRecord, ExperimentTask
 from psi.core.utils import now_utc
+from psi.services.dev_board import invalidate_program_board_cache
 
 TASK_STATUSES: tuple[str, ...] = ("planned", "in_progress", "done", "blocked")
 TASK_URGENCY: tuple[str, ...] = ("critical", "high", "normal", "low")
@@ -24,6 +25,31 @@ def _normalize_status(status: str | None) -> str:
 def _normalize_urgency(urgency: str | None) -> str:
     u = str(urgency or "").strip().lower()
     return u if u in TASK_URGENCY else "normal"
+
+
+def build_task_prefill_from_suggestion(
+    *,
+    program_id: int,
+    molecule_id: int,
+    metric_key: str = "",
+    suggested_assay: str = "",
+    suggested_rationale: str = "",
+    source_kind: str = "insight",
+) -> dict[str, str | int]:
+    metric = str(metric_key or "").strip()
+    assay = str(suggested_assay or "").strip() or metric
+    rationale = str(suggested_rationale or "").strip()
+    src = str(source_kind or "").strip().lower() or "insight"
+    if src not in {"insight", "board", "manual", "builder_exploration"}:
+        src = "insight"
+    return {
+        "program_id": int(program_id),
+        "molecule_id": int(molecule_id),
+        "metric_key": metric,
+        "suggested_assay": assay,
+        "suggested_rationale": rationale,
+        "source_kind": src,
+    }
 
 
 def _sort_clause():
@@ -99,6 +125,7 @@ def create_experiment_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    invalidate_program_board_cache(program_id=int(task.program_id))
     return task
 
 
@@ -134,6 +161,7 @@ def update_task_status(db: Session, *, task_id: int, status: str) -> ExperimentT
         db.add(task)
         db.commit()
         db.refresh(task)
+        invalidate_program_board_cache(program_id=int(task.program_id))
     return task
 
 
@@ -146,6 +174,7 @@ def assign_task_owner(db: Session, *, task_id: int, owner_text: str) -> Experime
     db.add(task)
     db.commit()
     db.refresh(task)
+    invalidate_program_board_cache(program_id=int(task.program_id))
     return task
 
 
@@ -158,6 +187,7 @@ def set_task_due_date(db: Session, *, task_id: int, due_date: str) -> Experiment
     db.add(task)
     db.commit()
     db.refresh(task)
+    invalidate_program_board_cache(program_id=int(task.program_id))
     return task
 
 
@@ -170,6 +200,7 @@ def set_task_urgency(db: Session, *, task_id: int, urgency: str) -> ExperimentTa
     db.add(task)
     db.commit()
     db.refresh(task)
+    invalidate_program_board_cache(program_id=int(task.program_id))
     return task
 
 
@@ -182,6 +213,7 @@ def set_task_notes(db: Session, *, task_id: int, notes: str) -> ExperimentTask:
     db.add(task)
     db.commit()
     db.refresh(task)
+    invalidate_program_board_cache(program_id=int(task.program_id))
     return task
 
 
@@ -201,6 +233,7 @@ def link_task_to_data_record(db: Session, *, task_id: int, data_record_id: int) 
     db.add(task)
     db.commit()
     db.refresh(task)
+    invalidate_program_board_cache(program_id=int(task.program_id))
     return task
 
 

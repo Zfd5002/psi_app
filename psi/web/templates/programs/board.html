@@ -6,6 +6,7 @@
     <div>
       <h1>{{ program.name }} Development Board</h1>
       <div class="muted">Scientist operations surface (deterministic, DI read-only consumption).</div>
+      <div class="muted mini"><b>Estimated outcome (heuristic projection)</b> applies to trajectory hints.</div>
     </div>
     <div class="no-print">
       <a class="btn" href="/programs/{{ program.id }}">Back to Program</a>
@@ -17,7 +18,7 @@
   {% set bu = board_urgency_filter if board_urgency_filter is defined else "" %}
   {% set bs = board_task_status_filter if board_task_status_filter is defined else "" %}
   {% set bd = board_due_filter if board_due_filter is defined else "" %}
-  <form method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
+  <form id="boardSearchForm" method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
     <input type="hidden" name="filter" value="{{ bf }}" />
     <input type="hidden" name="owner" value="{{ bo }}" />
     <input type="hidden" name="urgency" value="{{ bu }}" />
@@ -29,7 +30,7 @@
     </label>
     <button class="btn mini" type="submit">Search</button>
   </form>
-  <form method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+  <form id="boardTaskFiltersForm" method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
     <input type="hidden" name="filter" value="{{ bf }}" />
     <input type="hidden" name="q" value="{{ bq }}" />
     <label>
@@ -67,10 +68,10 @@
     <button class="btn mini" type="submit">Apply task filters</button>
   </form>
   <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-    <a class="btn mini {% if bf == 'all' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=all&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">All</a>
-    <a class="btn mini {% if bf == 'ready' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=ready&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only ready</a>
-    <a class="btn mini {% if bf == 'failed' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=failed&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only failed</a>
-    <a class="btn mini {% if bf == 'missing' %}primary{% endif %}" href="/programs/{{ program.id }}/board?filter=missing&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only missing</a>
+    <a class="btn mini board-filter-link {% if bf == 'all' %}primary{% endif %}" data-board-filter-value="all" href="/programs/{{ program.id }}/board?filter=all&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">All</a>
+    <a class="btn mini board-filter-link {% if bf == 'ready' %}primary{% endif %}" data-board-filter-value="ready" href="/programs/{{ program.id }}/board?filter=ready&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only ready</a>
+    <a class="btn mini board-filter-link {% if bf == 'failed' %}primary{% endif %}" data-board-filter-value="failed" href="/programs/{{ program.id }}/board?filter=failed&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only failed</a>
+    <a class="btn mini board-filter-link {% if bf == 'missing' %}primary{% endif %}" data-board-filter-value="missing" href="/programs/{{ program.id }}/board?filter=missing&q={{ bq }}&owner={{ bo }}&urgency={{ bu }}&task_status={{ bs }}&due={{ bd }}">Show only missing</a>
   </div>
 
   {% set g = (board.groups if board is defined and board.groups is defined else {}) %}
@@ -113,7 +114,7 @@
             </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
             {% if row.trajectory_next_experiment is defined and row.trajectory_next_experiment %}
-              <div class="mini muted">Trajectory hint: {{ row.trajectory_next_experiment }}</div>
+              <div class="mini muted">Trajectory hint (estimated outcome): {{ row.trajectory_next_experiment }}</div>
             {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
@@ -181,7 +182,7 @@
             </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
             {% if row.trajectory_next_experiment is defined and row.trajectory_next_experiment %}
-              <div class="mini muted">Trajectory hint: {{ row.trajectory_next_experiment }}</div>
+              <div class="mini muted">Trajectory hint (estimated outcome): {{ row.trajectory_next_experiment }}</div>
             {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
@@ -249,7 +250,7 @@
             </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
             {% if row.trajectory_next_experiment is defined and row.trajectory_next_experiment %}
-              <div class="mini muted">Trajectory hint: {{ row.trajectory_next_experiment }}</div>
+              <div class="mini muted">Trajectory hint (estimated outcome): {{ row.trajectory_next_experiment }}</div>
             {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
@@ -317,7 +318,7 @@
             </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
             {% if row.trajectory_next_experiment is defined and row.trajectory_next_experiment %}
-              <div class="mini muted">Trajectory hint: {{ row.trajectory_next_experiment }}</div>
+              <div class="mini muted">Trajectory hint (estimated outcome): {{ row.trajectory_next_experiment }}</div>
             {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
@@ -370,6 +371,55 @@
 </div>
 <script>
   (function () {
+    var storageKey = "psi.board.filters.program.{{ program.id }}";
+    var searchForm = document.getElementById("boardSearchForm");
+    var taskForm = document.getElementById("boardTaskFiltersForm");
+    function readState() {
+      var fromSearch = new URLSearchParams(window.location.search || "");
+      return {
+        filter: (fromSearch.get("filter") || "").trim(),
+        q: (fromSearch.get("q") || "").trim(),
+        owner: (fromSearch.get("owner") || "").trim(),
+        urgency: (fromSearch.get("urgency") || "").trim(),
+        task_status: (fromSearch.get("task_status") || "").trim(),
+        due: (fromSearch.get("due") || "").trim()
+      };
+    }
+    function applyState(state) {
+      ["filter", "q", "owner", "urgency", "task_status", "due"].forEach(function (name) {
+        var val = String((state && state[name]) || "");
+        document.querySelectorAll('[name="' + name + '"]').forEach(function (el) { el.value = val; });
+      });
+    }
+    function saveState(state) {
+      try { window.localStorage.setItem(storageKey, JSON.stringify(state || {})); } catch (_) {}
+    }
+    var current = readState();
+    var hasQuery = Object.keys(current).some(function (k) { return !!current[k]; });
+    if (!hasQuery) {
+      try {
+        var raw = window.localStorage.getItem(storageKey);
+        if (raw) {
+          var saved = JSON.parse(raw || "{}");
+          applyState(saved);
+        }
+      } catch (_) {}
+    } else {
+      saveState(current);
+    }
+    if (searchForm) {
+      searchForm.addEventListener("submit", function () { saveState(readState()); });
+    }
+    if (taskForm) {
+      taskForm.addEventListener("submit", function () { saveState(readState()); });
+    }
+    document.querySelectorAll(".board-filter-link").forEach(function (a) {
+      a.addEventListener("click", function () {
+        var nxt = readState();
+        nxt.filter = String(a.getAttribute("data-board-filter-value") || "all");
+        saveState(nxt);
+      });
+    });
     document.querySelectorAll("[data-card-link]").forEach(function (el) {
       el.style.cursor = "pointer";
       el.addEventListener("click", function (ev) {
