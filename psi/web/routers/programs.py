@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from psi.core.models import Molecule
@@ -14,6 +14,7 @@ from psi.services import programs as svc
 from psi.services import data_records as data_records_svc
 from psi.services import dev_board as dev_board_svc
 from psi.services import experiment_tasks as experiment_tasks_svc
+from psi.services import narratives as narratives_svc
 
 router = APIRouter()
 
@@ -56,6 +57,48 @@ def program_detail(program_id: int, request: Request, db: Session = Depends(get_
         raise HTTPException(404)
     ctx["request"] = request
     return templates.TemplateResponse("programs/detail.html", ctx)
+
+
+@router.get("/programs/{program_id}/narrative", response_class=HTMLResponse)
+def program_narrative_detail(program_id: int, request: Request, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    p = svc.get_program(db, int(program_id))
+    if p is None:
+        raise HTTPException(404)
+    narrative = narratives_svc.build_program_narrative(db, program_id=int(program_id))
+    q = getattr(request, "query_params", {}) or {}
+    brief = str((q.get("view") if hasattr(q, "get") else "") or "").strip().lower() == "brief"
+    return templates.TemplateResponse(
+        "programs/narrative.html",
+        {
+            "request": request,
+            "program": p,
+            "narrative": narrative,
+            "narrative_brief": brief,
+        },
+    )
+
+
+@router.get("/programs/{program_id}/narrative/export")
+def program_narrative_export(program_id: int, db: Session = Depends(get_db)):
+    p = svc.get_program(db, int(program_id))
+    if p is None:
+        raise HTTPException(404)
+    n = narratives_svc.build_program_narrative(db, program_id=int(program_id))
+    lines = [
+        f"Program Narrative Export: {str(p.name or '')}",
+        f"Scientific thesis: {str(n.get('scientific_thesis') or '')}",
+        f"Current state: {str(n.get('current_state_summary') or '')}",
+        f"Next milestone: {str(n.get('next_milestone') or '')}",
+        f"Milestone rationale: {str(n.get('milestone_rationale') or '')}",
+        f"Overall stage: {str(n.get('overall_stage') or '')}",
+        f"Confidence summary: {str(n.get('confidence_summary') or '')}",
+    ]
+    return Response(
+        content="\\n".join(lines) + "\\n",
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="program_{int(program_id)}_narrative.txt"'},
+    )
 
 
 @router.get("/programs/{program_id}/board", response_class=HTMLResponse)

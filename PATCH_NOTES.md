@@ -11863,3 +11863,293 @@ Behavior:
 
 Gates:
 - PASS
+
+## 2026-03-07 — v1.3.0c106
+Intent:
+- Add deterministic narrative service foundation for program and portfolio storytelling.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/narratives.py`
+- `tests/test_narratives_service.py`
+
+Behavior:
+- Added `build_program_narrative(...)` and `build_portfolio_narrative(...)` structured outputs from existing read-model data.
+- Added baseline narrative sections for thesis, current state, support/uncertainty/risk, plans, milestone, and portfolio-level bottleneck/task/evidence summaries.
+- Added service tests covering program and portfolio narrative structures.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c107
+Intent:
+- Add deterministic program thesis and milestone synthesis helpers for narratives.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/narratives.py`
+- `tests/test_narratives_service.py`
+
+Behavior:
+- Added synthesis helpers for scientific thesis, current state summary, next milestone, milestone rationale, and stage framing.
+- Program narrative now uses helper-derived milestone and stage values.
+- Added tests for thesis and milestone synthesis behavior.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c108
+Intent:
+- Add deterministic risk/uncertainty/support synthesis for narratives.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/narratives.py`
+- `tests/test_narratives_service.py`
+
+Behavior:
+- Added helper synthesis blocks for strongest support, major uncertainties, and active risks.
+- Program narrative now uses helper-derived support/uncertainty/risk sections from structured counts.
+- Added tests for support/uncertainty/risk synthesis helper outputs.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c109
+Intent:
+- Add narrative-layer confidence and maturity rollup synthesis.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/narratives.py`
+- `tests/test_narratives_service.py`
+
+Behavior:
+- Added claim/evidence/plan maturity rollup helpers and deterministic confidence summary synthesis.
+- Program narrative now includes rollup blocks and derived confidence summary.
+- Added tests for maturity rollups and confidence helper behavior.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c110
+Intent:
+- Add compact Program Narrative panel on program detail.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/programs.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_narrative_surface.py`
+
+Behavior:
+- Program detail context now includes `program_narrative` built from deterministic narrative service output.
+- Added Program Narrative section showing thesis, current state, support, uncertainties, and next milestone.
+- Added tests for context inclusion and panel rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c111
+Intent:
+- Add full program narrative detail route and page.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/templates/programs/narrative.html`
+- `tests/test_program_narrative_router.py`
+- `tests/test_program_narrative_detail_surface.py`
+
+Behavior:
+- Added route `/programs/{program_id}/narrative` for structured program narrative view.
+- Added narrative detail template with thesis, evidence/risk blocks, active plans, trajectory opportunities, and milestone framing.
+- Added router/template tests for route presence, context, and narrative section rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c112
+Intent:
+- Add claim/plan/trajectory narrative anchor links for story-like program narratives.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/narratives.py`
+- `psi/web/templates/programs/narrative.html`
+- `tests/test_narratives_service.py`
+- `tests/test_program_narrative_detail_surface.py`
+
+Behavior:
+- Program narrative now includes deterministic anchor blocks and link sets for top claims, plans, and trajectory opportunities.
+- Program narrative detail page now renders an "Evidence Anchors" section with anchored links.
+- Added service/template tests for anchor link structures and rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c113
+Intent:
+- Add milestone framing narrative helpers and program narrative sections.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/narratives.py`
+- `psi/web/templates/programs/narrative.html`
+- `tests/test_narratives_service.py`
+- `tests/test_program_narrative_detail_surface.py`
+
+Behavior:
+- Added deterministic milestone framing blocks: what is proven, what remains, what unlocks next milestone, and what is underway.
+- Program narrative now includes `milestone_framing` payload and renders it in the narrative detail view.
+- Added tests for milestone framing helper structure and template rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c114
+Intent:
+- Enrich portfolio narrative service for leadership-level cross-program synthesis.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/narratives.py`
+- `tests/test_narratives_service.py`
+
+Behavior:
+- Portfolio narrative now includes deterministically ranked strongest/most-blocked programs, bottleneck rollups, highest-value plans, and near-term inflection rows.
+- Added `most_blocked_programs` and richer bottleneck/inflection structures for leadership consumption.
+- Added service tests for enriched portfolio narrative fields.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c115
+Intent:
+- Add portfolio leadership narrative sections on portfolio overview page.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_router.py`
+- `tests/test_portfolio_narrative_surface.py`
+
+Behavior:
+- Portfolio router now injects deterministic `portfolio_narrative` context.
+- Portfolio overview now renders leadership narrative sections: state summary, strongest progress signals, constrained areas, inflection points, and burden summaries.
+- Added route/template tests for portfolio narrative context and rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c116
+Intent:
+- Add concise leadership summary cards to portfolio narrative view.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/narratives.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_narratives_service.py`
+- `tests/test_portfolio_narrative_surface.py`
+
+Behavior:
+- Portfolio narrative now includes `leadership_cards` for programs nearing milestone, programs needing support, highest-value pending plans, and largest evidence gaps.
+- Portfolio page now renders compact leadership summary cards for fast scan.
+- Added service/template tests for leadership card structures and rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c117
+Intent:
+- Add export-friendly narrative endpoints for program and portfolio leadership views.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/routers/portfolio.py`
+- `tests/test_program_narrative_router.py`
+- `tests/test_portfolio_router.py`
+
+Behavior:
+- Added `/programs/{program_id}/narrative/export` plain-text export endpoint.
+- Added `/portfolio/narrative/export` plain-text export endpoint.
+- Added route and response-content tests for both exports.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c118
+Intent:
+- Add compact brief mode for narrative surfaces (leadership/investor view).
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/programs.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/templates/programs/narrative.html`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_program_narrative_router.py`
+- `tests/test_program_narrative_detail_surface.py`
+- `tests/test_portfolio_router.py`
+- `tests/test_portfolio_narrative_surface.py`
+
+Behavior:
+- Added `view=brief` mode for program narrative and portfolio overview surfaces.
+- Brief mode renders compact leadership summaries with thesis/progress/risk/next milestone focus while preserving full mode.
+- Added tests for brief-mode context handling and brief template rendering.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c119
+Intent:
+- Add explicit narrative regression boundary coverage.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_narrative_regression_boundaries.py`
+
+Behavior:
+- Added regression tests enforcing no DI/snapshot mutation and no claim/task/plan truth mutation from narrative generation.
+- Added deterministic narrative output equality checks for repeated generation calls.
+
+Gates:
+- PASS
+
+## 2026-03-07 — v1.3.0c120
+Intent:
+- Add Leadership/Investor Narrative layer documentation and final polish.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/LEADERSHIP_INVESTOR_NARRATIVE_LAYER.md`
+- `psi/web/templates/programs/narrative.html`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_program_narrative_detail_surface.py`
+- `tests/test_portfolio_narrative_surface.py`
+
+Behavior:
+- Added narrative layer documentation with derivation model, boundaries, deterministic rules, UI/export surfaces, and extension points.
+- Added export links and final readability polish for program/portfolio narrative pages including brief-mode coherence.
+- Added/updated surface tests to validate final narrative polish behavior.
+
+Gates:
+- PASS

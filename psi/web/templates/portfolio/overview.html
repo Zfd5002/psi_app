@@ -4,6 +4,16 @@
 <div class="card">
   <h1>Portfolio Intelligence</h1>
   <div class="muted">Leadership read-model across programs, molecules, tasks, and insight outputs.</div>
+  {% set brief = (narrative_brief if narrative_brief is defined else false) %}
+  <div class="mini muted" style="margin-top:4px;">
+    View: {% if brief %}Brief{% else %}Full{% endif %}
+    {% if brief %}
+      · <a href="/portfolio">Switch to full</a>
+    {% else %}
+      · <a href="/portfolio?view=brief">Switch to brief</a>
+    {% endif %}
+    · <a href="/portfolio/narrative/export">Export narrative</a>
+  </div>
 
   {% set s = (portfolio_summary if portfolio_summary is defined and portfolio_summary is mapping else {}) %}
   <div class="card" style="margin-top:10px;">
@@ -18,7 +28,111 @@
       <div><b>Accepted plans:</b> {{ s.accepted_plans if s.accepted_plans is defined else 0 }}</div>
     </div>
   </div>
+  {% set pn = (portfolio_narrative if portfolio_narrative is defined and portfolio_narrative is mapping else {}) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Portfolio Narrative</h3>
+    <div class="grid cols-2">
+      <div>
+        <div class="muted mini">Portfolio state summary</div>
+        <ul>
+          {% for x in (pn.near_term_inflection_points if pn.near_term_inflection_points is defined else []) %}
+            <li>{{ x }}</li>
+          {% else %}
+            <li class="muted">No summary points.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Strongest progress signals</div>
+        <ul>
+          {% for r in (pn.strongest_programs if pn.strongest_programs is defined else []) %}
+            <li><a href="/programs/{{ r.program_id }}">{{ r.program_name }}</a> (score={{ "%.2f"|format(r.readiness_score if r.readiness_score is defined else 0.0) }})</li>
+          {% else %}
+            <li class="muted">No strong signals.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Most constrained areas</div>
+        <ul>
+          {% for x in (pn.key_bottlenecks if pn.key_bottlenecks is defined else []) %}
+            <li>{{ x }}</li>
+          {% else %}
+            <li class="muted">No bottlenecks.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Top upcoming inflection points</div>
+        <ul>
+          {% for r in (pn.near_term_inflection_rows if pn.near_term_inflection_rows is defined else []) %}
+            <li><a href="/programs/{{ r.program_id }}">{{ r.program_name }}</a> (ready={{ r.molecules_ready if r.molecules_ready is defined else 0 }})</li>
+          {% else %}
+            <li class="muted">No near-term inflections.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div>
+        <div class="muted mini">Task/plan burden summary</div>
+        {% set tb = (pn.task_burden_summary if pn.task_burden_summary is defined and pn.task_burden_summary is mapping else {}) %}
+        <div>In progress {{ tb.tasks_in_progress if tb.tasks_in_progress is defined else 0 }}, overdue {{ tb.tasks_overdue if tb.tasks_overdue is defined else 0 }}, blocked {{ tb.tasks_blocked if tb.tasks_blocked is defined else 0 }}</div>
+      </div>
+      <div>
+        <div class="muted mini">Evidence gap summary</div>
+        {% set eg = (pn.evidence_gap_summary if pn.evidence_gap_summary is defined and pn.evidence_gap_summary is mapping else {}) %}
+        <div>Missing-data molecules {{ eg.missing_data_molecules if eg.missing_data_molecules is defined else 0 }}, evidence-starved claims {{ eg.evidence_starved_claims if eg.evidence_starved_claims is defined else 0 }}</div>
+      </div>
+    </div>
+    {% set lc = (pn.leadership_cards if pn.leadership_cards is defined and pn.leadership_cards is mapping else {}) %}
+    <div class="grid cols-4" style="margin-top:10px;">
+      <div class="card">
+        <div class="muted mini">Programs nearing milestone</div>
+        <ul>
+          {% for r in (lc.programs_nearing_milestone if lc.programs_nearing_milestone is defined else []) %}
+            <li><a href="/programs/{{ r.program_id }}">{{ r.program_name }}</a></li>
+          {% else %}<li class="muted">None</li>{% endfor %}
+        </ul>
+      </div>
+      <div class="card">
+        <div class="muted mini">Programs needing support</div>
+        <ul>
+          {% for r in (lc.programs_needing_support if lc.programs_needing_support is defined else []) %}
+            <li><a href="/programs/{{ r.program_id }}">{{ r.program_name }}</a></li>
+          {% else %}<li class="muted">None</li>{% endfor %}
+        </ul>
+      </div>
+      <div class="card">
+        <div class="muted mini">Highest-value pending plans</div>
+        <ul>
+          {% for r in (lc.highest_value_pending_plans if lc.highest_value_pending_plans is defined else []) %}
+            <li><a href="/plans/{{ r.plan_id }}">{{ r.title }}</a></li>
+          {% else %}<li class="muted">None</li>{% endfor %}
+        </ul>
+      </div>
+      <div class="card">
+        <div class="muted mini">Largest evidence gaps</div>
+        <ul>
+          {% for r in (lc.largest_evidence_gaps if lc.largest_evidence_gaps is defined else []) %}
+            <li>{{ r.metric_key if r.metric_key is defined else "metric" }} ({{ r.missing_molecule_count if r.missing_molecule_count is defined else 0 }})</li>
+          {% else %}<li class="muted">None</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% if brief %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Leadership Brief</h3>
+    {% set pn = (portfolio_narrative if portfolio_narrative is defined and portfolio_narrative is mapping else {}) %}
+    <div><b>Portfolio state:</b> {% set pts = (pn.near_term_inflection_points if pn.near_term_inflection_points is defined else []) %}{{ pts[0] if pts else "—" }}</div>
+    <div><b>Strongest signal:</b> {% set sp = (pn.strongest_programs if pn.strongest_programs is defined else []) %}{% if sp %}<a href="/programs/{{ sp[0].program_id }}">{{ sp[0].program_name }}</a>{% else %}—{% endif %}</div>
+    <div><b>Top constraint:</b> {% set kb = (pn.key_bottlenecks if pn.key_bottlenecks is defined else []) %}{{ kb[0] if kb else "—" }}</div>
+    <div><b>Highest-value pending plan:</b> {% set hv = (pn.highest_value_plans if pn.highest_value_plans is defined else []) %}{% if hv %}<a href="/plans/{{ hv[0].plan_id }}">{{ hv[0].title }}</a>{% else %}—{% endif %}</div>
+  </div>
+  {% endif %}
 
+  {% if not brief %}
   <div class="card" style="margin-top:10px;">
     <h3 style="margin-top:0;">Global Task Status</h3>
     <div class="grid cols-4">
@@ -247,5 +361,6 @@
       </div>
     </div>
   </div>
+  {% endif %}
 </div>
 {% endblock %}

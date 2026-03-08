@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Program Narrative | {{ program.name }} | PSI{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Program Narrative</h1>
+  <div><b>Program:</b> <a href="/programs/{{ program.id }}">{{ program.name }}</a></div>
+  {% set brief = (narrative_brief if narrative_brief is defined else false) %}
+  <div class="mini muted" style="margin-top:4px;">
+    View: {% if brief %}Brief{% else %}Full{% endif %}
+    {% if brief %}
+      · <a href="/programs/{{ program.id }}/narrative">Switch to full</a>
+    {% else %}
+      · <a href="/programs/{{ program.id }}/narrative?view=brief">Switch to brief</a>
+    {% endif %}
+    · <a href="/programs/{{ program.id }}/narrative/export">Export</a>
+  </div>
+
+  {% set n = (narrative if narrative is defined and narrative is mapping else {}) %}
+  {% if brief %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Leadership Brief</h3>
+    <div><b>Thesis:</b> {{ n.scientific_thesis if n.scientific_thesis is defined else "—" }}</div>
+    <div><b>Progress:</b> {{ n.current_state_summary if n.current_state_summary is defined else "—" }}</div>
+    <div><b>Risk:</b> {% set ar = (n.active_risks if n.active_risks is defined else []) %}{{ ar[0] if ar else "—" }}</div>
+    <div><b>Next milestone:</b> {{ n.next_milestone if n.next_milestone is defined else "—" }}</div>
+  </div>
+  {% else %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Scientific Thesis</h3>
+    <div>{{ n.scientific_thesis if n.scientific_thesis is defined else "—" }}</div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Current State</h3>
+    <div>{{ n.current_state_summary if n.current_state_summary is defined else "—" }}</div>
+    <div class="mini muted" style="margin-top:4px;">Stage: {{ n.overall_stage|humanize_state if n.overall_stage is defined else "unknown" }} · Confidence: {{ n.confidence_summary|humanize_state if n.confidence_summary is defined else "developing" }}</div>
+  </div>
+
+  <div class="grid cols-2" style="margin-top:10px;">
+    <div class="card">
+      <h3 style="margin-top:0;">Strongest Support</h3>
+      <ul>
+        {% for x in (n.strongest_support if n.strongest_support is defined else []) %}<li>{{ x }}</li>{% else %}<li class="muted">None</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Major Uncertainties</h3>
+      <ul>
+        {% for x in (n.major_uncertainties if n.major_uncertainties is defined else []) %}<li>{{ x }}</li>{% else %}<li class="muted">None</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid cols-2" style="margin-top:10px;">
+    <div class="card">
+      <h3 style="margin-top:0;">Active Risks</h3>
+      <ul>
+        {% for x in (n.active_risks if n.active_risks is defined else []) %}<li>{{ x }}</li>{% else %}<li class="muted">None</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Next Milestone</h3>
+      <div><b>{{ n.next_milestone if n.next_milestone is defined else "—" }}</b></div>
+      <div class="muted" style="margin-top:4px;">{{ n.milestone_rationale if n.milestone_rationale is defined else "" }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Active Plans</h3>
+    <ul>
+      {% for p in (n.active_plans if n.active_plans is defined else []) %}
+        <li><a href="/plans/{{ p.plan_id }}">{{ p.title }}</a> · {{ p.plan_type|humanize_state }} · {{ p.status|humanize_state }}</li>
+      {% else %}
+        <li class="muted">No active plans.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% set nb = (n.narrative_anchor_blocks if n.narrative_anchor_blocks is defined else []) %}
+  {% set nl = (n.narrative_links if n.narrative_links is defined and n.narrative_links is mapping else {}) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Evidence Anchors</h3>
+    <ul>
+      {% for b in nb %}
+        <li><b>{{ b.title if b.title is defined else "Anchor" }}:</b> {{ b.summary if b.summary is defined else "" }}</li>
+      {% else %}
+        <li class="muted">No anchor blocks.</li>
+      {% endfor %}
+    </ul>
+    <div class="grid cols-3">
+      <div>
+        <div class="muted mini">Top claims</div>
+        <ul>
+          {% for c in (nl.top_claim_links if nl.top_claim_links is defined else []) %}<li><a href="/claims/{{ c.claim_id }}">{{ c.label }}</a></li>{% else %}<li class="muted">None</li>{% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Top plans</div>
+        <ul>
+          {% for p in (nl.top_plan_links if nl.top_plan_links is defined else []) %}<li><a href="/plans/{{ p.plan_id }}">{{ p.label }}</a></li>{% else %}<li class="muted">None</li>{% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="muted mini">Top trajectory opportunities</div>
+        <ul>
+          {% for t in (nl.top_trajectory_links if nl.top_trajectory_links is defined else []) %}<li>{% if t.molecule_id %}<a href="/molecules/{{ t.molecule_id }}">Molecule #{{ t.molecule_id }}</a> · {% endif %}{% if t.assay %}{{ t.assay }}{% else %}experiment{% endif %}{% if t.metric_key %} ({{ t.metric_key }}){% endif %}</li>{% else %}<li class="muted">None</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Trajectory Opportunities</h3>
+    <ul>
+      {% for t in (n.top_trajectory if n.top_trajectory is defined else []) %}
+        <li>{% if t.suggested_assay %}{{ t.suggested_assay }}{% else %}experiment{% endif %} · {{ t.metric_key if t.metric_key is defined else "" }} · readiness gain {{ t.expected_readiness_gain if t.expected_readiness_gain is defined else 0 }}</li>
+      {% else %}
+        <li class="muted">No trajectory opportunities.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% set mf = (n.milestone_framing if n.milestone_framing is defined and n.milestone_framing is mapping else {}) %}
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Milestone Framing</h3>
+    <div class="grid cols-2">
+      <div>
+        <div class="muted mini">What is proven</div>
+        <ul>{% for x in (mf.what_is_proven if mf.what_is_proven is defined else []) %}<li>{{ x }}</li>{% else %}<li class="muted">None</li>{% endfor %}</ul>
+      </div>
+      <div>
+        <div class="muted mini">What remains to prove</div>
+        <ul>{% for x in (mf.what_remains_to_prove if mf.what_remains_to_prove is defined else []) %}<li>{{ x }}</li>{% else %}<li class="muted">None</li>{% endfor %}</ul>
+      </div>
+      <div>
+        <div class="muted mini">What would unlock next milestone</div>
+        <ul>{% for x in (mf.what_would_unlock_next_milestone if mf.what_would_unlock_next_milestone is defined else []) %}<li>{{ x }}</li>{% else %}<li class="muted">None</li>{% endfor %}</ul>
+      </div>
+      <div>
+        <div class="muted mini">What is underway</div>
+        <ul>{% for x in (mf.what_is_underway if mf.what_is_underway is defined else []) %}<li>{{ x }}</li>{% else %}<li class="muted">None</li>{% endfor %}</ul>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

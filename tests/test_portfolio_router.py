@@ -29,6 +29,7 @@ def test_portfolio_route_exists() -> None:
     route_keys = {(r.path, tuple(sorted(getattr(r, "methods", set()) or set()))) for r in portfolio_router.router.routes}
     assert ("/portfolio", ("GET",)) in route_keys
     assert ("/portfolio/export", ("GET",)) in route_keys
+    assert ("/portfolio/narrative/export", ("GET",)) in route_keys
 
 
 def test_portfolio_route_context(monkeypatch) -> None:
@@ -50,7 +51,10 @@ def test_portfolio_route_context(monkeypatch) -> None:
             assert "portfolio_trajectory" in resp.context
             assert "portfolio_claim_summary" in resp.context
             assert "portfolio_plan_summary" in resp.context
+            assert "portfolio_narrative" in resp.context
             assert isinstance(resp.context["program_summaries"], list)
+            bresp = portfolio_router.portfolio_overview(request=SimpleNamespace(query_params={"view": "brief"}), db=db)
+            assert bool(bresp.context.get("narrative_brief")) is True
         finally:
             db.close()
     finally:
@@ -73,6 +77,11 @@ def test_portfolio_export_csv_contains_program_rollup() -> None:
             assert "P-csv" in text
             assert "text/csv" in str(resp.media_type)
             assert "portfolio_summary.csv" in str(resp.headers.get("Content-Disposition", ""))
+            nresp = portfolio_router.portfolio_narrative_export(db=db)
+            ntxt = str(nresp.body.decode("utf-8"))
+            assert "Portfolio Narrative Export" in ntxt
+            assert "Key bottlenecks:" in ntxt
+            assert "portfolio_narrative.txt" in str(nresp.headers.get("Content-Disposition", ""))
         finally:
             db.close()
     finally:

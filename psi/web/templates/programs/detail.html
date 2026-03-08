@@ -85,6 +85,16 @@
       {% endfor %}
     </tbody>
   </table>
+  {% set pn = (program_narrative if program_narrative is defined and program_narrative is mapping else {}) %}
+  <h3>Program Narrative</h3>
+  <div class="card">
+    <div><b>Scientific thesis:</b> {{ pn.scientific_thesis if pn.scientific_thesis is defined else "—" }}</div>
+    <div><b>Current state:</b> {{ pn.current_state_summary if pn.current_state_summary is defined else "—" }}</div>
+    <div><b>Strongest support:</b> {{ (pn.strongest_support|join("; ")) if pn.strongest_support is defined else "—" }}</div>
+    <div><b>Major uncertainties:</b> {{ (pn.major_uncertainties|join("; ")) if pn.major_uncertainties is defined else "—" }}</div>
+    <div><b>Next milestone:</b> {{ pn.next_milestone if pn.next_milestone is defined else "—" }}</div>
+    <div class="mini muted" style="margin-top:4px;"><a href="/programs/{{ program.id }}/narrative">Open full narrative</a></div>
+  </div>
   {% set pcs = (program_claim_summary if program_claim_summary is defined and program_claim_summary is mapping else {}) %}
   {% set pcp = (program_claims_preview if program_claims_preview is defined and program_claims_preview is iterable else []) %}
   <h3>Scientific Claims Summary</h3>

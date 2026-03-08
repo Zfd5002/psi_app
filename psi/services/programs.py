@@ -29,6 +29,7 @@ from psi.services.evidence_preview import build_record_evidence_preview
 from psi.web.ui_labels import humanize_key
 from psi.services import claims as claims_svc
 from psi.services import plans as plans_svc
+from psi.services import narratives as narratives_svc
 
 PROGRAM_MOLECULE_ROLES: tuple[str, ...] = (
     "lead",
@@ -736,6 +737,7 @@ def get_program_detail(
                 "proposed_steps": int(sum(1 for s in steps if str(s.status or "") == "proposed")),
             }
         )
+    program_narrative = narratives_svc.build_program_narrative(db, program_id=int(program_id))
 
     return {
         "program": p,
@@ -779,6 +781,7 @@ def get_program_detail(
         "program_claims_preview": claim_preview[:10],
         "program_plan_summary": plan_summary,
         "program_plans_preview": plan_preview[:10],
+        "program_narrative": program_narrative,
         "program_dashboard": program_dashboard,
         "di_dashboard": di_dashboard,
         "audits": audits,
