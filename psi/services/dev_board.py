@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from psi.core.models import DecisionSnapshot, ExperimentTask, Molecule
 from psi.core.measurement_schema import measurement_cols
 from psi.services.insight_engine import build_insight_bundle, summarize_trend_signals
+from psi.services.trajectory import generate_trajectory_candidates, rank_trajectory_candidates
 from psi.services.trends import TREND_METRIC_KEYS
 
 _BOARD_CACHE_BY_PROGRAM_ID: dict[int, dict[str, Any]] = {}
@@ -264,6 +265,24 @@ def _execution_rollup(db: Session, *, program_id: int) -> dict[str, int]:
     }
 
 
+def _trajectory_hint_by_molecule(db: Session, *, molecule_ids: list[int]) -> dict[int, str]:
+    out: dict[int, str] = {}
+    for mid in sorted({int(x) for x in molecule_ids if x is not None}):
+        ranked = rank_trajectory_candidates(generate_trajectory_candidates(db, molecule_id=int(mid)))
+        if not ranked:
+            continue
+        top = ranked[0]
+        assay = str(top.get("suggested_assay") or "").strip()
+        mk = str(top.get("metric_key") or "").strip()
+        if assay and mk:
+            out[int(mid)] = f"{assay} ({mk})"
+        elif assay:
+            out[int(mid)] = assay
+        elif mk:
+            out[int(mid)] = mk
+    return out
+
+
 def build_development_board(db: Session, *, program_id: int, use_cache: bool = True) -> dict[str, Any]:
     program_id_i = int(program_id)
     if use_cache and program_id_i in _BOARD_CACHE_BY_PROGRAM_ID:
@@ -296,6 +315,9 @@ def build_development_board(db: Session, *, program_id: int, use_cache: bool = T
     }
     trend_by_molecule = _trend_signals_by_molecule(db, program_id=program_id_i)
     task_by_molecule = _task_insights_by_molecule(db, program_id=program_id_i)
+    trajectory_hint_by_molecule = _trajectory_hint_by_molecule(
+        db, molecule_ids=[int(m.id) for m in molecules]
+    )
     for m in molecules:
         mid = int(m.id)
         snap = latest_by_molecule.get(mid)
@@ -325,6 +347,7 @@ def build_development_board(db: Session, *, program_id: int, use_cache: bool = T
             "top_task_owner_text": str(task_by_molecule.get(mid, {}).get("top_task_owner_text") or ""),
             "top_task_due_date": str(task_by_molecule.get(mid, {}).get("top_task_due_date") or ""),
             "top_task_urgency": str(task_by_molecule.get(mid, {}).get("top_task_urgency") or ""),
+            "trajectory_next_experiment": str(trajectory_hint_by_molecule.get(mid) or ""),
             "why_here": _why_here(
                 has_snapshot=(snap is not None),
                 group_key=grp,

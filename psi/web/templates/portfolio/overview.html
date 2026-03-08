@@ -124,5 +124,27 @@
       </tbody>
     </table>
   </div>
+
+  <div class="card" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Portfolio Trajectory Insights</h3>
+    {% set ptr = (portfolio_trajectory if portfolio_trajectory is defined and portfolio_trajectory is iterable else []) %}
+    <table class="table mini">
+      <thead><tr><th>Program</th><th>Molecule</th><th>Experiment</th><th>Metric</th><th>Readiness gain</th><th>Confidence</th></tr></thead>
+      <tbody>
+      {% for r in ptr %}
+        <tr>
+          <td><a href="/programs/{{ r.program_id }}">#{{ r.program_id }} {{ r.program_name if r.program_name is defined else "" }}</a></td>
+          <td><a href="/molecules/{{ r.molecule_id }}">#{{ r.molecule_id }}</a></td>
+          <td>{{ r.suggested_assay if r.suggested_assay is defined and r.suggested_assay else "recommended experiment" }}</td>
+          <td>{{ r.metric_key if r.metric_key is defined else "—" }}</td>
+          <td>{{ r.expected_readiness_gain if r.expected_readiness_gain is defined else 0 }}</td>
+          <td>{{ r.confidence_level if r.confidence_level is defined else "low" }} ({{ "%.2f"|format(r.confidence_score if r.confidence_score is defined else 0.0) }})</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">No trajectory projections available.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

@@ -89,6 +89,10 @@ def test_molecule_detail_context_includes_lineage_parent_and_children() -> None:
             assert child_ctx["lineage_parent"] is not None
             assert child_ctx["lineage_parent"]["primary_id"] == "LINEAGE-PARENT"
             assert child_ctx["lineage_parent"]["derivation_type"] == "point_mutation"
+            assert "trajectory_candidates" in child_ctx
+            assert isinstance(child_ctx["trajectory_candidates"], list)
+            assert "trajectory_tree" in child_ctx
+            assert isinstance(child_ctx["trajectory_tree"], dict)
 
             parent_ctx = molecule_svc.get_molecule_detail(db, int(parent.id))
             children = parent_ctx["lineage_children"]
@@ -183,6 +187,22 @@ def test_molecule_detail_template_renders_lineage_panel() -> None:
                 "suggested_assay": "SPR",
             }
         ],
+        trajectory_candidates=[
+            {
+                "metric_key": "kd_nM",
+                "suggested_assay": "BLI",
+                "expected_readiness_gain": 1,
+                "gate_impact": 1,
+                "confidence_level": "high",
+                "confidence_score": 0.82,
+            }
+        ],
+        trajectory_tree={
+            "nodes": [
+                {"node_id": "root", "parent_id": None},
+                {"node_id": "n1_0", "parent_id": "root", "metric_key": "kd_nM", "suggested_assay": "BLI", "readiness_after": "ready"},
+            ]
+        },
     )
     assert "Lineage" in html
     assert "Parent molecule" in html
@@ -203,3 +223,9 @@ def test_molecule_detail_template_renders_lineage_panel() -> None:
     assert "Trend Signals" in html
     assert "trend-sparkline" in html
     assert "monomer_pct: improving" in html
+    assert "Scientific Trajectory" in html
+    assert "Expected readiness gain" in html
+    assert "BLI" in html
+    assert "Trajectory Graph" in html
+    assert "Current state" in html
+    assert "root → n1_0" in html

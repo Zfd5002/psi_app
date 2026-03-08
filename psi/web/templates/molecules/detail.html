@@ -283,6 +283,51 @@
     </div>
   </div>
 
+  {% set tc = (trajectory_candidates if trajectory_candidates is defined and trajectory_candidates is iterable else []) %}
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Scientific Trajectory</h2>
+    <div class="muted mini">Derived projection layer. No DI, DataRecord, or task state is mutated.</div>
+    <table class="table mini" style="margin-top:8px;">
+      <thead><tr><th>Experiment</th><th>Metric</th><th>Expected readiness gain</th><th>Gate impact</th><th>Confidence</th></tr></thead>
+      <tbody>
+      {% for r in tc %}
+        <tr>
+          <td>{{ r.suggested_assay if r.suggested_assay is defined and r.suggested_assay else "recommended experiment" }}</td>
+          <td>{{ r.metric_key if r.metric_key is defined else "—" }}</td>
+          <td>{{ r.expected_readiness_gain if r.expected_readiness_gain is defined else 0 }}</td>
+          <td>{{ r.gate_impact if r.gate_impact is defined else 0 }}</td>
+          <td>{{ r.confidence_level if r.confidence_level is defined else "low" }} ({{ "%.2f"|format(r.confidence_score if r.confidence_score is defined else 0.0) }})</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No projected trajectory candidates available.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% set tt = (trajectory_tree if trajectory_tree is defined and trajectory_tree is mapping else {}) %}
+  {% set nodes = (tt.nodes if tt.nodes is defined and tt.nodes is iterable else []) %}
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Trajectory Graph</h2>
+    <div class="muted mini">Current state to projected states (derived, deterministic, read-only).</div>
+    <div style="margin-top:8px;">
+      {% for n in nodes %}
+        {% if n.node_id == "root" %}
+          <div><b>Current state</b></div>
+        {% else %}
+          <div class="mini">
+            {{ n.parent_id }} → {{ n.node_id }} :
+            {{ n.suggested_assay if n.suggested_assay is defined and n.suggested_assay else n.metric_key }}
+            ({{ n.metric_key if n.metric_key is defined else "metric" }})
+            ⇒ {{ n.readiness_after if n.readiness_after is defined else "not_assessed" }}
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="muted">No trajectory graph nodes available.</div>
+      {% endfor %}
+    </div>
+  </div>
+
   {% include "molecules/_sequence_editor.html" %}
 
   {% set ib = molecule_insight_bundle if molecule_insight_bundle is defined and molecule_insight_bundle else {} %}

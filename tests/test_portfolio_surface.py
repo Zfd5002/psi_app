@@ -64,6 +64,18 @@ def test_portfolio_overview_template_sections() -> None:
         portfolio_timeline=[
             {"week_start": "2026-03-02", "tasks_completed": 5, "tasks_created": 7, "evidence_created": 4},
         ],
+        portfolio_trajectory=[
+            {
+                "program_id": 1,
+                "program_name": "P1",
+                "molecule_id": 7,
+                "suggested_assay": "BLI",
+                "metric_key": "kd_nM",
+                "expected_readiness_gain": 1,
+                "confidence_level": "high",
+                "confidence_score": 0.81,
+            }
+        ],
     )
     assert "Portfolio Intelligence" in html
     assert "Portfolio Summary" in html
@@ -72,6 +84,7 @@ def test_portfolio_overview_template_sections() -> None:
     assert "Molecule Leaderboard" in html
     assert "Evidence Gap Report" in html
     assert "Portfolio Timeline" in html
+    assert "Portfolio Trajectory Insights" in html
     assert "kd_nM" in html
     assert "/molecules/7" in html
     assert "2026-03-02" in html

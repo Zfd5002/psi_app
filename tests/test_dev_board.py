@@ -139,6 +139,8 @@ def test_build_development_board_groups_molecules_deterministically() -> None:
             assert str(groups["missing_data"][0]["why_here"]).startswith("Missing data because")
             assert str(groups["not_evaluated"][0]["why_here"]) == "Not evaluated because no DI snapshot exists."
             assert isinstance(groups["failed"][0]["warnings"], list)
+            assert "trajectory_next_experiment" in groups["missing_data"][0]
+            assert "kd_nM" in str(groups["missing_data"][0]["trajectory_next_experiment"])
         finally:
             db.close()
     finally:

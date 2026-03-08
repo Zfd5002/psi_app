@@ -112,6 +112,9 @@
               {% if row.top_next_task_label is defined and row.top_next_task_label %}<span class="chip">next {{ row.top_next_task_label }}</span>{% endif %}
             </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
+            {% if row.trajectory_next_experiment is defined and row.trajectory_next_experiment %}
+              <div class="mini muted">Trajectory hint: {{ row.trajectory_next_experiment }}</div>
+            {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
             {% if row.warnings is defined and row.warnings %}
@@ -177,6 +180,9 @@
               {% if row.top_next_task_label is defined and row.top_next_task_label %}<span class="chip">next {{ row.top_next_task_label }}</span>{% endif %}
             </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
+            {% if row.trajectory_next_experiment is defined and row.trajectory_next_experiment %}
+              <div class="mini muted">Trajectory hint: {{ row.trajectory_next_experiment }}</div>
+            {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
             {% if row.warnings is defined and row.warnings %}
@@ -242,6 +248,9 @@
               {% if row.top_next_task_label is defined and row.top_next_task_label %}<span class="chip">next {{ row.top_next_task_label }}</span>{% endif %}
             </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
+            {% if row.trajectory_next_experiment is defined and row.trajectory_next_experiment %}
+              <div class="mini muted">Trajectory hint: {{ row.trajectory_next_experiment }}</div>
+            {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
             {% if row.warnings is defined and row.warnings %}
@@ -307,6 +316,9 @@
               {% if row.top_next_task_label is defined and row.top_next_task_label %}<span class="chip">next {{ row.top_next_task_label }}</span>{% endif %}
             </div>
             <div class="mini muted">{% if row.blocking_reason %}Blocker: {{ row.blocking_reason }}{% else %}No blocking reason recorded.{% endif %}</div>
+            {% if row.trajectory_next_experiment is defined and row.trajectory_next_experiment %}
+              <div class="mini muted">Trajectory hint: {{ row.trajectory_next_experiment }}</div>
+            {% endif %}
             <div class="mini muted">Why here: {{ row.why_here if row.why_here is defined and row.why_here else "No explanation available." }}</div>
             <div><b>Top next action:</b> {{ row.top_next_action if row.top_next_action is defined and row.top_next_action else "Review molecule detail" }}</div>
             {% if row.warnings is defined and row.warnings %}

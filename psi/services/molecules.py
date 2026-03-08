@@ -57,6 +57,7 @@ from psi.services.molecule_viewer import (
 from psi.services.sequence_annotation import annotate_sequence_for_editor
 from psi.services.insight_engine import build_insight_bundle, summarize_trend_signals
 from psi.services.trends import build_molecule_trends
+from psi.services.trajectory import build_trajectory_tree, generate_trajectory_candidates, rank_trajectory_candidates
 
 
 def _pack_segments(segments: list[dict]) -> list[list[dict]]:
@@ -515,6 +516,10 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         }
         for t in open_task_rows
     ]
+    trajectory_candidates = rank_trajectory_candidates(
+        generate_trajectory_candidates(db, molecule_id=int(molecule_id))
+    )[:5]
+    trajectory_tree = build_trajectory_tree(db, molecule_id=int(molecule_id), max_depth=2, branch_limit=4)
 
     return {
         "molecule": m,
@@ -546,6 +551,8 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "molecule_trends": molecule_trends,
         "molecule_trend_insights": molecule_trend_insights,
         "open_experiment_tasks": open_experiment_tasks,
+        "trajectory_candidates": trajectory_candidates,
+        "trajectory_tree": trajectory_tree,
         "pdl1_allowed_mismatches": int(pdl1_allowed_mismatches or 0),
         "property_runs": runs,
         "latest_run": latest_run,

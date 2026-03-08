@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from psi.services import portfolio as portfolio_svc
+from psi.services import trajectory as trajectory_svc
 from psi.web.deps import get_db, get_templates
 
 router = APIRouter()
@@ -21,6 +22,7 @@ def portfolio_overview(request: Request, db: Session = Depends(get_db)):
     leaderboard = portfolio_svc.build_molecule_leaderboard(db, limit=20)
     gaps = portfolio_svc.build_evidence_gap_report(db, limit=20)
     timeline = portfolio_svc.build_portfolio_timeline(db, weeks=12)
+    portfolio_trajectory = trajectory_svc.build_portfolio_trajectory(db, limit=20)
     return templates.TemplateResponse(
         "portfolio/overview.html",
         {
@@ -30,6 +32,7 @@ def portfolio_overview(request: Request, db: Session = Depends(get_db)):
             "molecule_leaderboard": leaderboard,
             "evidence_gap_report": gaps,
             "portfolio_timeline": timeline,
+            "portfolio_trajectory": portfolio_trajectory.get("experiments") or [],
         },
     )
 

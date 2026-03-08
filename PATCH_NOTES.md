@@ -11040,3 +11040,265 @@ Behavior:
 
 Gates:
 - PASS
+## 2026-03-07 — v1.3.0c61
+Intent:
+- Add Scientific Trajectory Engine core simulation entrypoint.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added deterministic `simulate_experiment_outcome(...)` trajectory projection using latest DI read-model context.
+- Trajectory output includes predicted gate deltas, readiness shift projection, impacted metrics, confidence level, and explanation.
+- Added tests for output shape and deterministic no-snapshot behavior.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c62
+Intent:
+- Add deterministic metric impact modeling for trajectory simulations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `predict_metric_delta(metric_key, experiment_type)` mapping common experiment categories to impacted metrics.
+- Simulation output now derives `impacted_metrics` from deterministic metric-delta modeling.
+- Added mapping tests for KD, SEC/purity, internalization, and fallback paths.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c63
+Intent:
+- Add deterministic gate-transition prediction for trajectory projections.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `predict_gate_transitions(metric_changes, gate_context=...)` to simulate gate-before/gate-after deltas without snapshot mutation.
+- `simulate_experiment_outcome(...)` now uses gate-transition prediction service logic.
+- Added deterministic tests for predicted gate delta ordering and status transitions.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c64
+Intent:
+- Add readiness projection logic for trajectory outcomes.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `predict_readiness_shift(gate_changes, metric_changes, readiness_before=...)`.
+- Simulation now uses explicit readiness-shift projection output (`readiness_before`, `readiness_after`).
+- Added tests verifying readiness transitions to ready when projected gate improvements occur.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c65
+Intent:
+- Add numeric trajectory confidence scoring.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `score_trajectory_confidence(...)` with deterministic 0–1 scoring based on metric importance, assumptions, and historical stability.
+- Simulation output now includes `confidence_score` and bucketed `confidence_level`.
+- Added tests for score range, determinism, and assumptions penalty impact.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c66
+Intent:
+- Integrate trajectory candidate generation with InsightEngine recommendations.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `generate_trajectory_candidates(molecule_id)` deriving candidates from InsightEngine `recommended_experiments`.
+- Candidate payload now includes expected readiness gain, metric coverage improvement, gate impact, and simulation confidence.
+- Added tests validating deterministic candidate generation and expected fields.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c67
+Intent:
+- Add deterministic trajectory candidate ranking.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `rank_trajectory_candidates(...)` with deterministic sort by expected readiness gain, confidence, effort estimate, coverage, and metric key.
+- Added lightweight effort estimation based on assay type.
+- Added tests verifying ranking order and effort influence.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c68
+Intent:
+- Add molecule-level Scientific Trajectory panel.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- Molecule detail context now includes ranked `trajectory_candidates` derived from trajectory service.
+- Added a new “Scientific Trajectory” panel on molecule detail rendering top projected experiments and expected readiness impact.
+- Added service/template tests for trajectory panel context and rendering.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c69
+Intent:
+- Add trajectory hints to development board cards.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/dev_board.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_dev_board.py`
+
+Behavior:
+- Development board now derives `trajectory_next_experiment` per molecule from ranked trajectory candidates.
+- Board cards render a compact “Trajectory hint” line when a top projection exists.
+- Added board service test coverage for trajectory hint presence and expected metric linkage.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c70
+Intent:
+- Add program-level trajectory aggregation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `build_program_trajectory(program_id)` to aggregate top projected experiments across molecules in a program.
+- Program-level trajectory ordering is deterministic by readiness gain, confidence, effort, molecule, and metric key.
+- Added tests validating cross-molecule aggregation behavior.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c71
+Intent:
+- Add portfolio-level trajectory insight aggregation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `psi/web/routers/portfolio.py`
+- `psi/web/templates/portfolio/overview.html`
+- `tests/test_portfolio_router.py`
+- `tests/test_portfolio_surface.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `build_portfolio_trajectory()` to identify globally high-impact projected experiments across programs.
+- Portfolio overview now renders a “Portfolio Trajectory Insights” section.
+- Added service/router/template tests for portfolio trajectory context and rendering.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c72
+Intent:
+- Add multi-experiment trajectory simulation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `simulate_experiment_set(molecule_id, experiments[])` returning cumulative readiness projection, impacted metrics, and impacted gates.
+- Multi-experiment simulation composes deterministic per-experiment read-model projections without mutating DI/task/evidence state.
+- Added tests for cumulative set simulation outputs.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c73
+Intent:
+- Add branching trajectory-tree modeling with deterministic ordering.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/trajectory.py`
+- `tests/test_trajectory_service.py`
+
+Behavior:
+- Added `build_trajectory_tree(...)` producing deterministic trajectory nodes rooted at current state with branching projected experiment outcomes.
+- Tree generation is bounded (`max_depth`, `branch_limit`) and read-model only.
+- Added tests for deterministic tree output and node structure.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c74
+Intent:
+- Add molecule-page trajectory visualization surface.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/services/molecules.py`
+- `psi/web/templates/molecules/detail.html`
+- `tests/test_molecule_lineage_surface.py`
+
+Behavior:
+- Molecule detail context now includes a derived `trajectory_tree` structure.
+- Added “Trajectory Graph” section rendering current state to projected states.
+- Added service/template tests for trajectory graph context and rendering.
+
+Gates:
+- PASS
+## 2026-03-07 — v1.3.0c75
+Intent:
+- Add trajectory regression hardening and documentation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `docs/SCIENTIFIC_TRAJECTORY_ENGINE.md`
+- `tests/test_trajectory_regression.py`
+
+Behavior:
+- Added regression tests ensuring trajectory simulation does not mutate DI snapshots, DataRecord state, or ExperimentTask state.
+- Added board-invariance regression coverage for trajectory reads.
+- Added Scientific Trajectory Engine documentation defining boundaries, service surfaces, UI surfaces, and determinism guarantees.
+
+Gates:
+- PASS
