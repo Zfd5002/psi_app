@@ -232,6 +232,8 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
     assert "derived_from_non_blocked_fraction_of_known_states" in html
     assert "Candidate Set" in html
     assert "Open Operational Tasks" in html
+    assert "Current Assessment" in html
+    assert "Latest DI-backed posture for active program molecules." in html
     assert "None assigned." in html
     assert "Molecule Status Board" in html
     assert "G3 Endotoxin" in html

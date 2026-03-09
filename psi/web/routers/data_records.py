@@ -10,12 +10,64 @@ from sqlalchemy.orm import Session
 from psi.services.legacy_yaml_compat import load_rules_legacy_yaml
 from psi.services import data_records as svc
 from psi.services import bulk_import as bulk_import_svc
+from psi.services import current_assessment as assessment_svc
 from psi.core.models import Batch, ExperimentTask, Molecule, Program
 from psi.web.deps import get_db, get_rules_path, get_storage_cfg, get_templates
 from psi.web import ui_surfaces
 from psi.web import handoff_context as handoff
 
 router = APIRouter()
+
+
+def _assessment_q(assessment: dict | None, *, error_text: str = "") -> dict[str, str]:
+    out: dict[str, str] = {}
+    if assessment:
+        out["assessment_state"] = str(assessment.get("state_label") or "")
+        out["assessment_semantics"] = str(assessment.get("refresh_semantics") or "")
+        out["assessment_next_metric"] = str(assessment.get("suggested_next_metric") or "")
+        blockers = [str(x) for x in (assessment.get("strongest_blocking_metrics") or []) if str(x).strip()]
+        if blockers:
+            out["assessment_blocker"] = blockers[0]
+    if str(error_text or "").strip():
+        out["assessment_error"] = str(error_text).strip()
+    return {k: v for k, v in out.items() if str(v).strip()}
+
+
+def _assessment_summary_from_query(request: Request) -> dict[str, str]:
+    qp = request.query_params if hasattr(request, "query_params") else {}
+    getv = qp.get if hasattr(qp, "get") else (lambda _k, _d="": _d)
+    return {
+        "semantics": str(getv("assessment_semantics", "") or "").strip().lower(),
+        "state": str(getv("assessment_state", "") or "").strip(),
+        "blocker": str(getv("assessment_blocker", "") or "").strip(),
+        "next_metric": str(getv("assessment_next_metric", "") or "").strip(),
+        "error": str(getv("assessment_error", "") or "").strip(),
+    }
+
+
+def _assessment_notice_message(summary: dict[str, str]) -> str:
+    if not summary:
+        return ""
+    if str(summary.get("error") or "").strip():
+        return "Data saved. PSI could not refresh the current assessment right now."
+    semantics = str(summary.get("semantics") or "").strip().lower()
+    if semantics == "first_assessment":
+        lead = "Data saved. PSI generated the first current assessment for this molecule."
+    elif semantics == "updated_assessment":
+        lead = "Data saved. PSI updated the current assessment for this molecule."
+    else:
+        return ""
+    tail: list[str] = []
+    st = str(summary.get("state") or "").strip()
+    if st:
+        tail.append(f"Current status: {st}.")
+    blocker = str(summary.get("blocker") or "").strip()
+    if blocker:
+        tail.append(f"Remaining blocker: {blocker}.")
+    nxt = str(summary.get("next_metric") or "").strip()
+    if nxt:
+        tail.append(f"Suggested next step: capture {nxt}.")
+    return " ".join([lead, *tail]).strip()
 
 
 @router.get("/data", response_class=HTMLResponse)
@@ -198,6 +250,10 @@ def new_data(
         "task_context": task_ctx,
         "handoff_source": str(source or ("task" if task_ctx is not None else "manual")).strip().lower(),
         "return_to": str(hctx.return_to or "").strip(),
+        "capture_notice": handoff.build_capture_notice(
+            context=hctx,
+            message=_assessment_notice_message(_assessment_summary_from_query(request)),
+        ),
         "surface": ui_surfaces.data_entry_surface(
             program_id=int(program_id) if program_id is not None else None,
             molecule_id=int(molecule_id) if molecule_id is not None else None,
@@ -269,9 +325,26 @@ def create_data(
         except ValueError as e:
             raise HTTPException(400, str(e))
 
+    assessment: dict | None = None
+    assessment_error = ""
+    molecule_scope_id = assessment_svc.infer_molecule_scope_for_record(
+        db=db,
+        molecule_id=(int(molecule_id) if molecule_id is not None else None),
+        batch_id=(int(batch_id) if batch_id is not None else None),
+    )
+    if molecule_scope_id is not None:
+        try:
+            assessment = assessment_svc.refresh_current_assessment_for_molecule(
+                db,
+                molecule_id=int(molecule_scope_id),
+                trigger="data_record_create",
+            )
+        except Exception as exc:
+            assessment_error = str(exc)
+
     intent = str(action_intent or "save").strip().lower()
     if intent == "save_add_another":
-        q: dict[str, str] = {"program_id": str(int(program_id))}
+        q: dict[str, str] = {"program_id": str(int(program_id)), "captured": "1"}
         if molecule_id is not None:
             q["molecule_id"] = str(int(molecule_id))
         if batch_id is not None:
@@ -282,15 +355,17 @@ def create_data(
         if task_id is not None:
             q["source"] = "task"
             q["from_task"] = "1"
+        q.update(_assessment_q(assessment, error_text=assessment_error))
         target = handoff.with_query("/data/new", q)
     else:
-        target = handoff.build_return_url(
-            f"/data/{rec.id}",
+        q = handoff.build_handoff_query(
             return_to=str(return_to or "").strip(),
             captured=True,
             from_task=(task_id is not None),
             next_step=("evidence" if task_id is not None else ""),
         )
+        q.update(_assessment_q(assessment, error_text=assessment_error))
+        target = handoff.with_query(f"/data/{rec.id}", q)
     return RedirectResponse(url=target, status_code=303)
 
 
@@ -304,10 +379,17 @@ def detail_data(record_id: int, request: Request, db: Session = Depends(get_db))
     ctx["request"] = request
     rec = ctx.get("record")
     hctx = handoff.get_handoff_context(request)
+    assessment_summary = _assessment_summary_from_query(request)
+    msg = _assessment_notice_message(assessment_summary)
     ctx["capture_notice"] = handoff.build_capture_notice(
         context=hctx,
-        message=("" if str(hctx.next_step or "").strip().lower() == "evidence" else "Review this result and continue the scientific loop."),
+        message=(
+            msg
+            if msg
+            else ("" if str(hctx.next_step or "").strip().lower() == "evidence" else "Review this result and continue the scientific loop.")
+        ),
     )
+    ctx["assessment_summary"] = assessment_summary
     ctx["surface"] = ui_surfaces.data_detail_surface(
         record_id=int(record_id),
         program_id=int(rec.program_id) if rec is not None and getattr(rec, "program_id", None) is not None else None,
@@ -397,6 +479,23 @@ def update_data(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+    assessment: dict | None = None
+    assessment_error = ""
+    molecule_scope_id = assessment_svc.infer_molecule_scope_for_record(
+        db=db,
+        molecule_id=(int(molecule_id) if molecule_id is not None else None),
+        batch_id=(int(batch_id) if batch_id is not None else None),
+    )
+    if molecule_scope_id is not None:
+        try:
+            assessment = assessment_svc.refresh_current_assessment_for_molecule(
+                db,
+                molecule_id=int(molecule_scope_id),
+                trigger="data_record_update",
+            )
+        except Exception as exc:
+            assessment_error = str(exc)
+
     intent = str(action_intent or "save").strip().lower()
     if intent in {"approve", "reject"}:
         try:
@@ -412,7 +511,9 @@ def update_data(
         except KeyError:
             raise HTTPException(404)
 
-    target = str(return_to or "").strip() or f"/data/{rec.id}"
+    target_base = str(return_to or "").strip() or f"/data/{rec.id}"
+    q = _assessment_q(assessment, error_text=assessment_error)
+    target = handoff.with_query(target_base, q) if q else target_base
     return RedirectResponse(url=target, status_code=303)
 
 

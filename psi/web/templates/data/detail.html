@@ -31,6 +31,20 @@
   {% include "partials/surface_chrome.html" %}
   <div class="page-intent-line">Captured result context: Program <a href="/programs/{{ record.program.id }}">{{ record.program.name }}</a>{% if record.molecule %} • Molecule <a href="/molecules/{{ record.molecule.id }}">{{ record.molecule.primary_id }}</a>{% endif %}{% if record.batch %} • Batch <a href="/batches/{{ record.batch.id }}">{{ record.batch.batch_id }}</a>{% endif %}.</div>
   {% include "partials/capture_notice.html" %}
+  {% set _as = (assessment_summary if assessment_summary is defined and assessment_summary is mapping else {}) %}
+  {% if _as and (_as.state or _as.semantics or _as.error) %}
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h3 style="margin-top:0;">Current Assessment</h3>
+    {% if _as.error %}
+      <div class="muted">PSI could not refresh the current assessment during this save. Review workflow and run DI manually if needed.</div>
+    {% else %}
+      <div class="mini"><b>Status:</b> {{ _as.state or "Not Evaluated" }}</div>
+      <div class="mini"><b>Assessment update:</b> {% if _as.semantics == "first_assessment" %}First assessment generated{% elif _as.semantics == "updated_assessment" %}Current assessment updated{% else %}No change reported{% endif %}</div>
+      {% if _as.blocker %}<div class="mini"><b>Remaining blocker:</b> {{ _as.blocker }}</div>{% endif %}
+      {% if _as.next_metric %}<div class="mini"><b>Suggested next metric:</b> {{ _as.next_metric }}</div>{% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
   <div class="grid cols-2" style="margin-top:10px;">
     <div class="card section-card section-workflow" style="margin:0;">
       <h3 style="margin-top:0;">Workflow Re-entry</h3>

@@ -1,3 +1,67 @@
+## 2026-03-09 — v1.3.0d97
+Why:
+- Scientists need post-save messaging that emphasizes current assessment refresh, not snapshot mechanics.
+
+What:
+- Added scientist-friendly assessment notice semantics in data routes:
+  - distinguishes first assessment vs updated assessment
+  - includes compact status/blocker/next-metric wording when available
+- `save-and-add-another` now carries `captured=1` so new-entry surfaces can show immediate loop-closure feedback.
+- Data detail now renders a compact **Current Assessment** summary card when assessment refresh context is present.
+- Added tests for assessment notice message semantics and save-and-add-another captured flag.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d97`)
+
+## 2026-03-09 — v1.3.0d96
+Why:
+- Standard result capture should refresh scientist-facing current assessment automatically, without requiring a separate manual DI run step.
+
+What:
+- Wired synchronous post-commit DI refresh into data save flows:
+  - `POST /data/new` (new capture)
+  - `POST /data/{record_id}/edit` (record update)
+- Refresh is scoped to affected molecule (inferred from `molecule_id` or `batch_id`) and uses existing governed DI runner via `current_assessment` service.
+- Redirects now carry compact assessment context (`assessment_semantics`, `assessment_state`, blocker/next hints) for scientist-facing messaging layers.
+- Preserved:
+  - existing save behavior
+  - save-and-add-another context preservation
+  - task-link handling and handoff params
+  - deterministic DI replay guarantees.
+- Added tests proving create/update paths trigger current-assessment refresh and attach refresh semantics in redirect URLs.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d96`)
+
+## 2026-03-09 — v1.3.0d95
+Why:
+- Introduce a lightweight, reusable “current assessment” service layer so scientist-facing surfaces can consistently resolve the latest active DI posture without changing snapshot governance.
+
+What:
+- Added `psi/services/current_assessment.py` with additive helpers:
+  - infer molecule scope from data-record context (`molecule_id`/`batch_id`)
+  - resolve latest active snapshot for molecule scope using authoritative supersession semantics (`superseded_by_snapshot_id IS NULL`)
+  - refresh molecule current assessment via governed DI runner (`run_di`) with stable default policy selection for `advance_to_in_vivo`
+  - normalize scientist-facing assessment labels (`Ready` / `Failed Criteria` / `Missing Data` / `Not Evaluated`)
+- Added tests for:
+  - latest-active snapshot resolution semantics
+  - molecule scope inference behavior
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d95`)
+
 ## 2026-03-09 — v1.3.0d94
 Why:
 - Adding multiple data records in sequence required manual re-navigation after every save.
@@ -14344,3 +14408,41 @@ Gates:
 - `pytest -q` — PASS
 - `python -m psi.tools.di_contract_smoke` — PASS
 - `python -m psi.tools.di_replay_regression --limit 5` — PASS (`matched=5`, `failed=0`)
+
+## 2026-03-09 — v1.3.0d98
+Intent:
+- Emphasize scientist-facing Current Assessment on Program Workspace while preserving existing DI governance and history behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/templates/programs/detail.html`
+- `tests/test_program_review_queue.py`
+
+Behavior:
+- Added a compact `Current Assessment` section near the top of Program Workspace using existing `di_dashboard` rollups (Ready / Failed criteria / Not assessed).
+- Added explicit bridge actions from current assessment to Development Board and assessment history section.
+- Kept governance lineage/snapshot panel unchanged and still secondary.
+- No DI engine/policy/snapshot semantics changed.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d99
+Intent:
+- Harden the current-assessment auto-refresh layer with targeted regression coverage and finalize d95–d99 consolidation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `tests/test_current_assessment_service.py`
+
+Behavior:
+- Added explicit regression coverage for `refresh_current_assessment_for_molecule` semantics:
+  - first assessment when no prior active snapshot exists
+  - updated assessment when a prior active snapshot exists
+- Verified state labeling remains scientist-facing (`Missing Data` / `Ready`) from DI output bundles.
+- No changes to DI snapshot immutability, policy pinning, replay contract, or board grouping semantics.
+
+Gates:
+- PASS

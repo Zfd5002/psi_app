@@ -85,6 +85,33 @@
       </div>
     </div>
   </div>
+  <div class="card section-card section-primary" id="program-current-assessment" style="margin-top:10px;">
+    <div class="section-heading">
+      <h2>Current Assessment</h2>
+      <div class="muted mini">Latest DI-backed posture for active program molecules.</div>
+    </div>
+    <div class="summary-metric-strip" style="margin-top:8px;">
+      <div class="summary-metric">
+        <div class="summary-metric-label">Ready</div>
+        <div class="summary-metric-value">{{ di_dashboard.counts.READY if di_dashboard is defined and di_dashboard and di_dashboard.counts is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Failed criteria</div>
+        <div class="summary-metric-value">{{ di_dashboard.counts.BLOCKED if di_dashboard is defined and di_dashboard and di_dashboard.counts is defined else 0 }}</div>
+      </div>
+      <div class="summary-metric">
+        <div class="summary-metric-label">Not assessed</div>
+        <div class="summary-metric-value">{{ di_dashboard.counts.UNKNOWN if di_dashboard is defined and di_dashboard and di_dashboard.counts is defined else 0 }}</div>
+      </div>
+    </div>
+    <div class="mini muted" style="margin-top:8px;">
+      Current assessment updates when new experiment results are captured. For full immutable DI lineage and policy provenance, use governance history below.
+    </div>
+    <div class="action-bar-utility no-print" style="margin-top:8px;">
+      <a class="btn mini" href="/programs/{{ program.id }}/board">Open Development Board</a>
+      <a class="btn mini" href="#program-governance">Assessment history</a>
+    </div>
+  </div>
   {% set pcs_top = (program_claim_summary if program_claim_summary is defined and program_claim_summary is mapping else {}) %}
   {% set pps_top = (program_plan_summary if program_plan_summary is defined and program_plan_summary is mapping else {}) %}
   {% set urgent_claims = (pcs_top.hypothesis_or_emerging if pcs_top.hypothesis_or_emerging is defined else 0) + (pcs_top.contradicted if pcs_top.contradicted is defined else 0) %}

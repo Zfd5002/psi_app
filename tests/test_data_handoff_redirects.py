@@ -105,6 +105,7 @@ def test_create_data_save_add_another_redirects_to_new_with_scope_context() -> N
             location = str(resp.headers.get("location") or "")
             assert resp.status_code == 303
             assert location.startswith("/data/new?")
+            assert "captured=1" in location
             assert "program_id=" in location
             assert "molecule_id=" in location
             assert "batch_id=" in location
