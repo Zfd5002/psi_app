@@ -55,7 +55,7 @@
       <a href="#board-ready">Ready</a>
       <a href="#board-failed">Failed</a>
       <a href="#board-missing-data">Missing</a>
-      <a href="#board-not-evaluated">Not Evaluated</a>
+      <a href="#board-not-evaluated">Assessment Pending</a>
     {% endif %}
   </div>
   <div class="page-intent-line">Daily command surface: triage molecule posture, assign work, and launch execution without leaving context.</div>
@@ -124,7 +124,7 @@
       <div><b>Ready:</b> {{ (g.ready|length) if g is mapping and g.ready is defined else 0 }}</div>
       <div><b>Failed:</b> {{ (g.failed|length) if g is mapping and g.failed is defined else 0 }}</div>
       <div><b>Missing data:</b> {{ (g.missing_data|length) if g is mapping and g.missing_data is defined else 0 }}</div>
-      <div><b>Not evaluated:</b> {{ (g.not_evaluated|length) if g is mapping and g.not_evaluated is defined else 0 }}</div>
+      <div><b>Assessment pending:</b> {{ (g.not_evaluated|length) if g is mapping and g.not_evaluated is defined else 0 }}</div>
     </div>
   </div>
   <div class="card section-card section-workflow" id="board-execution" style="margin-top:10px;">
@@ -152,7 +152,7 @@
               {% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
             </div>
-            <div class="mini muted">Status: {{ row.status if row.status is defined else "not assessed" }}</div>
+            <div class="mini muted">Status: {{ (row.status if row.status is defined else "not_assessed")|humanize_state }}</div>
             <div class="mini muted">
               Tasks: <span class="chip">open {{ row.open_task_count if row.open_task_count is defined else 0 }}</span>
               <span class="chip">in progress {{ row.in_progress_task_count if row.in_progress_task_count is defined else 0 }}</span>
@@ -227,7 +227,7 @@
               {% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
             </div>
-            <div class="mini muted">Status: {{ row.status if row.status is defined else "not assessed" }}</div>
+            <div class="mini muted">Status: {{ (row.status if row.status is defined else "not_assessed")|humanize_state }}</div>
             <div class="mini muted">
               Tasks: <span class="chip">open {{ row.open_task_count if row.open_task_count is defined else 0 }}</span>
               <span class="chip">in progress {{ row.in_progress_task_count if row.in_progress_task_count is defined else 0 }}</span>
@@ -302,7 +302,7 @@
               {% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
             </div>
-            <div class="mini muted">Status: {{ row.status if row.status is defined else "not assessed" }}</div>
+            <div class="mini muted">Status: {{ (row.status if row.status is defined else "not_assessed")|humanize_state }}</div>
             <div class="mini muted">
               Tasks: <span class="chip">open {{ row.open_task_count if row.open_task_count is defined else 0 }}</span>
               <span class="chip">in progress {{ row.in_progress_task_count if row.in_progress_task_count is defined else 0 }}</span>
@@ -367,7 +367,7 @@
       </ul>
     </section>
     <section class="card board-column" id="board-not-evaluated">
-      <h3 style="margin-top:0;">NOT EVALUATED</h3>
+      <h3 style="margin-top:0;">ASSESSMENT PENDING</h3>
       <div class="muted mini">count={{ (g.not_evaluated|length) if g is mapping and g.not_evaluated is defined else 0 }}</div>
       <ul>
         {% for row in (g.not_evaluated if g is mapping and g.not_evaluated is defined else []) %}
@@ -377,7 +377,7 @@
               {% if row.title %}<span class="muted"> — {{ row.title }}</span>{% endif %}
               {% if row.trend_signal == "improving" %}<span class="chip">▲ improving</span>{% elif row.trend_signal == "declining" %}<span class="chip">▼ declining</span>{% else %}<span class="chip">■ stable</span>{% endif %}
             </div>
-            <div class="mini muted">Status: {{ row.status if row.status is defined else "not assessed" }}</div>
+            <div class="mini muted">Status: {{ (row.status if row.status is defined else "not_assessed")|humanize_state }}</div>
             <div class="mini muted">
               Tasks: <span class="chip">open {{ row.open_task_count if row.open_task_count is defined else 0 }}</span>
               <span class="chip">in progress {{ row.in_progress_task_count if row.in_progress_task_count is defined else 0 }}</span>

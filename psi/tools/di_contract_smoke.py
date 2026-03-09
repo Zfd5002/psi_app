@@ -186,6 +186,9 @@ def _render_di_snapshot_template_smoke(ctx: dict) -> str:
     repo_root = Path(__file__).resolve().parents[2]
     tpl_dir = repo_root / "psi" / "web" / "templates"
     env = Environment(loader=FileSystemLoader(str(tpl_dir)))
+    env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
     tmpl = env.get_template("decisions/_di_snapshot.html")
     return tmpl.render(**(ctx or {}))
 
@@ -194,6 +197,9 @@ def _render_di_run_template_smoke(ctx: dict) -> str:
     repo_root = Path(__file__).resolve().parents[2]
     tpl_dir = repo_root / "psi" / "web" / "templates"
     env = Environment(loader=FileSystemLoader(str(tpl_dir)))
+    env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
     tmpl = env.get_template("di/run.html")
     return tmpl.render(**(ctx or {}))
 

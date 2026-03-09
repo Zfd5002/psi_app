@@ -15,7 +15,7 @@
   ] %}
   {% set page_primary_actions = [
     {"href": "/batches/new?molecule_id=" ~ molecule.id, "label": "New Batch"},
-    {"href": "/di/run?molecule_id=" ~ molecule.id, "label": "Run DI"}
+    {"href": "/di/run?molecule_id=" ~ molecule.id, "label": "Run Development Assessment"}
   ] %}
   {% set page_secondary_actions = [
     {"href": "/programs/" ~ molecule.program_id, "label": "Open Program Workspace"},
@@ -67,6 +67,30 @@
   {% include "molecules/partials/working_lane.html" %}
   {% set evidence_count = (evidence|length) if evidence is defined and evidence is iterable else 0 %}
   {% include "molecules/partials/workflow_loop.html" %}
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">Current Assessment</h2>
+    {% set _mh_milestones = (mh.progress_milestones if mh.progress_milestones is defined and mh.progress_milestones else []) %}
+    {% set _mh_passed = [] %}
+    {% set _mh_blocking = "" %}
+    {% for _ms in _mh_milestones %}
+      {% if _ms.satisfied %}
+        {% set _mh_passed = _mh_passed + [(_ms.label|humanize_key)] %}
+      {% elif not _mh_blocking %}
+        {% set _mh_blocking = (_ms.label|humanize_key) %}
+      {% endif %}
+    {% endfor %}
+    {% if mh.latest_di_snapshot_id is defined and mh.latest_di_snapshot_id %}
+      <div class="mini"><b>Current snapshot:</b> <a href="/decisions/{{ mh.latest_di_snapshot_id }}">#{{ mh.latest_di_snapshot_id }}</a></div>
+      <div class="mini"><b>Status summary:</b> {{ mh.drift_summary_plain if mh.drift_summary_plain is defined and mh.drift_summary_plain else "No summary available." }}</div>
+      <div class="mini"><b>Current stage:</b> {{ (mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else "Not assessed")|humanize_key }}</div>
+      {% if _mh_blocking %}<div class="mini"><b>Blocking stage:</b> {{ _mh_blocking }}</div>{% endif %}
+      {% if _mh_passed %}<div class="mini"><b>Passed stages:</b> {{ _mh_passed|join("; ") }}</div>{% endif %}
+      <div class="mini muted" style="margin-top:4px;">Historical snapshots remain available under decision history and governance surfaces.</div>
+    {% else %}
+      <div class="mini">No current assessment yet for this molecule.</div>
+      <div class="mini muted" style="margin-top:4px;">Capture relevant data to auto-refresh the assessment, or run DI manually for governance workflows.</div>
+    {% endif %}
+  </div>
 
   <div class="molecule-legacy-top section-secondary" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
     <div>
@@ -120,7 +144,7 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
       <a class="btn primary" href="/batches/new?molecule_id={{ molecule.id }}">New Batch</a>
-      <a class="btn primary" href="/di/run?molecule_id={{ molecule.id }}">Run DI for this molecule</a>
+      <a class="btn primary" href="/di/run?molecule_id={{ molecule.id }}">Run development assessment for this molecule</a>
       <a class="btn" href="/decisions/new?program_id={{ molecule.program_id }}&molecule_id={{ molecule.id }}">Run Legacy YAML (Deprecated)</a>
       <a class="btn" href="/molecules/{{ molecule.id }}/edit">Edit</a>
     </div>
@@ -456,7 +480,7 @@
     <div class="grid cols-2" style="margin-top:8px;gap:12px;">
       <div>
         <div><b>Snapshot ID:</b> {{ ibs.snapshot_id if ibs is mapping and ibs.snapshot_id is defined and ibs.snapshot_id else "—" }}</div>
-        <div><b>Decision key:</b> {{ ibs.decision_key if ibs is mapping and ibs.decision_key is defined and ibs.decision_key else "—" }}</div>
+        <div><b>Decision chain:</b> {{ (ibs.decision_key if ibs is mapping and ibs.decision_key is defined and ibs.decision_key else "—")|humanize_key }}</div>
         <div><b>Created at:</b> {{ ibs.created_at if ibs is mapping and ibs.created_at is defined and ibs.created_at else "—" }}</div>
       </div>
       <div>

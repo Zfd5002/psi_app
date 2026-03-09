@@ -107,6 +107,12 @@
     <div class="mini muted" style="margin-top:8px;">
       Current assessment updates when new experiment results are captured. For full immutable DI lineage and policy provenance, use governance history below.
     </div>
+    {% set _top_fail_gate = ((di_dashboard.top_failing_gates[0][0]) if di_dashboard is defined and di_dashboard and di_dashboard.top_failing_gates is defined and di_dashboard.top_failing_gates else "") %}
+    {% set _top_missing_metric = ((di_dashboard.top_missing_metrics[0][0]) if di_dashboard is defined and di_dashboard and di_dashboard.top_missing_metrics is defined and di_dashboard.top_missing_metrics else "") %}
+    <div class="mini" style="margin-top:6px;">
+      <b>Primary blocking gate:</b> {{ (_top_fail_gate|humanize_key) if _top_fail_gate else "None recorded" }}
+      {% if _top_missing_metric %} · <b>Most missing requirement:</b> {{ _top_missing_metric|humanize_key }}{% endif %}
+    </div>
     <div class="action-bar-utility no-print" style="margin-top:8px;">
       <a class="btn mini" href="/programs/{{ program.id }}/board">Open Development Board</a>
       <a class="btn mini" href="#program-governance">Assessment history</a>
@@ -569,7 +575,7 @@
       <h3>Recent decisions</h3>
       <ul>
         {% for d in recent_decisions %}
-          <li><a href="/decisions/{{ d.id }}">{{ d.decision_key }}</a> <span class="muted">{{ d.created_at }}</span></li>
+          <li><a href="/decisions/{{ d.id }}">{{ d.decision_key|humanize_key }}</a> <span class="muted">{{ d.created_at }}</span></li>
         {% else %}
           <li class="muted">(none)</li>
         {% endfor %}

@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from psi.core.db import ensure_schema
 from psi.core.storage import StorageConfig, ensure_storage
 from psi.extensions import load_extensions
-from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
+from psi.web.ui_labels import humanize_decision_key, humanize_key, humanize_path_token, humanize_state
 from psi.web.routers import (
     batches,
     builder,
@@ -52,6 +52,7 @@ def create_app(*, base_dir: Path | None = None) -> FastAPI:
     # Release string (shown in UI footer). Single source of truth: psi/version.py
     templates.env.globals["PSI_VERSION"] = PSI_VERSION
     templates.env.filters["humanize_key"] = humanize_key
+    templates.env.filters["humanize_decision_key"] = humanize_decision_key
     templates.env.filters["humanize_state"] = humanize_state
     templates.env.filters["humanize_path_token"] = humanize_path_token
     storage = StorageConfig(base_dir=base_dir)

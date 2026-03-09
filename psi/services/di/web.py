@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from psi.core.di.policy import load_policy
 from psi.core.models import Batch, Molecule
+from psi.services import development_progression as progression_svc
 from psi.services.di.templates.registry import DECISION_KEY_TO_TEMPLATE_KEY
 from psi.services.di.util import heavy_compute_banner_text, is_heavy_compute_enabled
+from psi.web.ui_labels import humanize_decision_key
 
 
 def _policy_dir() -> Path:
@@ -64,6 +66,21 @@ def latest_policy_for_decision(decision_key: str) -> Dict[str, Any] | None:
     return opts[0]
 
 
+def stable_default_policy_for_decision(decision_key: str) -> Dict[str, Any] | None:
+    dk = str(decision_key or "").strip()
+    policies = list_di_policies()
+    selected = latest_policy_for_decision(dk)
+    if dk == "advance_to_in_vivo":
+        stable_default = next((p for p in policies if p["decision_key"] == dk and p["policy_version"] == "v0.5"), None)
+        if stable_default is not None:
+            selected = stable_default
+    if dk == "ready_for_scaleup_screen":
+        stable_default = next((p for p in policies if p["decision_key"] == dk and p["policy_version"] == "v0.2"), None)
+        if stable_default is not None:
+            selected = stable_default
+    return selected
+
+
 def build_di_run_context(
     db: Session,
     *,
@@ -73,22 +90,23 @@ def build_di_run_context(
     scope_type: str | None = None,
 ) -> Dict[str, Any]:
     decision_keys = sorted(DECISION_KEY_TO_TEMPLATE_KEY.keys())
-    dk = str(decision_key or "").strip() or (decision_keys[0] if decision_keys else "")
+    canonical_decision_key = progression_svc.canonical_decision_key()
+    dk_in = str(decision_key or "").strip()
+    dk = dk_in if dk_in in decision_keys else (canonical_decision_key if canonical_decision_key in decision_keys else (decision_keys[0] if decision_keys else ""))
     selected_scope_type = str(scope_type or "").strip().lower()
     if selected_scope_type not in ("batch", "molecule"):
         selected_scope_type = "batch" if batch_id else ("molecule" if molecule_id else "batch")
     policies = list_di_policies()
-    selected_policy = latest_policy_for_decision(dk)
-    # x08: use immutable forward policy forks as default UI selections.
-    if dk == "advance_to_in_vivo":
-        stable_default = next((p for p in policies if p["decision_key"] == dk and p["policy_version"] == "v0.5"), None)
-        if stable_default is not None:
-            selected_policy = stable_default
-    if dk == "ready_for_scaleup_screen":
-        stable_default = next((p for p in policies if p["decision_key"] == dk and p["policy_version"] == "v0.2"), None)
-        if stable_default is not None:
-            selected_policy = stable_default
+    selected_policy = stable_default_policy_for_decision(dk)
     selected_policy_path = selected_policy["path"] if selected_policy else ""
+    governance_policy_options = [
+        {
+            **p,
+            "decision_label": humanize_decision_key(str(p.get("decision_key") or "")),
+        }
+        for p in policies
+        if str(p.get("decision_key") or "") == dk
+    ]
 
     q = db.query(Batch)
     if molecule_id:
@@ -100,9 +118,14 @@ def build_di_run_context(
     return {
         "selected_scope_type": selected_scope_type,
         "decision_keys": decision_keys,
+        "decision_key_labels": {k: humanize_decision_key(k) for k in decision_keys},
         "policies": policies,
+        "governance_policy_options": governance_policy_options,
         "selected_decision_key": dk,
+        "selected_decision_label": humanize_decision_key(dk),
         "selected_policy_path": selected_policy_path,
+        "selected_policy_version": (str(selected_policy.get("policy_version") or "") if selected_policy else ""),
+        "canonical_chain_label": progression_svc.canonical_chain_label(),
         "batches": batches,
         "molecules": molecules,
         "selected_batch_id": int(batch_id) if batch_id else None,

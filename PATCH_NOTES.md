@@ -14446,3 +14446,135 @@ Behavior:
 
 Gates:
 - PASS
+
+## 2026-03-09 — v1.3.0d100
+Intent:
+- Add centralized scientist-facing DI label humanization for decision/gate identifiers.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/web/ui_labels.py`
+- `tests/test_ui_label_humanization.py`
+
+Behavior:
+- Added explicit display-label overrides for canonical DI decision keys and core gate keys.
+- Added `humanize_decision_key()` helper for consistent DI decision-family rendering.
+- Preserved internal identifiers and snapshot/governance semantics.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d101
+Intent:
+- Introduce canonical development progression presentation layer for scientist-facing assessment summaries.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/development_progression.py`
+- `tests/test_development_progression.py`
+
+Behavior:
+- Added deterministic progression presenter with canonical chain id (`development_progression_v1`) and default decision key (`advance_to_in_vivo`).
+- Added ordered stage summary generation (passed stages, blocking stage, missing/failing requirements, recommended next step).
+- No DI engine logic rewrite; output is derived from existing DI output payloads.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d102
+Intent:
+- Simplify manual DI primary flow to canonical progression defaults while preserving advanced governance controls.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/di/web.py`
+- `psi/web/templates/di/run.html`
+- `tests/test_di_run_surface.py`
+
+Behavior:
+- `/di/run` now defaults to canonical progression chain in scientist-facing flow.
+- Decision-family/policy selectors moved behind `Advanced governance options` in the same form.
+- Added scientist-facing chain labeling and humanized decision-family option text.
+- Advanced explicit package/version selection remains available for governance use.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d103
+Intent:
+- Enrich current-assessment save feedback with stage/blocker semantics from canonical progression summary.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/current_assessment.py`
+- `psi/web/routers/data_records.py`
+- `psi/web/templates/data/detail.html`
+
+Behavior:
+- Auto-refresh assessment payload now includes stage-level progression fields.
+- Post-save notices and data-detail summary can show current stage, blocking stage, passed stages, and next-step guidance.
+- Preserved snapshot creation/supersession behavior and deterministic request-local execution.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d104
+Intent:
+- Align board and related scientist-facing surfaces with human-readable progression wording.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/services/dev_board.py`
+- `psi/web/templates/programs/board.html`
+- `tests/test_dev_board.py`
+- `tests/test_program_board_surface.py`
+
+Behavior:
+- Board copy now uses `Assessment Pending` wording and humanized status labels.
+- Updated board `why_here` language for no-snapshot state to progression-friendly wording.
+- Kept board grouping semantics and DI-snapshot-driven behavior unchanged.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d105
+Intent:
+- Preserve advanced governance/audit path while reducing underscore-style scientist-facing leaks across core DI/product templates.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/web/templates/decisions/list.html`
+- `psi/web/templates/decisions/detail.html`
+- `psi/web/templates/decisions/detail_print.html`
+- `psi/web/templates/decisions/history.html`
+- `psi/web/templates/decisions/compare.html`
+- `psi/web/templates/decisions/_di_snapshot.html`
+- `psi/web/templates/decisions/new.html`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/molecules/partials/history_audit_zone.html`
+- `psi/web/templates/batches/detail.html`
+- `tests/test_decision_surface_labels.py`
+
+Behavior:
+- Humanized decision-family labels in core decision/product surfaces.
+- Scientist-facing headings shifted toward `Assessment` terminology while keeping immutable snapshot history intact.
+- Advanced governance/provenance details remain available in dedicated sections.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d106
+Intent:
+- Final hardening/regression pass for canonical progression UX and DI-governance compatibility.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+
+Behavior:
+- Consolidated d100–d105 into version `v1.3.0d106`.
+- Confirmed no changes to DI replay contract, snapshot immutability, or policy provenance mechanics.
+
+Gates:
+- PASS

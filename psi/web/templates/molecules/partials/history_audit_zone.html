@@ -40,7 +40,7 @@
               {% endif %}
             </td>
             <td class="muted">{{ row.created_at }}</td>
-            <td>{{ row.decision_key }}</td>
+            <td>{{ row.decision_key|humanize_key }}</td>
             <td>
               {% if row.batch_id %}
                 <a href="/batches/{{ row.batch_id }}">{{ row.batch_label or row.batch_id }}</a>

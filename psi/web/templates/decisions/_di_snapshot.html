@@ -283,7 +283,7 @@
     <div>
       <div class="muted">Decision state</div>
       <div style="font-size:22px;font-weight:800;">{{ output.decision_state }}</div>
-      <div class="muted">Decision: {{ snap.decision_key }}</div>
+      <div class="muted">Decision chain: {{ snap.decision_key|humanize_key }}</div>
       {% if gate_outcomes_ordered and gate_outcomes_ordered|length %}
         {% set pass_n = 0 %}
         {% set fail_n = 0 %}

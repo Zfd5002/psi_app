@@ -4,7 +4,7 @@
 <div class="card">
   <div class="no-print" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
     <div>
-      <h1 style="margin:0;">Decision #{{ snap.id }} ({{ snap.decision_key }})</h1>
+      <h1 style="margin:0;">Assessment #{{ snap.id }} ({{ snap.decision_key|humanize_key }})</h1>
       <div class="muted">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
       {% if snap.engine_key %}
         {% if snap.engine_key == "di" %}
@@ -19,7 +19,7 @@
   </div>
 
   <div style="margin-top:0;">
-    <h1 class="print-only" style="display:none;margin:0;">Decision #{{ snap.id }} ({{ snap.decision_key }})</h1>
+    <h1 class="print-only" style="display:none;margin:0;">Assessment #{{ snap.id }} ({{ snap.decision_key|humanize_key }})</h1>
     <div class="muted print-only" style="display:none;">Rules {{ snap.rules_version }} · created {{ snap.created_at }}</div>
     {% if snap.engine_key %}
       {% if snap.engine_key == "di" %}

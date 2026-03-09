@@ -6,11 +6,16 @@ from types import SimpleNamespace
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from psi.web.routers import programs as programs_router
+from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
 
 def _env() -> Environment:
     root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
-    return Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
+    return env
 
 
 def test_program_board_route_exists() -> None:
@@ -46,7 +51,7 @@ def test_program_board_template_renders_sections() -> None:
     assert "READY" in html
     assert "FAILED CRITERIA" in html
     assert "MISSING DATA" in html
-    assert "NOT EVALUATED" in html
+    assert "ASSESSMENT PENDING" in html
     assert "Program Summary" in html
     assert "Execution Panel" in html
     assert "In progress this week:" in html
@@ -64,7 +69,7 @@ def test_program_board_template_renders_sections() -> None:
     assert "/molecules/2" in html
     assert 'id="board-ready"' in html
     assert "count=1" in html
-    assert "Status: ready" in html
+    assert "Status: Ready" in html
     assert "Tasks:" in html
     assert "open 2" in html
     assert "in progress 1" in html

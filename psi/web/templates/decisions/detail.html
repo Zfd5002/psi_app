@@ -4,7 +4,7 @@
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
     <div>
-      <h1 style="margin:0;">Decision #{{ snap.id }} ({{ snap.decision_key }})</h1>
+      <h1 style="margin:0;">Assessment #{{ snap.id }} ({{ snap.decision_key|humanize_key }})</h1>
       <div style="margin-top:6px;">
         {% if snap.is_superseded %}
           <span style="padding:2px 10px;border-radius:999px;font-size:12px;border:1px solid #999;">SUPERSEDED</span>

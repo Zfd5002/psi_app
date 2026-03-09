@@ -8,6 +8,16 @@ _KEY_OVERRIDES = {
     "run_semantics": "Run Semantics",
     "value_functions_enforced": "Value Functions Enforced",
     "value_functions_enforcement_reason": "Value Functions Enforcement Reason",
+    "advance_to_in_vivo": "Development Progression",
+    "ready_for_scaleup_screen": "Scale-Up Readiness Screen",
+    "development_progression_v1": "Development Progression v1",
+    "g1_material_readiness": "Gate 1: Material Readiness",
+    "g2_purity_integrity": "Gate 2: Quality / Integrity",
+    "g3_endotoxin": "Gate 3: Endotoxin Control",
+    "g3_stability": "Gate 3: Stability",
+    "g4_functional": "Gate 4: Functional Evidence",
+    "g5_internalization_if_kd_present": "Gate 5: Modality-Specific Requirements",
+    "g6_pk_optional": "Gate 6: In Vivo Readiness",
 }
 
 _ACRONYMS = {
@@ -64,9 +74,16 @@ def humanize_key(key: str) -> str:
     if not raw:
         return ""
     override = _KEY_OVERRIDES.get(raw)
+    if not override:
+        override = _KEY_OVERRIDES.get(raw.lower())
     if override:
         return override
     return humanize_slug_or_token(raw)
+
+
+def humanize_decision_key(key: str) -> str:
+    """Scientist-facing display label for DI decision identifiers."""
+    return humanize_key(key)
 
 
 def humanize_state(value: str) -> str:

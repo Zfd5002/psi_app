@@ -137,7 +137,7 @@ def test_build_development_board_groups_molecules_deterministically() -> None:
             assert [x["primary_id"] for x in groups["not_evaluated"]] == ["M-D"]
             assert groups["ready"][0]["trend_signal"] == "improving"
             assert str(groups["missing_data"][0]["why_here"]).startswith("Missing data because")
-            assert str(groups["not_evaluated"][0]["why_here"]) == "Not evaluated because no DI snapshot exists."
+            assert str(groups["not_evaluated"][0]["why_here"]) == "Assessment pending because no current development snapshot exists."
             assert isinstance(groups["failed"][0]["warnings"], list)
             assert "trajectory_next_experiment" in groups["missing_data"][0]
             assert "kd_nM" in str(groups["missing_data"][0]["trajectory_next_experiment"])

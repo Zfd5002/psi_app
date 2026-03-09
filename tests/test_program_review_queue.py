@@ -236,7 +236,7 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
     assert "Latest DI-backed posture for active program molecules." in html
     assert "None assigned." in html
     assert "Molecule Status Board" in html
-    assert "G3 Endotoxin" in html
+    assert "Gate 3: Endotoxin Control" in html
     assert "Program Evidence Summary" in html
     assert "Binding" in html
     assert "Program Evidence Map" in html

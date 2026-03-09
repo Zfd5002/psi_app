@@ -4,8 +4,8 @@
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
     <div>
-      <h1 style="margin:0;">Decision history</h1>
-      <div class="muted">Scope: {{ snap.decision_key }} · program {{ snap.program_id }} · molecule {{ snap.molecule_id }} · batch {{ snap.batch_id }}</div>
+      <h1 style="margin:0;">Assessment history</h1>
+      <div class="muted">Scope: {{ snap.decision_key|humanize_key }} · program {{ snap.program_id }} · molecule {{ snap.molecule_id }} · batch {{ snap.batch_id }}</div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
       <a class="btn" href="/decisions/{{ snap.id }}">Back to snapshot</a>

@@ -40,8 +40,11 @@
     {% else %}
       <div class="mini"><b>Status:</b> {{ _as.state or "Not Evaluated" }}</div>
       <div class="mini"><b>Assessment update:</b> {% if _as.semantics == "first_assessment" %}First assessment generated{% elif _as.semantics == "updated_assessment" %}Current assessment updated{% else %}No change reported{% endif %}</div>
-      {% if _as.blocker %}<div class="mini"><b>Remaining blocker:</b> {{ _as.blocker }}</div>{% endif %}
-      {% if _as.next_metric %}<div class="mini"><b>Suggested next metric:</b> {{ _as.next_metric }}</div>{% endif %}
+      {% if _as.current_stage %}<div class="mini"><b>Current stage:</b> {{ _as.current_stage }}</div>{% endif %}
+      {% if _as.blocking_stage %}<div class="mini"><b>Blocking stage:</b> {{ _as.blocking_stage }}</div>{% endif %}
+      {% if _as.passed_stages %}<div class="mini"><b>Passed stages:</b> {{ _as.passed_stages }}</div>{% endif %}
+      {% if _as.blocker %}<div class="mini"><b>Remaining blocker:</b> {{ _as.blocker|humanize_key }}</div>{% endif %}
+      {% if _as.next_metric %}<div class="mini"><b>Suggested next metric:</b> {{ _as.next_metric|humanize_key }}</div>{% endif %}
     {% endif %}
   </div>
   {% endif %}

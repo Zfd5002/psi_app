@@ -25,6 +25,12 @@ def _assessment_q(assessment: dict | None, *, error_text: str = "") -> dict[str,
         out["assessment_state"] = str(assessment.get("state_label") or "")
         out["assessment_semantics"] = str(assessment.get("refresh_semantics") or "")
         out["assessment_next_metric"] = str(assessment.get("suggested_next_metric") or "")
+        out["assessment_current_stage"] = str(assessment.get("current_stage_label") or "")
+        out["assessment_blocking_stage"] = str(assessment.get("blocking_stage_label") or "")
+        out["assessment_next_step"] = str(assessment.get("recommended_next_step") or "")
+        passed = [str(x) for x in (assessment.get("passed_stage_labels") or []) if str(x).strip()]
+        if passed:
+            out["assessment_passed_stages"] = " | ".join(passed[:6])
         blockers = [str(x) for x in (assessment.get("strongest_blocking_metrics") or []) if str(x).strip()]
         if blockers:
             out["assessment_blocker"] = blockers[0]
@@ -41,6 +47,10 @@ def _assessment_summary_from_query(request: Request) -> dict[str, str]:
         "state": str(getv("assessment_state", "") or "").strip(),
         "blocker": str(getv("assessment_blocker", "") or "").strip(),
         "next_metric": str(getv("assessment_next_metric", "") or "").strip(),
+        "current_stage": str(getv("assessment_current_stage", "") or "").strip(),
+        "blocking_stage": str(getv("assessment_blocking_stage", "") or "").strip(),
+        "next_step": str(getv("assessment_next_step", "") or "").strip(),
+        "passed_stages": str(getv("assessment_passed_stages", "") or "").strip(),
         "error": str(getv("assessment_error", "") or "").strip(),
     }
 
@@ -61,12 +71,21 @@ def _assessment_notice_message(summary: dict[str, str]) -> str:
     st = str(summary.get("state") or "").strip()
     if st:
         tail.append(f"Current status: {st}.")
+    current_stage = str(summary.get("current_stage") or "").strip()
+    if current_stage:
+        tail.append(f"Current stage: {current_stage}.")
+    blocking_stage = str(summary.get("blocking_stage") or "").strip()
+    if blocking_stage:
+        tail.append(f"Blocking stage: {blocking_stage}.")
     blocker = str(summary.get("blocker") or "").strip()
     if blocker:
         tail.append(f"Remaining blocker: {blocker}.")
     nxt = str(summary.get("next_metric") or "").strip()
     if nxt:
         tail.append(f"Suggested next step: capture {nxt}.")
+    next_step = str(summary.get("next_step") or "").strip()
+    if next_step:
+        tail.append(next_step)
     return " ".join([lead, *tail]).strip()
 
 

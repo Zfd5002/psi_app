@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 
 from psi.core.di.schema import DIInput
 from psi.core.models import Batch, DecisionSnapshot, Molecule
+from psi.services import development_progression as progression_svc
 from psi.services.di.runner import run_di
 from psi.services.di.web import latest_policy_for_decision, list_di_policies
 from psi.services.insight_engine import build_insight_bundle
 
-DEFAULT_DECISION_KEY = "advance_to_in_vivo"
+DEFAULT_DECISION_KEY = progression_svc.canonical_decision_key()
 
 
 def _stable_default_policy_for_decision(decision_key: str) -> dict[str, Any] | None:
@@ -100,6 +101,7 @@ def refresh_current_assessment_for_molecule(
     snap_id = int(res.get("snapshot_id"))
     out = res.get("output") if isinstance(res.get("output"), dict) else {}
     bundle = build_insight_bundle(out if out else None)
+    progression = progression_svc.build_progression_summary(out)
     missing_metrics = [
         str(x.get("metric_key") or "")
         for x in (bundle.get("missing_evidence") or [])
@@ -123,4 +125,11 @@ def refresh_current_assessment_for_molecule(
         "missing_metrics": missing_metrics,
         "strongest_blocking_metrics": strongest_blocking,
         "suggested_next_metric": next_metric,
+        "current_stage_label": str(progression.get("current_stage_label") or ""),
+        "blocking_stage_label": str(progression.get("blocking_stage_label") or ""),
+        "passed_stage_labels": list(progression.get("passed_stage_labels") or []),
+        "missing_requirement_labels": list(progression.get("missing_requirement_labels") or []),
+        "failing_requirement_labels": list(progression.get("failing_requirement_labels") or []),
+        "recommended_next_step": str(progression.get("recommended_next_step") or ""),
+        "progression_summary": progression,
     }

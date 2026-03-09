@@ -1,17 +1,18 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <h1>Run DI</h1>
+  <h1>Run Development Assessment</h1>
   <div class="molecule-view-toggle no-print" role="tablist" aria-label="DI run page view mode" style="margin-top:8px;">
     <button type="button" class="btn mini" id="di_view_scientist" data-view-mode="scientist">Scientist</button>
     <button type="button" class="btn mini" id="di_view_governance" data-view-mode="governance">Governance</button>
   </div>
-  <div class="muted">Creates a DI snapshot for a batch or molecule scope. This does not use the legacy YAML engine.</div>
+  <div class="muted">Runs the canonical development progression assessment for a batch or molecule scope. Snapshot governance and replay behavior remain unchanged.</div>
   <div class="card" style="margin-top:10px;padding:10px;border-left:4px solid {% if heavy_compute_enabled %}#2d6a4f{% else %}#8a6d3b{% endif %};">
     {{ heavy_compute_banner if heavy_compute_banner is defined else 'Heavy Compute: OFF (default). Does not affect DI snapshot hashes.' }}
   </div>
   <div class="card" data-di-panel="scientist" style="margin-top:10px;padding:10px;">
-    <div class="muted">Scientist-first view emphasizes execution inputs and interpretability. Toggle is UI-only.</div>
+    <div class="muted"><b>Default chain:</b> {{ canonical_chain_label if canonical_chain_label is defined else "Development Progression" }} · {{ selected_decision_label if selected_decision_label is defined else selected_decision_key }}</div>
+    <div class="muted mini" style="margin-top:4px;">Policy selection is managed automatically in the default path.</div>
   </div>
   <div class="card" data-di-panel="governance" style="margin-top:10px;padding:10px;display:none;">
     <div class="muted mini">Governance notes (UI-only)</div>
@@ -66,26 +67,29 @@
       </select>
     </div>
 
-    <div class="field">
-      <label>Decision key</label>
-      <select name="decision_key" required>
-        {% for k in decision_keys %}
-          <option value="{{ k }}" {% if k == selected_decision_key %}selected{% endif %}>{{ k }}</option>
-        {% endfor %}
-      </select>
-    </div>
+    <details class="progressive-disclosure">
+      <summary>Advanced governance options</summary>
+      <div class="field" style="margin-top:8px;">
+        <label>Decision family (advanced)</label>
+        <select name="decision_key" required>
+          {% for k in decision_keys %}
+            <option value="{{ k }}" {% if k == selected_decision_key %}selected{% endif %}>{{ (decision_key_labels[k] if decision_key_labels is defined and k in decision_key_labels else k) }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <div class="field">
-      <label>Policy package</label>
-      <select name="policy_path" required>
-        {% for p in policies %}
-          <option value="{{ p.path }}" {% if p.path == selected_policy_path %}selected{% endif %}>
-            {{ p.decision_key }} · {{ p.policy_version }} · {{ p.policy_name }}
-          </option>
-        {% endfor %}
-      </select>
-      <div class="help">Defaults to the latest policy version for the selected decision key.</div>
-    </div>
+      <div class="field">
+        <label>Policy package (advanced)</label>
+        <select name="policy_path" required>
+          {% for p in (governance_policy_options if governance_policy_options is defined else policies) %}
+            <option value="{{ p.path }}" {% if p.path == selected_policy_path %}selected{% endif %}>
+              {{ p.decision_label if p.decision_label is defined else (p.decision_key|humanize_key) }} · {{ p.policy_version }} · {{ p.policy_name|humanize_key }}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="help">Use this only for governance/audit re-runs. Default scientist flow should keep canonical defaults.</div>
+      </div>
+    </details>
 
     <div class="grid cols-2">
       <div class="field">
@@ -104,7 +108,7 @@
     </div>
 
     <div class="actions">
-      <button class="btn primary" type="submit">Run DI</button>
+      <button class="btn primary" type="submit">Run Development Assessment</button>
       <a class="btn" href="/decisions/new">Run Legacy YAML</a>
       <a class="btn" href="/decisions">Cancel</a>
     </div>

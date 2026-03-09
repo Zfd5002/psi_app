@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from psi.core.db import ensure_schema
 from psi.core.models import Base, DecisionSnapshot, Molecule, Program
 from psi.services.decisions import get_snapshot_detail
+from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
 
 
 def _mkdb():
@@ -24,7 +25,11 @@ def _mkdb():
 
 def _env() -> Environment:
     root = Path(__file__).resolve().parents[1] / "psi" / "web" / "templates"
-    return Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env = Environment(loader=FileSystemLoader(str(root)), autoescape=select_autoescape(["html", "xml"]))
+    env.filters["humanize_key"] = humanize_key
+    env.filters["humanize_state"] = humanize_state
+    env.filters["humanize_path_token"] = humanize_path_token
+    return env
 
 
 def test_di_snapshot_detail_includes_insight_bundle_summary() -> None:

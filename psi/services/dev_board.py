@@ -132,7 +132,7 @@ def _warning_flags(*, bundle: dict[str, Any], trend_signal: str) -> list[str]:
 
 def _why_here(*, has_snapshot: bool, group_key: str, bundle: dict[str, Any], missing_metrics: list[str], blocking_reason: str) -> str:
     if not has_snapshot:
-        return "Not evaluated because no DI snapshot exists."
+        return "Assessment pending because no current development snapshot exists."
     if group_key == "missing_data":
         mk = str(missing_metrics[0] or "").strip() if missing_metrics else ""
         if mk:
@@ -149,7 +149,7 @@ def _why_here(*, has_snapshot: bool, group_key: str, bundle: dict[str, Any], mis
         return "Failed criteria based on latest DI decision context."
     if group_key == "ready":
         return "Ready because required criteria are currently satisfied."
-    return "Not currently prioritized by DI decision context."
+    return "Not currently prioritized by the latest development assessment."
 
 
 def _task_insights_by_molecule(db: Session, *, program_id: int) -> dict[int, dict[str, Any]]:
