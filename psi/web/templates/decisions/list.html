@@ -10,6 +10,9 @@
     <a class="btn primary" href="/di/run">Run DI</a>
     <a class="btn" href="/decisions/new">Run Legacy YAML</a>
   </div>
+  {% if active_program %}
+    <div class="muted mini">Scoped to program: <a href="/programs/{{ active_program.id }}">{{ active_program.name }}</a> · <a href="/decisions">clear filter</a></div>
+  {% endif %}
 
   <table class="table" style="margin-top:12px;">
     <thead><tr>

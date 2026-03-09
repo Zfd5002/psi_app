@@ -13,7 +13,7 @@ from psi.services.computed import run_computed_properties, run_immunogenicity_mh
 from psi.services.numbering import trigger_numbering_for_molecule
 from psi.services.domains import extract_domains_for_molecule, upsert_user_domain_instance
 from psi.services import files as file_svc
-from psi.core.models import MoleculeComponent
+from psi.core.models import MoleculeComponent, Program
 
 router = APIRouter()
 
@@ -124,13 +124,14 @@ async def create_domain_label(molecule_id: int, request: Request, db: Session = 
 
 
 @router.get("/molecules", response_class=HTMLResponse)
-def list_molecules(request: Request, db: Session = Depends(get_db)):
+def list_molecules(request: Request, program_id: int | None = None, db: Session = Depends(get_db)):
     templates = get_templates(request)
-    molecules, programs = svc.list_molecules(db)
+    molecules, programs = svc.list_molecules(db, program_id=program_id)
     header_by_molecule_id = svc.build_list_molecule_header_models(
         db,
         molecule_ids=[int(m.id) for m in molecules],
     )
+    active_program = db.get(Program, int(program_id)) if program_id is not None else None
     return templates.TemplateResponse(
         "molecules/list.html",
         {
@@ -138,6 +139,7 @@ def list_molecules(request: Request, db: Session = Depends(get_db)):
             "molecules": molecules,
             "programs": programs,
             "header_by_molecule_id": header_by_molecule_id,
+            "active_program": active_program,
             "surface": ui_surfaces.molecules_registry_surface(),
         },
     )

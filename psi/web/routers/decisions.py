@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from psi.core.models import Program
 from psi.services import decisions as svc
 from psi.services.di.verify import verify_snapshot
 from psi.web.deps import get_db, get_rules_path, get_templates
@@ -12,10 +13,11 @@ router = APIRouter()
 
 
 @router.get("/decisions", response_class=HTMLResponse)
-def list_decisions(request: Request, db: Session = Depends(get_db)):
+def list_decisions(request: Request, program_id: int | None = None, db: Session = Depends(get_db)):
     templates = get_templates(request)
-    snaps = svc.list_decision_snapshots(db)
-    return templates.TemplateResponse("decisions/list.html", {"request": request, "snaps": snaps})
+    snaps = svc.list_decision_snapshots(db, program_id=program_id)
+    active_program = db.get(Program, int(program_id)) if program_id is not None else None
+    return templates.TemplateResponse("decisions/list.html", {"request": request, "snaps": snaps, "active_program": active_program})
 
 
 @router.get("/decisions/new", response_class=HTMLResponse)

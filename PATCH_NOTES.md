@@ -1,3 +1,92 @@
+## 2026-03-09 — v1.3.0d94
+Why:
+- Adding multiple data records in sequence required manual re-navigation after every save.
+
+What:
+- Added a low-risk repeated-entry flow on new data capture:
+  - new button: **Save and add another**
+  - preserves program/molecule/batch (and return-to context) while redirecting back to `/data/new`
+- Preserved existing default save behavior (`Save` still redirects to data detail page).
+- For task-linked repeated entry:
+  - keeps source/from_task context markers
+  - intentionally does not resubmit `task_id` to avoid accidental task relinking on subsequent entries
+- Added redirect tests covering:
+  - default save path unchanged
+  - save-and-add-another context preservation
+  - task-linked save-and-add-another behavior
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d94`)
+
+## 2026-03-09 — v1.3.0d93
+Why:
+- Molecule and batch pages lacked a clear, first-class route back to the parent program workspace.
+
+What:
+- Added explicit **Open Program Workspace** action on:
+  - molecule detail (`molecules/detail.html`)
+  - batch detail (`batches/detail.html`)
+- Kept all existing actions intact.
+- Added tests to lock in presence of these program-return affordances.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d93`)
+
+## 2026-03-09 — v1.3.0d92
+Why:
+- `/data/new` scope selectors were independent global dropdowns, forcing manual cross-selection and causing avoidable context mistakes.
+
+What:
+- Added server-side scope prefill for batch-launched data entry:
+  - when `batch_id` is provided, `/data/new` now infers molecule/program from the batch unless explicitly overridden.
+- Added selector metadata in `data/form` core fields:
+  - molecule options now include `data-program-id`
+  - batch options now include `data-molecule-id` and `data-program-id`
+- Extended `data_form.js` with lightweight scope synchronization:
+  - Program selection constrains Molecule options
+  - Molecule selection constrains Batch options and syncs Program
+  - Batch selection backfills Molecule and Program
+  - users can still manually change any selector
+- Added tests covering:
+  - batch-context prefill (`/data/new?batch_id=...`)
+  - selector metadata rendering and scope-sync JS presence
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d92`)
+
+## 2026-03-09 — v1.3.0d91
+Why:
+- Program Workspace drill-down links already pass `program_id`, but destination registry routes were still rendering global rows, causing context loss.
+
+What:
+- Added optional program-scoped filtering to registry list services/routes for:
+  - molecules (`/molecules?program_id=...`)
+  - data records (`/data?program_id=...`)
+  - evidence (`/evidence?program_id=...`)
+  - decisions (`/decisions?program_id=...`)
+- Preserved global behavior when `program_id` is absent.
+- Added lightweight in-page scope indicator on each registry list template (with clear-filter link).
+- Added route-level tests covering each filtered registry path.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d91`)
+
 ## 2026-03-08 — v1.3.0d70
 Why:
 - Consolidate d61–d69 with lightweight regression hardening around ingestion composition and static-JS extraction.

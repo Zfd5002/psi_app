@@ -286,8 +286,11 @@ def _reconcile_single_active_snapshot_for_scope(
         )
 
 
-def list_decision_snapshots(db: Session) -> list[DecisionSnapshot]:
-    return db.query(DecisionSnapshot).order_by(DecisionSnapshot.created_at.desc()).limit(200).all()
+def list_decision_snapshots(db: Session, *, program_id: int | None = None) -> list[DecisionSnapshot]:
+    q = db.query(DecisionSnapshot)
+    if program_id is not None:
+        q = q.filter(DecisionSnapshot.program_id == int(program_id))
+    return q.order_by(DecisionSnapshot.created_at.desc()).limit(200).all()
 
 
 def get_decision_new_context(db: Session, rules_path: str) -> dict:

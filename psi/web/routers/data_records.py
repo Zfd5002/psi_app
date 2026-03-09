@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from psi.services.legacy_yaml_compat import load_rules_legacy_yaml
 from psi.services import data_records as svc
 from psi.services import bulk_import as bulk_import_svc
-from psi.core.models import ExperimentTask
+from psi.core.models import Batch, ExperimentTask, Molecule, Program
 from psi.web.deps import get_db, get_rules_path, get_storage_cfg, get_templates
 from psi.web import ui_surfaces
 from psi.web import handoff_context as handoff
@@ -19,10 +19,11 @@ router = APIRouter()
 
 
 @router.get("/data", response_class=HTMLResponse)
-def list_data(request: Request, db: Session = Depends(get_db)):
+def list_data(request: Request, program_id: Optional[int] = None, db: Session = Depends(get_db)):
     templates = get_templates(request)
-    ctx = svc.list_data_records(db)
+    ctx = svc.list_data_records(db, program_id=program_id)
     ctx["request"] = request
+    ctx["active_program"] = db.get(Program, int(program_id)) if program_id is not None else None
     ctx["surface"] = ui_surfaces.data_registry_surface()
     return templates.TemplateResponse("data/list.html", ctx)
 
@@ -135,6 +136,19 @@ def new_data(
 
     task_ctx = None
     task = None
+    if batch_id is not None:
+        batch = db.get(Batch, int(batch_id))
+        if batch is not None:
+            if molecule_id is None:
+                molecule_id = int(batch.molecule_id)
+            if program_id is None:
+                mol = db.get(Molecule, int(batch.molecule_id))
+                if mol is not None:
+                    program_id = int(mol.program_id)
+    if molecule_id is not None and program_id is None:
+        mol = db.get(Molecule, int(molecule_id))
+        if mol is not None:
+            program_id = int(mol.program_id)
     if task_id is not None:
         task = db.get(ExperimentTask, int(task_id))
         if task is not None:
@@ -203,6 +217,7 @@ def create_data(
     method: str = Form(...),
     title: str = Form(...),
     task_id: Optional[int] = Form(None),
+    action_intent: str = Form("save"),
     return_to: str = Form(""),
     notes: str = Form(""),
     run_date: str = Form(""),
@@ -254,13 +269,28 @@ def create_data(
         except ValueError as e:
             raise HTTPException(400, str(e))
 
-    target = handoff.build_return_url(
-        f"/data/{rec.id}",
-        return_to=str(return_to or "").strip(),
-        captured=True,
-        from_task=(task_id is not None),
-        next_step=("evidence" if task_id is not None else ""),
-    )
+    intent = str(action_intent or "save").strip().lower()
+    if intent == "save_add_another":
+        q: dict[str, str] = {"program_id": str(int(program_id))}
+        if molecule_id is not None:
+            q["molecule_id"] = str(int(molecule_id))
+        if batch_id is not None:
+            q["batch_id"] = str(int(batch_id))
+        rt = str(return_to or "").strip()
+        if rt:
+            q["return_to"] = rt
+        if task_id is not None:
+            q["source"] = "task"
+            q["from_task"] = "1"
+        target = handoff.with_query("/data/new", q)
+    else:
+        target = handoff.build_return_url(
+            f"/data/{rec.id}",
+            return_to=str(return_to or "").strip(),
+            captured=True,
+            from_task=(task_id is not None),
+            next_step=("evidence" if task_id is not None else ""),
+        )
     return RedirectResponse(url=target, status_code=303)
 
 

@@ -19,7 +19,7 @@
     <select name="molecule_id" id="moleculeSel">
       <option value="">(none)</option>
       {% for m in molecules %}
-        <option value="{{ m.id }}" {% if (record and record.molecule_id==m.id) or (not record and prefill.molecule_id and prefill.molecule_id==m.id) %}selected{% endif %}>{{ m.primary_id }}</option>
+        <option value="{{ m.id }}" data-program-id="{{ m.program_id }}" {% if (record and record.molecule_id==m.id) or (not record and prefill.molecule_id and prefill.molecule_id==m.id) %}selected{% endif %}>{{ m.primary_id }}</option>
       {% endfor %}
     </select>
   </div>
@@ -28,7 +28,7 @@
     <select name="batch_id" id="batchSel">
       <option value="">(none)</option>
       {% for b in batches %}
-        <option value="{{ b.id }}" {% if (record and record.batch_id==b.id) or (not record and prefill.batch_id and prefill.batch_id==b.id) %}selected{% endif %}>{{ b.batch_id }}</option>
+        <option value="{{ b.id }}" data-molecule-id="{{ b.molecule_id }}" data-program-id="{{ b.molecule.program_id if b.molecule else '' }}" {% if (record and record.batch_id==b.id) or (not record and prefill.batch_id and prefill.batch_id==b.id) %}selected{% endif %}>{{ b.batch_id }}</option>
       {% endfor %}
     </select>
     <div class="help">Enforced by UI registry for experimental data types (Binding, CellAssay, InVivo, CMC_Analytics).</div>

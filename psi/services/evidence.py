@@ -12,8 +12,11 @@ from psi.core.utils import model_to_dict, now_utc
 from psi.services.data_records import create_data_record, get_form_context
 
 
-def list_evidence(db: Session) -> dict:
-    ev = db.query(Evidence).order_by(Evidence.created_at.desc()).limit(200).all()
+def list_evidence(db: Session, *, program_id: int | None = None) -> dict:
+    q = db.query(Evidence)
+    if program_id is not None:
+        q = q.filter(Evidence.program_id == int(program_id))
+    ev = q.order_by(Evidence.created_at.desc()).limit(200).all()
     programs = db.query(Program).order_by(Program.name.asc()).all()
     molecules = db.query(Molecule).order_by(Molecule.primary_id.asc()).all()
     batches = db.query(Batch).order_by(Batch.created_at.desc()).all()

@@ -18,6 +18,7 @@
     {"href": "/di/run?molecule_id=" ~ molecule.id, "label": "Run DI"}
   ] %}
   {% set page_secondary_actions = [
+    {"href": "/programs/" ~ molecule.program_id, "label": "Open Program Workspace"},
     {"href": "/decisions/new?program_id=" ~ molecule.program_id ~ "&molecule_id=" ~ molecule.id, "label": "Run Legacy YAML (Deprecated)"},
     {"href": "/molecules/" ~ molecule.id ~ "/edit", "label": "Edit"}
   ] %}

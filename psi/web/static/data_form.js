@@ -13,11 +13,13 @@
     const domainSel = document.getElementById('domainSel');
     const dataTypeSel = document.getElementById('dataTypeSel');
     const methodSel = document.getElementById('methodSel');
+    const programSel = document.getElementById('programSel');
+    const moleculeSel = document.getElementById('moleculeSel');
+    const batchSel = document.getElementById('batchSel');
     const paramsFields = document.getElementById('paramsFields');
     const resultsFields = document.getElementById('resultsFields');
     const paramsJson = document.getElementById('paramsJson');
     const resultsJson = document.getElementById('resultsJson');
-    const batchSel = document.getElementById('batchSel');
     const batchRequirementHint = document.getElementById('batchRequirementHint');
 
     const schemas = registry.data_schemas || {};
@@ -33,6 +35,18 @@
     const preDomain = String(cfg.preDomain || '');
     const preDt = String(cfg.preDt || '');
     const preM = String(cfg.preM || '');
+    let suppressScopeSync = false;
+    const moleculeAll = moleculeSel ? Array.from(moleculeSel.options).map((optNode) => ({
+      value: String(optNode.value || ''),
+      label: String(optNode.textContent || ''),
+      programId: String(optNode.dataset.programId || ''),
+    })) : [];
+    const batchAll = batchSel ? Array.from(batchSel.options).map((optNode) => ({
+      value: String(optNode.value || ''),
+      label: String(optNode.textContent || ''),
+      moleculeId: String(optNode.dataset.moleculeId || ''),
+      programId: String(optNode.dataset.programId || ''),
+    })) : [];
 
     function clear(el){ while(el.firstChild) el.removeChild(el.firstChild); }
     function opt(sel, value, label){
@@ -40,6 +54,96 @@
       o.value = value;
       o.textContent = label;
       sel.appendChild(o);
+      return o;
+    }
+
+    function repopulateMoleculeOptions(selectedProgram, selectedMolecule){
+      if(!moleculeSel) return '';
+      clear(moleculeSel);
+      opt(moleculeSel, '', '(none)');
+      const allowed = moleculeAll.filter((row) => !selectedProgram || row.programId === selectedProgram);
+      let resolved = '';
+      allowed.forEach((row) => {
+        const node = opt(moleculeSel, row.value, row.label);
+        if (row.programId) node.dataset.programId = row.programId;
+        if (selectedMolecule && row.value === selectedMolecule) {
+          resolved = row.value;
+        }
+      });
+      moleculeSel.value = resolved;
+      return resolved;
+    }
+
+    function repopulateBatchOptions(selectedProgram, selectedMolecule, selectedBatch){
+      if(!batchSel) return '';
+      clear(batchSel);
+      opt(batchSel, '', '(none)');
+      const allowed = batchAll.filter((row) => {
+        if (selectedMolecule) return row.moleculeId === selectedMolecule;
+        if (selectedProgram) return row.programId === selectedProgram;
+        return true;
+      });
+      let resolved = '';
+      allowed.forEach((row) => {
+        const node = opt(batchSel, row.value, row.label);
+        if (row.moleculeId) node.dataset.moleculeId = row.moleculeId;
+        if (row.programId) node.dataset.programId = row.programId;
+        if (selectedBatch && row.value === selectedBatch) {
+          resolved = row.value;
+        }
+      });
+      batchSel.value = resolved;
+      return resolved;
+    }
+
+    function syncScope({ trigger = '' } = {}){
+      if(!programSel || !moleculeSel || !batchSel || suppressScopeSync) return;
+      suppressScopeSync = true;
+      let selectedProgram = String(programSel.value || '');
+      let selectedMolecule = String(moleculeSel.value || '');
+      let selectedBatch = String(batchSel.value || '');
+
+      if (trigger === 'batch' && selectedBatch) {
+        const row = batchAll.find((x) => x.value === selectedBatch);
+        if (row) {
+          selectedMolecule = row.moleculeId || selectedMolecule;
+          selectedProgram = row.programId || selectedProgram;
+        }
+      } else if (trigger === 'molecule' && selectedMolecule) {
+        const row = moleculeAll.find((x) => x.value === selectedMolecule);
+        if (row && row.programId) selectedProgram = row.programId;
+      }
+
+      if (selectedProgram) programSel.value = selectedProgram;
+      selectedMolecule = repopulateMoleculeOptions(selectedProgram, selectedMolecule);
+      selectedBatch = repopulateBatchOptions(selectedProgram, selectedMolecule, selectedBatch);
+
+      if (selectedMolecule && !selectedProgram) {
+        const row = moleculeAll.find((x) => x.value === selectedMolecule);
+        if (row && row.programId) {
+          selectedProgram = row.programId;
+          programSel.value = selectedProgram;
+          selectedMolecule = repopulateMoleculeOptions(selectedProgram, selectedMolecule);
+          selectedBatch = repopulateBatchOptions(selectedProgram, selectedMolecule, selectedBatch);
+        }
+      }
+
+      if (selectedBatch && !selectedMolecule) {
+        const row = batchAll.find((x) => x.value === selectedBatch);
+        if (row) {
+          if (row.programId) {
+            selectedProgram = row.programId;
+            programSel.value = selectedProgram;
+          }
+          if (row.moleculeId) {
+            selectedMolecule = row.moleculeId;
+          }
+          selectedMolecule = repopulateMoleculeOptions(selectedProgram, selectedMolecule);
+          selectedBatch = repopulateBatchOptions(selectedProgram, selectedMolecule, selectedBatch);
+        }
+      }
+
+      suppressScopeSync = false;
     }
 
     function getSchema(dt, m){
@@ -282,7 +386,11 @@
 
     populateDomains();
     populateDataTypes();
+    syncScope();
 
+    if (programSel) programSel.addEventListener('change', () => syncScope({ trigger: 'program' }));
+    if (moleculeSel) moleculeSel.addEventListener('change', () => syncScope({ trigger: 'molecule' }));
+    if (batchSel) batchSel.addEventListener('change', () => syncScope({ trigger: 'batch' }));
     domainSel.addEventListener('change', populateDataTypes);
     dataTypeSel.addEventListener('change', populateMethods);
     methodSel.addEventListener('change', renderSchema);

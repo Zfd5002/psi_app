@@ -1,5 +1,8 @@
 <div style="display:flex;gap:10px;flex-wrap:wrap;">
   <button class="btn primary" type="submit" onclick="document.getElementById('actionIntent').value='save'">Save</button>
+  {% if not record %}
+    <button class="btn" type="submit" onclick="document.getElementById('actionIntent').value='save_add_another'">Save and add another</button>
+  {% endif %}
   {% if record %}
     <button class="btn primary" type="submit" onclick="document.getElementById('actionIntent').value='approve'">Approve</button>
     <button class="btn" type="submit" onclick="document.getElementById('actionIntent').value='reject'">Reject</button>

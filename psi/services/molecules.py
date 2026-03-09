@@ -96,8 +96,11 @@ from psi.services.molecule_sequences import (
 )
 
 
-def list_molecules(db: Session) -> tuple[list[Molecule], list[Program]]:
-    molecules = db.query(Molecule).order_by(Molecule.created_at.desc()).all()
+def list_molecules(db: Session, *, program_id: int | None = None) -> tuple[list[Molecule], list[Program]]:
+    q = db.query(Molecule)
+    if program_id is not None:
+        q = q.filter(Molecule.program_id == int(program_id))
+    molecules = q.order_by(Molecule.created_at.desc()).all()
     programs = db.query(Program).order_by(Program.name.asc()).all()
     return molecules, programs
 

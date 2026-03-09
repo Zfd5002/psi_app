@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from psi.core.models import Program
 from psi.services import evidence as svc
 from psi.core.models import EvidenceCitation
 from psi.web.deps import get_db, get_rules_path, get_storage_cfg, get_templates
@@ -16,13 +17,19 @@ router = APIRouter()
 
 
 @router.get("/evidence", response_class=HTMLResponse)
-def list_evidence(request: Request, db: Session = Depends(get_db), rules_path=Depends(get_rules_path)):
+def list_evidence(
+    request: Request,
+    program_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    rules_path=Depends(get_rules_path),
+):
     templates = get_templates(request)
-    ctx = svc.list_evidence(db)
+    ctx = svc.list_evidence(db, program_id=program_id)
     # domains for filters
     form_ctx = svc.get_evidence_form_context(db, str(rules_path))
     ctx.update({"domains": form_ctx["domains"]})
     ctx["request"] = request
+    ctx["active_program"] = db.get(Program, int(program_id)) if program_id is not None else None
     ctx["surface"] = ui_surfaces.evidence_registry_surface()
     return templates.TemplateResponse("evidence/list.html", ctx)
 

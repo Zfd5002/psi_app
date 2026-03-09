@@ -11,6 +11,9 @@
   {% set page_secondary_actions = [{"href": "/data/bulk-import", "label": "Bulk import"}] %}
   {% set page_metrics = [{"label": "Data Records", "value": (rows|length)}] %}
   {% include "partials/page_header.html" %}
+  {% if active_program %}
+    <div class="muted mini">Scoped to program: <a href="/programs/{{ active_program.id }}">{{ active_program.name }}</a> · <a href="/data">clear filter</a></div>
+  {% endif %}
   {% if sf.archetype_labels is defined and sf.archetype_labels %}
     <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
   {% endif %}
