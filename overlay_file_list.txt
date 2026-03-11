@@ -1,7 +1,4 @@
 PATCH_NOTES.md
 overlay_file_list.txt
-psi/services/evidence_preview.py
 psi/services/programs.py
 psi/version.py
-tests/test_evidence_preview.py
-tests/test_program_review_queue.py

@@ -1,3 +1,58 @@
+## 2026-03-11 — v1.3.0d156
+Why:
+- `get_program_detail(...)` still held DI lineage and optional verification logic inline, which increased orchestration complexity.
+- PSI needed this section extracted in a behavior-preserving way before broader decomposition.
+
+What:
+- Extracted DI lineage/verification section into:
+  - `psi/services/programs.py`
+  - new helper: `_build_program_lineage_context(...)`
+- `get_program_detail(...)` now consumes `lineage_rows` from the helper and keeps the existing downstream dashboard/context usage unchanged.
+- Preserved lineage row structure, drift computation ordering, optional verification behavior, and error fallback payloads.
+
+Notes:
+- No scientist-facing UI/UX change.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
+## 2026-03-11 — v1.3.0d155
+Why:
+- `get_program_detail(...)` still embedded the final context payload construction inline, making output-shape review and maintenance harder.
+- PSI needed a low-risk extraction of response-shape serialization without semantic changes.
+
+What:
+- Extracted final context dict assembly into:
+  - `psi/services/programs.py`
+  - new helper: `_serialize_program_detail_context(...)`
+- `get_program_detail(...)` now delegates final payload construction to the helper with explicit arguments.
+- Preserved exact context keys, nested structure, slicing behavior (`[:10]` previews), and deterministic role option ordering.
+
+Notes:
+- No scientist-facing UI/UX change.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
+## 2026-03-11 — v1.3.0d154
+Why:
+- `get_program_detail(...)` remained a large mixed-responsibility function after query hot-path hardening.
+- PSI needed a low-risk first extraction step to improve maintainability without changing behavior.
+
+What:
+- Extracted dashboard/candidate/suggestion synthesis block from `get_program_detail(...)` into:
+  - `psi/services/programs.py`
+  - new helper: `_build_program_dashboard_context(...)`
+- `get_program_detail(...)` now calls the helper and reuses returned structures for:
+  - `program_dashboard`
+  - `candidate_set`
+  - `program_molecule_status_board`
+  - `program_suggested_experiments`
+- Preserved existing ordering, keys, and output semantics.
+
+Notes:
+- No scientist-facing UI/UX change.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
 ## 2026-03-11 — v1.3.0d153
 Why:
 - Query audit confirmed repeated per-record evidence preview work in program review queue assembly (`build_program_review_queue`), with repeated record-metric loading along the preview path.

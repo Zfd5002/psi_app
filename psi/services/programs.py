@@ -310,47 +310,216 @@ def _build_program_claim_plan_context(db: Session, *, program_id: int) -> dict[s
     }
 
 
-def get_program_detail(
+def _build_program_dashboard_context(
+    *,
+    molecules: list[Molecule],
+    status_by_mid: dict[int, dict[str, Any]],
+    review_queue: list[dict[str, Any]],
+    status_counts: dict[str, int],
+    program_memberships: list[tuple[ProgramMembership, Molecule]],
+    molecule_rollup: list[dict[str, Any]],
+    di_dashboard: dict[str, Any],
+) -> dict[str, Any]:
+    role_counts: dict[str, int] = {k: 0 for k in PROGRAM_MOLECULE_ROLES}
+    for m in molecules:
+        role = str((status_by_mid.get(int(m.id)) or {}).get("role") or "active")
+        role_norm = _normalize_program_molecule_role(role)
+        role_counts[role_norm] = int(role_counts.get(role_norm, 0)) + 1
+    pending_entry_count = int(sum(len(g.get("records") or []) for g in review_queue))
+    ready_count = int(status_counts.get("READY", 0))
+    blocked_count = int(status_counts.get("BLOCKED", 0))
+    known_count = int(ready_count + blocked_count)
+    progress_percent = (round((ready_count * 100.0 / known_count), 1) if known_count > 0 else 0.0)
+    confidence_percent = (
+        round(((known_count - blocked_count) * 100.0 / known_count), 1)
+        if known_count > 0
+        else 0.0
+    )
+    program_dashboard = {
+        "molecule_count": int(len(molecules)),
+        "pending_entry_count": pending_entry_count,
+        "role_counts": {k: int(role_counts.get(k, 0)) for k in PROGRAM_MOLECULE_ROLES},
+        "active_contender_count": int(
+            role_counts.get("lead", 0) + role_counts.get("backup", 0) + role_counts.get("active", 0)
+        ),
+        "posture_label": (
+            "READY"
+            if ready_count > 0 and blocked_count == 0
+            else ("BLOCKED" if blocked_count > 0 else "UNKNOWN")
+        ),
+        # Display-only bars, deterministic from molecule rollup state counts.
+        "progress_percent": progress_percent,
+        "confidence_percent": confidence_percent,
+        "progress_basis": "derived_from_latest_molecule_readiness_states",
+        "confidence_basis": "derived_from_non_blocked_fraction_of_known_states",
+        "progress_label": (
+            "advanced"
+            if progress_percent >= 80.0
+            else ("developing" if progress_percent >= 40.0 else "early")
+        ),
+        "confidence_label": (
+            "high"
+            if confidence_percent >= 80.0
+            else ("moderate" if confidence_percent >= 40.0 else "low")
+        ),
+    }
+    role_grouped: dict[str, list[dict[str, Any]]] = {k: [] for k in PROGRAM_MOLECULE_ROLES}
+    for pm, m in program_memberships:
+        role_info = status_by_mid.get(int(m.id)) or {}
+        role = _normalize_program_molecule_role(str(role_info.get("role") or "active"))
+        role_grouped[role].append(
+            {
+                "molecule_id": int(m.id),
+                "primary_id": str(m.primary_id or ""),
+                "title": str(m.title or ""),
+                "rationale": str(role_info.get("rationale") or "").strip(),
+                "sort_index": int(pm.sort_index or 0),
+            }
+        )
+    candidate_set = {
+        role: sorted(
+            role_grouped.get(role) or [],
+            key=lambda x: (int(x.get("sort_index") or 0), str(x.get("primary_id") or ""), int(x.get("molecule_id") or 0)),
+        )
+        for role in PROGRAM_MOLECULE_ROLES
+    }
+    status_board = sorted(
+        [
+            {
+                "molecule_id": int(r.get("molecule_id") or 0),
+                "primary_id": str(r.get("primary_id") or ""),
+                "title": str(r.get("title") or ""),
+                "role": _normalize_program_molecule_role(str((status_by_mid.get(int(r.get("molecule_id") or 0)) or {}).get("role") or "active")),
+                "readiness_state": str(r.get("readiness_state") or "UNKNOWN"),
+                "key_blocker": str(r.get("key_blocker") or ""),
+                "latest_evidence_update": str(r.get("latest_evidence_update") or ""),
+            }
+            for r in molecule_rollup
+            if int(r.get("molecule_id") or 0) > 0
+        ],
+        key=lambda x: (str(x.get("primary_id") or ""), int(x.get("molecule_id") or 0)),
+    )
+    prioritized_subjects = [
+        f"{role}:{item['primary_id']}"
+        for role in ("lead", "backup", "active")
+        for item in (candidate_set.get(role) or [])
+        if isinstance(item, dict) and str(item.get("primary_id") or "").strip()
+    ]
+    top_missing_metric = (
+        str((di_dashboard.get("top_missing_metrics") or [("", 0)])[0][0] or "")
+        if isinstance(di_dashboard.get("top_missing_metrics"), list) and di_dashboard.get("top_missing_metrics")
+        else ""
+    )
+    top_failing_gate = (
+        str((di_dashboard.get("top_failing_gates") or [("", 0)])[0][0] or "")
+        if isinstance(di_dashboard.get("top_failing_gates"), list) and di_dashboard.get("top_failing_gates")
+        else ""
+    )
+    suggestion_items: list[str] = []
+    if top_missing_metric:
+        suggestion_items.append(
+            f"Close missing evidence for {humanize_key(top_missing_metric)} in priority candidates ({', '.join(prioritized_subjects[:3]) if prioritized_subjects else 'lead/backup/active set'})."
+        )
+    if top_failing_gate:
+        suggestion_items.append(
+            f"Address failing gate {humanize_key(top_failing_gate)} first for lead and backup candidates."
+        )
+    if pending_entry_count > 0:
+        suggestion_items.append(
+            f"Resolve pending review queue entries ({pending_entry_count}) to stabilize evidence availability before the next program review."
+        )
+    if not suggestion_items:
+        suggestion_items.append("No prioritized experiment suggestions available from current program evidence surfaces.")
+    return {
+        "program_dashboard": program_dashboard,
+        "candidate_set": candidate_set,
+        "program_molecule_status_board": status_board,
+        "program_suggested_experiments": suggestion_items[:5],
+    }
+
+
+def _serialize_program_detail_context(
+    *,
+    program: Program,
+    molecules: list[Molecule],
+    program_memberships: list[tuple[ProgramMembership, Molecule]],
+    all_molecules: list[Molecule],
+    recent_batches: list[Batch],
+    recent_data: list[DataRecord],
+    recent_evidence: list[Evidence],
+    recent_decisions: list[DecisionSnapshot],
+    review_queue: list[dict[str, Any]],
+    open_experiment_tasks_preview: list[dict[str, Any]],
+    status_by_mid: dict[int, dict[str, Any]],
+    candidate_set: dict[str, list[dict[str, Any]]],
+    status_board: list[dict[str, Any]],
+    program_evidence_summary: list[dict[str, Any]],
+    program_evidence_matrix: dict[str, Any],
+    program_suggested_experiments: list[str],
+    claim_summary_counts: dict[str, Any],
+    claim_preview: list[dict[str, Any]],
+    plan_summary: dict[str, Any],
+    plan_preview: list[dict[str, Any]],
+    program_narrative: dict[str, Any],
+    program_dashboard: dict[str, Any],
+    di_dashboard: dict[str, Any],
+    audits: list[AuditEvent],
+) -> dict[str, Any]:
+    return {
+        "program": program,
+        "molecules": molecules,
+        "program_memberships_v3": [
+            {
+                "membership_id": int(pm.id),
+                "program_id": int(pm.program_id),
+                "molecule_id": int(m.id),
+                "sort_index": int(pm.sort_index or 0),
+                "primary_id": str(m.primary_id or ""),
+                "title": str(m.title or ""),
+                "owner_program_id": int(m.program_id) if m.program_id is not None else None,
+                "candidate_role": str((status_by_mid.get(int(m.id)) or {}).get("role") or "active"),
+                "candidate_role_rationale": str((status_by_mid.get(int(m.id)) or {}).get("rationale") or ""),
+            }
+            for pm, m in program_memberships
+        ],
+        "all_molecules_for_membership": [
+            {
+                "id": int(m.id),
+                "primary_id": str(m.primary_id or ""),
+                "title": str(m.title or ""),
+                "owner_program_id": int(m.program_id) if m.program_id is not None else None,
+            }
+            for m in all_molecules
+        ],
+        "recent_batches": recent_batches,
+        "recent_data": recent_data,
+        "recent_evidence": recent_evidence,
+        "recent_decisions": recent_decisions,
+        "review_queue_by_molecule": review_queue,
+        "open_experiment_tasks_preview": open_experiment_tasks_preview,
+        "program_molecule_role_options": list(PROGRAM_MOLECULE_ROLES),
+        "candidate_set": candidate_set,
+        "program_molecule_status_board": status_board,
+        "program_evidence_summary": program_evidence_summary,
+        "program_evidence_matrix": program_evidence_matrix,
+        "program_suggested_experiments": program_suggested_experiments,
+        "program_claim_summary": claim_summary_counts,
+        "program_claims_preview": claim_preview[:10],
+        "program_plan_summary": plan_summary,
+        "program_plans_preview": plan_preview[:10],
+        "program_narrative": program_narrative,
+        "program_dashboard": program_dashboard,
+        "di_dashboard": di_dashboard,
+        "audits": audits,
+    }
+
+
+def _build_program_lineage_context(
+    *,
     db: Session,
     program_id: int,
-    *,
-    policy_version_filter: str | None = None,
-    verify_lineage: bool = False,
-) -> dict:
-    p = get_program(db, program_id)
-    if not p:
-        raise KeyError("Program not found")
-
-    base_ctx = _collect_program_detail_inputs(db, program_id=int(program_id))
-    molecules = list(base_ctx["molecules"])
-    program_memberships = list(base_ctx["program_memberships"])
-    all_molecules = list(base_ctx["all_molecules"])
-    recent_batches = list(base_ctx["recent_batches"])
-    recent_data = list(base_ctx["recent_data"])
-    recent_evidence = list(base_ctx["recent_evidence"])
-    recent_decisions = list(base_ctx["recent_decisions"])
-    audits = list(base_ctx["audits"])
-    review_queue = list(base_ctx["review_queue"])
-    open_experiment_tasks_preview = list(base_ctx["open_experiment_tasks_preview"])
-    status_by_mid = dict(base_ctx["status_by_mid"])
-
-    # v1.2.9m: deterministic DI rollups (latest snapshot per molecule)
-    all_snaps = (
-        db.query(DecisionSnapshot)
-        .filter(DecisionSnapshot.program_id == program_id)
-        .filter(DecisionSnapshot.superseded_by_snapshot_id.is_(None))
-        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
-        .all()
-    )
-
-    latest_by_mol: dict[int, DecisionSnapshot] = {}
-    for s in all_snaps:
-        if s.molecule_id is None:
-            continue
-        mid = int(s.molecule_id)
-        if mid not in latest_by_mol:
-            latest_by_mol[mid] = s
-
+    verify_lineage: bool,
+) -> dict[str, Any]:
     def _safe_json(s: str | None) -> dict:
         try:
             obj = json.loads(s or "{}")
@@ -373,7 +542,7 @@ def get_program_detail(
     lineage_snaps = (
         db.query(DecisionSnapshot, Molecule)
         .outerjoin(Molecule, Molecule.id == DecisionSnapshot.molecule_id)
-        .filter(DecisionSnapshot.program_id == program_id)
+        .filter(DecisionSnapshot.program_id == int(program_id))
         .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
         .limit(100)
         .all()
@@ -465,6 +634,63 @@ def get_program_detail(
                 }
             except Exception:
                 row["verification"] = {"anchored": "ERROR", "current": "ERROR", "replay_vs_current": "ERROR"}
+    return {"lineage_rows": lineage_rows}
+
+
+def get_program_detail(
+    db: Session,
+    program_id: int,
+    *,
+    policy_version_filter: str | None = None,
+    verify_lineage: bool = False,
+) -> dict:
+    p = get_program(db, program_id)
+    if not p:
+        raise KeyError("Program not found")
+
+    base_ctx = _collect_program_detail_inputs(db, program_id=int(program_id))
+    molecules = list(base_ctx["molecules"])
+    program_memberships = list(base_ctx["program_memberships"])
+    all_molecules = list(base_ctx["all_molecules"])
+    recent_batches = list(base_ctx["recent_batches"])
+    recent_data = list(base_ctx["recent_data"])
+    recent_evidence = list(base_ctx["recent_evidence"])
+    recent_decisions = list(base_ctx["recent_decisions"])
+    audits = list(base_ctx["audits"])
+    review_queue = list(base_ctx["review_queue"])
+    open_experiment_tasks_preview = list(base_ctx["open_experiment_tasks_preview"])
+    status_by_mid = dict(base_ctx["status_by_mid"])
+
+    # v1.2.9m: deterministic DI rollups (latest snapshot per molecule)
+    all_snaps = (
+        db.query(DecisionSnapshot)
+        .filter(DecisionSnapshot.program_id == program_id)
+        .filter(DecisionSnapshot.superseded_by_snapshot_id.is_(None))
+        .order_by(DecisionSnapshot.created_at.desc(), DecisionSnapshot.id.desc())
+        .all()
+    )
+
+    latest_by_mol: dict[int, DecisionSnapshot] = {}
+    for s in all_snaps:
+        if s.molecule_id is None:
+            continue
+        mid = int(s.molecule_id)
+        if mid not in latest_by_mol:
+            latest_by_mol[mid] = s
+
+    def _safe_json(s: str | None) -> dict:
+        try:
+            obj = json.loads(s or "{}")
+            return obj if isinstance(obj, dict) else {}
+        except Exception:
+            return {}
+
+    lineage_ctx = _build_program_lineage_context(
+        db=db,
+        program_id=int(program_id),
+        verify_lineage=bool(verify_lineage),
+    )
+    lineage_rows = list(lineage_ctx["lineage_rows"])
 
     status_counts = {"READY": 0, "BLOCKED": 0, "UNKNOWN": 0}
     blocker_counts: dict[str, int] = {}
@@ -671,117 +897,19 @@ def get_program_detail(
         "lineage": lineage_rows,
         "molecule_rollup": sorted(molecule_rollup, key=lambda r: str(r.get("primary_id") or "")),
     }
-    role_counts: dict[str, int] = {k: 0 for k in PROGRAM_MOLECULE_ROLES}
-    for m in molecules:
-        role = str((status_by_mid.get(int(m.id)) or {}).get("role") or "active")
-        role_norm = _normalize_program_molecule_role(role)
-        role_counts[role_norm] = int(role_counts.get(role_norm, 0)) + 1
-    pending_entry_count = int(sum(len(g.get("records") or []) for g in review_queue))
-    ready_count = int(status_counts.get("READY", 0))
-    blocked_count = int(status_counts.get("BLOCKED", 0))
-    known_count = int(ready_count + blocked_count)
-    progress_percent = (round((ready_count * 100.0 / known_count), 1) if known_count > 0 else 0.0)
-    confidence_percent = (
-        round(((known_count - blocked_count) * 100.0 / known_count), 1)
-        if known_count > 0
-        else 0.0
+    dashboard_ctx = _build_program_dashboard_context(
+        molecules=molecules,
+        status_by_mid=status_by_mid,
+        review_queue=review_queue,
+        status_counts=status_counts,
+        program_memberships=program_memberships,
+        molecule_rollup=molecule_rollup,
+        di_dashboard=di_dashboard,
     )
-    program_dashboard = {
-        "molecule_count": int(len(molecules)),
-        "pending_entry_count": pending_entry_count,
-        "role_counts": {k: int(role_counts.get(k, 0)) for k in PROGRAM_MOLECULE_ROLES},
-        "active_contender_count": int(
-            role_counts.get("lead", 0) + role_counts.get("backup", 0) + role_counts.get("active", 0)
-        ),
-        "posture_label": (
-            "READY"
-            if ready_count > 0 and blocked_count == 0
-            else ("BLOCKED" if blocked_count > 0 else "UNKNOWN")
-        ),
-        # Display-only bars, deterministic from molecule rollup state counts.
-        "progress_percent": progress_percent,
-        "confidence_percent": confidence_percent,
-        "progress_basis": "derived_from_latest_molecule_readiness_states",
-        "confidence_basis": "derived_from_non_blocked_fraction_of_known_states",
-        "progress_label": (
-            "advanced"
-            if progress_percent >= 80.0
-            else ("developing" if progress_percent >= 40.0 else "early")
-        ),
-        "confidence_label": (
-            "high"
-            if confidence_percent >= 80.0
-            else ("moderate" if confidence_percent >= 40.0 else "low")
-        ),
-    }
-    role_grouped: dict[str, list[dict[str, Any]]] = {k: [] for k in PROGRAM_MOLECULE_ROLES}
-    for pm, m in program_memberships:
-        role_info = status_by_mid.get(int(m.id)) or {}
-        role = _normalize_program_molecule_role(str(role_info.get("role") or "active"))
-        role_grouped[role].append(
-            {
-                "molecule_id": int(m.id),
-                "primary_id": str(m.primary_id or ""),
-                "title": str(m.title or ""),
-                "rationale": str(role_info.get("rationale") or "").strip(),
-                "sort_index": int(pm.sort_index or 0),
-            }
-        )
-    candidate_set = {
-        role: sorted(
-            role_grouped.get(role) or [],
-            key=lambda x: (int(x.get("sort_index") or 0), str(x.get("primary_id") or ""), int(x.get("molecule_id") or 0)),
-        )
-        for role in PROGRAM_MOLECULE_ROLES
-    }
-    status_board = sorted(
-        [
-            {
-                "molecule_id": int(r.get("molecule_id") or 0),
-                "primary_id": str(r.get("primary_id") or ""),
-                "title": str(r.get("title") or ""),
-                "role": _normalize_program_molecule_role(str((status_by_mid.get(int(r.get("molecule_id") or 0)) or {}).get("role") or "active")),
-                "readiness_state": str(r.get("readiness_state") or "UNKNOWN"),
-                "key_blocker": str(r.get("key_blocker") or ""),
-                "latest_evidence_update": str(r.get("latest_evidence_update") or ""),
-            }
-            for r in molecule_rollup
-            if int(r.get("molecule_id") or 0) > 0
-        ],
-        key=lambda x: (str(x.get("primary_id") or ""), int(x.get("molecule_id") or 0)),
-    )
-    prioritized_subjects = [
-        f"{role}:{item['primary_id']}"
-        for role in ("lead", "backup", "active")
-        for item in (candidate_set.get(role) or [])
-        if isinstance(item, dict) and str(item.get("primary_id") or "").strip()
-    ]
-    top_missing_metric = (
-        str((di_dashboard.get("top_missing_metrics") or [("", 0)])[0][0] or "")
-        if isinstance(di_dashboard.get("top_missing_metrics"), list) and di_dashboard.get("top_missing_metrics")
-        else ""
-    )
-    top_failing_gate = (
-        str((di_dashboard.get("top_failing_gates") or [("", 0)])[0][0] or "")
-        if isinstance(di_dashboard.get("top_failing_gates"), list) and di_dashboard.get("top_failing_gates")
-        else ""
-    )
-    suggestion_items: list[str] = []
-    if top_missing_metric:
-        suggestion_items.append(
-            f"Close missing evidence for {humanize_key(top_missing_metric)} in priority candidates ({', '.join(prioritized_subjects[:3]) if prioritized_subjects else 'lead/backup/active set'})."
-        )
-    if top_failing_gate:
-        suggestion_items.append(
-            f"Address failing gate {humanize_key(top_failing_gate)} first for lead and backup candidates."
-        )
-    if pending_entry_count > 0:
-        suggestion_items.append(
-            f"Resolve pending review queue entries ({pending_entry_count}) to stabilize evidence availability before the next program review."
-        )
-    if not suggestion_items:
-        suggestion_items.append("No prioritized experiment suggestions available from current program evidence surfaces.")
-    program_suggested_experiments = suggestion_items[:5]
+    program_dashboard = dict(dashboard_ctx["program_dashboard"])
+    candidate_set = dict(dashboard_ctx["candidate_set"])
+    status_board = list(dashboard_ctx["program_molecule_status_board"])
+    program_suggested_experiments = list(dashboard_ctx["program_suggested_experiments"])
     claim_plan_ctx = _build_program_claim_plan_context(db, program_id=int(program_id))
     claim_summary_counts = dict(claim_plan_ctx["program_claim_summary"])
     claim_preview = list(claim_plan_ctx["program_claims_preview"])
@@ -789,53 +917,32 @@ def get_program_detail(
     plan_preview = list(claim_plan_ctx["program_plans_preview"])
     program_narrative = narratives_svc.build_program_narrative(db, program_id=int(program_id))
 
-    return {
-        "program": p,
-        "molecules": molecules,
-        "program_memberships_v3": [
-            {
-                "membership_id": int(pm.id),
-                "program_id": int(pm.program_id),
-                "molecule_id": int(m.id),
-                "sort_index": int(pm.sort_index or 0),
-                "primary_id": str(m.primary_id or ""),
-                "title": str(m.title or ""),
-                "owner_program_id": int(m.program_id) if m.program_id is not None else None,
-                "candidate_role": str((status_by_mid.get(int(m.id)) or {}).get("role") or "active"),
-                "candidate_role_rationale": str((status_by_mid.get(int(m.id)) or {}).get("rationale") or ""),
-            }
-            for pm, m in program_memberships
-        ],
-        "all_molecules_for_membership": [
-            {
-                "id": int(m.id),
-                "primary_id": str(m.primary_id or ""),
-                "title": str(m.title or ""),
-                "owner_program_id": int(m.program_id) if m.program_id is not None else None,
-            }
-            for m in all_molecules
-        ],
-        "recent_batches": recent_batches,
-        "recent_data": recent_data,
-        "recent_evidence": recent_evidence,
-        "recent_decisions": recent_decisions,
-        "review_queue_by_molecule": review_queue,
-        "open_experiment_tasks_preview": open_experiment_tasks_preview,
-        "program_molecule_role_options": list(PROGRAM_MOLECULE_ROLES),
-        "candidate_set": candidate_set,
-        "program_molecule_status_board": status_board,
-        "program_evidence_summary": program_evidence_summary,
-        "program_evidence_matrix": program_evidence_matrix,
-        "program_suggested_experiments": program_suggested_experiments,
-        "program_claim_summary": claim_summary_counts,
-        "program_claims_preview": claim_preview[:10],
-        "program_plan_summary": plan_summary,
-        "program_plans_preview": plan_preview[:10],
-        "program_narrative": program_narrative,
-        "program_dashboard": program_dashboard,
-        "di_dashboard": di_dashboard,
-        "audits": audits,
-    }
+    return _serialize_program_detail_context(
+        program=p,
+        molecules=molecules,
+        program_memberships=program_memberships,
+        all_molecules=all_molecules,
+        recent_batches=recent_batches,
+        recent_data=recent_data,
+        recent_evidence=recent_evidence,
+        recent_decisions=recent_decisions,
+        review_queue=review_queue,
+        open_experiment_tasks_preview=open_experiment_tasks_preview,
+        status_by_mid=status_by_mid,
+        candidate_set=candidate_set,
+        status_board=status_board,
+        program_evidence_summary=program_evidence_summary,
+        program_evidence_matrix=program_evidence_matrix,
+        program_suggested_experiments=program_suggested_experiments,
+        claim_summary_counts=claim_summary_counts,
+        claim_preview=claim_preview,
+        plan_summary=plan_summary,
+        plan_preview=plan_preview,
+        program_narrative=program_narrative,
+        program_dashboard=program_dashboard,
+        di_dashboard=di_dashboard,
+        audits=audits,
+    )
 
 
 def build_program_review_queue(db: Session, *, program_id: int) -> list[dict[str, Any]]:
