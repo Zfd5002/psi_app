@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from psi.core.antibody_numbering import number_variable_domain
-from psi.core.deps import abnumber_available
+from psi.core.deps import numbering_dependency_status
 from psi.core.models import DomainArtifact, DomainInstance, SequenceEntity
 from psi.core.utils import now_utc
 from psi.services.domain_artifacts import ensure_domain_artifact_running, set_artifact_failure, set_artifact_skipped, set_artifact_success
@@ -29,7 +29,8 @@ def trigger_numbering_for_molecule(db: Session, *, molecule_id: int, scheme: str
     settings = {"scheme": scheme_l}
     tool_name = "abnumber"
     tool_version = "unknown"
-    if abnumber_available():
+    dep_status = numbering_dependency_status()
+    if dep_status["components"].get("abnumber", {}).get("available"):
         try:
             import abnumber  # type: ignore
 
@@ -72,9 +73,15 @@ def trigger_numbering_for_molecule(db: Session, *, molecule_id: int, scheme: str
             db.commit()
             db.refresh(art)
 
-        # Dependency gate (abnumber)
-        if not abnumber_available():
-            set_artifact_skipped(db, art, code="dependency_missing", reason="abnumber not installed (install requirements-heavy.txt)")
+        # Dependency gate (numbering stack)
+        if not dep_status.get("ok"):
+            missing = ",".join(str(x) for x in dep_status.get("missing") or [])
+            set_artifact_skipped(
+                db,
+                art,
+                code="dependency_missing",
+                reason=f"numbering dependencies missing: {missing or 'unknown'} (install requirements-heavy.txt)",
+            )
             continue
 
         # Compute and store
@@ -128,35 +135,51 @@ def get_numbering_artifacts_for_molecule(db: Session, *, molecule_id: int, schem
     for inst in instances:
         if not inst.domain_sequence_id:
             continue
-        art = db.execute(
+        artifacts = db.execute(
             select(DomainArtifact)
             .where(DomainArtifact.sequence_id == inst.domain_sequence_id)
             .where(DomainArtifact.artifact_type == "ab_numbering")
             .where(DomainArtifact.domain_type == inst.domain_type)
             .where(DomainArtifact.tool_name == tool_name)
             .where(DomainArtifact.settings_hash == settings_hash)
-            .order_by(DomainArtifact.updated_at.desc())
-        ).scalar_one_or_none()
-        if not art:
+            .order_by(DomainArtifact.updated_at.desc(), DomainArtifact.id.desc())
+        ).scalars().all()
+        if not artifacts:
             continue
-        if art.status == "running":
+        latest = artifacts[0]
+        if latest.status == "running":
             result["pending"] = True
         # Always store latest artifact status for UI messaging.
-        meta = {"status": art.status, "updated_at": str(art.updated_at), "tool_version": art.tool_version}
-        if art.error:
-            meta["error"] = art.error
+        meta = {"status": latest.status, "updated_at": str(latest.updated_at), "tool_version": latest.tool_version}
+        if latest.error:
+            meta["error"] = latest.error
 
-        parsed = None
-        if art.result_json:
+        parsed_latest = None
+        if latest.result_json:
             try:
-                parsed = json.loads(art.result_json)
+                parsed_latest = json.loads(latest.result_json)
             except Exception:
-                parsed = art.result_json
-        if parsed is not None:
-            meta["result"] = parsed
+                parsed_latest = latest.result_json
+        if parsed_latest is not None:
+            meta["result"] = parsed_latest
 
+        parsed_success = None
+        success_artifact = None
+        for art in artifacts:
+            if art.status != "success" or not art.result_json:
+                continue
+            try:
+                parsed_success = json.loads(art.result_json)
+            except Exception:
+                parsed_success = art.result_json
+            success_artifact = art
+            break
         result["artifacts"][inst.domain_type] = meta
 
-        if art.status == "success" and parsed is not None:
-            result[inst.domain_type] = parsed
+        if parsed_success is not None:
+            result[inst.domain_type] = parsed_success
+            if latest.status != "success" and success_artifact is not None:
+                meta["using_last_success"] = True
+                meta["last_success_updated_at"] = str(success_artifact.updated_at)
+                meta["last_success_tool_version"] = str(success_artifact.tool_version or "")
     return result

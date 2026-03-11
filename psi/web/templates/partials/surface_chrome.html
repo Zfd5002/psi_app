@@ -9,7 +9,8 @@
 </div>
 {% endif %}
 {% set _nav = (_sf.local_nav if _sf.local_nav is defined and _sf.local_nav is iterable else []) %}
-{% if _nav %}
+{% set _hide_nav = (hide_surface_local_nav if hide_surface_local_nav is defined else false) %}
+{% if _nav and not _hide_nav %}
 <div class="local-subnav no-print">
   {% for item in _nav %}
     {% set _active = (item.active if item.active is defined else false) %}

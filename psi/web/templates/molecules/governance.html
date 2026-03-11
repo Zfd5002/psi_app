@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ molecule.primary_id }} Governance | PSI{% endblock %}
+{% block content %}
+{% set mh = molecule_header_model if molecule_header_model is defined and molecule_header_model else {} %}
+{% set ib = molecule_insight_bundle if molecule_insight_bundle is defined and molecule_insight_bundle else {} %}
+{% set ibg = molecule_insight_governance if molecule_insight_governance is defined and molecule_insight_governance else {} %}
+{% set ibs = molecule_insight_source if molecule_insight_source is defined and molecule_insight_source else {} %}
+<div class="card molecule-page">
+  {% set page_eyebrow = "Molecule Governance" %}
+  {% set page_title = molecule.primary_id ~ " Governance" %}
+  {% set page_subtitle = "Assessment lineage, policy provenance, and technical audit detail." %}
+  {% set page_primary_actions = [
+    {"href": "/di/run?molecule_id=" ~ molecule.id, "label": "Run Development Assessment"},
+    {"href": "/decisions/new?program_id=" ~ molecule.program_id ~ "&molecule_id=" ~ molecule.id, "label": "Legacy YAML (Advanced)"},
+    {"href": "/decisions?program_id=" ~ molecule.program_id, "label": "Assessment History"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/molecules/" ~ molecule.id, "label": "Back to Workspace"},
+    {"href": "/molecules/" ~ molecule.id ~ "/results", "label": "Open Results"},
+    {"href": "/programs/" ~ molecule.program_id ~ "/board", "label": "Open Program Board"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Current Stage", "value": (mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else "not started")},
+    {"label": "Latest Snapshot", "value": ("#" ~ mh.latest_di_snapshot_id if mh.latest_di_snapshot_id is defined and mh.latest_di_snapshot_id else "—")},
+    {"label": "DI Snapshots", "value": (di_history|length if di_history is defined and di_history is iterable else 0)},
+    {"label": "Audit Events", "value": (audits|length if audits is defined and audits is iterable else 0)}
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set surface_chrome_active_index = 2 %}
+  {% set hide_surface_local_nav = true %}
+  {% include "partials/surface_chrome.html" %}
+  {% include "molecules/partials/surface_nav.html" %}
+  <div class="page-intent-line">Governance surface for DI rationale, snapshot history, policy detail, and audit traceability.</div>
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">Current Governance Context</h2>
+    <div class="grid cols-2" style="margin-top:8px;">
+      <div>
+        <div><b>Snapshot ID:</b> {{ ibs.snapshot_id if ibs is mapping and ibs.snapshot_id is defined and ibs.snapshot_id else "—" }}</div>
+        <div><b>Decision chain:</b> {{ (ibs.decision_key if ibs is mapping and ibs.decision_key is defined and ibs.decision_key else "—")|humanize_key }}</div>
+        <div><b>Created at:</b> {{ ibs.created_at if ibs is mapping and ibs.created_at is defined and ibs.created_at else "—" }}</div>
+      </div>
+      <div>
+        <div><b>Policy:</b> {{ ibg.policy_name if ibg is mapping and ibg.policy_name is defined and ibg.policy_name else "—" }}</div>
+        <div><b>Version:</b> {{ ibg.policy_version if ibg is mapping and ibg.policy_version is defined and ibg.policy_version else "—" }}</div>
+        <div><b>Policy hash:</b> {{ ibg.policy_semantics_hash if ibg is mapping and ibg.policy_semantics_hash is defined and ibg.policy_semantics_hash else "—" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <details class="card progressive-disclosure section-secondary" style="margin-top:12px;" open>
+    <summary><b>Assessment Interpretation Detail</b></summary>
+    <div style="margin-top:8px;"><b>Status:</b> {{ (ib.molecule_status if ib is mapping and ib.molecule_status is defined and ib.molecule_status else "not_assessed")|humanize_state }}</div>
+    <div style="margin-top:8px;">
+      <div class="muted mini">Blocking issues</div>
+      <ul class="clean mini" style="margin-top:4px;">
+        {% for row in (ib.blocking_issues if ib is mapping and ib.blocking_issues is defined else []) %}
+          <li><b>{{ row.gate_key if row.gate_key is defined and row.gate_key else "unspecified_gate" }}</b> · {{ row.status if row.status is defined else "unknown" }}</li>
+        {% else %}
+          <li class="muted">No active blocking issues detected.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="muted mini">Suggested experiments</div>
+      <ul class="clean" style="margin-top:4px;">
+        {% for row in (ib.recommended_experiments if ib is mapping and ib.recommended_experiments is defined else []) %}
+          {% set assay = (row.suggested_assay if row.suggested_assay is defined else "") %}
+          {% set mk = (row.metric_key if row.metric_key is defined else "") %}
+          {% set why = (row.reason if row.reason is defined else "") %}
+          <li>
+            {{ assay if assay else mk }}
+            <a class="btn mini no-print" href="/builder/suggested-task/new?molecule_id={{ molecule.id }}&metric_key={{ mk|replace(' ', '%20') }}&suggested_assay={{ assay|replace(' ', '%20') }}&suggested_rationale={{ why|replace(' ', '%20') }}">Create Task</a>
+          </li>
+        {% else %}
+          <li class="muted">No immediate experiment suggestions available.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </details>
+
+  <div class="card section-card section-secondary" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Scientific Trajectory</h2>
+    <div class="muted mini"><b>Estimated outcome (heuristic projection)</b></div>
+    <table class="table mini" style="margin-top:8px;">
+      <thead><tr><th>Experiment</th><th>Metric</th><th>Expected readiness gain</th><th>Gate impact</th><th>Confidence</th></tr></thead>
+      <tbody>
+      {% for r in (trajectory_candidates if trajectory_candidates is defined and trajectory_candidates is iterable else []) %}
+        <tr>
+          <td>{{ r.suggested_assay if r.suggested_assay is defined and r.suggested_assay else "recommended experiment" }}</td>
+          <td>{{ r.metric_key if r.metric_key is defined else "—" }}</td>
+          <td>{{ r.expected_readiness_gain if r.expected_readiness_gain is defined else 0 }}</td>
+          <td>{{ r.gate_impact if r.gate_impact is defined else 0 }}</td>
+          <td>{{ r.confidence_level if r.confidence_level is defined else "low" }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted empty-state-cell">No trajectory candidates available.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% include "molecules/partials/history_audit_zone.html" %}
+</div>
+{% endblock %}

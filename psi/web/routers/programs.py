@@ -15,6 +15,7 @@ from psi.services import program_board as program_board_svc
 from psi.services import experiment_tasks as experiment_tasks_svc
 from psi.services import narratives as narratives_svc
 from psi.services import workflow_center as workflow_center_svc
+from psi.services import current_assessment as assessment_svc
 
 router = APIRouter()
 
@@ -162,8 +163,49 @@ def program_development_board(program_id: int, request: Request, db: Session = D
             "board_urgency_filter": urgency_filter,
             "board_task_status_filter": status_filter,
             "board_due_filter": due_filter,
+            "refreshed_pending": int(request.query_params.get("refreshed_pending") or 0),
+            "pending_total": int(request.query_params.get("pending_total") or 0),
+            "refresh_errors": int(request.query_params.get("refresh_errors") or 0),
             "surface": ui_surfaces.program_board_surface(program_id=int(program_id)),
         },
+    )
+
+
+@router.post("/programs/{program_id}/board/update-pending-assessments")
+def program_board_update_pending_assessments(
+    program_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    program = svc.get_program(db, int(program_id))
+    if not program:
+        raise HTTPException(404)
+    board = dev_board_svc.build_development_board(db, program_id=int(program_id), use_cache=False)
+    groups = board.get("groups") if isinstance(board, dict) else {}
+    pending_rows = list(groups.get("not_evaluated") or []) if isinstance(groups, dict) else []
+    pending_ids = [
+        int(row.get("molecule_id"))
+        for row in pending_rows
+        if isinstance(row, dict) and row.get("molecule_id") is not None
+    ]
+    refreshed = 0
+    errors = 0
+    for molecule_id in pending_ids:
+        try:
+            assessment_svc.refresh_current_assessment_for_molecule(
+                db,
+                molecule_id=int(molecule_id),
+                trigger="program_board_pending_refresh",
+            )
+            refreshed += 1
+        except Exception:
+            errors += 1
+    return RedirectResponse(
+        url=(
+            f"/programs/{int(program_id)}/board"
+            f"?refreshed_pending={int(refreshed)}&pending_total={int(len(pending_ids))}&refresh_errors={int(errors)}"
+        ),
+        status_code=303,
     )
 
 

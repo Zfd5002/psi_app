@@ -31,6 +31,12 @@
           <div style="display:flex;flex-direction:column;gap:4px;">
             <div><a href="/molecules/{{ m.id }}"><strong>{{ m.primary_id }}</strong></a></div>
             <div class="muted">{{ m.title or '' }}</div>
+            <div class="mini muted no-print">
+              <a href="/molecules/{{ m.id }}">workspace</a> ·
+              <a href="/molecules/{{ m.id }}/results">results</a> ·
+              <a href="/molecules/{{ m.id }}/sequence">sequence</a> ·
+              <a href="/molecules/{{ m.id }}/governance">governance</a>
+            </div>
           </div>
         </td>
         <td style="min-width:360px;">

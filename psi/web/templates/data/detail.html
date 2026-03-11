@@ -6,25 +6,26 @@
   {% set page_title = record.title %}
   {% set page_subtitle = record.domain ~ " • " ~ record.data_type ~ "/" ~ record.method %}
   {% set page_primary_actions = [
-    {"href": "/evidence/new?program_id=" ~ record.program_id ~ (("&molecule_id=" ~ record.molecule_id) if record.molecule_id else "") ~ (("&batch_id=" ~ record.batch_id) if record.batch_id else "") ~ ("&return_to=/data/" ~ record.id), "label": "Create Evidence (cite this)"}
+    {"href": "/programs/" ~ record.program.id ~ "/workflow", "label": "Continue in Program Workflow"}
   ] %}
   {% set page_secondary_actions = [
     {"href": "/data/" ~ record.id ~ "/edit", "label": "Edit"},
-    {"href": "/programs/" ~ record.program.id ~ "/workflow", "label": "Continue in Program Workflow"},
+    {"href": "/evidence/new?program_id=" ~ record.program_id ~ (("&molecule_id=" ~ record.molecule_id) if record.molecule_id else "") ~ (("&batch_id=" ~ record.batch_id) if record.batch_id else "") ~ ("&return_to=/data/" ~ record.id), "label": "Create Evidence (Optional)"},
     {"href": "/programs/" ~ record.program.id, "label": "Back to Program"}
   ] %}
   {% if record.molecule %}
     {% set page_secondary_actions = page_secondary_actions + [{"href": "/molecules/" ~ record.molecule.id, "label": "Open Molecule Workspace"}] %}
   {% endif %}
   {% set page_metrics = [
-    {"label": "Record ID", "value": ("#" ~ record.id)},
+    {"label": "Result ID", "value": ("#" ~ record.id)},
     {"label": "Program", "value": record.program.name},
     {"label": "Run Date", "value": (record.run_date if record.run_date else "not set")},
     {"label": "Cited by Evidence", "value": (evidence_citing|length)}
   ] %}
   {% set page_matters_now = [
     "Review extracted measurements and QC state for this run.",
-    "Create evidence if this result supports or contradicts a claim.",
+    "Review the current assessment update and any blocker changes after this result.",
+    "Create evidence only when you need interpretation/governance documentation.",
     "Return to program workflow to continue active experimental work."
   ] %}
   {% include "partials/page_header.html" %}
@@ -59,8 +60,11 @@
     </div>
     <div class="card section-card section-primary" style="margin:0;">
       <h3 style="margin-top:0;">Recommended Next Step</h3>
-      <div class="mini">If this run changes scientific posture, create evidence and cite this data record.</div>
-      <div style="margin-top:8px;" class="no-print"><a class="btn mini primary" href="/evidence/new?program_id={{ record.program_id }}{% if record.molecule_id %}&molecule_id={{ record.molecule_id }}{% endif %}{% if record.batch_id %}&batch_id={{ record.batch_id }}{% endif %}&return_to=/data/{{ record.id }}">Create or Link Evidence</a></div>
+      <div class="mini">Use Program Workflow to continue execution. Add evidence as an optional interpretation/governance layer when needed.</div>
+      <div style="margin-top:8px;" class="no-print">
+        <a class="btn mini primary" href="/programs/{{ record.program.id }}/workflow">Continue in Program Workflow</a>
+        <a class="btn mini" href="/evidence/new?program_id={{ record.program_id }}{% if record.molecule_id %}&molecule_id={{ record.molecule_id }}{% endif %}{% if record.batch_id %}&batch_id={{ record.batch_id }}{% endif %}&return_to=/data/{{ record.id }}">Create or Link Evidence (Optional)</a>
+      </div>
     </div>
   </div>
 

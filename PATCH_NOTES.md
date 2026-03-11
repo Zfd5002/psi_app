@@ -1,3 +1,616 @@
+## 2026-03-10 — v1.3.0d135
+Why:
+- Domain recompute (`POST /molecules/{id}/domains/recompute`) could appear to run but never persist VH/VL `DomainInstance` rows because its background worker opened the DB in read-only mode (`ensure=False` → `PRAGMA query_only=1`).
+- This blocked numbering preconditions and left users in a non-obvious redirect/no-op loop.
+
+What:
+- Fixed writable session usage for write-intent background tasks:
+  - `psi/web/routers/molecules.py`
+    - numbering background task now uses `get_db_ctx(..., ensure=True)`
+    - immunogenicity background task now uses `get_db_ctx(..., ensure=True)`
+    - domains recompute background task now uses `get_db_ctx(..., ensure=True)`
+  - `psi/services/molecules.py`
+    - `_background_compute(...)` now uses `get_db(..., ensure=True)`
+    - `_background_domain_extraction(...)` now uses `get_db(..., ensure=True)`
+- Improved recompute UX visibility:
+  - `POST /molecules/{id}/domains/recompute` now redirects with `domains_status=started`.
+  - sequence viewer and governance/history annotation panel now show a compact “recompute started” notice when this param is present.
+- Preserved numbering precondition semantics (still requires successful VH/VL domain rows), but this precondition is now satisfiable via writable recompute execution.
+
+Tests:
+- Updated `tests/test_molecule_split_surfaces.py`:
+  - recompute redirect now expects `domains_status=started`
+  - added regression asserting recompute background uses writable session (`ensure=True`)
+  - added regression asserting numbering background uses writable session (`ensure=True`)
+  - added regressions asserting service background compute/domain helpers use writable session (`ensure=True`)
+- Updated `tests/test_sequence_viewer_layout.py`:
+  - asserts sequence viewer template surfaces `domains_status` started notice.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d135`)
+
+## 2026-03-10 — v1.3.0d134
+Why:
+- Desktop-launched PSI could run `Compute numbering` with a clean redirect but no FR/CDR output because numbering dependencies were not first-class in `.venv` and failure states were insufficiently distinguished.
+
+What:
+- Dependency declaration hardening:
+  - added `anarci==1.3` to `requirements-heavy.txt` (alongside existing `abnumber==0.4.4`).
+  - updated heavy-compute docs to use `requirements-heavy.txt` as first-class install path and keep `scripts/install_anarci.sh` as fallback.
+- Numbering dependency diagnostics:
+  - added `numbering_dependency_status()` in `psi/core/deps.py` with per-component probe details (`abnumber`, `anarci`, `biopython`), versions, and missing list.
+- Route-level failure visibility:
+  - `POST /molecules/{id}/numbering` now uses dependency probe and distinguishes:
+    - `numbering_status=no_domains`
+    - `numbering_status=missing_dependencies` (+ `numbering_missing=...`)
+    - `numbering_status=started`
+- Backend numbering service guard:
+  - `trigger_numbering_for_molecule()` now gates on full numbering dependency status and records explicit skipped reason listing missing dependencies.
+- Sequence-page messaging:
+  - sequence viewer now shows concise notices for started/no-domains/missing-dependencies.
+  - for artifact outcomes, shows explicit failure/skipped messages and indicates when last successful numbering payload is being used.
+- Numbering payload continuity:
+  - `get_numbering_artifacts_for_molecule()` now falls back to latest successful payload when newest artifact is non-success, while keeping latest status metadata.
+- Added focused tests for:
+  - dependency probe behavior
+  - route distinction between missing dependencies vs missing domains
+  - template messaging hooks
+  - numbering service fallback behavior.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d134`)
+
+## 2026-03-10 — v1.3.0d133
+Why:
+- `Compute numbering` could redirect cleanly while producing no visible FR/CDR output due to silent prerequisite/dependency failures and latest-artifact selection behavior.
+
+What:
+- Numbering path audit confirmed:
+  - `POST /molecules/{id}/numbering` is distinct from annotation recompute.
+  - annotation recompute (`/domains/recompute`) does **not** run numbering.
+  - runtime environment may have ANARCI present but `abnumber` missing, causing numbering refresh to fail.
+- Route hardening (`psi/web/routers/molecules.py`):
+  - added preflight checks before enqueueing background numbering:
+    - if no successful VH/VL domain instances: redirect with `numbering_status=no_domains`
+    - if `abnumber` unavailable: redirect with `numbering_status=missing_abnumber`
+    - otherwise enqueue and redirect with `numbering_status=started`
+  - preserved sequence-page return targeting and scheme propagation.
+- Sequence page failure visibility (`molecules/partials/sequence_viewer.html`):
+  - added concise notices for `numbering_status` query states (`started`, `no_domains`, `missing_abnumber`)
+  - added notice when viewer is using last successful numbering payload after a failed/skipped refresh.
+- Numbering artifact retrieval repair (`psi/services/numbering.py`):
+  - `get_numbering_artifacts_for_molecule` now falls back to the latest successful artifact payload when the newest artifact is non-success (skipped/failure), while preserving latest status metadata.
+  - prevents good prior numbering payloads from disappearing after a failed refresh attempt.
+- Added focused regressions:
+  - route preflight/redirect behavior and task enqueue expectations
+  - sequence template status messaging hooks
+  - numbering service fallback to last successful payload.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d133`)
+
+## 2026-03-10 — v1.3.0d132
+Why:
+- Sequence page showed `Recompute annotations` but no visible antibody-numbering action, creating ambiguity about whether numbering still exists and is separately triggerable.
+
+What:
+- Confirmed numbering backend still exists and is distinct:
+  - route: `POST /molecules/{id}/numbering`
+  - service trigger: `trigger_numbering_for_molecule(...)` (background task)
+- Restored a visible sequence-page numbering control:
+  - added `Compute numbering` button/form in `molecules/partials/sequence_viewer.html`
+  - kept it separate from `Recompute annotations`.
+- Improved numbering route UX for sequence flow:
+  - `run_numbering` now accepts optional `return_to`
+  - when `return_to` targets same-molecule sequence path, redirect stays on `/molecules/{id}/sequence...` and preserves `scheme` query parameter.
+- Added focused regressions:
+  - sequence template exposes numbering control/action
+  - numbering route redirects back to sequence page when requested.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d132`)
+
+## 2026-03-10 — v1.3.0d131
+Why:
+- Numbering-derived antibody regions (CDR1/2/3 and FR1/2/3/4) were computed in payloads but not surfaced as first-class sequence viewer annotation layers.
+
+What:
+- Added deterministic numbering-to-viewer region projection in:
+  - `psi/services/molecule_viewer.py`
+- New behavior:
+  - when a VH/VL domain has complete numbering `cdrs` payload and region lengths exactly match the domain span,
+    the viewer now emits `Antibody regions` features for:
+    - `FR1`, `CDR1`, `FR2`, `CDR2`, `FR3`, `CDR3`, `FR4`
+  - no regions are fabricated when numbering payload is absent/incomplete/length-inconsistent.
+- Preserved existing viewer behavior and feature families (recognized regions, liabilities, references, linkers, copy/highlight interactions).
+- Added focused regression tests:
+  - `tests/test_molecule_viewer_numbering_regions.py`
+  - validates heavy/light region surfacing when present
+  - validates no fake regions when payload is incomplete
+  - validates existing recognized-region output remains present.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d131`)
+
+## 2026-03-10 — v1.3.0d130
+Why:
+- Needed a code-grounded capability inventory for molecule sequence annotations before implementing richer selectable scientist layers.
+
+What:
+- Added exploratory audit report:
+  - `SEQUENCE_ANNOTATION_CAPABILITY_AUDIT.md`
+- Report covers:
+  - annotation layers implemented and currently exposed on `/molecules/{id}/sequence`
+  - features computed but not surfaced/selectable (notably numbering-derived CDR/FR payload)
+  - partial/uncertain capabilities (hinge/CH boundaries, Fc species)
+  - missing capabilities requiring new implementation
+  - concrete code locations and dependency notes
+  - staged patch roadmap for richer scientist-friendly layer controls.
+- No DI/governance/schema/runtime behavior changes.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d130`)
+
+## 2026-03-10 — v1.3.0d129
+Why:
+- Sequence page showed redundant symmetric HC/LC viewers when paired chains were sequence-identical, increasing visual noise for scientists.
+
+What:
+- Added display-layer chain-collapse helper for sequence viewers:
+  - if `HC1 == HC2`, render only one heavy-chain viewer labeled `Heavy Chain (HC1 = HC2)`
+  - if `LC1 == LC2`, render only one light-chain viewer labeled `Light Chain (LC1 = LC2)`
+  - heavy and light collapse logic handled independently
+  - collapse only when both paired chains exist and are exactly identical
+- Wired sequence viewer partial to use prepared collapsed component list + explicit display labels for:
+  - main sequence blocks
+  - annotation-panel component headings
+- Added focused regression tests covering:
+  - identical HC collapse
+  - identical LC collapse
+  - mixed identical/different heavy-light scenarios
+  - single-HC/single-LC handling without misleading labels
+  - non-identical duplicated chains remaining separate.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d129`)
+
+## 2026-03-10 — v1.3.0d128
+Why:
+- Runtime debug on sequence viewer showed two remaining contributors to clipping diagnostics:
+  - `viewer_overflowX` could still resolve to hidden in live CSS cascade contexts
+  - `--residue-cell-w` could be empty when width measurement was invalid at first pass.
+
+What:
+- Hardened viewer overflow behavior:
+  - `.seq-scroll.viewer-v2 { overflow-x: auto !important; }`
+- Made `--residue-cell-w` assignment unconditional in wrap computation path:
+  - fallback width is applied when measured width is invalid
+  - CSS variable is always set before `--wrap-cols`
+- Updated focused layout regression assertions for:
+  - enforced overflow-x behavior
+  - always-on residue-cell-width fallback assignment.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d128`)
+
+## 2026-03-10 — v1.3.0d127
+Why:
+- Remaining sequence viewer clipping needed live runtime geometry visibility to validate final layout-accounting behavior in-browser.
+
+What:
+- Added temporary query-param-gated sequence geometry instrumentation in `molecule_detail.js`:
+  - activate with `?debug_seq=1` on molecule sequence pages
+  - logs per viewer:
+    - viewer / lane / lane-label / seq-grid clientWidth + rect width
+    - first residue rect width
+    - computed `--wrap-cols` and `--residue-cell-w`
+    - computed style display / overflow-x / width / min-width for viewer/lane/lane-label/seq-grid/residue
+- Instrumentation is passive and does not alter annotation/DI/governance behavior.
+- Added focused regression assertion that debug mode hook + key geometry fields exist.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d127`)
+
+## 2026-03-10 — v1.3.0d126
+Why:
+- Sequence viewer clipping persisted because width models were still mixed: grid sizing remained content-coupled (`max-content`), while wrap math used mixed integer/float widths and a coarse one-column safety decrement.
+
+What:
+- Validated and fixed the remaining width-model mismatch:
+  - removed `max-content` coupling on viewer grids (`.seq-grid`/`.num-grid` now width-constrained by lane/container)
+  - changed wrap-width measurement to consistent float widths using `getBoundingClientRect().width` for both lane and viewer paths
+  - replaced `-1 column` safety with a small pixel safety buffer (`max(1px, 15% of residue cell width)`)
+- Kept existing annotation behavior, reactive recompute timing, and horizontal-scroll fallback intact.
+- Updated focused layout tests to assert:
+  - no `max-content` coupling in viewer grid sizing
+  - float-width lane/viewer measurement path
+  - pixel-buffer safety math.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d126`)
+
+## 2026-03-10 — v1.3.0d125
+Why:
+- Sequence viewer still clipped right-edge residues at 100% zoom because wrap-column math was keyed off outer viewer width instead of the true sequence lane drawing width.
+
+What:
+- Updated wrap-column measurement source in `molecule_detail.js`:
+  - prefer `.lane` width (`lane.clientWidth`) as the governing drawable region
+  - fall back to viewer width only when lane width is unavailable
+  - keep conservative floor/safety behavior from prior patch
+- Added `min-width:0` to `.lane` to avoid shrink constraints in nested layouts.
+- Expanded focused layout tests to assert lane-width-based wrap measurement and lane shrink guard.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d125`)
+
+## 2026-03-10 — v1.3.0d124
+Why:
+- Sequence viewer still clipped 1–2 residues at the right edge because render width used a hardcoded `1ch` grid-column unit while wrap-column math used measured pixel widths; small font/rendering deltas still caused over-packing.
+
+What:
+- Switched sequence grid columns from fixed `1ch` to a measured CSS variable:
+  - `var(--residue-cell-w, 1ch)`
+- Updated viewer JS to set `--residue-cell-w` from actual rendered residue cell width before applying `--wrap-cols`.
+- Kept existing conservative/reacive wrap recalculation logic (load, resize, details toggle, ResizeObserver).
+- Updated focused layout tests to assert:
+  - measured residue-cell-width variable is set in JS
+  - both sequence-related templates use the measured-width grid column expression.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d124`)
+
+## 2026-03-10 — v1.3.0d123
+Why:
+- Sequence viewer still clipped 1–2 residues at the right edge on steady-state load; resizing the window corrected it, indicating wrap-column measurement timing/math drift.
+
+What:
+- Refined sequence viewer wrap-column calculation in `molecule_detail.js`:
+  - measure residue cell width from actual rendered `.residue` elements
+  - compute against true usable content width (`clientWidth - horizontal padding`)
+  - apply conservative floor with one-column safety cushion to avoid right-edge truncation
+- Improved initial-load recomputation timing:
+  - added scheduled refresh on load + double `requestAnimationFrame` settle pass
+  - kept resize/toggle refreshes
+  - added `ResizeObserver` refresh for viewer container size changes
+- Added focused regression assertions on wrap math + reactive recompute wiring.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d123`)
+
+## 2026-03-10 — v1.3.0d122
+Why:
+- Long molecule sequences on the sequence viewer were visually clipped due to horizontal overflow being forced hidden.
+
+What:
+- Updated sequence viewer CSS to use horizontal scrolling instead of clipping:
+  - `.seq-scroll` now allows `overflow-x:auto`
+  - `.seq-scroll.viewer-v2` now uses `overflow-x:auto` and `overflow-y:hidden`
+  - viewer grids now use `min-width/max-content` so full residue lanes remain accessible
+- Added a focused UI regression test to assert scrollable sequence-viewer CSS structure remains in place.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d122`)
+
+## 2026-03-10 — v1.3.0d121
+Why:
+- Recompute annotations on the molecule sequence surface redirected users back to the workspace route, interrupting sequence-review flow.
+
+What:
+- Updated `POST /molecules/{id}/domains/recompute` to accept an optional `return_to` form field.
+- Added safe redirect behavior:
+  - if `return_to` targets the same molecule’s `/sequence` route, redirect there;
+  - otherwise keep existing fallback redirect to `/molecules/{id}#domains`.
+- Updated sequence viewer recompute form to submit:
+  - `return_to=/molecules/{id}/sequence#sequence-viewer`
+- Added regression test proving sequence-page recompute returns to sequence view.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d121`)
+
+## 2026-03-10 — v1.3.0d120
+Why:
+- Sequence viewer annotation detection was visible in summary/group counts, but expanded detail groups could render empty for motif/liability-heavy molecules.
+
+What:
+- Restored motif/liability bulk-control rows in `sequence_viewer.html` for:
+  - `N_glycosylation`
+  - `oxidation_susceptible`
+  - `deamidation`
+- Kept existing per-feature row rendering unchanged.
+- Added template regression checks to ensure liability bulk controls remain present on the sequence viewer surface.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d120`)
+
+## 2026-03-10 — v1.3.0d119
+Why:
+- Final usability polish was needed so molecule results review includes unassigned runs and clearer scientist-facing table language.
+
+What:
+- Extended molecule results flattening to include both:
+  - batch-linked experiment records, and
+  - molecule-level unassigned records.
+- Preserved measurement-first extraction with summary fallback for any record missing extracted rows.
+- Updated results value table headers to scientist-readable labels (`Experiment`, `Measured metric`).
+- Expanded helper regression coverage to assert unassigned-record inclusion.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d119`)
+
+## 2026-03-10 — v1.3.0d118
+Why:
+- Sequence surface needed the full annotated sequence-inspection experience (not just editor/lineage context).
+
+What:
+- Ensured the dedicated sequence page keeps the annotated sequence viewer as a first-class section.
+- Wired sequence page scripts/config so viewer interactions and annotation highlights function on `/molecules/{id}/sequence`.
+- Added regression assertions to keep sequence viewer include + script wiring in place.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d118`)
+
+## 2026-03-10 — v1.3.0d117
+Why:
+- Molecule Results still emphasized record metadata; scientists need direct assay values (metric/value/unit) for fast ELN review.
+
+What:
+- Updated molecule results flattening logic to read extracted measurement rows per data record and emit scientist-readable result rows.
+- Kept deterministic fallback to record summary text when extracted measurement rows are unavailable.
+- Preserved drill-down links to batch and experiment-record detail.
+- Added route-level regression coverage that asserts molecule results context includes real flattened value rows (for example `kd_nM`).
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d117`)
+
+## 2026-03-10 — v1.3.0d116
+Why:
+- Molecule split pages rendered duplicate local navigation controls because both shared surface chrome and molecule surface partial emitted subnav links.
+
+What:
+- Enabled `hide_surface_local_nav` on the molecule governance page to match workspace/results/sequence behavior.
+- Kept a single canonical molecule subnav source via `molecules/partials/surface_nav.html`.
+- Added regression assertions covering all four molecule split templates so duplicate-nav regressions are caught early.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d116`)
+
+## 2026-03-10 — v1.3.0d115
+Why:
+- Complete ELN-first molecule split by reinforcing discoverability and documenting the architecture as a product guardrail.
+
+What:
+- Added molecule registry quick links for split molecule surfaces:
+  - workspace / results / sequence / governance
+- Lightly extended UX philosophy doc with explicit molecule surface architecture principle.
+- Added template assertions for split-surface quick links in molecule registry.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d115`)
+
+## 2026-03-10 — v1.3.0d114
+Why:
+- `/molecules/{id}` needed to become a short ELN-first workspace instead of a mixed workspace/results/sequence/governance mega-page.
+
+What:
+- Replaced default molecule detail template with a concise workspace layout focused on:
+  - current status
+  - add/view result loop
+  - current assessment
+  - recent results
+  - execution and optional interpretation via progressive disclosure.
+- Added shared molecule surface nav partial usage across the workspace.
+- Updated molecule detail test expectations to reflect split-surface architecture.
+- Added molecule surface-nav template assertions.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d114`)
+
+## 2026-03-10 — v1.3.0d113
+Why:
+- Molecule experience needed explicit page-level separation so scientists can move between workspace, results, sequence, and governance views without one overloaded page.
+
+What:
+- Added new molecule sub-routes:
+  - `/molecules/{id}/results`
+  - `/molecules/{id}/sequence`
+  - `/molecules/{id}/governance`
+- Added shared molecule page-context helper in molecule router to keep route logic thin and consistent.
+- Added new templates:
+  - `molecules/results.html`
+  - `molecules/sequence.html`
+  - `molecules/governance.html`
+  - shared molecule local surface nav partial.
+- Extended surface descriptor system with:
+  - `molecule_results_surface`
+  - `molecule_sequence_surface`
+  - `molecule_governance_surface`
+  - and updated molecule local nav links to route-based workspace/results/sequence/governance navigation.
+- Added tests covering new molecule split-surface routes.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d113`)
+
+## 2026-03-09 — v1.3.0d112
+Why:
+- Molecule workspace needed a clearer scientist-first hierarchy, and PSI needed a documented UX philosophy to reduce future drift.
+
+What:
+- Molecule workspace IA pass:
+  - added a top-level **Experiment Review** section with direct molecule-scoped result review and result-capture actions.
+  - moved detailed legacy/advanced molecule controls into a collapsed progressive-disclosure block.
+  - kept all existing deep drill-down/governance content available.
+- Added template assertion test for molecule experiment-review entry affordance.
+- Added new UX philosophy document:
+  - `docs/PSI_UX_PHILOSOPHY.md`
+  - defines scientist-assistant model, context preservation, hierarchy/disclosure rules, governance compatibility, and tutorial-driven UX validation.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d112`)
+
+## 2026-03-09 — v1.3.0d111
+Why:
+- Molecule-level experiment review needs a fast molecule-first entry instead of forcing batch-first nested exploration.
+
+What:
+- Extended experiment results registry route to support molecule scoping:
+  - `/data?molecule_id=...`
+  - supports combined scope with `program_id`.
+- Updated data list route context to expose:
+  - `active_molecule`
+  - inferred `active_program` from molecule when needed.
+- Added molecule scope banner + clear-filter behavior on experiment results list.
+- Added molecule workspace CTA:
+  - **View Experiment Results** (`/data?program_id=...&molecule_id=...`)
+- Kept existing batch-first deep review and all prior behavior intact.
+- Added test coverage for molecule-filtered data list behavior.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d111`)
+
+## 2026-03-09 — v1.3.0d110
+Why:
+- Program Board should let scientists refresh pending assessments in-place instead of navigating away and running assessments one-by-one.
+
+What:
+- Added board-level pending refresh action:
+  - `POST /programs/{program_id}/board/update-pending-assessments`
+  - Button label: **Update Pending Assessments**
+- Action behavior:
+  - computes current board groups
+  - refreshes only `not_evaluated` molecules using existing `refresh_current_assessment_for_molecule`
+  - keeps synchronous deterministic execution (no background jobs)
+- Added board feedback banner showing refreshed count, total pending count, and refresh error count.
+- Added route-level test proving only pending molecules are refreshed and redirect summary values are set.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d110`)
+
+## 2026-03-09 — v1.3.0d109
+Why:
+- Program-context launch points should keep optional interpretation/governance tools scoped to the active program.
+
+What:
+- Added query-param program scoping for claims/plans registry routes:
+  - `/claims?program_id=...`
+  - `/plans?program_id=...`
+- Preserved backward compatibility: no `program_id` keeps global registry behavior.
+- Added active-program scope banners with clear-filter links to claims/plans list templates.
+- Extended claims/plans surface descriptors to render program-context local nav when scoped.
+- Updated program workspace/workflow/board actions to preserve program context when opening optional claims/plans surfaces.
+- Added tests for program-scoped claims/plans route behavior.
+
+Gates run:
+- `python -m compileall -q psi` — PASS
+- `pytest -q` — PASS
+- `python -m psi.tools.di_contract_smoke` — PASS
+- `python -m psi.tools.di_replay_regression --limit 5` — PASS
+- `python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"` — PASS (`v1.3.0d109`)
+
 ## 2026-03-09 — v1.3.0d97
 Why:
 - Scientists need post-save messaging that emphasizes current assessment refresh, not snapshot mechanics.
@@ -14575,6 +15188,61 @@ Changed files:
 Behavior:
 - Consolidated d100–d105 into version `v1.3.0d106`.
 - Confirmed no changes to DI replay contract, snapshot immutability, or policy provenance mechanics.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d107
+Intent:
+- First-phase experiment-first workflow reframe for scientist-facing PSI UX, while preserving canonical DI and governance behavior.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/ui_surfaces.py`
+- `psi/web/templates/base.html`
+- `psi/web/templates/home.html`
+- `psi/web/templates/data/form.html`
+- `psi/web/templates/data/detail.html`
+- `psi/web/templates/data/list.html`
+- `psi/web/templates/partials/data/form_actions.html`
+- `psi/web/templates/partials/capture_notice.html`
+- `psi/web/templates/programs/workflow.html`
+- `psi/web/templates/programs/detail.html`
+- `psi/web/templates/programs/board.html`
+- `psi/web/templates/partials/programs/workflow_interpretation_queue.html`
+- `psi/web/templates/partials/workflow_interpretation_queue.html`
+- `psi/web/templates/molecules/detail.html`
+- `psi/web/templates/batches/detail.html`
+- `psi/web/templates/di/run.html`
+- `psi/web/templates/decisions/new.html`
+- `psi/web/templates/decisions/list.html`
+
+Behavior:
+- Reframed scientist-facing terminology and CTAs around `Experiment Result` capture instead of `Data Record` framing.
+- Elevated result capture as primary action in program and molecule workspaces.
+- Kept post-save assessment refresh messaging central and immediate; made evidence follow-up explicitly optional.
+- Reframed interpretation queue copy so it no longer implies DI is blocked pending evidence creation.
+- De-emphasized legacy `/decisions/new` path as advanced/governance-only in UI labels and headers.
+- Preserved immutable DecisionSnapshot history, canonical DI refresh semantics, and deterministic replay behavior.
+
+Gates:
+- PASS
+
+## 2026-03-09 — v1.3.0d108
+Intent:
+- Fix structured molecule form compatibility so tutorial and normal form entry reliably persist HC/LC components for builder parent derivation.
+
+Changed files:
+- `PATCH_NOTES.md`
+- `psi/version.py`
+- `psi/web/routers/molecules.py`
+- `tests/test_molecule_structured_form_submission.py`
+
+Behavior:
+- Molecule form component extraction now accepts both uppercase (`HC1/LC1/HC2/LC2`) and lowercase (`hc1/lc1/hc2/lc2`) field names.
+- Preserved clear/empty semantics and backward compatibility for any existing lowercase submitters.
+- Added regression coverage proving uppercase structured submission creates persisted components and builder point-mutation draft can derive from that parent.
 
 Gates:
 - PASS

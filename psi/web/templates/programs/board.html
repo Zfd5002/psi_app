@@ -20,8 +20,11 @@
     {"href": "/molecules?program_id=" ~ program.id, "label": "Program Molecules"}
   ] %}
   {% set page_secondary_actions = [
-    {"href": "/data?program_id=" ~ program.id, "label": "Results"},
-    {"href": "/evidence?program_id=" ~ program.id, "label": "Evidence"}
+    {"href": "/data?program_id=" ~ program.id, "label": "Experiment Results"},
+    {"href": "/evidence?program_id=" ~ program.id, "label": "Evidence (Optional)"},
+    {"href": "/claims?program_id=" ~ program.id, "label": "Claims (Optional)"},
+    {"href": "/plans?program_id=" ~ program.id, "label": "Plans (Optional)"},
+    {"href": "/decisions?program_id=" ~ program.id, "label": "Assessment History"}
   ] %}
   {% set page_metrics = [
     {"label": "Ready", "value": ((g.ready|length) if g is mapping and g.ready is defined else 0)},
@@ -59,6 +62,14 @@
     {% endif %}
   </div>
   <div class="page-intent-line">Daily command surface: triage molecule posture, assign work, and launch execution without leaving context.</div>
+  {% if pending_total is defined and pending_total > 0 %}
+    <div class="notice" style="margin-top:10px;">
+      <b>Pending assessments updated:</b> {{ refreshed_pending if refreshed_pending is defined else 0 }} of {{ pending_total }} molecules.
+      {% if refresh_errors is defined and refresh_errors > 0 %}
+        <span class="muted">Errors: {{ refresh_errors }}.</span>
+      {% endif %}
+    </div>
+  {% endif %}
   <details class="progressive-disclosure no-print" open style="margin-top:10px;">
     <summary>Search and board filters</summary>
     <form id="boardSearchForm" method="get" action="/programs/{{ program.id }}/board" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
@@ -138,6 +149,11 @@
     <div class="action-bar-utility no-print" style="margin-top:8px;">
       <a class="btn mini primary" href="/programs/{{ program.id }}/workflow">Open Program Workflow</a>
       <a class="btn mini" href="/programs/{{ program.id }}">Back to Program Strategy</a>
+      {% if g is mapping and g.not_evaluated is defined and (g.not_evaluated|length) > 0 %}
+        <form method="post" action="/programs/{{ program.id }}/board/update-pending-assessments" style="display:inline;">
+          <button class="btn mini" type="submit">Update Pending Assessments</button>
+        </form>
+      {% endif %}
     </div>
   </div>
   <div class="grid cols-2" style="margin-top:10px;">

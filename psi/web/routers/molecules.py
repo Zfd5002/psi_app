@@ -3,17 +3,20 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from psi.web.deps import get_db, get_storage_cfg, get_templates
 from psi.web import ui_surfaces
 from psi.web import handoff_context as handoff
 from psi.core.db import get_db as get_db_ctx
 from psi.services import molecules as svc
+from psi.services.measurements import list_measurements_for_record
 from psi.services.computed import run_computed_properties, run_immunogenicity_mhci
 from psi.services.numbering import trigger_numbering_for_molecule
 from psi.services.domains import extract_domains_for_molecule, upsert_user_domain_instance
 from psi.services import files as file_svc
-from psi.core.models import MoleculeComponent, Program
+from psi.core.models import DomainInstance, MoleculeComponent, Program
+from psi.core.deps import numbering_dependency_status
 
 router = APIRouter()
 
@@ -28,6 +31,199 @@ def _db_path_from_session(db: Session) -> str | None:
         return None
 
 
+def _append_query_params(url: str, params: dict[str, str]) -> str:
+    parts = urlsplit(url)
+    existing = dict(parse_qsl(parts.query, keep_blank_values=True))
+    existing.update({k: v for k, v in params.items() if v is not None})
+    query = urlencode(existing)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+
+
+def _collapse_symmetric_viewer_components(components: list[dict] | None) -> list[dict]:
+    """Collapse redundant symmetric chain viewers for sequence display.
+
+    Display-only behavior:
+    - HC1 == HC2 -> keep one heavy-chain viewer with explicit collapsed label.
+    - LC1 == LC2 -> keep one light-chain viewer with explicit collapsed label.
+    - Handle heavy and light symmetry independently.
+    """
+    rows = list(components or [])
+    by_role: dict[str, dict] = {}
+    for c in rows:
+        role = str((c or {}).get("role") or "").strip().upper()
+        if role and role not in by_role:
+            by_role[role] = c
+
+    def _seq_for(role: str) -> str:
+        c = by_role.get(role) or {}
+        return str(c.get("sequence") or "")
+
+    hc_identical = bool(by_role.get("HC1") and by_role.get("HC2") and _seq_for("HC1") == _seq_for("HC2"))
+    lc_identical = bool(by_role.get("LC1") and by_role.get("LC2") and _seq_for("LC1") == _seq_for("LC2"))
+
+    out: list[dict] = []
+    for c in rows:
+        role = str((c or {}).get("role") or "").strip().upper()
+        if hc_identical and role == "HC2":
+            continue
+        if lc_identical and role == "LC2":
+            continue
+        row = dict(c or {})
+        if hc_identical and role in ("HC1", "HC2"):
+            row["display_role_label"] = "Heavy Chain (HC1 = HC2)"
+        elif lc_identical and role in ("LC1", "LC2"):
+            row["display_role_label"] = "Light Chain (LC1 = LC2)"
+        else:
+            row["display_role_label"] = row.get("role") or role
+        out.append(row)
+    return out
+
+
+def _result_text_from_summary(summary: dict) -> tuple[str, str]:
+    kind = str(summary.get("kind") or "").strip()
+    if kind == "SEC":
+        return (str(summary.get("monomer_pct") if summary.get("monomer_pct") is not None else "n/a"), "% monomer")
+    if kind == "Binding":
+        return (str(summary.get("kd_nM") if summary.get("kd_nM") is not None else "n/a"), "nM KD")
+    if kind == "Endotoxin":
+        return (str(summary.get("value_eu_ml") if summary.get("value_eu_ml") is not None else "n/a"), "EU/mL")
+    if kind == "Expression":
+        return (str(summary.get("titer_mg_ml") if summary.get("titer_mg_ml") is not None else "n/a"), "mg/mL")
+    if kind == "Potency":
+        return (str(summary.get("ec50_nM") if summary.get("ec50_nM") is not None else "n/a"), "nM EC50")
+    return ("—", "")
+
+
+def _measurement_value_and_unit(row: dict) -> tuple[str, str]:
+    value_num = row.get("value_num")
+    value_text = row.get("value_text")
+    if value_num is not None:
+        return (str(value_num), str(row.get("unit") or ""))
+    if value_text not in (None, ""):
+        return (str(value_text), str(row.get("unit") or ""))
+    raw = row.get("value")
+    if raw not in (None, ""):
+        return (str(raw), str(row.get("unit") or ""))
+    return ("—", str(row.get("unit") or ""))
+
+
+def _measurement_metric_name(row: dict) -> str:
+    metric = str(row.get("metric_key") or row.get("name") or row.get("key") or "").strip()
+    return metric or "result"
+
+
+def _flatten_result_value_rows(
+    db: Session,
+    exp_batch_panels: list[dict] | None,
+    exp_molecule_level_records: list[dict] | None = None,
+) -> list[dict]:
+    rows: list[dict] = []
+    measurement_cache: dict[int, list[dict]] = {}
+
+    def _rows_for_record(record_id: int) -> list[dict]:
+        if record_id not in measurement_cache:
+            try:
+                measurement_cache[record_id] = list_measurements_for_record(db, record_id=int(record_id))
+            except Exception:
+                measurement_cache[record_id] = []
+        return measurement_cache.get(record_id, [])
+
+    for panel in list(exp_batch_panels or []):
+        batch = panel.get("batch")
+        batch_id = int(batch.id) if batch is not None and getattr(batch, "id", None) is not None else None
+        batch_label = str(panel.get("batch_label") or (batch.batch_id if batch is not None and getattr(batch, "batch_id", None) else "—"))
+        assays = panel.get("assays") if isinstance(panel, dict) else {}
+        if not isinstance(assays, dict):
+            continue
+        for assay_name, conds in assays.items():
+            if not isinstance(conds, dict):
+                continue
+            for node in conds.values():
+                runs = node.get("runs") if isinstance(node, dict) else []
+                for item in list(runs or []):
+                    record = item.get("record") if isinstance(item, dict) else None
+                    if record is None:
+                        continue
+                    summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
+                    record_id = int(record.id)
+                    measurements = _rows_for_record(record_id)
+                    if measurements:
+                        for mr in measurements:
+                            value, units = _measurement_value_and_unit(mr)
+                            rows.append(
+                                {
+                                    "record_id": record_id,
+                                    "record_title": str(record.title or ""),
+                                    "run_date": str(record.run_date or ""),
+                                    "assay": str(assay_name or ""),
+                                    "metric": _measurement_metric_name(mr),
+                                    "value": value,
+                                    "units": units,
+                                    "batch_id": batch_id,
+                                    "batch_label": batch_label,
+                                }
+                            )
+                        continue
+
+                    value, units = _result_text_from_summary(summary)
+                    rows.append(
+                        {
+                            "record_id": record_id,
+                            "record_title": str(record.title or ""),
+                            "run_date": str(record.run_date or ""),
+                            "assay": str(assay_name or ""),
+                            "metric": str(summary.get("kind") or assay_name or "Result"),
+                            "value": value,
+                            "units": units,
+                            "batch_id": batch_id,
+                            "batch_label": batch_label,
+                        }
+                    )
+
+    for item in list(exp_molecule_level_records or []):
+        record = item.get("record") if isinstance(item, dict) else None
+        if record is None:
+            continue
+        summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
+        record_id = int(record.id)
+        measurements = _rows_for_record(record_id)
+        assay_name = str(summary.get("kind") or "Unassigned run")
+        if measurements:
+            for mr in measurements:
+                value, units = _measurement_value_and_unit(mr)
+                rows.append(
+                    {
+                        "record_id": record_id,
+                        "record_title": str(record.title or ""),
+                        "run_date": str(record.run_date or ""),
+                        "assay": assay_name,
+                        "metric": _measurement_metric_name(mr),
+                        "value": value,
+                        "units": units,
+                        "batch_id": None,
+                        "batch_label": "Unassigned",
+                    }
+                )
+            continue
+
+        value, units = _result_text_from_summary(summary)
+        rows.append(
+            {
+                "record_id": record_id,
+                "record_title": str(record.title or ""),
+                "run_date": str(record.run_date or ""),
+                "assay": assay_name,
+                "metric": str(summary.get("kind") or "Result"),
+                "value": value,
+                "units": units,
+                "batch_id": None,
+                "batch_label": "Unassigned",
+            }
+        )
+    rows.sort(key=lambda r: (str(r.get("run_date") or ""), int(r.get("record_id") or 0)), reverse=True)
+    return rows
+
+
 @router.post("/molecules/{molecule_id}/computed/recompute")
 def recompute_fast_properties(molecule_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     m = svc.get_molecule(db, molecule_id)
@@ -39,18 +235,62 @@ def recompute_fast_properties(molecule_id: int, background_tasks: BackgroundTask
 
 
 @router.post("/molecules/{molecule_id}/numbering")
-def run_numbering(molecule_id: int, background_tasks: BackgroundTasks, scheme: str = Form("kabat"), db: Session = Depends(get_db)):
+def run_numbering(
+    molecule_id: int,
+    background_tasks: BackgroundTasks,
+    scheme: str = Form("kabat"),
+    return_to: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
     m = svc.get_molecule(db, molecule_id)
     if not m:
         raise HTTPException(404)
+    target = f"/molecules/{molecule_id}?scheme={scheme}"
+    candidate = str(return_to or "").strip()
+    # Allow explicit sequence-page return target for this same molecule only.
+    if candidate and candidate.startswith(f"/molecules/{molecule_id}/sequence"):
+        target = candidate
+
+    has_domains = (
+        db.query(DomainInstance)
+        .filter(DomainInstance.molecule_id == int(molecule_id))
+        .filter(DomainInstance.domain_type.in_(["VH", "VL"]))
+        .filter(DomainInstance.status == "success")
+        .count()
+        > 0
+    )
+    if not has_domains:
+        return RedirectResponse(
+            url=_append_query_params(target, {"scheme": str(scheme), "numbering_status": "no_domains"}),
+            status_code=303,
+        )
+
+    dep_status = numbering_dependency_status()
+    if not dep_status.get("ok"):
+        missing = ",".join(str(x) for x in dep_status.get("missing") or [])
+        return RedirectResponse(
+            url=_append_query_params(
+                target,
+                {
+                    "scheme": str(scheme),
+                    "numbering_status": "missing_dependencies",
+                    "numbering_missing": missing,
+                },
+            ),
+            status_code=303,
+        )
+
     # Run in background: compute missing artifacts.
     db_path = _db_path_from_session(db)
     def _bg():
-        with get_db_ctx(db_path, ensure=False) as s:
+        with get_db_ctx(db_path, ensure=True) as s:
             trigger_numbering_for_molecule(s, molecule_id=molecule_id, scheme=scheme, force=True)
 
     background_tasks.add_task(_bg)
-    return RedirectResponse(url=f"/molecules/{molecule_id}?scheme={scheme}", status_code=303)
+    return RedirectResponse(
+        url=_append_query_params(target, {"scheme": str(scheme), "numbering_status": "started"}),
+        status_code=303,
+    )
 
 
 @router.post("/molecules/{molecule_id}/immunogenicity/mhci")
@@ -75,7 +315,7 @@ def run_immunogenicity_mhci_scan(
 
     db_path = _db_path_from_session(db)
     def _bg():
-        with get_db_ctx(db_path, ensure=False) as s:
+        with get_db_ctx(db_path, ensure=True) as s:
             run_immunogenicity_mhci(
                 s,
                 molecule_id=molecule_id,
@@ -91,18 +331,31 @@ def run_immunogenicity_mhci_scan(
 
 
 @router.post("/molecules/{molecule_id}/domains/recompute")
-def recompute_domains(molecule_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def recompute_domains(
+    molecule_id: int,
+    background_tasks: BackgroundTasks,
+    return_to: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
     m = svc.get_molecule(db, molecule_id)
     if not m:
         raise HTTPException(404)
 
     db_path = _db_path_from_session(db)
     def _bg():
-        with get_db_ctx(db_path, ensure=False) as s:
+        with get_db_ctx(db_path, ensure=True) as s:
             extract_domains_for_molecule(s, molecule_id)
 
     background_tasks.add_task(_bg)
-    return RedirectResponse(url=f"/molecules/{molecule_id}#domains", status_code=303)
+    target = f"/molecules/{molecule_id}#domains"
+    candidate = str(return_to or "").strip()
+    # Allow explicit sequence-page return target for this same molecule only.
+    if candidate and candidate.startswith(f"/molecules/{molecule_id}/sequence"):
+        target = candidate
+    return RedirectResponse(
+        url=_append_query_params(target, {"domains_status": "started"}),
+        status_code=303,
+    )
 
 
 @router.post("/molecules/{molecule_id}/domains")
@@ -163,17 +416,24 @@ def _extract_components_from_form(form) -> dict[str, str]:
     we include it with an empty string so the service layer can clear that role.
     """
     comps: dict[str, str] = {}
+    # Accept both legacy lowercase keys and current form uppercase keys.
+    # This keeps structured creation deterministic across direct form posts and
+    # any callers still submitting lowercase field names.
     mapping = [
-        ('hc1','HC1'),
-        ('lc1','LC1'),
-        ('hc2','HC2'),
-        ('lc2','LC2'),
+        (("HC1", "hc1"), "HC1"),
+        (("LC1", "lc1"), "LC1"),
+        (("HC2", "hc2"), "HC2"),
+        (("LC2", "lc2"), "LC2"),
     ]
-    for name, role in mapping:
-        raw = form.get(name)
-        if raw is None:
+    for aliases, role in mapping:
+        picked = None
+        for name in aliases:
+            if name in form:
+                picked = form.get(name)
+                break
+        if picked is None:
             continue
-        comps[role] = (raw or "").strip()
+        comps[role] = (picked or "").strip()
     return comps
 
 
@@ -293,6 +553,108 @@ def molecule_detail(molecule_id: int, request: Request, tab: str = "overview", b
         ctx.setdefault("exp_run_qc", {})
 
     return templates.TemplateResponse("molecules/detail.html", ctx)
+
+
+def _build_molecule_page_context(
+    *,
+    db: Session,
+    request: Request,
+    molecule_id: int,
+    tab: str = "overview",
+    batch_id: int | None = None,
+    include_batch_ui: bool = False,
+) -> dict:
+    mm = request.query_params.get("pdl1_mm", "")
+    try:
+        pdl1_mm = int(mm) if str(mm).strip() != "" else 0
+    except Exception:
+        pdl1_mm = 0
+    pdl1_mm = max(0, min(25, pdl1_mm))
+    ctx = svc.get_molecule_detail(db, molecule_id, pdl1_allowed_mismatches=pdl1_mm)
+    ctx["sequence_viewer_components"] = _collapse_symmetric_viewer_components(
+        ctx.get("viewer_v2_components") if isinstance(ctx, dict) else None
+    )
+    ctx["request"] = request
+    ctx["tab"] = tab
+    hctx = handoff.get_handoff_context(request)
+    ctx["capture_notice"] = handoff.build_capture_notice(
+        context=hctx,
+        return_to=f"/programs/{int(ctx['molecule'].program_id)}/workflow",
+        message="Continue in Program Workflow to unblock, assign, and close the next work item.",
+    )
+    if include_batch_ui:
+        qc_mode = str(request.query_params.get("qc_mode") or "all").strip().lower()
+        if qc_mode not in ("all", "model_safe", "approved"):
+            qc_mode = "all"
+        try:
+            ctx.update(
+                svc.get_molecule_batch_ui_context(
+                    db,
+                    molecule_id,
+                    selected_batch_id=batch_id if tab == "experimental" else None,
+                    qc_mode=qc_mode,
+                )
+            )
+        except Exception:
+            ctx.setdefault("data_overview", None)
+            ctx.setdefault("exp_qc_mode", qc_mode)
+            ctx.setdefault("exp_run_qc", {})
+    return ctx
+
+
+@router.get("/molecules/{molecule_id}/results", response_class=HTMLResponse)
+def molecule_results(molecule_id: int, request: Request, batch_id: int | None = None, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    try:
+        ctx = _build_molecule_page_context(
+            db=db,
+            request=request,
+            molecule_id=int(molecule_id),
+            tab="experimental",
+            batch_id=batch_id,
+            include_batch_ui=True,
+        )
+    except KeyError:
+        raise HTTPException(404)
+    ctx["surface"] = ui_surfaces.molecule_results_surface(molecule_id=int(molecule_id))
+    ctx["result_value_rows"] = _flatten_result_value_rows(
+        db,
+        ctx.get("exp_batch_panels"),
+        ctx.get("exp_molecule_level_records"),
+    )
+    return templates.TemplateResponse("molecules/results.html", ctx)
+
+
+@router.get("/molecules/{molecule_id}/sequence", response_class=HTMLResponse)
+def molecule_sequence(molecule_id: int, request: Request, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    try:
+        ctx = _build_molecule_page_context(
+            db=db,
+            request=request,
+            molecule_id=int(molecule_id),
+            include_batch_ui=False,
+        )
+    except KeyError:
+        raise HTTPException(404)
+    ctx["surface"] = ui_surfaces.molecule_sequence_surface(molecule_id=int(molecule_id))
+    return templates.TemplateResponse("molecules/sequence.html", ctx)
+
+
+@router.get("/molecules/{molecule_id}/governance", response_class=HTMLResponse)
+def molecule_governance(molecule_id: int, request: Request, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    try:
+        ctx = _build_molecule_page_context(
+            db=db,
+            request=request,
+            molecule_id=int(molecule_id),
+            include_batch_ui=True,
+        )
+    except KeyError:
+        raise HTTPException(404)
+    ctx["surface"] = ui_surfaces.molecule_governance_surface(molecule_id=int(molecule_id))
+    return templates.TemplateResponse("molecules/governance.html", ctx)
 
 
 @router.post("/molecules/{molecule_id}/files")

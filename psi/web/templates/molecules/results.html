@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ molecule.primary_id }} Results | PSI{% endblock %}
+{% block content %}
+{% set mh = molecule_header_model if molecule_header_model is defined and molecule_header_model else {} %}
+<div class="card molecule-page">
+  {% set page_eyebrow = "Molecule Results" %}
+  {% set page_title = molecule.primary_id ~ " Results" %}
+  {% set page_subtitle = "Molecule-first experiment review across batches and runs." %}
+  {% set page_primary_actions = [
+    {"href": "/data/new?program_id=" ~ molecule.program_id ~ "&molecule_id=" ~ molecule.id, "label": "Add Experiment Result"},
+    {"href": "/data?program_id=" ~ molecule.program_id ~ "&molecule_id=" ~ molecule.id, "label": "Open Results Registry"},
+    {"href": "/batches/new?molecule_id=" ~ molecule.id, "label": "New Batch"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/molecules/" ~ molecule.id, "label": "Back to Workspace"},
+    {"href": "/programs/" ~ molecule.program_id ~ "/workflow", "label": "Open Program Workflow"},
+    {"href": "/programs/" ~ molecule.program_id, "label": "Open Program Workspace"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Current Stage", "value": (mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else "not started")},
+    {"label": "Data Records", "value": (data_records|length if data_records is defined and data_records is iterable else 0)},
+    {"label": "Batches", "value": (exp_batches|length if exp_batches is defined and exp_batches is iterable else 0)},
+    {"label": "Measurements", "value": (data_overview.total_measurements if data_overview is defined and data_overview and data_overview.total_measurements is defined else 0)}
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set surface_chrome_active_index = 2 %}
+  {% set hide_surface_local_nav = true %}
+  {% include "partials/surface_chrome.html" %}
+  {% include "molecules/partials/surface_nav.html" %}
+  {% include "partials/capture_notice.html" %}
+  <div class="page-intent-line">Review recent-to-historical experiment outcomes for this molecule, then open any record or batch for detail.</div>
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">Measured Result Values</h2>
+    <div class="muted mini">Flattened scientist-readable outcomes across this molecule's experiment history.</div>
+    <div class="linked-table-wrap" style="margin-top:8px;">
+      <table class="table mini">
+        <thead><tr><th>Run date</th><th>Experiment</th><th>Measured metric</th><th>Value</th><th>Units</th><th>Batch</th><th>Record</th></tr></thead>
+        <tbody>
+          {% for row in (result_value_rows if result_value_rows is defined and result_value_rows is iterable else [])[:120] %}
+          <tr>
+            <td class="muted">{{ row.run_date }}</td>
+            <td>{{ row.assay|humanize_path_token }}</td>
+            <td>{{ row.metric|humanize_path_token }}</td>
+            <td><b>{{ row.value }}</b></td>
+            <td class="muted">{{ row.units or "—" }}</td>
+            <td class="muted">{% if row.batch_id %}<a href="/batches/{{ row.batch_id }}">{{ row.batch_label }}</a>{% else %}—{% endif %}</td>
+            <td><a href="/data/{{ row.record_id }}">{{ row.record_title }}</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="muted empty-state-cell">No measured result values available for this molecule yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <details class="card progressive-disclosure section-secondary" style="margin-top:12px;">
+    <summary><b>Recent Experiment Records (Metadata)</b></summary>
+    <div class="linked-table-wrap" style="margin-top:8px;">
+      <table class="table mini">
+        <thead><tr><th>Run date</th><th>Title</th><th>Batch</th><th>Domain</th><th>Type / Method</th></tr></thead>
+        <tbody>
+          {% for r in data_records[:40] %}
+          <tr>
+            <td class="muted">{{ r.run_date or "" }}</td>
+            <td><a href="/data/{{ r.id }}">{{ r.title }}</a></td>
+            <td class="muted">{% if r.batch_id %}<a href="/batches/{{ r.batch_id }}">#{{ r.batch_id }}</a>{% else %}—{% endif %}</td>
+            <td class="muted">{{ r.domain|humanize_path_token }}</td>
+            <td class="muted">{{ (r.data_type ~ " / " ~ r.method)|humanize_path_token }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted empty-state-cell">No experiment records captured for this molecule yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  {% include "molecules/partials/evidence_data_zone.html" %}
+</div>
+{% endblock %}

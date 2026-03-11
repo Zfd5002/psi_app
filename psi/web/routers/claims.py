@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from psi.core.models import Molecule
+from psi.core.models import Molecule, Program
 from psi.services import claims as claims_svc
 from psi.web.deps import get_db, get_templates
 from psi.web import ui_surfaces
@@ -13,15 +13,21 @@ router = APIRouter()
 
 
 @router.get("/claims", response_class=HTMLResponse)
-def claims_list(request: Request, db: Session = Depends(get_db)):
+def claims_list(request: Request, program_id: int | None = None, db: Session = Depends(get_db)):
     templates = get_templates(request)
-    rows = claims_svc.list_claims(db, include_archived=False, limit=200)
+    rows = (
+        claims_svc.list_claims_for_program(db, program_id=int(program_id), include_archived=False)
+        if program_id is not None
+        else claims_svc.list_claims(db, include_archived=False, limit=200)
+    )
+    active_program = db.get(Program, int(program_id)) if program_id is not None else None
     return templates.TemplateResponse(
         "claims/list.html",
         {
             "request": request,
             "claims": rows,
-            "surface": ui_surfaces.claims_registry_surface(),
+            "active_program": active_program,
+            "surface": ui_surfaces.claims_registry_surface(program_id=program_id),
         },
     )
 

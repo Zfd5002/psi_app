@@ -12,14 +12,17 @@
     "Progress: " ~ ((pd.progress_percent if pd.progress_percent is defined else 0) ~ "%")
   ] %}
   {% set page_primary_actions = [
+    {"href": "/data/new?program_id=" ~ program.id, "label": "Add Experiment Result"},
     {"href": "/programs/" ~ program.id ~ "/workflow", "label": "Open Program Workflow"},
     {"href": "/programs/" ~ program.id ~ "/board", "label": "Open Development Board"}
   ] %}
   {% set page_secondary_actions = [
     {"href": "/molecules/new?program_id=" ~ program.id, "label": "New Molecule"},
     {"href": "/programs/" ~ program.id ~ "/edit", "label": "Edit Program"},
-    {"href": "/data?program_id=" ~ program.id, "label": "Results"},
-    {"href": "/evidence?program_id=" ~ program.id, "label": "Evidence"}
+    {"href": "/data?program_id=" ~ program.id, "label": "Experiment Results"},
+    {"href": "/evidence?program_id=" ~ program.id, "label": "Evidence (Optional)"},
+    {"href": "/claims?program_id=" ~ program.id, "label": "Claims (Optional)"},
+    {"href": "/plans?program_id=" ~ program.id, "label": "Plans (Optional)"}
   ] %}
   {% set page_metrics = [
     {"label": "Program Molecules", "value": (pd.molecule_count if pd.molecule_count is defined else 0)},
@@ -132,7 +135,7 @@
         <div class="summary-metric-value">{{ di_dashboard.counts.BLOCKED if di_dashboard is defined and di_dashboard and di_dashboard.counts is defined else 0 }}</div>
       </div>
       <div class="summary-metric">
-        <div class="summary-metric-label">Missing evidence signals</div>
+        <div class="summary-metric-label">Missing measurement signals</div>
         <div class="summary-metric-value">{{ (di_dashboard.top_missing_metrics|length) if di_dashboard is defined and di_dashboard and di_dashboard.top_missing_metrics is defined else 0 }}</div>
       </div>
       <div class="summary-metric">
@@ -206,9 +209,10 @@
     <div class="action-bar-utility no-print" style="margin-top:8px;">
       <a class="btn primary" href="/programs/{{ program.id }}/workflow">Open Program Workflow</a>
       <a class="btn primary" href="/programs/{{ program.id }}/board">Open Development Board</a>
+      <a class="btn primary" href="/data/new?program_id={{ program.id }}">Add Experiment Result</a>
       <a class="btn" href="#open-tasks">Open Operational Tasks</a>
       <a class="btn" href="/molecules/new?program_id={{ program.id }}">Add Molecule</a>
-      <a class="btn" href="/data?program_id={{ program.id }}">Program Data Entry</a>
+      <a class="btn" href="/data?program_id={{ program.id }}">Program Experiment Results</a>
     </div>
   </div>
 
@@ -285,8 +289,10 @@
   <div class="row no-print" style="gap:8px;flex-wrap:wrap;">
     <a class="btn mini primary" href="/programs/{{ program.id }}/board">View Development Board</a>
     <a class="btn mini" href="/molecules?program_id={{ program.id }}">Program molecules</a>
-    <a class="btn mini" href="/data?program_id={{ program.id }}">Program data records</a>
-    <a class="btn mini" href="/evidence?program_id={{ program.id }}">Program evidence</a>
+    <a class="btn mini" href="/data?program_id={{ program.id }}">Program experiment results</a>
+    <a class="btn mini" href="/evidence?program_id={{ program.id }}">Program evidence (optional)</a>
+    <a class="btn mini" href="/claims?program_id={{ program.id }}">Program claims (optional)</a>
+    <a class="btn mini" href="/plans?program_id={{ program.id }}">Program plans (optional)</a>
     <a class="btn mini" href="/decisions?program_id={{ program.id }}">Program decisions</a>
     <a class="btn mini" href="/reports/new?report_type=program_report&subject_ids={{ program.id }}">Generate program report</a>
   </div>

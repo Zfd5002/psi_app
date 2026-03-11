@@ -15,6 +15,50 @@ def _confidence_from_mismatches(mismatches: int, length: int) -> float:
     return max(0.0, min(1.0, 1.0 - (mm / float(length))))
 
 
+def _numbering_region_spans_for_domain(
+    *,
+    domain_instance: DomainInstance,
+    payload: dict[str, Any] | None,
+) -> list[dict[str, int | str]]:
+    """Project numbering cdrs payload into FR/CDR spans for a single VH/VL domain.
+
+    We only project when all FR/CDR regions are present and fully length-consistent with
+    the domain span to avoid fabricating partial/ambiguous regions.
+    """
+    if not isinstance(payload, dict):
+        return []
+    cdrs = payload.get("cdrs")
+    if not isinstance(cdrs, dict):
+        return []
+
+    order = ["FR1", "CDR1", "FR2", "CDR2", "FR3", "CDR3", "FR4"]
+    lengths: dict[str, int] = {}
+    for key in order:
+        seq = cdrs.get(key)
+        if not isinstance(seq, str):
+            return []
+        ln = len(seq.strip())
+        if ln <= 0:
+            return []
+        lengths[key] = ln
+
+    domain_len = int(domain_instance.end_idx) - int(domain_instance.start_idx)
+    if domain_len <= 0:
+        return []
+    if sum(lengths[k] for k in order) != domain_len:
+        return []
+
+    spans: list[dict[str, int | str]] = []
+    cursor = int(domain_instance.start_idx)
+    for key in order:
+        ln = int(lengths[key])
+        start = int(cursor)
+        end = int(cursor + ln)
+        spans.append({"name": key, "start": start, "end": end})
+        cursor = end
+    return spans
+
+
 def domain_instances_by_component(*, domain_instances: list[DomainInstance]) -> dict[int, list[DomainInstance]]:
     out: dict[int, list[DomainInstance]] = {}
     for di in domain_instances or []:
@@ -195,6 +239,30 @@ def build_viewer_v2_components(
                     "parent_id": None,
                 }
             )
+            if di.domain_type in ["VH", "VL"]:
+                payload = payload_root.get(di.domain_type)
+                for reg in _numbering_region_spans_for_domain(domain_instance=di, payload=payload):
+                    features.append(
+                        {
+                            "id": f"numreg:{comp_id}:{di.id}:{reg['name']}:{reg['start']}:{reg['end']}",
+                            "name": str(reg["name"]),
+                            "group": "Antibody regions",
+                            "kind": "numbering_region",
+                            "feature_type": "antibody_region",
+                            "spans": [{"start": int(reg["start"]), "end": int(reg["end"])}],
+                            "confidence": 1.0,
+                            "source": "computed",
+                            "status": "success",
+                            "method": "numbering_projection",
+                            "tool_name": "abnumber",
+                            "tool_version": "",
+                            "meta": {
+                                "domain_type": str(di.domain_type),
+                                "scheme": str(payload.get("scheme") or "kabat") if isinstance(payload, dict) else "kabat",
+                            },
+                            "parent_id": f"di:{di.id}",
+                        }
+                    )
         fc = detect_fc_region(seq)
         if fc:
             features.append(
@@ -283,6 +351,7 @@ def build_viewer_v2_components(
 
         order = [
             "Sequence",
+            "Antibody regions",
             "Recognized regions",
             "Linkers / junctions",
             "Engineering features",

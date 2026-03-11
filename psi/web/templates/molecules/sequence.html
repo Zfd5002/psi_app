@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ molecule.primary_id }} Sequence | PSI{% endblock %}
+{% block content %}
+{% set mh = molecule_header_model if molecule_header_model is defined and molecule_header_model else {} %}
+<div class="card molecule-page">
+  {% set page_eyebrow = "Molecule Sequence" %}
+  {% set page_title = molecule.primary_id ~ " Sequence" %}
+  {% set page_subtitle = "Sequence, components, annotations, and builder handoff." %}
+  {% set page_primary_actions = [
+    {"href": "/molecules/" ~ molecule.id ~ "#sequence_editor_panel", "label": "Open Sequence Editor"},
+    {"href": "/builder/point-mutation?parent_molecule_id=" ~ molecule.id, "label": "Open Builder"},
+    {"href": "/molecules/" ~ molecule.id ~ "/edit", "label": "Edit Molecule"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/molecules/" ~ molecule.id, "label": "Back to Workspace"},
+    {"href": "/molecules/" ~ molecule.id ~ "/results", "label": "Open Results"},
+    {"href": "/programs/" ~ molecule.program_id, "label": "Open Program Workspace"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Current Stage", "value": (mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else "not started")},
+    {"label": "Components", "value": (components|length if components is defined and components is iterable else 0)},
+    {"label": "Annotations", "value": (domain_instances|length if domain_instances is defined and domain_instances is iterable else 0)},
+    {"label": "Lineage Children", "value": (lineage_children|length if lineage_children is defined and lineage_children is iterable else 0)}
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set surface_chrome_active_index = 2 %}
+  {% set hide_surface_local_nav = true %}
+  {% include "partials/surface_chrome.html" %}
+  {% include "molecules/partials/surface_nav.html" %}
+  <div class="page-intent-line">Inspect annotated sequences first, then use builder handoff and sequence editing tools.</div>
+
+  {% include "molecules/partials/sequence_viewer.html" %}
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">Lineage Context</h2>
+    {% if lineage_parent %}
+      <div class="mini muted">Parent molecule</div>
+      <div><a href="/molecules/{{ lineage_parent.molecule_id }}"><b>{{ lineage_parent.primary_id }}</b></a>{% if lineage_parent.summary %} · {{ lineage_parent.summary }}{% endif %}</div>
+    {% else %}
+      <div class="muted mini">No parent molecule recorded.</div>
+    {% endif %}
+    <div style="margin-top:8px;" class="mini muted">Child molecules</div>
+    <ul class="clean mini" style="margin-top:4px;">
+      {% for child in lineage_children %}
+        <li><a href="/molecules/{{ child.molecule_id }}">{{ child.primary_id }}</a>{% if child.summary %} · {{ child.summary }}{% endif %}</li>
+      {% else %}
+        <li class="muted">No child molecules recorded.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% include "molecules/_sequence_editor.html" %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script id="molecule-detail-config" type="application/json">{{ {"molecule_id": molecule.id, "molecule_trends": molecule_trends}|tojson }}</script>
+<script src="/static/molecule_detail.js"></script>
+<script src="/static/sequence_editor.js"></script>
+{% endblock %}

@@ -49,7 +49,7 @@ def test_suggested_task_route_prefills_payload(monkeypatch, mkdb, dummy_template
         eng.dispose()
 
 
-def test_molecule_detail_suggested_experiment_has_create_task_link() -> None:
-    src = (Path(__file__).resolve().parents[1] / "psi" / "web" / "templates" / "molecules" / "detail.html").read_text()
+def test_molecule_governance_suggested_experiment_has_create_task_link() -> None:
+    src = (Path(__file__).resolve().parents[1] / "psi" / "web" / "templates" / "molecules" / "governance.html").read_text()
     assert "/builder/suggested-task/new?molecule_id={{ molecule.id }}" in src
     assert "Create Task" in src

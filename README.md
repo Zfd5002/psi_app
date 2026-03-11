@@ -16,6 +16,12 @@ Heavy compute (domains + numbering, etc.):
 pip install -r requirements.txt -r requirements-heavy.txt
 ```
 
+If `anarci` fails to install from `requirements-heavy.txt` in your environment, use:
+
+```bash
+./scripts/install_anarci.sh
+```
+
 This repo was refactored from an MVP layout into a layered, extensible architecture designed for:
 
 - clean long-term growth by a small team
@@ -109,4 +115,3 @@ Run the minimal (no-pytest) smoke tests:
 ```bash
 python -m psi.scripts.smoke_test
 ```
-

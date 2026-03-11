@@ -25,6 +25,5 @@ def test_capture_notice_partial_renders_return_link_and_flags() -> None:
     assert "Capture recorded." in html
     assert "Update recorded." in html
     assert "Task-linked flow." in html
-    assert "Recommended next step: create or link evidence from this result." in html
+    assert "Optional next step: create or link evidence from this result if you need interpretation/governance documentation." in html
     assert "/programs/1/workflow" in html
-

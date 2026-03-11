@@ -129,17 +129,65 @@ def molecule_detail_surface(*, molecule_id: int) -> SurfaceDescriptor:
         surface_title="Molecule Workspace",
         dominant_purpose="scientific and execution loop",
         local_nav=[
-            nav_item("Overview", "#zone-overview"),
-            nav_item("Workflow Loop", "#workflow-loop"),
-            nav_item("Execution", "#zone-execution"),
-            nav_item("Scientific Rationale", "#zone-rationale"),
-            nav_item("Evidence & Data", "#zone-evidence-data"),
-            nav_item("Sequence & Annotations", "#zone-sequence-annotations"),
-            nav_item("History & Audit", "#zone-history-audit"),
+            nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
+            nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
+            nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
         ],
         archetype_labels=["Overview Signals", "Scientific Workspace", "Operational Loop"],
         attention_mode="high",
         workflow_stage_emphasis="evidence to task loop",
+    )
+
+
+def molecule_results_surface(*, molecule_id: int) -> SurfaceDescriptor:
+    return workspace_surface(
+        surface_key="molecule_results",
+        surface_title="Molecule Results",
+        dominant_purpose="molecule-first experiment result review",
+        local_nav=[
+            nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
+            nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
+            nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
+        ],
+        archetype_labels=["ELN Review", "Scientific Workspace", "Result History"],
+        attention_mode="high",
+        workflow_stage_emphasis="result interpretation",
+    )
+
+
+def molecule_sequence_surface(*, molecule_id: int) -> SurfaceDescriptor:
+    return workspace_surface(
+        surface_key="molecule_sequence",
+        surface_title="Molecule Sequence",
+        dominant_purpose="sequence and annotation inspection with builder handoff",
+        local_nav=[
+            nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
+            nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
+            nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
+        ],
+        archetype_labels=["Sequence View", "Design Surface", "Annotation Review"],
+        attention_mode="normal",
+        workflow_stage_emphasis="sequence design review",
+    )
+
+
+def molecule_governance_surface(*, molecule_id: int) -> SurfaceDescriptor:
+    return workspace_surface(
+        surface_key="molecule_governance",
+        surface_title="Molecule Governance",
+        dominant_purpose="assessment lineage, snapshots, and audit detail",
+        local_nav=[
+            nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
+            nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
+            nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
+        ],
+        archetype_labels=["Governance View", "Assessment History", "Audit Trace"],
+        attention_mode="normal",
+        workflow_stage_emphasis="policy and snapshot traceability",
     )
 
 
@@ -227,22 +275,38 @@ def molecules_registry_surface() -> SurfaceDescriptor:
     )
 
 
-def claims_registry_surface() -> SurfaceDescriptor:
+def claims_registry_surface(*, program_id: int | None = None) -> SurfaceDescriptor:
+    nav = [nav_item("Claims", "/claims"), nav_item("New Claim", "/claims/new")]
+    if program_id is not None:
+        nav = [
+            nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"),
+            nav_item("Program Workspace", f"/programs/{int(program_id)}"),
+            nav_item("Claims (Program)", f"/claims?program_id={int(program_id)}"),
+            nav_item("New Claim", "/claims/new"),
+        ]
     return registry_surface(
         surface_key="claims_registry",
         surface_title="Scientific Claims",
         dominant_purpose="review and open claim interpretation workspaces",
-        local_nav=[nav_item("Claims", "/claims"), nav_item("New Claim", "/claims/new")],
+        local_nav=nav,
         archetype_labels=["Registry Page", "Scientific Interpretation"],
     )
 
 
-def plans_registry_surface() -> SurfaceDescriptor:
+def plans_registry_surface(*, program_id: int | None = None) -> SurfaceDescriptor:
+    nav = [nav_item("Plans", "/plans"), nav_item("New Plan", "/plans/new")]
+    if program_id is not None:
+        nav = [
+            nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"),
+            nav_item("Program Workspace", f"/programs/{int(program_id)}"),
+            nav_item("Plans (Program)", f"/plans?program_id={int(program_id)}"),
+            nav_item("New Plan", "/plans/new"),
+        ]
     return registry_surface(
         surface_key="plans_registry",
         surface_title="Scientific Plans",
         dominant_purpose="review and open plan execution workspaces",
-        local_nav=[nav_item("Plans", "/plans"), nav_item("New Plan", "/plans/new")],
+        local_nav=nav,
         archetype_labels=["Registry Page", "Execution Planning"],
     )
 
@@ -252,14 +316,14 @@ def data_registry_surface() -> SurfaceDescriptor:
         surface_key="data_registry",
         surface_title="Experiment Results",
         surface_subtitle="Scientist-facing record of captured runs and extracted measurements.",
-        dominant_purpose="scan recorded experiments and move into evidence interpretation",
-        local_nav=[nav_item("Data Records", "/data"), nav_item("New Data Record", "/data/new"), nav_item("Bulk Import", "/data/bulk-import")],
-        archetype_labels=["Registry Page", "Evidence Loop Entry"],
+        dominant_purpose="scan recorded experiments and continue execution using current assessment feedback",
+        local_nav=[nav_item("Experiment Results", "/data"), nav_item("Add Experiment Result", "/data/new"), nav_item("Bulk Import", "/data/bulk-import")],
+        archetype_labels=["Registry Page", "Experiment Loop Entry"],
     )
 
 
 def data_entry_surface(*, program_id: int | None = None, molecule_id: int | None = None, from_task: bool = False) -> SurfaceDescriptor:
-    nav = [nav_item("Lab Notebook", "/data"), nav_item("New Data Record", "/data/new")]
+    nav = [nav_item("Experiment Results", "/data"), nav_item("Add Experiment Result", "/data/new")]
     if program_id is not None:
         nav.append(nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
         nav.append(nav_item("Program Board", f"/programs/{int(program_id)}/board"))
@@ -271,14 +335,14 @@ def data_entry_surface(*, program_id: int | None = None, molecule_id: int | None
         surface_subtitle="Record experimental output with clear scientific context and workflow linkage.",
         dominant_purpose="capture experiment results and close operational loops",
         local_nav=nav,
-        archetype_labels=["Workflow Page", "Result Capture", "Evidence Loop"],
-        workflow_stage_emphasis="task to data to evidence",
+        archetype_labels=["Workflow Page", "Result Capture", "Assessment Refresh"],
+        workflow_stage_emphasis="task to result to assessment",
         attention_mode="high" if from_task else "normal",
     )
 
 
 def data_detail_surface(*, record_id: int, program_id: int | None = None, molecule_id: int | None = None) -> SurfaceDescriptor:
-    nav = [nav_item("Lab Notebook", "/data"), nav_item("This Data Record", f"/data/{int(record_id)}")]
+    nav = [nav_item("Experiment Results", "/data"), nav_item("This Result Record", f"/data/{int(record_id)}")]
     if program_id is not None:
         nav.append(nav_item("Program Workflow", f"/programs/{int(program_id)}/workflow"))
     if molecule_id is not None:
@@ -287,10 +351,10 @@ def data_detail_surface(*, record_id: int, program_id: int | None = None, molecu
         surface_key="data_detail",
         surface_title="Experiment Result Record",
         surface_subtitle="Review captured output, extracted measurements, and evidence linkage.",
-        dominant_purpose="review recorded results and move into evidence interpretation",
+        dominant_purpose="review recorded results and continue execution with refreshed assessment",
         local_nav=nav,
-        archetype_labels=["Scientific Workspace", "Evidence Loop Entry"],
-        workflow_stage_emphasis="result review and interpretation handoff",
+        archetype_labels=["Scientific Workspace", "Experiment Loop Entry"],
+        workflow_stage_emphasis="result review and workflow re-entry",
     )
 
 

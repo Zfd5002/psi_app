@@ -603,7 +603,7 @@ def _background_compute(molecule_id: int, trigger_reason: str, db_path: str | No
     import os
 
     # Avoid import-time SessionLocal for background tasks to preserve db_path correctness in tests/tools.
-    with get_db(db_path, ensure=False) as db:
+    with get_db(db_path, ensure=True) as db:
         m = db.get(Molecule, molecule_id)
         heavy_global = os.getenv("PSI_ENABLE_HEAVY_COMPUTE", "").strip() == "1"
         tier = "FAST+HEAVY" if heavy_global and m and int(m.heavy_compute_enabled or 0) == 1 else "FAST"
@@ -612,7 +612,7 @@ def _background_compute(molecule_id: int, trigger_reason: str, db_path: str | No
 
 def _background_domain_extraction(molecule_id: int, db_path: str | None = None) -> None:
     # Avoid import-time SessionLocal for background tasks to preserve db_path correctness in tests/tools.
-    with get_db(db_path, ensure=False) as db:
+    with get_db(db_path, ensure=True) as db:
         extract_domains_for_molecule(db, molecule_id)
 
 

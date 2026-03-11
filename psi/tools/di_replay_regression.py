@@ -211,6 +211,33 @@ def _compute_semantic_diff_for_snapshot(db: Session, snap: DecisionSnapshot) -> 
     }
 
 
+def _build_rollup_surface_from_snapshot_slice(snaps: List[DecisionSnapshot], *, program_id: int) -> Dict[str, Any]:
+    latest_by_molecule: Dict[int, DecisionSnapshot] = {}
+    for s in snaps:
+        if int(s.program_id) != int(program_id):
+            continue
+        mid = int(s.molecule_id or 0)
+        prev = latest_by_molecule.get(mid)
+        if prev is None or int(s.id) > int(prev.id):
+            latest_by_molecule[mid] = s
+    stage_counts: Dict[str, int] = {}
+    snapshot_ids: List[int] = []
+    molecule_ids: List[int] = []
+    for mid in sorted(latest_by_molecule.keys()):
+        s = latest_by_molecule[mid]
+        out = verify_mod._parse_json_field(s.outputs_json, default={})
+        state = str((out.get("decision_state") if isinstance(out, dict) else "") or "not_assessed").strip().lower()
+        stage_counts[state] = stage_counts.get(state, 0) + 1
+        snapshot_ids.append(int(s.id))
+        molecule_ids.append(int(mid))
+    return {
+        "program_id": int(program_id),
+        "snapshot_ids": sorted(snapshot_ids),
+        "molecule_ids": molecule_ids,
+        "stage_counts": {k: stage_counts[k] for k in sorted(stage_counts.keys())},
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="python -m psi.tools.di_replay_regression",
@@ -291,10 +318,12 @@ def main() -> None:
         )
 
         print(f"replay_regression: matched={len(snaps)} order={args.order} limit={'ALL' if limit is None else limit}")
+        rollup_program_ids: set[int] = set()
 
         for snap in snaps:
             tested += 1
             sid = int(snap.id)
+            rollup_program_ids.add(int(snap.program_id))
             try:
                 stored_pkg_hash = _extract_snapshot_policy_package_hash(snap)
                 if not stored_pkg_hash:
@@ -392,6 +421,20 @@ def main() -> None:
                 failed += 1
                 failures.append({"snapshot_id": sid, "failure_type": f"exception:{type(e).__name__}", "error": str(e)})
                 print(f"FAIL snapshot_id={sid} type=exception:{type(e).__name__} error={e}")
+
+        if snaps:
+            for pid in sorted(rollup_program_ids):
+                try:
+                    r1 = _build_rollup_surface_from_snapshot_slice(snaps, program_id=int(pid))
+                    r2 = _build_rollup_surface_from_snapshot_slice(list(reversed(snaps)), program_id=int(pid))
+                    if stable_json_dumps(r1) != stable_json_dumps(r2):
+                        failed += 1
+                        failures.append({"program_id": int(pid), "failure_type": "program_rollup_nondeterministic"})
+                        print(f"FAIL program_id={pid} type=program_rollup_nondeterministic")
+                except Exception as e:
+                    failed += 1
+                    failures.append({"program_id": int(pid), "failure_type": f"program_rollup_exception:{type(e).__name__}", "error": str(e)})
+                    print(f"FAIL program_id={pid} type=program_rollup_exception:{type(e).__name__} error={e}")
 
     summary = {
         "matched": len(snaps),

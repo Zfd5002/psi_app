@@ -90,11 +90,27 @@ def _assessment_notice_message(summary: dict[str, str]) -> str:
 
 
 @router.get("/data", response_class=HTMLResponse)
-def list_data(request: Request, program_id: Optional[int] = None, db: Session = Depends(get_db)):
+def list_data(
+    request: Request,
+    program_id: Optional[int] = None,
+    molecule_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
     templates = get_templates(request)
-    ctx = svc.list_data_records(db, program_id=program_id)
+    ctx = svc.list_data_records(db, program_id=program_id, molecule_id=molecule_id)
+    active_molecule = db.get(Molecule, int(molecule_id)) if molecule_id is not None else None
+    inferred_program = (
+        int(active_molecule.program_id)
+        if active_molecule is not None and program_id is None and getattr(active_molecule, "program_id", None) is not None
+        else None
+    )
     ctx["request"] = request
-    ctx["active_program"] = db.get(Program, int(program_id)) if program_id is not None else None
+    ctx["active_program"] = (
+        db.get(Program, int(program_id))
+        if program_id is not None
+        else (db.get(Program, int(inferred_program)) if inferred_program is not None else None)
+    )
+    ctx["active_molecule"] = active_molecule
     ctx["surface"] = ui_surfaces.data_registry_surface()
     return templates.TemplateResponse("data/list.html", ctx)
 

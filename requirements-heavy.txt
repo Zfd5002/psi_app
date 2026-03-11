@@ -13,6 +13,7 @@
 #
 biopython==1.83
 abnumber==0.4.4
+anarci==1.3
 
 # Optional (manual-only immunogenicity triage in PSI v1.1.8):
 # mhcflurry==2.0.0

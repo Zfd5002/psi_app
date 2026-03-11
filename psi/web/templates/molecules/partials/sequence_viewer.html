@@ -1,0 +1,157 @@
+<div class="card section-card section-primary" id="sequence-viewer" style="margin-top:10px;">
+  <h2 style="margin-top:0;">Annotated Sequence Viewer</h2>
+  <p class="muted mini">Selectable, copy-clean sequence viewer with annotation highlights (liabilities, regions, Fc/hinge and custom labels).</p>
+
+  <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0;">
+    <form method="post" action="/molecules/{{ molecule.id }}/domains/recompute">
+      <input type="hidden" name="return_to" value="/molecules/{{ molecule.id }}/sequence#sequence-viewer" />
+      <button class="btn" type="submit">Recompute annotations</button>
+    </form>
+    <form method="post" action="/molecules/{{ molecule.id }}/numbering" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="hidden" name="return_to" value="/molecules/{{ molecule.id }}/sequence#sequence-viewer" />
+      <input type="hidden" name="scheme" value="{{ request.query_params.get('scheme', 'kabat') if request is defined else 'kabat' }}" />
+      <button class="btn" type="submit">Compute numbering</button>
+    </form>
+    {% if not heavy_gate_domains.ok %}
+      <div class="notice mini">{{ heavy_gate_domains.reason }}. Install <code>requirements-heavy.txt</code> to enable.</div>
+    {% endif %}
+  </div>
+  {% set _nstatus = request.query_params.get('numbering_status') if request is defined and request.query_params is defined else '' %}
+  {% set _dstatus = request.query_params.get('domains_status') if request is defined and request.query_params is defined else '' %}
+  {% if _dstatus == 'started' %}
+    <div class="notice mini" style="margin:8px 0;">Annotation recompute started. Refresh this page in a moment to load updated domain labels.</div>
+  {% endif %}
+  {% if _nstatus == 'started' %}
+    <div class="notice mini" style="margin:8px 0;">Numbering started. Refresh this page in a moment to load updated FR/CDR layers.</div>
+  {% elif _nstatus == 'no_domains' %}
+    <div class="notice mini" style="margin:8px 0;">No VH/VL domains are available yet for numbering. Run <b>Recompute annotations</b> first.</div>
+  {% elif _nstatus == 'missing_dependencies' %}
+    <div class="notice mini" style="margin:8px 0;">
+      Antibody numbering backend unavailable. Missing dependencies:
+      <code>{{ request.query_params.get('numbering_missing', 'unknown') if request is defined and request.query_params is defined else 'unknown' }}</code>.
+      Install heavy dependencies to run numbering.
+    </div>
+  {% endif %}
+  {% set _np = numbering_payload if numbering_payload is defined and numbering_payload is mapping else {} %}
+  {% if _np.artifacts is defined and _np.artifacts %}
+    {% for _dtype, _meta in _np.artifacts.items() %}
+      {% if _meta.using_last_success is defined and _meta.using_last_success %}
+        <div class="notice mini" style="margin:6px 0;">
+          {{ _dtype }} numbering refresh failed; showing last successful payload from {{ _meta.last_success_updated_at }}.
+        </div>
+      {% elif _meta.status is defined and (_meta.status == 'failure' or _meta.status == 'skipped') %}
+        <div class="notice mini" style="margin:6px 0;">
+          {{ _dtype }} numbering {{ _meta.status }}{% if _meta.error is defined and _meta.error %}: {{ _meta.error }}{% endif %}.
+        </div>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+
+  <div class="card no-print" style="margin:10px 0;">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <div class="muted"><strong>PD-L1 scan</strong> (substitutions-only; no indels)</div>
+      <form method="get" action="{{ sequence_page_path if sequence_page_path is defined else '/molecules/' ~ molecule.id ~ '/sequence' }}" style="display:flex;gap:8px;align-items:center;">
+        <label class="muted" style="margin:0;">Allowed mismatches</label>
+        <select name="pdl1_mm" id="pdl1_mm">
+          {% for n in [0,1,2,3,4,5,8,10,15,20,25] %}
+            <option value="{{ n }}" {% if (pdl1_allowed_mismatches|default(0))==n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn" type="submit">Update</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns: 1fr 360px; gap:14px;">
+    <div>
+      {% set _sv = (sequence_viewer_components if sequence_viewer_components is defined and sequence_viewer_components is iterable else viewer_v2_components) %}
+      {% for t in _sv %}
+        <div class="card" style="margin:12px 0;">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+              <strong>{{ t.display_role_label if t.display_role_label is defined and t.display_role_label else t.role }}</strong>
+              <span class="muted">· length={{ t.length }}</span>
+            </div>
+            <div class="no-print muted mini">Tip: click-drag to select; ⌘/Ctrl+C copies clean amino acids.</div>
+          </div>
+          <div class="seq-scroll viewer-v2" data-component-id="{{ t.component_id }}" data-molecule-id="{{ molecule.id }}" style="--len: {{ t.length }};" data-seq="{{ t.sequence }}">
+            <div class="lane">
+              <div class="lane-label muted">Sequence</div>
+              <div class="seq-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), var(--residue-cell-w, 1ch));">
+                {% for aa in t.sequence %}
+                  <span class="residue" data-pos="{{ loop.index0 }}">{{ aa }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="muted">No structured components for this molecule.</div>
+      {% endfor %}
+    </div>
+
+    <div>
+      <div class="card" id="annotations_panel">
+        <h3 style="margin-top:0;">Annotations</h3>
+        <div class="muted mini">Click an annotation to highlight residues. Copy preserves raw amino-acid sequence only.</div>
+        {% set _sv = (sequence_viewer_components if sequence_viewer_components is defined and sequence_viewer_components is iterable else viewer_v2_components) %}
+        {% for t in _sv %}
+          <div class="annot-comp" data-component-id="{{ t.component_id }}" data-annotations-groups='{{ t.annotations_groups | tojson }}' style="margin-top:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+              <strong>{{ t.display_role_label if t.display_role_label is defined and t.display_role_label else t.role }}</strong>
+              <button class="btn mini" type="button" data-action="annot-clear-highlights">Clear highlights</button>
+            </div>
+            {% for g in t.annotations_groups %}
+              <details class="annot-group" {% if loop.index0 < 2 %}open{% endif %} style="margin-top:8px;">
+                <summary class="muted"><strong>{{ g.group }}</strong> <span class="mini">({{ g["items"]|length }})</span></summary>
+                <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+                  {% set _gname = (g.group | lower) %}
+                  {% if 'motif' in _gname or 'liabil' in _gname %}
+                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+                      <div>N_glycosylation</div>
+                      <div style="display:flex;gap:8px;align-items:center;">
+                        <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="N_glycosylation">Highlight</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}" data-feature-name="N_glycosylation">Deselect</button>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+                      <div>Oxidation susceptible</div>
+                      <div style="display:flex;gap:8px;align-items:center;">
+                        <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="oxidation_susceptible">Highlight</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}" data-feature-name="oxidation_susceptible">Deselect</button>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+                      <div>Deamidation susceptible</div>
+                      <div style="display:flex;gap:8px;align-items:center;">
+                        <button class="btn mini" type="button" data-action="viewer-bulk-highlight" data-component-id="{{ t.component_id }}" data-feature-name="deamidation">Highlight</button>
+                        <button class="btn mini" type="button" data-action="viewer-clear-highlights" data-component-id="{{ t.component_id }}" data-feature-name="deamidation">Deselect</button>
+                      </div>
+                    </div>
+                  {% endif %}
+                  {% for f in g["items"] %}
+                    {% if f.name != 'oxidation_susceptible' and f.name != 'deamidation' and f.name != 'N_glycosylation' %}
+                      {% set sp = (f.spans[0] if f.spans and (f.spans|length)>0 else {'start':0,'end':0}) %}
+                      <div class="annot-item" data-component-id="{{ t.component_id }}" data-feature='{{ f | tojson }}'>
+                        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+                          <div>
+                            <div><strong>{{ f.name }}</strong></div>
+                            <div class="muted mini">[{{ sp.start }}, {{ sp.end }}) · {{ (f.confidence*100) | round(1) }}%</div>
+                          </div>
+                          <div style="display:flex;gap:8px;align-items:center;">
+                            <button class="btn mini" type="button" data-action="annot-highlight">Highlight</button>
+                            <button class="btn mini" type="button" data-action="annot-copy">Copy</button>
+                          </div>
+                        </div>
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </details>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>

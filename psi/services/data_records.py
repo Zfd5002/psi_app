@@ -107,10 +107,17 @@ def _jsonish_to_str(value: Any, *, default: str = "{}") -> str:
         return s if s else default
 
 
-def list_data_records(db: Session, *, program_id: int | None = None) -> dict:
+def list_data_records(
+    db: Session,
+    *,
+    program_id: int | None = None,
+    molecule_id: int | None = None,
+) -> dict:
     q = db.query(DataRecord)
     if program_id is not None:
         q = q.filter(DataRecord.program_id == int(program_id))
+    if molecule_id is not None:
+        q = q.filter(DataRecord.molecule_id == int(molecule_id))
     records = q.order_by(DataRecord.created_at.desc()).limit(200).all()
     programs = db.query(Program).order_by(Program.name.asc()).all()
     molecules = db.query(Molecule).order_by(Molecule.primary_id.asc()).all()

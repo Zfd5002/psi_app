@@ -1,0 +1,9 @@
+{% set _sid = molecule.id if molecule is defined and molecule and molecule.id is defined else 0 %}
+{% if _sid %}
+<div class="local-subnav no-print">
+  <a href="/molecules/{{ _sid }}">Workspace</a>
+  <a href="/molecules/{{ _sid }}/results">Results</a>
+  <a href="/molecules/{{ _sid }}/sequence">Sequence</a>
+  <a href="/molecules/{{ _sid }}/governance">Governance</a>
+</div>
+{% endif %}

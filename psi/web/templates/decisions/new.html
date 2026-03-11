@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Run Legacy YAML | PSI{% endblock %}
+{% block title %}Legacy YAML Assessment (Advanced) | PSI{% endblock %}
 {% block content %}
 <div class="card">
-  <h1 style="margin:0;">Run Legacy YAML</h1>
-  <div class="muted" style="margin-top:6px;">Legacy YAML engine (deprecated). For DI snapshots, use <a href="/di/run">Run Development Assessment</a>.</div>
+  <h1 style="margin:0;">Legacy YAML Assessment (Advanced)</h1>
+  <div class="muted" style="margin-top:6px;">Advanced governance-only path for historical parity. Normal scientist workflow should use <a href="/di/run">Run Development Assessment</a>.</div>
   <div class="muted" style="margin-top:6px;">Rules: {{ rules_version }} · Evidence is scored deterministically from max strength per evidence type.</div>
 
   <form class="form" method="post" action="/decisions/new">
@@ -54,7 +54,7 @@
     </div>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button class="btn primary" type="submit">Run & Save Snapshot</button>
+      <button class="btn primary" type="submit">Run & Save Legacy Snapshot</button>
       <a class="btn" href="/decisions">Cancel</a>
     </div>
   </form>

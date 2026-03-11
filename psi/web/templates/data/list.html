@@ -6,13 +6,25 @@
   {% set rows = (records if records is defined and records is iterable else []) %}
   {% set page_eyebrow = "Registry" %}
   {% set page_title = "Experiment Results" %}
-  {% set page_subtitle = "Recorded experimental outputs and measurement entries with evidence-loop handoff." %}
-  {% set page_primary_actions = [{"href": "/data/new", "label": "New Data Record"}] %}
+  {% set page_subtitle = "Recorded experimental outputs and extracted measurements powering current development assessment." %}
+  {% set _new_href = "/data/new" %}
+  {% if active_program %}
+    {% set _new_href = _new_href ~ "?program_id=" ~ active_program.id %}
+    {% if active_molecule %}
+      {% set _new_href = _new_href ~ "&molecule_id=" ~ active_molecule.id %}
+    {% endif %}
+  {% elif active_molecule %}
+    {% set _new_href = _new_href ~ "?molecule_id=" ~ active_molecule.id %}
+  {% endif %}
+  {% set page_primary_actions = [{"href": _new_href, "label": "Add Experiment Result"}] %}
   {% set page_secondary_actions = [{"href": "/data/bulk-import", "label": "Bulk import"}] %}
-  {% set page_metrics = [{"label": "Data Records", "value": (rows|length)}] %}
+  {% set page_metrics = [{"label": "Experiment Results", "value": (rows|length)}] %}
   {% include "partials/page_header.html" %}
   {% if active_program %}
     <div class="muted mini">Scoped to program: <a href="/programs/{{ active_program.id }}">{{ active_program.name }}</a> · <a href="/data">clear filter</a></div>
+  {% endif %}
+  {% if active_molecule %}
+    <div class="muted mini">Scoped to molecule: <a href="/molecules/{{ active_molecule.id }}">{{ active_molecule.primary_id }}</a> · <a href="{% if active_program %}/data?program_id={{ active_program.id }}{% else %}/data{% endif %}">clear molecule filter</a></div>
   {% endif %}
   {% if sf.archetype_labels is defined and sf.archetype_labels %}
     <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
@@ -35,7 +47,7 @@
         <td class="muted">{{ r.run_date or '' }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted empty-state-cell">No data records yet. Start result capture to close execution loops.</td></tr>
+      <tr><td colspan="8" class="muted empty-state-cell">No experiment results yet. Capture a result to refresh development assessment.</td></tr>
       {% endfor %}
     </tbody>
   </table>

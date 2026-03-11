@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{% if record %}Edit Data Record{% else %}New Data Record{% endif %} | PSI{% endblock %}
+{% block title %}{% if record %}Edit Experiment Result{% else %}New Experiment Result{% endif %} | PSI{% endblock %}
 {% block content %}
 <div class="card">
   {% set page_eyebrow = "Result Capture" %}
-  {% set page_title = "Capture Experiment Results" if not record else "Update Experiment Results" %}
+  {% set page_title = "Capture Experiment Result" if not record else "Update Experiment Result" %}
   {% set page_subtitle = "Record experimental output with clear task, molecule, and program context." %}
   {% set page_primary_actions = [] %}
   {% set page_secondary_actions = [] %}
@@ -15,7 +15,7 @@
     {% set page_secondary_actions = page_secondary_actions + [{"href": "/molecules/" ~ prefill.molecule_id, "label": "Open Molecule Workspace"}] %}
   {% endif %}
   {% if record and record.id %}
-    {% set page_secondary_actions = page_secondary_actions + [{"href": "/data/" ~ record.id, "label": "Open Data Record"}] %}
+    {% set page_secondary_actions = page_secondary_actions + [{"href": "/data/" ~ record.id, "label": "Open Result Record"}] %}
   {% endif %}
   {% set page_metrics = [] %}
   {% if task_context %}
@@ -26,11 +26,11 @@
   {% set page_matters_now = [
     "Capture the run output in a structured way so measurements can be extracted reliably.",
     "Confirm scope (program/molecule/batch) before saving.",
-    "After saving, review extracted measurements and create or link supporting evidence."
+    "After saving, review the refreshed development assessment and choose optional interpretation steps."
   ] %}
   {% include "partials/page_header.html" %}
   {% include "partials/surface_chrome.html" %}
-  <div class="page-intent-line">This workspace closes the operational loop: <b>Task → Data Entry → Evidence</b>.</div>
+  <div class="page-intent-line">This workspace closes the operating loop: <b>Task → Experiment Result → Current Assessment</b> (with optional interpretation follow-up).</div>
   {% include "partials/data/form_capture_context.html" %}
   <div class="card section-card section-primary" style="margin:10px 0;">
     <div class="section-heading"><h3 style="margin:0;">Result Capture Form</h3></div>

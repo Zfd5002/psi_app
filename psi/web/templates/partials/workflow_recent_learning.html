@@ -1,0 +1,44 @@
+<div class="card section-card section-primary" style="margin-top:10px;" id="recent-learning">
+  <div class="section-heading">
+    <h2>Recently Captured Learning</h2>
+    <div class="muted mini">Latest results and evidence in this program, surfaced for interpretation follow-through.</div>
+  </div>
+  <div class="grid cols-2" style="margin-top:8px;">
+    <div class="linked-table-wrap">
+      <h3 style="margin:0 0 6px 0;">Recent Results</h3>
+      <table class="table mini">
+        <thead><tr><th>Record</th><th>Molecule</th><th>Title</th></tr></thead>
+        <tbody>
+          {% for r in recent_data_records %}
+            {% set rm = molecule_by_id.get(r.molecule_id) if molecule_by_id is defined and r.molecule_id else None %}
+            <tr>
+              <td><a href="/data/{{ r.id }}">#{{ r.id }}</a></td>
+              <td>{% if rm %}<a href="/molecules/{{ rm.id }}">{{ rm.primary_id }}</a>{% elif r.molecule_id %}#{{ r.molecule_id }}{% else %}<span class="muted">program-level</span>{% endif %}</td>
+              <td>{{ r.title }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="muted empty-state-cell">No recent results captured in this program.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="linked-table-wrap">
+      <h3 style="margin:0 0 6px 0;">Recent Evidence</h3>
+      <table class="table mini">
+        <thead><tr><th>Evidence</th><th>Type</th><th>Strength</th></tr></thead>
+        <tbody>
+          {% for ev in recent_evidence %}
+            <tr>
+              <td><a href="/evidence/{{ ev.id }}">#{{ ev.id }}</a></td>
+              <td>{{ ev.evidence_type }}</td>
+              <td>{{ ev.strength }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="muted empty-state-cell">No recent evidence entries in this program.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+

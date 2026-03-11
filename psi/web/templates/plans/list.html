@@ -10,6 +10,9 @@
   {% set page_primary_actions = [{"href": "/plans/new", "label": "New Plan"}] %}
   {% set page_metrics = [{"label": "Plans", "value": (rows|length)}] %}
   {% include "partials/page_header.html" %}
+  {% if active_program %}
+    <div class="muted mini">Scoped to program: <a href="/programs/{{ active_program.id }}">{{ active_program.name }}</a> · <a href="/plans">clear filter</a></div>
+  {% endif %}
   {% if sf.archetype_labels is defined and sf.archetype_labels %}
     <div class="page-archetype-bar">{% for lbl in sf.archetype_labels %}<span class="page-archetype-chip{% if loop.first %} is-active{% endif %}">{{ lbl }}</span>{% endfor %}</div>
   {% endif %}

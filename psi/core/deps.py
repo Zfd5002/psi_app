@@ -10,6 +10,8 @@ execution through these helpers.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib
+from importlib import metadata
 
 
 def anarci_available() -> bool:
@@ -37,6 +39,45 @@ def biopython_available() -> bool:
         return True
     except Exception:
         return False
+
+
+@dataclass(frozen=True)
+class DependencyProbe:
+    available: bool
+    version: str | None
+    error: str | None
+
+
+def _probe_dependency(import_name: str, *, dist_name: str | None = None) -> DependencyProbe:
+    try:
+        importlib.import_module(import_name)
+    except Exception as e:
+        return DependencyProbe(available=False, version=None, error=f"{type(e).__name__}: {e}")
+
+    ver = None
+    try:
+        ver = metadata.version(dist_name or import_name)
+    except Exception:
+        ver = None
+    return DependencyProbe(available=True, version=ver, error=None)
+
+
+def numbering_dependency_status() -> dict:
+    """Detailed probe for antibody-numbering runtime dependencies."""
+    ab = _probe_dependency("abnumber", dist_name="abnumber")
+    an = _probe_dependency("anarci", dist_name="anarci")
+    bp = _probe_dependency("Bio", dist_name="biopython")
+    components = {
+        "abnumber": {"available": ab.available, "version": ab.version, "error": ab.error},
+        "anarci": {"available": an.available, "version": an.version, "error": an.error},
+        "biopython": {"available": bp.available, "version": bp.version, "error": bp.error},
+    }
+    missing = [name for name, meta in components.items() if not bool(meta.get("available"))]
+    return {
+        "ok": len(missing) == 0,
+        "missing": missing,
+        "components": components,
+    }
 
 
 @dataclass(frozen=True)

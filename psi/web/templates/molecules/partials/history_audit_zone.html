@@ -534,6 +534,10 @@
   <p class="muted">Selectable, copy-clean sequence viewer with an annotation sidebar. Click an annotation to highlight residues; copy always yields raw amino acids only.</p>
 
   <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0;">
+    {% set _dstatus = request.query_params.get('domains_status') if request is defined and request.query_params is defined else '' %}
+    {% if _dstatus == 'started' %}
+      <div class="notice mini">Domain recompute started. Refresh this page in a moment to load updated domain labels.</div>
+    {% endif %}
     <form method="post" action="/molecules/{{ molecule.id }}/domains/recompute">
       <button class="btn" type="submit">Recompute domains</button>
     </form>
@@ -572,7 +576,7 @@
           <div class="seq-scroll viewer-v2" data-component-id="{{ t.component_id }}" data-molecule-id="{{ molecule.id }}" style="--len: {{ t.length }};" data-seq="{{ t.sequence }}">
             <div class=\"lane\">
               <div class=\"lane-label muted\">Sequence</div>
-              <div class="seq-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), 1ch);">
+              <div class="seq-grid" style="grid-template-columns: repeat(var(--wrap-cols, 80), var(--residue-cell-w, 1ch));">
                 {% for aa in t.sequence %}
                   <span class="residue" data-pos="{{ loop.index0 }}">{{ aa }}</span>
                 {% endfor %}

@@ -330,31 +330,47 @@
     dispatchViewerSelection(viewerEl, idx, idx + 1);
   }
 
-  function charWidthPx(el){
+  function residueCellWidthPx(viewerEl){
+    const sample = viewerEl.querySelector('.residue');
+    if(sample){
+      const sw = sample.getBoundingClientRect().width;
+      if(sw && isFinite(sw) && sw > 0) return sw;
+    }
     const probe = document.createElement('span');
+    probe.className = 'residue';
     probe.textContent = 'M';
     probe.style.visibility = 'hidden';
     probe.style.position = 'absolute';
-    probe.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
-    probe.style.fontSize = '12px';
-    el.appendChild(probe);
+    probe.style.pointerEvents = 'none';
+    viewerEl.appendChild(probe);
     const w = probe.getBoundingClientRect().width || 10;
     probe.remove();
     return w;
   }
 
   function computeWrapCols(viewerEl){
-    // Compute based on the visible viewer container width (stable), not content width.
-    const w = viewerEl.clientWidth || (viewerEl.getBoundingClientRect && viewerEl.getBoundingClientRect().width) || 0;
+    // Compute from the actual sequence drawing lane width (not the outer viewer chrome).
+    const laneEl = viewerEl.querySelector('.lane');
+    const laneW = laneEl && laneEl.getBoundingClientRect ? laneEl.getBoundingClientRect().width : 0;
+    const viewerW = viewerEl.getBoundingClientRect ? viewerEl.getBoundingClientRect().width : 0;
+    const w = laneW || viewerW;
     if(!w) return 80;
 
-    let cw = charWidthPx(viewerEl);
+    const cs = window.getComputedStyle ? window.getComputedStyle(viewerEl) : null;
+    const padLeft = cs ? (parseFloat(cs.paddingLeft || '0') || 0) : 0;
+    const padRight = cs ? (parseFloat(cs.paddingRight || '0') || 0) : 0;
+    const borderLeft = cs ? (parseFloat(cs.borderLeftWidth || '0') || 0) : 0;
+    const borderRight = cs ? (parseFloat(cs.borderRightWidth || '0') || 0) : 0;
+    // If we measured the lane, it's already inside viewer padding; only subtract viewer padding on fallback.
+    const usableWidth = laneW ? Math.max(0, w) : Math.max(0, w - padLeft - padRight - borderLeft - borderRight);
+
+    let cw = residueCellWidthPx(viewerEl);
     // Guard against bad measurements (can happen in hidden/just-rendered contexts)
     if(!cw || !isFinite(cw) || cw < 7) cw = 10;
 
-    const laneLabelGutter = 64;
-    const pad = 24;
-    let cols = Math.floor((w - laneLabelGutter - pad) / cw);
+    // Safety cushion in pixels: prevents threshold clipping while avoiding coarse one-column drops.
+    const safetyPx = Math.max(1, cw * 0.15);
+    let cols = Math.floor((usableWidth - safetyPx) / cw);
     if(!cols || !isFinite(cols)) cols = 80;
 
     // Hard clamps: prevents any overflow spiral
@@ -363,8 +379,64 @@
   }
 
   function setWrapCols(viewerEl){
+    let cw = residueCellWidthPx(viewerEl);
+    if(!cw || !isFinite(cw) || cw < 7) cw = 10;
+    // Always set measured/fallback residue cell width so runtime geometry debug
+    // reflects the exact value used for wrap-column computation.
+    viewerEl.style.setProperty('--residue-cell-w', `${cw.toFixed(3)}px`);
     const cols = computeWrapCols(viewerEl);
     viewerEl.style.setProperty('--wrap-cols', String(cols));
+  }
+
+  function seqViewerDebugEnabled(){
+    try{
+      const u = new URL(window.location.href);
+      return String(u.searchParams.get('debug_seq') || '').trim() === '1';
+    }catch(e){
+      return false;
+    }
+  }
+
+  function elMetrics(el){
+    if(!el) return null;
+    const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : {width: 0};
+    const cs = window.getComputedStyle ? window.getComputedStyle(el) : null;
+    return {
+      clientWidth: Number(el.clientWidth || 0),
+      rectWidth: Number(rect && rect.width ? rect.width : 0),
+      display: cs ? String(cs.display || '') : '',
+      overflowX: cs ? String(cs.overflowX || '') : '',
+      width: cs ? String(cs.width || '') : '',
+      minWidth: cs ? String(cs.minWidth || '') : '',
+    };
+  }
+
+  function logSeqViewerDebug(viewerEl){
+    const laneEl = viewerEl.querySelector('.lane');
+    const laneLabelEl = viewerEl.querySelector('.lane-label');
+    const seqGridEl = viewerEl.querySelector('.seq-grid');
+    const residueEl = viewerEl.querySelector('.residue');
+    const rrect = residueEl && residueEl.getBoundingClientRect ? residueEl.getBoundingClientRect() : {width: 0};
+    const vcs = window.getComputedStyle ? window.getComputedStyle(viewerEl) : null;
+    const payload = {
+      componentId: String(viewerEl.dataset.componentId || ''),
+      viewer: elMetrics(viewerEl),
+      lane: elMetrics(laneEl),
+      laneLabel: elMetrics(laneLabelEl),
+      seqGrid: elMetrics(seqGridEl),
+      residue: {
+        rectWidth: Number(rrect && rrect.width ? rrect.width : 0),
+        display: vcs ? String((window.getComputedStyle(residueEl || viewerEl).display || '')) : '',
+        overflowX: vcs ? String((window.getComputedStyle(residueEl || viewerEl).overflowX || '')) : '',
+        width: vcs ? String((window.getComputedStyle(residueEl || viewerEl).width || '')) : '',
+        minWidth: vcs ? String((window.getComputedStyle(residueEl || viewerEl).minWidth || '')) : '',
+      },
+      wrapCols: String((viewerEl.style.getPropertyValue('--wrap-cols') || '').trim()),
+      residueCellW: String((viewerEl.style.getPropertyValue('--residue-cell-w') || '').trim()),
+    };
+    try{
+      console.log('[PSI seq debug]', payload);
+    }catch(e){}
   }
 
   function setWrapColsAll(){
@@ -377,15 +449,22 @@
         const rect = v.getBoundingClientRect();
         if(!rect || rect.width < 10) continue;
         setWrapCols(v);
+        if(seqViewerDebugEnabled()) logSeqViewerDebug(v);
       }catch(e){}
     }
   }
 
   // initial + reactive recompute (important when panels/components are collapsed then expanded)
-  setTimeout(setWrapColsAll, 0);
-  window.addEventListener("resize", () => setTimeout(setWrapColsAll, 0));
+  const scheduleWrapColsRefresh = () => {
+    setTimeout(setWrapColsAll, 0);
+    requestAnimationFrame(() => setWrapColsAll());
+    requestAnimationFrame(() => requestAnimationFrame(() => setWrapColsAll()));
+  };
+  scheduleWrapColsRefresh();
+  window.addEventListener("load", scheduleWrapColsRefresh);
+  window.addEventListener("resize", scheduleWrapColsRefresh);
   document.addEventListener("toggle", (e) => {
-    if(e && e.target && e.target.tagName === "DETAILS") setTimeout(setWrapColsAll, 0);
+    if(e && e.target && e.target.tagName === "DETAILS") scheduleWrapColsRefresh();
   });
 
 
@@ -456,7 +535,7 @@
   const viewers = Array.from(document.querySelectorAll('.seq-scroll.viewer-v2'));
   viewers.forEach((viewerEl) => {
     setWrapCols(viewerEl);
-    window.addEventListener('resize', () => setWrapCols(viewerEl));
+    if(seqViewerDebugEnabled()) logSeqViewerDebug(viewerEl);
 
     // Manual selection => highlight residues (native selection remains untouched)
     viewerEl.addEventListener('mouseup', () => {
@@ -496,6 +575,13 @@
       }
     });
   });
+
+  if(window.ResizeObserver){
+    const ro = new ResizeObserver(() => scheduleWrapColsRefresh());
+    viewers.forEach((viewerEl) => {
+      try{ ro.observe(viewerEl); }catch(e){}
+    });
+  }
 
   // Annotations panel interactions
   document.querySelectorAll('.annot-item').forEach((row) => {

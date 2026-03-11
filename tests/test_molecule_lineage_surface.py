@@ -105,12 +105,12 @@ def test_molecule_detail_context_includes_lineage_parent_and_children() -> None:
         eng.dispose()
 
 
-def test_molecule_detail_template_renders_lineage_panel() -> None:
-    tpl = _env().get_template("molecules/detail.html")
-    html = tpl.render(
+def test_molecule_split_templates_render_sequence_and_governance_panels() -> None:
+    seq_tpl = _env().get_template("molecules/sequence.html")
+    seq_html = seq_tpl.render(
         request=SimpleNamespace(query_params={}),
         tab="overview",
-        molecule=SimpleNamespace(id=10, primary_id="M-10", title="Mol 10", description_user="", description="", description_auto=""),
+        molecule=SimpleNamespace(id=10, primary_id="M-10", title="Mol 10", description_user="", description="", description_auto="", program_id=1),
         molecule_header_model={},
         lineage_parent={
             "molecule_id": 9,
@@ -205,28 +205,70 @@ def test_molecule_detail_template_renders_lineage_panel() -> None:
             ]
         },
     )
-    assert "Lineage" in html
-    assert "Parent molecule" in html
-    assert "Child molecules" in html
-    assert "M-9" in html
-    assert "M-11" in html
-    assert "sequence_editor_tooltip" in html
-    assert "/static/sequence_editor.js" in html
-    assert "What This Molecule Needs Next" in html
-    assert "Operational Tasks" in html
-    assert "#41" in html
-    assert "Start" in html
-    assert "Add measurement for kd_nM" in html
-    assert "Blocking evidence detail" in html
-    assert "Monomer &gt;= 85 %" in html or "Monomer >= 85 %" in html
-    assert "Insight Governance Detail" in html
-    assert "Gate outcomes" in html
-    assert "Trend Signals" in html
-    assert "trend-sparkline" in html
-    assert "monomer_pct: improving" in html
-    assert "Scientific Trajectory" in html
-    assert "Expected readiness gain" in html
-    assert "BLI" in html
-    assert "Trajectory Graph" in html
-    assert "Current state" in html
-    assert "root → n1_0" in html
+    assert "Lineage Context" in seq_html
+    assert "Parent molecule" in seq_html
+    assert "Child molecules" in seq_html
+    assert "M-9" in seq_html
+    assert "M-11" in seq_html
+    assert "sequence_editor_tooltip" in seq_html
+    assert "/static/sequence_editor.js" in seq_html
+
+    gov_tpl = _env().get_template("molecules/governance.html")
+    gov_html = gov_tpl.render(
+        request=SimpleNamespace(query_params={}),
+        tab="overview",
+        molecule=SimpleNamespace(id=10, primary_id="M-10", title="Mol 10", description_user="", description="", description_auto="", program_id=1),
+        molecule_header_model={},
+        lineage_parent=None,
+        lineage_children=[],
+        exp_batch_panels=[],
+        data_records=[],
+        evidence=[],
+        file_links=[],
+        files_by_id={},
+        audits=[],
+        components=[],
+        domain_instances=[],
+        latest_values_parsed=[],
+        latest_values_by_key={},
+        immuno_values_parsed=[],
+        immuno_values_by_key={},
+        latest_run_events=[],
+        di_history=[],
+        exp_batches=[],
+        exp_qc_mode="all",
+        heavy_gate_overall=SimpleNamespace(ok=True),
+        heavy_gate_domains=SimpleNamespace(ok=True),
+        heavy_gate_numbering=SimpleNamespace(ok=True),
+        latest_run=None,
+        latest_immuno_run=None,
+        viewer_v2_components=[],
+        numbering_maps={},
+        numbering_payload={},
+        pdl1_allowed_mismatches=0,
+        sequence_editor_annotations=[],
+        molecule_insight_bundle={
+            "molecule_status": "blocked",
+            "blocking_issues": [{"gate_key": "sec_gate", "status": "fail"}],
+            "missing_evidence": [{"metric_key": "kd_nM"}],
+        },
+        molecule_insight_source={"snapshot_id": 12, "decision_key": "advance_to_in_vivo", "created_at": "2026-03-07"},
+        molecule_insight_governance={
+            "policy_name": "readiness_policy",
+            "policy_version": "v0.2",
+            "policy_semantics_hash": "abc123",
+            "snapshot_content_hash": "def456",
+            "gate_outcomes": [{"gate_key": "sec_gate", "status": "fail"}],
+        },
+        molecule_trends={"metric_keys": [], "series": {}},
+        molecule_trend_insights=[],
+        open_experiment_tasks=[],
+        trajectory_candidates=[],
+        trajectory_tree={"nodes": []},
+    )
+    assert "Current Governance Context" in gov_html
+    assert "Assessment Interpretation Detail" in gov_html
+    assert "History &amp; Audit" in gov_html
+    assert "Scientific Trajectory" in gov_html
+    assert "Estimated outcome (heuristic projection)" in gov_html
+    assert "Expected readiness gain" in gov_html

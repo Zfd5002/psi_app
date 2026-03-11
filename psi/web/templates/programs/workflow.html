@@ -4,15 +4,20 @@
 <div class="card">
   {% set page_eyebrow = "Program Workflow" %}
   {% set page_title = program.name ~ " Program Workflow" %}
-  {% set page_subtitle = "Unified operational workflow surface across board, claims, plans, and molecule actions." %}
+  {% set page_subtitle = "Unified operational workflow surface centered on experiment execution and current assessment." %}
   {% set page_primary_actions = [
+    {"href": "/data/new?program_id=" ~ program.id, "label": "Add Experiment Result"},
     {"href": "/programs/" ~ program.id ~ "/board", "label": "Open Board"},
     {"href": "/programs/" ~ program.id, "label": "Back to Program"}
   ] %}
   {% set page_secondary_actions = [
     {"href": "/programs/" ~ program.id ~ "/board", "label": "Board"},
-    {"href": "/data?program_id=" ~ program.id, "label": "Results"},
-    {"href": "/molecules?program_id=" ~ program.id, "label": "Program Molecules"}
+    {"href": "/data?program_id=" ~ program.id, "label": "Experiment Results"},
+    {"href": "/molecules?program_id=" ~ program.id, "label": "Program Molecules"},
+    {"href": "/evidence?program_id=" ~ program.id, "label": "Evidence (Optional)"},
+    {"href": "/claims?program_id=" ~ program.id, "label": "Claims (Optional)"},
+    {"href": "/plans?program_id=" ~ program.id, "label": "Plans (Optional)"},
+    {"href": "/decisions?program_id=" ~ program.id, "label": "Assessment History"}
   ] %}
   {% set page_metrics = [
     {"label": "Ready to Start", "value": (ready_to_start|length)},
@@ -22,9 +27,9 @@
   ] %}
   {% set page_matters_now = [
     "Start planned tasks with clear assay focus",
-    "Advance in-progress tasks into evidence capture",
+    "Capture experiment results for in-progress work so PSI refreshes the current assessment",
     "Unblock blocked tasks and reassign ownership where needed",
-    "Review recently completed tasks to confirm evidence linkage"
+    "Use optional interpretation lanes (evidence/claims/plans) only when needed"
   ] %}
   {% include "partials/page_header.html" %}
   {% set surface_chrome_active_index = 1 %}
@@ -76,12 +81,12 @@
   <div class="grid cols-2 workflow-secondary-stack" style="margin-top:10px;">
     <details class="card progressive-disclosure section-secondary" id="recent-learning" {% if recent_data_records|length or recent_evidence|length %}open{% endif %}>
       <summary><b>Recently Captured Learning</b> <span class="muted mini">({{ recent_data_records|length }} results · {{ recent_evidence|length }} evidence)</span></summary>
-      <div class="muted mini" style="margin-top:6px;">Latest results and evidence in this program, surfaced for interpretation follow-through.</div>
+      <div class="muted mini" style="margin-top:6px;">Latest results and optional interpretation records surfaced for follow-through.</div>
       {% include "partials/programs/workflow_recent_learning.html" %}
     </details>
     <details class="card progressive-disclosure section-secondary" id="interpretation-queue" {% if pending_interpretation|length %}open{% endif %}>
       <summary><b>Results Awaiting Interpretation</b> <span class="muted mini">({{ pending_interpretation|length }})</span></summary>
-      <div class="muted mini" style="margin-top:6px;">Recently captured results without evidence citation yet.</div>
+      <div class="muted mini" style="margin-top:6px;">Recently captured results with optional interpretation follow-up still available.</div>
       {% include "partials/programs/workflow_interpretation_queue.html" %}
     </details>
   </div>
@@ -103,7 +108,7 @@
   {% set section_id = "blocked-table" %}
   {% include "partials/programs/workflow_task_table.html" %}
 
-  <div class="section-heading workflow-section-heading" style="margin-top:12px;"><h2 id="awaiting-data">Awaiting Data Entry</h2><div class="muted mini">Tasks in progress but not yet linked to evidence.</div></div>
+  <div class="section-heading workflow-section-heading" style="margin-top:12px;"><h2 id="awaiting-data">Awaiting Data Entry</h2><div class="muted mini">Tasks in progress that still need experiment results.</div></div>
   <div class="linked-table-wrap" style="margin-top:8px;">
     <table class="table mini">
       <thead><tr><th>Task</th><th>Molecule</th><th>Focus</th><th class="no-print">Primary action</th></tr></thead>

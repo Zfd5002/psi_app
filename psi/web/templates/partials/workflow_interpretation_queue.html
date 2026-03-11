@@ -1,0 +1,24 @@
+<div class="card section-card section-workflow" style="margin-top:10px;" id="interpretation-queue">
+  <div class="section-heading">
+    <h2>Results Awaiting Interpretation</h2>
+    <div class="muted mini">Recently captured results where optional interpretation follow-up is still available.</div>
+  </div>
+  <div class="linked-table-wrap" style="margin-top:8px;">
+    <table class="table mini">
+      <thead><tr><th>Result</th><th>Molecule</th><th>Run</th><th class="no-print">Next step</th></tr></thead>
+      <tbody>
+        {% for r in pending_interpretation %}
+          {% set rm = molecule_by_id.get(r.molecule_id) if molecule_by_id is defined and r.molecule_id else None %}
+          <tr>
+            <td><a href="/data/{{ r.id }}">#{{ r.id }}</a></td>
+            <td>{% if rm %}<a href="/molecules/{{ rm.id }}">{{ rm.primary_id }}</a>{% elif r.molecule_id %}#{{ r.molecule_id }}{% else %}<span class="muted">program-level</span>{% endif %}</td>
+            <td>{{ r.title }}</td>
+            <td class="no-print"><a class="btn mini primary" href="/evidence/new?program_id={{ program.id }}{% if r.molecule_id %}&molecule_id={{ r.molecule_id }}{% endif %}{% if r.batch_id %}&batch_id={{ r.batch_id }}{% endif %}&return_to=/programs/{{ program.id }}/workflow">Create evidence</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" class="muted empty-state-cell">No recent results currently need optional interpretation follow-up.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

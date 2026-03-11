@@ -13,11 +13,10 @@
   {% if _message %}
     {{ _message }}
   {% elif _next_step == "evidence" %}
-    Recommended next step: create or link evidence from this result.
+    Optional next step: create or link evidence from this result if you need interpretation/governance documentation.
   {% else %}
     Continue in workflow to keep the scientific loop moving.
   {% endif %}
   {% if _return_to %} <a href="{{ _return_to }}">Return to prior context</a>.{% endif %}
 </div>
 {% endif %}
-

@@ -1,0 +1,8 @@
+PATCH_NOTES.md
+psi/version.py
+psi/web/routers/molecules.py
+psi/services/molecules.py
+psi/web/templates/molecules/partials/sequence_viewer.html
+psi/web/templates/molecules/partials/history_audit_zone.html
+tests/test_molecule_split_surfaces.py
+tests/test_sequence_viewer_layout.py
