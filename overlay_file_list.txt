@@ -1,8 +1,7 @@
 PATCH_NOTES.md
-README.md
 overlay_file_list.txt
+psi/services/evidence_preview.py
+psi/services/programs.py
 psi/version.py
-scripts/test_fast_gate.sh
-scripts/test_milestone_gate.sh
-tests/fast_gate_nodeids.txt
-tests/milestone_gate_targets.txt
+tests/test_evidence_preview.py
+tests/test_program_review_queue.py

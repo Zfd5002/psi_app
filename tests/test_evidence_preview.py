@@ -96,6 +96,55 @@ def test_build_record_evidence_preview_new_vs_existing_deterministic() -> None:
         eng.dispose()
 
 
+def test_build_record_evidence_preview_uses_preloaded_metric_keys(monkeypatch) -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 3, 0, 0, 0)
+            p = Program(name="P-pre", description="", created_at=now, updated_at=now)
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="M-pre", title="Mol", created_at=now, updated_at=now)
+            db.add(m)
+            db.commit()
+            db.refresh(m)
+            b = Batch(molecule_id=int(m.id), batch_id="B-pre", title="Batch", created_at=now, updated_at=now)
+            db.add(b)
+            db.commit()
+            db.refresh(b)
+
+            rec = create_data_record(
+                db,
+                program_id=int(p.id),
+                molecule_id=int(m.id),
+                batch_id=int(b.id),
+                domain="Biological",
+                data_type="Binding",
+                method="BLI",
+                title="Binding",
+                results_json={"ec50": 1.2},
+            )
+            _sync_metric_key(db)
+
+            def _should_not_run(*args, **kwargs):
+                raise AssertionError("_record_metric_keys should not run when record_metric_keys are provided")
+
+            monkeypatch.setattr("psi.services.evidence_preview._record_metric_keys", _should_not_run)
+            preview = build_record_evidence_preview(
+                db,
+                record_id=int(rec.id),
+                record_metric_keys=["ec50", "ec50", "kd"],
+                molecule_id=int(m.id),
+            )
+            assert int(preview["counts"]["total_metrics"]) == 2
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
 def test_build_pending_evidence_preview_for_molecule_filters_approved_entries() -> None:
     eng, SessionTmp = _mkdb()
     try:

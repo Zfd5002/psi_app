@@ -1,3 +1,79 @@
+## 2026-03-11 — v1.3.0d153
+Why:
+- Query audit confirmed repeated per-record evidence preview work in program review queue assembly (`build_program_review_queue`), with repeated record-metric loading along the preview path.
+- PSI needed a conservative batching/preload pass here without changing queue ordering or preview semantics.
+
+What:
+- Extended evidence preview builder to support preloaded inputs:
+  - `psi/services/evidence_preview.py`
+  - `build_record_evidence_preview(...)` now accepts optional:
+    - `record_metric_keys`
+    - `molecule_id`
+  - when provided, it skips per-record metric query and record fetch for that call while preserving output schema/labels/count semantics.
+- Updated program review queue assembly to pass preloaded values already available in queue construction:
+  - `psi/services/programs.py`
+  - `build_program_review_queue(...)` now passes each record’s deduped metric keys + molecule id directly into `build_record_evidence_preview(...)`.
+  - keeps existing snapshot cache semantics and deterministic queue ordering unchanged.
+- Added focused tests:
+  - `tests/test_evidence_preview.py`
+    - validates preloaded metric-key mode is honored without calling `_record_metric_keys`.
+  - `tests/test_program_review_queue.py`
+    - validates program review queue passes preloaded `record_metric_keys` and `molecule_id` to evidence preview builder.
+
+Notes:
+- No scientist-facing UI/UX change.
+- No DB/schema changes.
+- No DI/governance/report semantics changes.
+
+## 2026-03-11 — v1.3.0d152
+Why:
+- Query-count audit confirmed repeated per-record measurement lookups on molecule detail/results paths (`_best_batch_summary_rows` and `_build_experiment_result_rows`).
+- PSI needed low-risk batching of measurement retrieval to reduce repeated SQL calls without changing result semantics or rendering behavior.
+
+What:
+- Added batched measurement retrieval helper:
+  - `psi/services/measurements.py`
+  - new `list_measurements_for_record_ids(...)` fetches measurements for all requested record IDs in one deterministic query and groups rows by `record_id`.
+- Updated molecule results/summary builders to consume one grouped measurement map:
+  - `psi/web/routers/molecules.py`
+  - new `_load_measurements_by_record_id(...)` shared loader.
+  - `_build_experiment_result_rows(...)` now uses batched measurement map instead of per-record query loop.
+  - `_best_batch_summary_rows(...)` now uses the same batched map for per-metric aggregation.
+  - conservative fallback retained: if batch load fails, behavior degrades to prior per-record retrieval semantics.
+- Added focused tests:
+  - `tests/test_measurements_mixed_schema_compat.py`
+    - validates `list_measurements_for_record_ids(...)` groups rows across multiple records.
+  - `tests/test_molecule_split_surfaces.py`
+    - validates experiment result row builder uses batched measurement lookup when available.
+
+Notes:
+- No scientist-facing UI/UX change.
+- No DB/schema changes.
+- No DI/governance/report semantics changes.
+
+## 2026-03-11 — v1.3.0d151
+Why:
+- Program detail query audit confirmed repeated per-plan step lookups in `_build_program_claim_plan_context`, creating a dominant hot path on `/programs/{id}`.
+- PSI needed a low-risk internal batching change that preserves identical context/output semantics while reducing repeated SQL calls.
+
+What:
+- Added batched plan-step retrieval helper:
+  - `psi/services/plans.py`
+  - new `list_plan_steps_for_plan_ids(...)` fetches all steps for a plan-id set in one ordered query and groups rows by `plan_id`.
+- Updated program claim/plan context assembly to use the batch map instead of per-plan lookups:
+  - `psi/services/programs.py`
+  - `_build_program_claim_plan_context(...)` now does one batched step-load for summary + preview plan sets, then reuses grouped rows in memory.
+- Added focused regression tests:
+  - `tests/test_plans_service.py`
+    - validates grouped + ordered behavior of `list_plan_steps_for_plan_ids(...)`.
+  - `tests/test_program_plan_summary.py`
+    - validates claim/plan context path uses batched loader and does not rely on per-plan `list_plan_steps(...)`.
+
+Notes:
+- No scientist-facing UI/UX change.
+- No DB/schema changes.
+- No DI/governance/report semantics changes.
+
 ## 2026-03-11 — v1.3.0d150
 Why:
 - Full `pytest -q` has grown large enough to slow everyday PSI patch iteration.

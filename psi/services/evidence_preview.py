@@ -83,19 +83,39 @@ def build_record_evidence_preview(
     *,
     record_id: int,
     latest_snapshot_cache: dict[int, dict[str, Any]] | None = None,
+    record_metric_keys: list[str] | None = None,
+    molecule_id: int | None = None,
 ) -> dict[str, Any]:
-    rec = db.get(DataRecord, int(record_id))
-    if rec is None:
-        raise KeyError("DataRecord not found")
+    rec = None
+    if record_metric_keys is None or molecule_id is None:
+        rec = db.get(DataRecord, int(record_id))
+        if rec is None:
+            raise KeyError("DataRecord not found")
 
-    record_keys = _record_metric_keys(db, record_id=int(record_id))
+    if record_metric_keys is None:
+        record_keys = _record_metric_keys(db, record_id=int(record_id))
+    else:
+        seen: set[str] = set()
+        record_keys = []
+        for mk in list(record_metric_keys or []):
+            key = str(mk or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            record_keys.append(key)
+
+    record_molecule_id = (
+        int(molecule_id)
+        if molecule_id is not None
+        else (int(rec.molecule_id) if rec is not None and rec.molecule_id is not None else None)
+    )
     latest = (
         _latest_snapshot_metric_keys_for_molecule(
             db,
-            molecule_id=int(rec.molecule_id),
+            molecule_id=int(record_molecule_id),
             cache=latest_snapshot_cache,
         )
-        if rec.molecule_id is not None
+        if record_molecule_id is not None
         else {"snapshot_id": None, "metric_keys": []}
     )
     latest_keys = [str(x) for x in (latest.get("metric_keys") or []) if str(x).strip()]
@@ -126,8 +146,8 @@ def build_record_evidence_preview(
     new_count = len([r for r in rows if str(r.get("status_key") or "") == "new_vs_last_snapshot"])
     existing_count = len([r for r in rows if str(r.get("status_key") or "") == "already_present"])
     return {
-        "record_id": int(rec.id),
-        "molecule_id": (int(rec.molecule_id) if rec.molecule_id is not None else None),
+        "record_id": int(record_id),
+        "molecule_id": record_molecule_id,
         "latest_snapshot_id": latest.get("snapshot_id"),
         "latest_snapshot_metric_keys": latest_keys,
         "rows": rows,

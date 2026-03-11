@@ -266,6 +266,10 @@ def _build_program_claim_plan_context(db: Session, *, program_id: int) -> dict[s
         )
     plan_rows = plans_svc.list_plans_for_program(db, program_id=int(program_id), include_archived=True)
     plan_preview_rows = plans_svc.top_plans_for_program(db, program_id=int(program_id), limit=10)
+    plan_step_map = plans_svc.list_plan_steps_for_plan_ids(
+        db,
+        plan_ids=[int(p.id) for p in plan_rows] + [int(p.id) for p in plan_preview_rows],
+    )
     plan_summary = {
         "recommended": 0,
         "accepted": 0,
@@ -278,14 +282,14 @@ def _build_program_claim_plan_context(db: Session, *, program_id: int) -> dict[s
             plan_summary["recommended"] += 1
         if st == "accepted":
             plan_summary["accepted"] += 1
-        steps = plans_svc.list_plan_steps(db, plan_id=int(prow.id))
+        steps = plan_step_map.get(int(prow.id), [])
         if any(str(s.status or "") == "proposed" for s in steps):
             plan_summary["awaiting_task_instantiation"] += 1
         if any(str(s.metric_key or "").strip() for s in steps):
             plan_summary["bottleneck_targeting"] += 1
     plan_preview = []
     for prow in plan_preview_rows:
-        steps = plans_svc.list_plan_steps(db, plan_id=int(prow.id))
+        steps = plan_step_map.get(int(prow.id), [])
         plan_preview.append(
             {
                 "plan_id": int(prow.id),
@@ -916,6 +920,8 @@ def build_program_review_queue(db: Session, *, program_id: int) -> list[dict[str
             db,
             record_id=rid,
             latest_snapshot_cache=latest_snapshot_cache,
+            record_metric_keys=metric_keys,
+            molecule_id=mid,
         )
         ev_counts = ev_preview.get("counts") if isinstance(ev_preview.get("counts"), dict) else {}
         ev_short = (

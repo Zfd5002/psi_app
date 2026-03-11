@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from psi.core.db import ensure_schema
 from psi.core.models import Base, Batch, Molecule, Program
 from psi.services.data_records import apply_bulk_qc_action_for_record, create_data_record
+from psi.services import programs as program_svc
 from psi.services.programs import PROGRAM_EVIDENCE_ROWS_SQL, build_program_review_queue
 from psi.web.routers import programs as programs_router
 from psi.web.ui_labels import humanize_key, humanize_path_token, humanize_state
@@ -255,6 +256,62 @@ def test_program_detail_template_renders_review_queue_actions_and_order() -> Non
     assert 'aria-hidden="true"' in html
     assert "psi_program_detail_mode" in html
     assert html.find("A-1") < html.find("B-1")
+
+
+def test_program_review_queue_passes_preloaded_metrics_into_evidence_preview(monkeypatch) -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 3)
+            p = Program(name="P-preload", description="", created_at=now, updated_at=now)
+            db.add(p); db.commit(); db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="A-1", title="A", created_at=now, updated_at=now)
+            db.add(m); db.commit(); db.refresh(m)
+            b = Batch(molecule_id=int(m.id), batch_id="BA", title="BA", created_at=now, updated_at=now)
+            db.add(b); db.commit(); db.refresh(b)
+            rec = create_data_record(
+                db,
+                program_id=int(p.id),
+                molecule_id=int(m.id),
+                batch_id=int(b.id),
+                domain="Biological",
+                data_type="Binding",
+                method="BLI",
+                title="A run",
+                results_json={"ec50": 1.2, "kd": 2.3},
+            )
+            _sync_metric_key(db)
+            seen: list[dict[str, object]] = []
+
+            def _fake_preview(db_sess, *, record_id, latest_snapshot_cache=None, record_metric_keys=None, molecule_id=None):
+                seen.append(
+                    {
+                        "record_id": int(record_id),
+                        "metric_keys": list(record_metric_keys or []),
+                        "molecule_id": int(molecule_id) if molecule_id is not None else None,
+                    }
+                )
+                return {
+                    "record_id": int(record_id),
+                    "molecule_id": molecule_id,
+                    "latest_snapshot_id": None,
+                    "latest_snapshot_metric_keys": [],
+                    "rows": [],
+                    "counts": {"total_metrics": 0, "new_vs_last_snapshot": 0, "already_present": 0},
+                }
+
+            monkeypatch.setattr(program_svc, "build_record_evidence_preview", _fake_preview)
+            queue = build_program_review_queue(db, program_id=int(p.id))
+            assert len(queue) == 1
+            assert seen, "expected evidence preview to be called"
+            assert seen[0]["record_id"] == int(rec.id)
+            assert seen[0]["molecule_id"] == int(m.id)
+            assert seen[0]["metric_keys"] == ["ec50", "kd"]
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
 
 
 def test_program_detail_template_hides_bulk_buttons_when_no_pending() -> None:
