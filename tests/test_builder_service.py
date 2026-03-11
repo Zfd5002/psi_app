@@ -14,6 +14,7 @@ from psi.services.builder import (
     MoleculeCreateMeta,
     build_molecule_draft,
     create_molecule_from_draft,
+    suggest_new_primary_id_for_parent,
 )
 
 
@@ -61,6 +62,86 @@ def test_build_molecule_draft_clone_is_read_only_and_valid() -> None:
             assert draft.components["HC1"] == "QVQLVQSG"
             assert draft.components["LC1"] == "DIVLTQSP"
             assert draft.inherited_program_id == int(p.id)
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_suggest_new_primary_id_uses_lineage_root_series_prefix() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 11)
+            p = Program(name="Builder-Suggest", description="", created_at=now, updated_at=now)
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+
+            root = molecule_svc.create_molecule(
+                db,
+                program_id=int(p.id),
+                primary_id="TUT1-A001",
+                title="Root",
+                components={"HC1": "AAAA", "LC1": "BBBB"},
+            )
+            parent = molecule_svc.create_molecule(
+                db,
+                program_id=int(p.id),
+                primary_id="TUT1-A002",
+                title="Parent",
+                components={"HC1": "AAAT", "LC1": "BBBB"},
+            )
+            db.add(
+                MoleculeDerivation(
+                    parent_molecule_id=int(root.id),
+                    child_molecule_id=int(parent.id),
+                    derivation_type="clone",
+                    edit_payload_json="{}",
+                    created_at=now,
+                )
+            )
+            db.commit()
+
+            payload = suggest_new_primary_id_for_parent(db, parent_molecule_id=int(parent.id))
+            assert int(payload["lineage_root_molecule_id"]) == int(root.id)
+            assert payload["lineage_root_primary_id"] == "TUT1-A001"
+            assert payload["series_prefix"] == "TUT1-A"
+            assert payload["suggested_new_primary_id"] == "TUT1-A003"
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
+def test_suggest_new_primary_id_defaults_to_3_digit_series_when_no_numeric_suffix_found() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 11)
+            p = Program(name="Builder-Suggest2", description="", created_at=now, updated_at=now)
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            parent = molecule_svc.create_molecule(
+                db,
+                program_id=int(p.id),
+                primary_id="ALPHA",
+                title="Parent",
+                components={"HC1": "AAAA", "LC1": "BBBB"},
+            )
+            molecule_svc.create_molecule(
+                db,
+                program_id=int(p.id),
+                primary_id="ALPHA007",
+                title="Sibling",
+                components={"HC1": "AAAT", "LC1": "BBBB"},
+            )
+            payload = suggest_new_primary_id_for_parent(db, parent_molecule_id=int(parent.id))
+            assert payload["series_prefix"] == "ALPHA"
+            assert payload["suggested_new_primary_id"] == "ALPHA008"
         finally:
             db.close()
     finally:
@@ -204,6 +285,8 @@ def test_build_point_mutation_draft_applies_mutation_and_create_child() -> None:
             assert len(draft.preview_rows) == 1
             assert draft.preview_rows[0]["before"] == "MSGN"
             assert draft.preview_rows[0]["after"] == "MAGQ"
+            assert isinstance(draft.preview_rows[0].get("diff_rows"), list)
+            assert int(draft.preview_rows[0]["diff_rows"][0]["changed_count"]) == 2
             assert len(draft.changed_residues) == 2
             assert draft.changed_residues[0]["component"] == "HC1"
             assert draft.changed_residues[0]["position"] == "2"

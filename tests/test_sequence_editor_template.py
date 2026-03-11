@@ -36,8 +36,8 @@ def test_sequence_editor_partial_renders_interactive_residues() -> None:
     assert 'id="seq_component_select"' in html
     assert 'id="seq_direct_mutations"' in html
     assert 'id="seq_direct_apply"' in html
-    assert 'id="seq_preview_original"' in html
-    assert 'id="seq_preview_edited"' in html
+    assert 'id="seq_preview_rows"' in html
+    assert "seq-editor-diff" in html
     assert 'action="/builder/point-mutation/draft"' in html
     assert 'id="seq_to_builder_mutations"' in html
     assert 'id="seq_to_builder_mutation_count"' in html

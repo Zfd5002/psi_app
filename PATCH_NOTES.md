@@ -1,3 +1,424 @@
+## 2026-03-11 — v1.3.0d150
+Why:
+- Full `pytest -q` has grown large enough to slow everyday PSI patch iteration.
+- PSI needed a deterministic, reviewable fast-development test gate without changing the existing full suite.
+
+What:
+- Added explicit fast-gate allowlist (35 node IDs from audit source of truth):
+  - `tests/fast_gate_nodeids.txt`
+  - one node ID per line in stable deterministic order.
+- Added deterministic fast gate runner:
+  - `scripts/test_fast_gate.sh`
+  - reads allowlist, ignores blank/comment lines, runs `pytest -q` on exact node IDs.
+- Added deterministic milestone gate runner (expanded subset):
+  - `tests/milestone_gate_targets.txt`
+  - `scripts/test_milestone_gate.sh`
+  - runs fast gate first, then executes `pytest -q` over curated milestone target files.
+- Added concise developer workflow docs:
+  - `README.md`
+  - documents Tier 1 / Tier 2 / Tier 3 gate usage and allowlist maintenance locations.
+
+Notes:
+- No tests removed.
+- No pytest markers added in this patch.
+- Full suite remains unchanged and available via `pytest -q` for release validation.
+
+## 2026-03-11 — v1.3.0d149
+Why:
+- The new molecule-level Best Batch-Derived Summary table needed experiment/assay context per metric so scientists can interpret values faster without leaving molecule overview.
+
+What:
+- Added deterministic experiment labels to molecule summary rows:
+  - `psi/web/routers/molecules.py`
+  - `_best_batch_summary_rows(...)` now emits `experiment` for each metric row.
+  - Mapping:
+    - Expression titer -> Expression
+    - Total yield -> Expression
+    - Viability -> Expression
+    - Monomer % -> SEC
+    - HMW % -> SEC
+    - Binding KD -> SPR
+    - Functional EC50 -> Cell Assay
+    - Endotoxin -> LAL
+- Updated molecule detail summary table columns to:
+  - `Metric | Experiment | Best | Average | Best Batch | Best Date`
+  - `psi/web/templates/molecules/detail.html`
+  - preserves compact layout and deterministic row ordering.
+
+Tests:
+- Updated `tests/test_molecule_split_surfaces.py`:
+  - asserts emitted summary rows include deterministic `experiment` values.
+  - asserts molecule detail template header order includes the new Experiment column.
+
+## 2026-03-11 — v1.3.0d148
+Why:
+- Scientists needed a molecule-level snapshot that summarizes best and average observed performance across all batches/runs without opening the full results surface.
+- The molecule detail page had recent records but no compact deterministic cross-batch metric rollup.
+
+What:
+- Added a compact molecule-level **Best Batch-Derived Summary** table on `/molecules/{id}`:
+  - `psi/web/templates/molecules/detail.html`
+  - column order is exactly:
+    `Metric | Best | Average | Best Batch | Best Date`
+  - only renders rows for metrics that have at least one numeric observation (no placeholders).
+- Added deterministic molecule summary aggregation helper:
+  - `psi/web/routers/molecules.py`
+  - new `_best_batch_summary_rows(...)` builds one row per target metric across all records in
+    `exp_batch_panels` + `exp_molecule_level_records`.
+  - metric order (only if data exists):
+    1) Expression titer
+    2) Total yield
+    3) Viability
+    4) Monomer %
+    5) HMW %
+    6) Binding KD
+    7) Functional EC50
+    8) Endotoxin
+  - best direction is metric-aware:
+    - higher-is-better: titer, total yield, viability, monomer%
+    - lower-is-better: HMW%, KD, EC50, endotoxin
+  - deterministic tie-break for best:
+    - newest `run_date`, then highest `record_id`
+  - averages computed only from numeric observations with compatible units; incompatible unit groups are skipped rather than mixed.
+  - best/average displays include units when available.
+
+Tests:
+- Updated `tests/test_molecule_split_surfaces.py`:
+  - verifies row-per-metric summary behavior with required ordering.
+  - verifies best-direction handling (higher vs lower metrics).
+  - verifies numeric/unit compatibility filtering behavior.
+  - verifies molecule detail template renders exact summary table header order.
+
+## 2026-03-11 — v1.3.0d147
+Why:
+- The experiment-centric results table from d146 worked functionally, but columns still felt effectively equal-width in practice, causing avoidable wrapping in Summary/Record.
+- Summary tokens also dropped units when measurements lacked explicit `unit`, reducing quick scientific readability.
+
+What:
+- Improved molecule-results table column sizing behavior while preserving single-table compact layout:
+  - `psi/web/templates/molecules/results.html`
+    - added `results-experiment-table` class and explicit `colgroup`:
+      `Run Date | Batch | Experiment | Summary | Result | Record`
+  - `psi/web/static/style.css`
+    - added table-specific width hints and nowrap rules for narrow columns.
+    - allocated wider/flexible space to Summary + Record columns.
+- Improved summary token unit rendering in experiment rows:
+  - `psi/web/routers/molecules.py`
+  - summary formatter now appends units when available from:
+    1) measurement row `unit`
+    2) metric catalog fallback unit
+    3) deterministic defaults for kinetics metrics (`kon/ka/koff/kdiss`).
+  - numeric rendering is compact and scientist-readable (e.g., `82,000` instead of scientific notation for common large values).
+  - still capped to 2–3 key metrics per row.
+
+Tests:
+- Updated `tests/test_molecule_split_surfaces.py`:
+  - verifies summary includes units when present.
+  - verifies summary uses fallback units when measurement units are missing.
+  - verifies summary omits units cleanly when unavailable.
+  - verifies results template includes column-order header and new `colgroup` markup.
+
+## 2026-03-11 — v1.3.0d146
+Why:
+- Molecule results page rendered one row per measurement, which expanded a single experiment run into many rows and buried experiment-level review flow.
+- Scientists needed one compact row per experiment with key metrics and explicit result status.
+
+What:
+- Replaced measurement-flattening with experiment-centric row aggregation for `/molecules/{id}/results`:
+  - `psi/web/routers/molecules.py`
+  - new `_build_experiment_result_rows(...)` outputs one row per `DataRecord`.
+  - reuses existing `exp_batch_panels` + `exp_molecule_level_records` context (no upstream plumbing redesign).
+  - deterministic ordering:
+    - canonical scientific group order via `metric_catalog._GROUP_ORDER` semantics
+    - then `run_date` descending (empty last)
+    - then `record_id` descending.
+  - compact summary metric selection (2–3 items) by experiment family priority.
+  - explicit result extraction chain:
+    1) `conclusion`
+    2) `pass_fail`
+    3) parsed `primary_result_text` token (`pass|borderline|fail`)
+    4) `—`.
+- Updated results template to experiment-centric single table:
+  - `psi/web/templates/molecules/results.html`
+  - column order now:
+    `Run Date | Batch | Experiment | Summary | Result | Record`.
+  - preserves record drill-down links and compact single-table layout.
+
+Tests:
+- Updated `tests/test_molecule_split_surfaces.py`:
+  - one-record-many-measurements => one table row
+  - canonical ordering and within-group date/id sorting
+  - deterministic summary cap and metric priority behavior
+  - result extraction fallback chain
+  - no placeholder rows for missing experiments
+  - template header column order assertion.
+
+## 2026-03-11 — v1.3.0d145
+Why:
+- Builder draft diff still showed live alignment drift and stale styling symptoms after d144.
+- Root causes were a too-tight Builder label gutter and browser caching of `/static/style.css` without a versioned URL.
+
+What:
+- Hardened Builder-only row alignment in the point-mutation draft diff block:
+  - `psi/web/static/style.css`
+  - widened Builder label gutter to a deterministic `9ch` (`.builder-draft-diff .seq-diff-line`).
+  - forced no-wrap labels (`.builder-draft-diff .seq-diff-label`) so label text never intrudes into sequence columns.
+  - removed inter-span whitespace drift in Builder sequence lanes with `font-size:0` on `.builder-draft-diff .seq-diff-seq` and restored residue glyph sizing on `.builder-draft-diff .seq-diff-aa`.
+- Added stylesheet cache-busting keyed to PSI version:
+  - `psi/web/templates/base.html`
+  - stylesheet href now uses `/static/style.css?v={{ PSI_VERSION or '' }}`.
+
+Tests:
+- Updated `tests/test_base_navigation.py`:
+  - asserts base template emits versioned stylesheet URL.
+- Updated `tests/test_sequence_diff_layout_css.py`:
+  - asserts Builder-only rigid gutter and whitespace-lock rules exist.
+
+## 2026-03-11 — v1.3.0d144
+Why:
+- Builder point-mutation draft preview still looked like highlight was missing even though changed flags and changed-class markup were present.
+- Root cause was visual salience on the Builder surface: changed-cell emphasis was too subtle at a glance.
+
+What:
+- Added a Builder-only diff scope wrapper in the point-mutation preview:
+  - `psi/web/templates/builder/point_mutation.html`
+  - wraps preview diff rows with `builder-draft-diff`.
+- Strengthened changed-residue styling only within that Builder scope:
+  - `psi/web/static/style.css`
+  - added `.builder-draft-diff .seq-diff-aa.is-changed` with higher-contrast background/foreground and stronger inset framing.
+- Preserved existing diff-row alignment contract and structure:
+  - no service/data/template diff-contract changes.
+  - no Sequence Editor styling changes in this patch.
+
+Tests:
+- Updated `tests/test_builder_router.py`:
+  - asserts Builder preview includes `builder-draft-diff`.
+  - asserts changed-cell class markup is present in rendered preview.
+- Updated `tests/test_sequence_diff_layout_css.py`:
+  - asserts Builder-specific highlight selector exists.
+
+## 2026-03-11 — v1.3.0d142
+Why:
+- Remaining sequence diff UX issues persisted after d140/d141:
+  - paired rows could shift because CSS grid auto-placement allowed the second line to land in column 1,
+  - changed-residue highlight needed stronger visibility,
+  - Builder preview still showed redundant sequence presentations around the primary diff view.
+
+What:
+- Fixed true residue-column alignment for both Builder and Sequence Editor diff rows:
+  - `psi/web/static/style.css`
+  - pinned diff lines to the sequence-content column with:
+    - `.seq-diff-row .seq-diff-line { grid-column: 2 }`
+  - this prevents label-length or row auto-placement from shifting Edited rows left.
+- Improved changed-residue visibility while keeping restrained style:
+  - `psi/web/static/style.css`
+  - strengthened `.seq-diff-aa.is-changed` contrast (background/outline/inset contrast).
+- Simplified Builder preview to one primary sequence comparison view:
+  - `psi/web/templates/builder/point_mutation.html`
+  - removed redundant before/after summary table and redundant full sequence table.
+  - kept aligned Sequence diff view as primary, plus concise changed-residue summary table.
+
+Tests:
+- Updated `tests/test_builder_router.py`:
+  - asserts old duplicate sequence summary headers are absent.
+  - asserts a single primary `seq-diff-block` for preview fixture.
+- Updated `tests/test_sequence_diff_service.py`:
+  - verifies changed flags are consistent in both original and edited rows.
+- Added `tests/test_sequence_diff_layout_css.py`:
+  - guards alignment pin rule and changed-highlight styling presence.
+
+## 2026-03-11 — v1.3.0d141
+Why:
+- Sequence Editor preview on `/molecules/{id}/sequence` rendered plain long strings for Original/Edited sequences, which produced poor wrap/alignment behavior and no inline mutation highlighting.
+
+What:
+- Refactored Sequence Editor preview rendering to paired deterministic diff rows:
+  - `psi/web/static/sequence_editor.js`
+  - added row-contract builder `buildDiffRows(original, edited, rowWidth)` with stable row boundaries and per-residue `changed` flags.
+  - added DOM renderer for paired rows (Original/Edited) with inline changed-residue highlighting.
+  - preserves existing queue validation, handoff behavior, and changed-position summary text.
+- Updated Sequence Editor preview container markup:
+  - `psi/web/templates/molecules/_sequence_editor.html`
+  - replaced plain `<code>` blob preview nodes with a dedicated paired diff rows container (`#seq_preview_rows`).
+- Reused compact monospaced diff visual pattern introduced in d140:
+  - no extra tabs/panels/buttons; no hardcoded 20-AA behavior.
+
+Tests:
+- Updated `tests/test_sequence_editor_template.py`:
+  - asserts new preview rows container and diff class wiring.
+- Added `tests/test_sequence_editor_diff_rendering_contract.py`:
+  - verifies JS paired-row diff contract fields and changed-residue class mapping.
+- Existing Sequence Editor parsing/preview regression tests retained and passing.
+
+## 2026-03-11 — v1.3.0d140
+Why:
+- Builder point-mutation preview showed full before/after strings and a separate changed-residue table, but did not highlight changed residues inline.
+- Long sequence previews were hard to scan quickly for scientists during draft review.
+
+What:
+- Added deterministic sequence diff-row formatter:
+  - `psi/services/sequence_diff.py`
+  - `build_diff_rows(original, edited, row_width=64)` emits paired rows with:
+    - stable row boundaries
+    - per-residue `changed` flags
+    - compact row ranges.
+- Wired Builder draft preview rows to include render-ready diff rows:
+  - `psi/services/builder.py`
+  - `preview_rows` now include `diff_rows` generated server-side.
+- Updated Builder point mutation preview rendering:
+  - `psi/web/templates/builder/point_mutation.html`
+  - Sequence diff section now renders paired Original/Edited rows with inline changed-residue highlighting.
+  - Preserves existing warnings/assumptions and changed-residue table.
+- Added restrained styling for compact paired diff rendering:
+  - `psi/web/static/style.css`
+  - monospaced rows, quiet unchanged residues, subtle highlight on changed residues.
+
+Tests:
+- Added `tests/test_sequence_diff_service.py`:
+  - deterministic changed-position mapping
+  - stable row segmentation.
+- Updated `tests/test_builder_service.py`:
+  - verifies point-mutation preview includes diff rows with expected changed count.
+- Updated `tests/test_builder_router.py`:
+  - verifies template includes new paired diff markup classes.
+
+## 2026-03-11 — v1.3.0d139
+Why:
+- Builder parent search returned metadata but rendered as plain text with no selection callback, so selecting a parent did not bind Program/Parent context or suggest a new primary ID.
+
+What:
+- Added selectable parent-binding behavior in Builder clone and point-mutation templates:
+  - `psi/web/templates/builder/clone.html`
+  - `psi/web/templates/builder/point_mutation.html`
+  - search results now render as clickable mini-buttons.
+  - clicking a result now binds `Program` + `Parent molecule` and fetches a derived `New primary ID` suggestion.
+  - parent/program changes clear stale derived ID state and refresh suggestion for the selected parent.
+- Added lightweight server suggestion API and metadata wiring:
+  - `psi/web/routers/builder.py`
+    - search payload now includes `program_id` (alongside `id`, `primary_id`, `title`, `program_name`).
+    - new endpoint `GET /builder/parent_context?parent_molecule_id=...`.
+  - `psi/services/builder.py`
+    - added deterministic `suggest_new_primary_id_for_parent(...)`.
+    - resolves lineage root (cycle-safe, best-effort) from `MoleculeDerivation`.
+    - derives a short flat family-series prefix.
+    - increments next numeric series value from in-program IDs matching that prefix.
+- Preserved manual-only fields (no auto-population changes):
+  - `New title`
+  - `Target component`
+  - `Mutations`
+  - `Rationale`
+
+Tests:
+- Updated `tests/test_builder_search.py` for new search payload shape (`program_id`).
+- Updated `tests/test_builder_router.py`:
+  - route coverage for `/builder/parent_context`
+  - JSON response coverage for suggested ID payload.
+- Updated `tests/test_builder_router_parent_selector.py`:
+  - template wiring coverage for parent-context fetch and derived `builder_new_primary_id`.
+  - guard asserting manual builder fields are not JS-bound by parent selection.
+- Updated `tests/test_builder_service.py`:
+  - lineage-root based suggestion behavior.
+  - numeric-series suggestion behavior fallback.
+
+## 2026-03-11 — v1.3.0d138
+Why:
+- Needed a conservative Fc species-like annotation label with explicit uncertainty handling, while keeping the sequence viewer uncluttered.
+- Audit direction required confidence-aware language (`human` vs `human-like` vs `species uncertain`) and no new UI controls.
+
+What:
+- Extended constant-region analyzer:
+  - `psi/core/constant_regions.py`
+  - now emits Fc species-like recognized-region feature from Fc-anchor identity:
+    - `Fc (human)` for high-identity anchors
+    - `Fc (human-like)` for moderate-identity anchors
+    - `Fc (species uncertain)` for lower-confidence anchors
+  - preserved conservative hinge and anchored LALA/LALAPG logic.
+  - updated analysis/tool metadata to `d138`.
+- Updated artifact service versioning:
+  - `psi/services/constant_regions.py`
+  - artifact tool version now `d138` to keep payload provenance deterministic.
+- Reduced viewer clutter / duplicate Fc labels:
+  - `psi/services/molecule_viewer.py`
+  - when constant payload already provides an Fc species-like recognized-region feature, legacy fallback `Fc (IgG1 core)` is not duplicated.
+  - fallback remains in place when constant payload is unavailable.
+
+UI/UX:
+- Reused existing annotation panel/grouping only.
+- No new tabs/menus/panels/buttons.
+
+Tests:
+- Updated `tests/test_constant_region_annotations.py`:
+  - high-confidence `Fc (human)` case
+  - lower-identity `Fc (species uncertain)` case
+  - viewer dedupe behavior to avoid dual Fc labels
+  - existing hinge and LALA/LALAPG coverage retained.
+
+## 2026-03-11 — v1.3.0d137
+Why:
+- Needed anchored Fc-engineering motif annotation (LALA/LALAPG) without adding new sequence-page UI controls.
+- Audit direction required conservative anchored detection, not global free-text motif scanning.
+
+What:
+- Extended constant-region analyzer:
+  - `psi/core/constant_regions.py`
+  - added anchored motif calls in Fc-neighborhood window:
+    - `LALA`
+    - `LALAPG`
+  - detection only runs after high-confidence Fc anchoring.
+  - `LALAPG` takes precedence over overlapping `LALA` to avoid duplicate clutter.
+  - updated analysis payload/tool metadata to `d137`.
+- Updated constant-region artifact service versioning:
+  - `psi/services/constant_regions.py`
+  - artifact tool version now `d137` for deterministic payload-key refresh.
+- Kept integration model unchanged:
+  - persisted `DomainArtifact` payload
+  - projected through existing `molecule_viewer` annotation groups
+  - no new tabs/panels/buttons.
+
+Tests:
+- Updated `tests/test_constant_region_annotations.py`:
+  - anchored `LALA` positive case
+  - `LALAPG` positive case with overlap-precedence behavior
+  - negative case for motif outside Fc-neighborhood window
+  - viewer projection into `Engineering features` group.
+
+## 2026-03-11 — v1.3.0d136
+Why:
+- Needed the first constant-region annotation patch in PSI’s existing sequence-viewer pipeline with provenance and low-clutter UX.
+- Audit direction prioritized conservative hinge surfacing before broader constant-region calls.
+
+What:
+- Added deterministic constant-region analysis core:
+  - `psi/core/constant_regions.py`
+  - v1 behavior emits `hinge` only when:
+    - a high-confidence Fc core anchor exists, and
+    - a canonical `CPPC` motif is present in a bounded upstream window.
+  - prefers no call over uncertain call.
+- Added PSI-native artifact persistence/cache for constant-region analysis:
+  - `psi/services/constant_regions.py`
+  - stores/reuses `DomainArtifact` rows with:
+    - `artifact_type=constant_region_annotations`
+    - tool metadata (`psi_constant_regions`, `d136`)
+    - deterministic payloads.
+- Integrated payload projection into existing viewer feature flow:
+  - `psi/services/molecule_viewer.py`
+    - accepts `constant_region_payload_by_component`
+    - projects payload features into existing annotation groups (no new controls).
+  - `psi/services/molecules.py`
+    - computes component payload map during molecule-detail context build
+    - passes through to viewer context.
+
+UI/UX:
+- No new tabs, menus, button rows, or panels.
+- Hinge appears through the existing sequence annotation rendering path.
+
+Tests:
+- Added `tests/test_constant_region_annotations.py`:
+  - positive hinge detection when Fc-anchored
+  - negative case without upstream hinge motif
+  - artifact persistence path for constant-region payload
+  - viewer projection of constant-region feature payload.
+
 ## 2026-03-10 — v1.3.0d135
 Why:
 - Domain recompute (`POST /molecules/{id}/domains/recompute`) could appear to run but never persist VH/VL `DomainInstance` rows because its background worker opened the DB in read-only mode (`ensure=False` → `PRAGMA query_only=1`).

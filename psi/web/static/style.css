@@ -54,6 +54,18 @@ textarea{min-height:110px;resize:vertical}
 
 /* Allow long unbroken strings (IDs, sequences) to wrap inside table cells. */
 .table td code,.table td pre{white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+.results-experiment-table{table-layout:auto}
+.results-experiment-table col.col-run-date{width:9rem}
+.results-experiment-table col.col-batch{width:9rem}
+.results-experiment-table col.col-experiment{width:14rem}
+.results-experiment-table col.col-summary{width:auto}
+.results-experiment-table col.col-result{width:8rem}
+.results-experiment-table col.col-record{width:14rem}
+.results-experiment-table td.col-run-date,
+.results-experiment-table td.col-batch,
+.results-experiment-table td.col-result{white-space:nowrap}
+.results-experiment-table td.col-summary,
+.results-experiment-table td.col-record{overflow-wrap:anywhere;word-break:break-word}
 .grid2{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
 @media (max-width:900px){.grid2{grid-template-columns:1fr}}
 .mini{font-size:12px;color:#cfe2f5}
@@ -304,6 +316,29 @@ body.pdf-mode .narrative-list{gap:3px}
 .molecule-confidence-item-state { text-transform:capitalize; font-size:12px; margin-top:2px; }
 @media (max-width: 900px) { .molecule-confidence-grid { grid-template-columns:1fr; } }
 @media (max-width: 900px) { .molecule-header-grid { grid-template-columns:1fr; } }
+
+/* --- v1.3.0d140: compact paired sequence diff rows --- */
+.seq-diff-block{margin-top:10px;border:1px solid rgba(36,50,74,.75);border-radius:12px;background:rgba(7,13,24,.45);padding:8px}
+.seq-diff-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.seq-diff-row{display:grid;grid-template-columns:70px 1fr;gap:6px;align-items:start;padding:4px 0;border-top:1px dashed rgba(36,50,74,.45)}
+.seq-diff-row:first-of-type{border-top:none}
+.seq-diff-range{text-align:right;padding-top:2px}
+.seq-diff-line{display:grid;grid-template-columns:56px 1fr;gap:8px;align-items:start}
+.seq-diff-row .seq-diff-line{grid-column:2}
+.seq-diff-seq{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:12px;line-height:1.35;letter-spacing:0;white-space:normal}
+.seq-diff-aa{display:inline-block;width:1ch;text-align:center;color:rgba(219,231,244,.86)}
+.seq-diff-aa.is-changed{background:rgba(255,193,7,.45);outline:1px solid rgba(255,224,130,.9);border-radius:3px;color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.2) inset}
+/* v1.3.0d144: Builder-only salience boost for changed residues */
+.builder-draft-diff .seq-diff-aa.is-changed{background:rgba(255,220,120,.92);color:#1f1400;outline:1px solid rgba(255,240,170,.98);box-shadow:0 0 0 1px rgba(43,32,0,.38) inset,0 0 0 1px rgba(255,210,80,.35)}
+/* v1.3.0d145: Builder-only rigid label gutter + no inter-residue whitespace drift */
+.builder-draft-diff .seq-diff-line{grid-template-columns:9ch 1fr}
+.builder-draft-diff .seq-diff-label{display:block;white-space:nowrap}
+.builder-draft-diff .seq-diff-seq{white-space:nowrap;font-size:0}
+.builder-draft-diff .seq-diff-aa{font-size:12px;line-height:1.35}
+@media (max-width:900px){
+  .seq-diff-row{grid-template-columns:1fr}
+  .seq-diff-range{text-align:left}
+}
 
 /* --- v1.3.0d1: shared scientist-first page scaffolding primitives --- */
 .page-header-scaffold{display:grid;gap:12px;padding:14px;border-radius:16px;border:1px solid rgba(51,184,255,.22);background:linear-gradient(135deg,rgba(16,26,46,.92),rgba(7,13,24,.86))}

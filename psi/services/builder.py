@@ -38,6 +38,7 @@ from psi.services.builder_validation import (
     validate_primary_id,
     validate_target_component_exists,
 )
+from psi.services.sequence_diff import build_diff_rows
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,17 @@ def _compute_changed_residues(*, component: str, before: str, after: str) -> lis
     return out
 
 
+def _attach_preview_diff_rows(preview_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in list(preview_rows or []):
+        item = dict(row or {})
+        before = str(item.get("before") or "")
+        after = str(item.get("after") or "")
+        item["diff_rows"] = build_diff_rows(original=before, edited=after)
+        out.append(item)
+    return out
+
+
 def _slug_token(value: str) -> str:
     s = re.sub(r"[^A-Za-z0-9]+", "_", str(value or "").strip()).strip("_")
     return s or "variant"
@@ -152,6 +164,101 @@ def _build_member_primary_id(*, naming_base: str, member_label: str, fallback_in
     if label == "variant":
         label = f"v{int(fallback_index)}"
     return f"{base}_{label}"
+
+
+def _resolve_family_root_molecule(db: Session, *, molecule: Molecule) -> Molecule:
+    """Return the top-most parent in derivation lineage (best-effort, cycle-safe)."""
+    cur = molecule
+    seen: set[int] = set()
+    while cur is not None and int(cur.id) not in seen:
+        seen.add(int(cur.id))
+        edge = (
+            db.query(MoleculeDerivation)
+            .filter(MoleculeDerivation.child_molecule_id == int(cur.id))
+            .order_by(MoleculeDerivation.id.asc())
+            .first()
+        )
+        if edge is None:
+            return cur
+        parent = db.get(Molecule, int(edge.parent_molecule_id))
+        if parent is None:
+            return cur
+        cur = parent
+    return molecule
+
+
+def _primary_series_prefix(primary_id: str) -> str:
+    """Derive a flat family-series prefix from a primary ID.
+
+    Examples:
+    - TUT1-A    -> TUT1-A
+    - TUT1-A001 -> TUT1-A
+    - TUT1-A-12 -> TUT1-A
+    """
+    pid = str(primary_id or "").strip()
+    if not pid:
+        return ""
+    m = re.match(r"^(.*?)(?:[-_]?(\d+))$", pid)
+    if not m:
+        return pid
+    prefix = str(m.group(1) or "").rstrip("-_")
+    return prefix or pid
+
+
+def suggest_new_primary_id_for_parent(
+    db: Session,
+    *,
+    parent_molecule_id: int,
+) -> dict[str, Any]:
+    """Suggest next flat family-series primary ID for a selected parent.
+
+    Returns payload suitable for Builder parent-context API.
+    """
+    parent = db.get(Molecule, int(parent_molecule_id))
+    if parent is None:
+        raise KeyError("Parent molecule not found")
+
+    root = _resolve_family_root_molecule(db, molecule=parent)
+    root_primary_id = str(root.primary_id or "").strip()
+    prefix = _primary_series_prefix(root_primary_id or str(parent.primary_id or ""))
+    if not prefix:
+        prefix = str(parent.primary_id or "").strip()
+
+    prog_id = int(parent.program_id)
+    prog_rows = (
+        db.query(Molecule.primary_id)
+        .filter(Molecule.program_id == int(prog_id))
+        .all()
+    )
+    pat = re.compile(rf"^{re.escape(prefix)}(?:[-_]?(\d+))$")
+    max_n = 0
+    max_width = 3
+    for (pid_raw,) in prog_rows:
+        pid = str(pid_raw or "").strip()
+        mm = pat.match(pid)
+        if not mm:
+            continue
+        digits = str(mm.group(1) or "")
+        if not digits:
+            continue
+        try:
+            n = int(digits)
+        except Exception:
+            continue
+        max_n = max(max_n, n)
+        max_width = max(max_width, len(digits))
+
+    next_n = int(max_n) + 1
+    suggested = f"{prefix}{next_n:0{max_width}d}"
+    return {
+        "parent_molecule_id": int(parent.id),
+        "parent_primary_id": str(parent.primary_id or ""),
+        "program_id": int(parent.program_id),
+        "series_prefix": str(prefix),
+        "lineage_root_molecule_id": int(root.id),
+        "lineage_root_primary_id": str(root.primary_id or ""),
+        "suggested_new_primary_id": str(suggested),
+    }
 
 
 def _load_parent_components(db: Session, *, parent_molecule_id: int) -> dict[str, str]:
@@ -374,7 +481,7 @@ def build_molecule_draft(db: Session, spec: MoleculeBuildSpec) -> MoleculeDraft:
         errors=[e for e in errors if str(e or "").strip()],
         warnings=warnings,
         assumptions=assumptions,
-        preview_rows=preview_rows,
+        preview_rows=_attach_preview_diff_rows(preview_rows),
         changed_residues=changed_residues,
         inherited_program_id=inherited_program_id,
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -40,7 +41,35 @@ def test_builder_routes_exist() -> None:
     assert ("/builder/cdr-builder", ("GET",)) in route_keys
     assert ("/builder/cdr-builder/draft", ("POST",)) in route_keys
     assert ("/builder/search_molecules", ("GET",)) in route_keys
+    assert ("/builder/parent_context", ("GET",)) in route_keys
     assert ("/builder/exploration-task", ("POST",)) in route_keys
+
+
+def test_builder_parent_context_returns_suggested_new_primary_id() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            p = Program(name="P-builder-context")
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            parent = Molecule(program_id=int(p.id), primary_id="TUT1-A001", title="Parent")
+            sibling = Molecule(program_id=int(p.id), primary_id="TUT1-A002", title="Sibling")
+            db.add_all([parent, sibling])
+            db.commit()
+            db.refresh(parent)
+            resp = builder_router.builder_parent_context(parent_molecule_id=int(parent.id), db=db)
+            assert resp.status_code == 200
+            payload = json.loads(resp.body.decode("utf-8"))
+            assert int(payload["parent_molecule_id"]) == int(parent.id)
+            assert int(payload["program_id"]) == int(p.id)
+            assert payload["series_prefix"] == "TUT1-A"
+            assert payload["suggested_new_primary_id"] == "TUT1-A003"
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
 
 
 def test_create_builder_exploration_task_route_creates_operational_task() -> None:
@@ -145,7 +174,32 @@ def test_builder_point_mutation_template_renders_before_after_preview() -> None:
             assumptions=[],
             parent_primary_id="M-11",
             derivation_type="point_mutation",
-            preview_rows=[{"component": "HC1", "before": "MSGN", "after": "MAGQ", "mutations": "S2A N4Q"}],
+            preview_rows=[
+                {
+                    "component": "HC1",
+                    "before": "MSGN",
+                    "after": "MAGQ",
+                    "mutations": "S2A N4Q",
+                    "diff_rows": [
+                        {
+                            "start": 1,
+                            "end": 4,
+                            "original": [
+                                {"aa": "M", "changed": False},
+                                {"aa": "S", "changed": True},
+                                {"aa": "G", "changed": False},
+                                {"aa": "N", "changed": True},
+                            ],
+                            "edited": [
+                                {"aa": "M", "changed": False},
+                                {"aa": "A", "changed": True},
+                                {"aa": "G", "changed": False},
+                                {"aa": "Q", "changed": True},
+                            ],
+                        }
+                    ],
+                }
+            ],
             changed_residues=[{"component": "HC1", "position": "2", "from": "S", "to": "A"}],
             components={"HC1": "MAGQ", "LC1": "BBBB"},
             parent_molecule_id=11,
@@ -155,11 +209,17 @@ def test_builder_point_mutation_template_renders_before_after_preview() -> None:
         form_data={"component": "HC1", "mutations": "S2A N4Q", "rationale": ""},
         error="",
     )
-    assert "Before" in html
-    assert "After" in html
     assert "S2A N4Q" in html
     assert "Changed residues" in html
     assert "Sequence diff view" in html
+    assert "builder-draft-diff" in html
+    assert "seq-diff-block" in html
+    assert "seq-diff-aa" in html
+    assert "seq-diff-aa is-changed" in html
+    assert html.count("seq-diff-block") == 1
+    assert "Diff summary" not in html
+    assert "<th>Before</th>" not in html
+    assert "<th>After</th>" not in html
     assert 'action="/builder/point-mutation/create"' in html
 
 

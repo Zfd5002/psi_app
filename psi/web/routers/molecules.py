@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+import re
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -11,6 +14,7 @@ from psi.web import handoff_context as handoff
 from psi.core.db import get_db as get_db_ctx
 from psi.services import molecules as svc
 from psi.services.measurements import list_measurements_for_record
+from psi.services.metric_catalog import metric_catalog_entry, metric_group_sort_key, normalize_metric_key
 from psi.services.computed import run_computed_properties, run_immunogenicity_mhci
 from psi.services.numbering import trigger_numbering_for_molecule
 from psi.services.domains import extract_domains_for_molecule, upsert_user_domain_instance
@@ -79,48 +83,226 @@ def _collapse_symmetric_viewer_components(components: list[dict] | None) -> list
     return out
 
 
-def _result_text_from_summary(summary: dict) -> tuple[str, str]:
-    kind = str(summary.get("kind") or "").strip()
-    if kind == "SEC":
-        return (str(summary.get("monomer_pct") if summary.get("monomer_pct") is not None else "n/a"), "% monomer")
-    if kind == "Binding":
-        return (str(summary.get("kd_nM") if summary.get("kd_nM") is not None else "n/a"), "nM KD")
-    if kind == "Endotoxin":
-        return (str(summary.get("value_eu_ml") if summary.get("value_eu_ml") is not None else "n/a"), "EU/mL")
-    if kind == "Expression":
-        return (str(summary.get("titer_mg_ml") if summary.get("titer_mg_ml") is not None else "n/a"), "mg/mL")
-    if kind == "Potency":
-        return (str(summary.get("ec50_nM") if summary.get("ec50_nM") is not None else "n/a"), "nM EC50")
-    return ("—", "")
+_RESULT_PARSE_RE = re.compile(r"\b(pass|borderline|fail)\b", flags=re.IGNORECASE)
 
 
-def _measurement_value_and_unit(row: dict) -> tuple[str, str]:
+_EXPERIMENT_GROUP_BY_DATA_TYPE = {
+    "EXPRESSION": "Expression",
+    "SEC": "Purity/SEC",
+    "PURITY": "Purity/SEC",
+    "PURIFICATION_RUN": "Purity/SEC",
+    "DLS": "Purity/SEC",
+    "STABILITY": "Purity/SEC",
+    "IDENTITY": "Purity/SEC",
+    "BINDING": "Binding",
+    "CELL_ASSAY": "Functional",
+    "ENDOTOXIN": "Endotoxin",
+    "PK_PD": "PK",
+    "IN_VIVO_EFFICACY": "In Vivo",
+}
+
+
+_SUMMARY_METRIC_PRIORITIES = {
+    "Expression": [
+        ("titer_mg_l",),
+        ("expr_yield_mgL",),
+        ("viability_percent",),
+        ("total_yield_mg",),
+    ],
+    "Purity/SEC": [
+        ("monomer_pct", "monomer_percent"),
+        ("hmw_pct", "hmw_percent"),
+        ("lmw_pct", "lmw_percent"),
+    ],
+    "Binding": [
+        ("kd_nM", "kd"),
+        ("kon",),
+        ("koff",),
+    ],
+    "Functional": [
+        ("ec50",),
+        ("percent_killing",),
+        ("surface_expression_pct_24h",),
+        ("internalization_t1_2_h",),
+    ],
+    "Endotoxin": [
+        ("value_eu_ml", "endotoxin_eu_ml", "endotoxin_eu_mg"),
+        ("limit_eu_ml", "spec_limit_eu_mg"),
+    ],
+    "PK": [
+        ("half_life_days",),
+        ("cmax_ug_ml",),
+        ("auc",),
+    ],
+    "In Vivo": [
+        ("diabetes_incidence_pct",),
+        ("time_to_onset_days",),
+    ],
+}
+
+
+_DEFAULT_UNIT_BY_METRIC = {
+    "kon": "M^-1 s^-1",
+    "ka": "M^-1 s^-1",
+    "koff": "s^-1",
+    "kdiss": "s^-1",
+    "rmax": "RU",
+}
+
+
+def _normalize_unit_display(unit: str) -> str:
+    u = str(unit or "").strip()
+    if not u:
+        return ""
+    lookup = {
+        "1/M/s": "M^-1 s^-1",
+        "1/Ms": "M^-1 s^-1",
+        "1/s": "s^-1",
+        "M-1 s-1": "M^-1 s^-1",
+    }
+    return str(lookup.get(u, u))
+
+
+def _measurement_metric_key(row: dict) -> str:
+    return str(row.get("metric_key") or row.get("name") or row.get("key") or "").strip()
+
+
+def _format_numeric_value(value: float) -> str:
+    num = float(value)
+    if abs(num - round(num)) < 1e-12:
+        return f"{int(round(num)):,}"
+    if abs(num) >= 1000:
+        return f"{num:,.3f}".rstrip("0").rstrip(".")
+    if abs(num) >= 1:
+        return f"{num:.4g}"
+    return f"{num:.3g}"
+
+
+def _measurement_value_and_unit(row: dict, *, metric_key: str = "") -> tuple[str, str]:
+    metric_key = str(metric_key or _measurement_metric_key(row) or "").strip()
     value_num = row.get("value_num")
     value_text = row.get("value_text")
+    unit = str(row.get("unit") or "").strip()
+    if not unit and metric_key:
+        unit = str(metric_catalog_entry(metric_key).get("unit") or "").strip()
+    if not unit and metric_key:
+        unit = str(_DEFAULT_UNIT_BY_METRIC.get(metric_key) or "").strip()
+    unit = _normalize_unit_display(unit)
     if value_num is not None:
-        return (str(value_num), str(row.get("unit") or ""))
+        try:
+            return (_format_numeric_value(float(value_num)), unit)
+        except Exception:
+            return (str(value_num), unit)
     if value_text not in (None, ""):
-        return (str(value_text), str(row.get("unit") or ""))
+        return (str(value_text), unit)
     raw = row.get("value")
     if raw not in (None, ""):
-        return (str(raw), str(row.get("unit") or ""))
-    return ("—", str(row.get("unit") or ""))
+        return (str(raw), unit)
+    return ("—", unit)
 
 
-def _measurement_metric_name(row: dict) -> str:
-    metric = str(row.get("metric_key") or row.get("name") or row.get("key") or "").strip()
-    return metric or "result"
+def _record_group_name(record, measurements: list[dict]) -> str:
+    dtype = str(getattr(record, "data_type", "") or "").strip().upper()
+    if dtype in _EXPERIMENT_GROUP_BY_DATA_TYPE:
+        return str(_EXPERIMENT_GROUP_BY_DATA_TYPE[dtype])
+    inferred = "Other"
+    for m in list(measurements or []):
+        mk = _measurement_metric_key(m)
+        if not mk:
+            continue
+        g = str(metric_catalog_entry(mk).get("domain") or "Other").strip() or "Other"
+        if g.lower() != "other":
+            inferred = g
+            break
+    return inferred
 
 
-def _flatten_result_value_rows(
+def _record_experiment_label(record) -> str:
+    dtype = str(getattr(record, "data_type", "") or "").strip()
+    method = str(getattr(record, "method", "") or "").strip()
+    dtype_txt = dtype.replace("_", " ").strip() or "Experiment"
+    method_txt = method.replace("_", " ").strip() or "Unknown"
+    return f"{dtype_txt} / {method_txt}"
+
+
+def _summary_for_measurements(*, group_name: str, measurements: list[dict], max_items: int = 3) -> str:
+    if not measurements:
+        return "—"
+    by_key: dict[str, dict] = {}
+    for m in list(measurements):
+        key = _measurement_metric_key(m)
+        if not key:
+            continue
+        by_key.setdefault(str(key), m)
+
+    selected_keys: list[str] = []
+    for alias_group in list(_SUMMARY_METRIC_PRIORITIES.get(group_name) or []):
+        for alias in alias_group:
+            if alias in by_key and alias not in selected_keys:
+                selected_keys.append(alias)
+                break
+        if len(selected_keys) >= max_items:
+            break
+
+    if not selected_keys:
+        noisy = {"conclusion", "pass_fail", "fit_model", "chi2", "binding_confirmed"}
+        fallback_keys = sorted([k for k in by_key.keys() if k not in noisy]) or sorted(by_key.keys())
+        selected_keys = fallback_keys[:max_items]
+
+    parts: list[str] = []
+    for k in selected_keys[:max_items]:
+        row = by_key.get(k) or {}
+        value, unit = _measurement_value_and_unit(row, metric_key=k)
+        entry = metric_catalog_entry(k)
+        label = str(entry.get("label") or k).strip() or k
+        if value == "—":
+            continue
+        if unit:
+            parts.append(f"{label} {value} {unit}")
+        else:
+            parts.append(f"{label} {value}")
+    return "; ".join(parts) if parts else "—"
+
+
+def _result_for_record(*, measurements: list[dict], primary_result_text: str | None) -> str:
+    by_key = {_measurement_metric_key(m): m for m in list(measurements or []) if _measurement_metric_key(m)}
+    for key in ("conclusion", "pass_fail"):
+        row = by_key.get(key)
+        if row is None:
+            continue
+        value, _unit = _measurement_value_and_unit(row, metric_key=key)
+        val = str(value or "").strip()
+        if val and val != "—":
+            return val
+    text = str(primary_result_text or "").strip()
+    if text:
+        m = _RESULT_PARSE_RE.search(text)
+        if m:
+            return str(m.group(1)).lower()
+    return "—"
+
+
+def _run_date_epoch(value: str) -> float:
+    text = str(value or "").strip()
+    if not text:
+        return -1.0
+    try:
+        if len(text) == 10:
+            return float(datetime.fromisoformat(text + "T00:00:00").timestamp())
+        return float(datetime.fromisoformat(text).timestamp())
+    except Exception:
+        return -1.0
+
+
+def _build_experiment_result_rows(
     db: Session,
     exp_batch_panels: list[dict] | None,
     exp_molecule_level_records: list[dict] | None = None,
 ) -> list[dict]:
-    rows: list[dict] = []
+    records_by_id = _collect_molecule_records_from_experimental_context(exp_batch_panels, exp_molecule_level_records)
     measurement_cache: dict[int, list[dict]] = {}
 
-    def _rows_for_record(record_id: int) -> list[dict]:
+    def _measurements_for_record(record_id: int) -> list[dict]:
         if record_id not in measurement_cache:
             try:
                 measurement_cache[record_id] = list_measurements_for_record(db, record_id=int(record_id))
@@ -128,6 +310,64 @@ def _flatten_result_value_rows(
                 measurement_cache[record_id] = []
         return measurement_cache.get(record_id, [])
 
+    rows: list[dict] = []
+    for record_id, node in records_by_id.items():
+        record = node.get("record")
+        if record is None:
+            continue
+        measurements = _measurements_for_record(int(record_id))
+        group_name = _record_group_name(record, measurements)
+        group_order = int(metric_group_sort_key(group_name)[0])
+        run_date = str(getattr(record, "run_date", "") or "")
+        rows.append(
+            {
+                "record_id": int(record_id),
+                "record_title": str(getattr(record, "title", "") or ""),
+                "run_date": run_date,
+                "batch_id": node.get("batch_id"),
+                "batch_label": str(node.get("batch_label") or "—"),
+                "experiment": _record_experiment_label(record),
+                "summary": _summary_for_measurements(group_name=group_name, measurements=measurements, max_items=3),
+                "result": _result_for_record(
+                    measurements=measurements,
+                    primary_result_text=str(getattr(record, "primary_result_text", "") or ""),
+                ),
+                "group_name": group_name,
+                "group_order": group_order,
+                "_run_date_epoch": _run_date_epoch(run_date),
+            }
+        )
+
+    rows.sort(
+        key=lambda r: (
+            int(r.get("group_order") or 999),
+            0 if float(r.get("_run_date_epoch") or -1) >= 0 else 1,
+            -float(r.get("_run_date_epoch") or -1),
+            -int(r.get("record_id") or 0),
+        )
+    )
+    for row in rows:
+        row.pop("_run_date_epoch", None)
+    return rows
+
+
+_MOLECULE_SUMMARY_METRIC_SPECS = [
+    {"label": "Expression titer", "experiment": "Expression", "keys": ("titer_mg_l", "expr_yield_mgL"), "best": "max"},
+    {"label": "Total yield", "experiment": "Expression", "keys": ("total_yield_mg",), "best": "max"},
+    {"label": "Viability", "experiment": "Expression", "keys": ("viability_percent",), "best": "max"},
+    {"label": "Monomer %", "experiment": "SEC", "keys": ("monomer_pct", "monomer_percent"), "best": "max"},
+    {"label": "HMW %", "experiment": "SEC", "keys": ("hmw_pct", "hmw_percent"), "best": "min"},
+    {"label": "Binding KD", "experiment": "SPR", "keys": ("kd_nM", "kd_nm", "kd"), "best": "min"},
+    {"label": "Functional EC50", "experiment": "Cell Assay", "keys": ("ec50",), "best": "min"},
+    {"label": "Endotoxin", "experiment": "LAL", "keys": ("endotoxin_eu_ml", "endotoxin_eu_mg", "value_eu_ml"), "best": "min"},
+]
+
+
+def _collect_molecule_records_from_experimental_context(
+    exp_batch_panels: list[dict] | None,
+    exp_molecule_level_records: list[dict] | None,
+) -> dict[int, dict]:
+    records_by_id: dict[int, dict] = {}
     for panel in list(exp_batch_panels or []):
         batch = panel.get("batch")
         batch_id = int(batch.id) if batch is not None and getattr(batch, "id", None) is not None else None
@@ -135,7 +375,7 @@ def _flatten_result_value_rows(
         assays = panel.get("assays") if isinstance(panel, dict) else {}
         if not isinstance(assays, dict):
             continue
-        for assay_name, conds in assays.items():
+        for _assay_name, conds in assays.items():
             if not isinstance(conds, dict):
                 continue
             for node in conds.values():
@@ -144,83 +384,137 @@ def _flatten_result_value_rows(
                     record = item.get("record") if isinstance(item, dict) else None
                     if record is None:
                         continue
-                    summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
                     record_id = int(record.id)
-                    measurements = _rows_for_record(record_id)
-                    if measurements:
-                        for mr in measurements:
-                            value, units = _measurement_value_and_unit(mr)
-                            rows.append(
-                                {
-                                    "record_id": record_id,
-                                    "record_title": str(record.title or ""),
-                                    "run_date": str(record.run_date or ""),
-                                    "assay": str(assay_name or ""),
-                                    "metric": _measurement_metric_name(mr),
-                                    "value": value,
-                                    "units": units,
-                                    "batch_id": batch_id,
-                                    "batch_label": batch_label,
-                                }
-                            )
-                        continue
-
-                    value, units = _result_text_from_summary(summary)
-                    rows.append(
-                        {
-                            "record_id": record_id,
-                            "record_title": str(record.title or ""),
-                            "run_date": str(record.run_date or ""),
-                            "assay": str(assay_name or ""),
-                            "metric": str(summary.get("kind") or assay_name or "Result"),
-                            "value": value,
-                            "units": units,
-                            "batch_id": batch_id,
-                            "batch_label": batch_label,
-                        }
-                    )
-
+                    records_by_id[record_id] = {
+                        "record": record,
+                        "batch_id": batch_id,
+                        "batch_label": batch_label,
+                    }
     for item in list(exp_molecule_level_records or []):
         record = item.get("record") if isinstance(item, dict) else None
         if record is None:
             continue
-        summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
         record_id = int(record.id)
-        measurements = _rows_for_record(record_id)
-        assay_name = str(summary.get("kind") or "Unassigned run")
-        if measurements:
-            for mr in measurements:
-                value, units = _measurement_value_and_unit(mr)
-                rows.append(
-                    {
-                        "record_id": record_id,
-                        "record_title": str(record.title or ""),
-                        "run_date": str(record.run_date or ""),
-                        "assay": assay_name,
-                        "metric": _measurement_metric_name(mr),
-                        "value": value,
-                        "units": units,
-                        "batch_id": None,
-                        "batch_label": "Unassigned",
-                    }
-                )
-            continue
-
-        value, units = _result_text_from_summary(summary)
-        rows.append(
+        records_by_id.setdefault(
+            record_id,
             {
-                "record_id": record_id,
-                "record_title": str(record.title or ""),
-                "run_date": str(record.run_date or ""),
-                "assay": assay_name,
-                "metric": str(summary.get("kind") or "Result"),
-                "value": value,
-                "units": units,
+                "record": record,
                 "batch_id": None,
                 "batch_label": "Unassigned",
+            },
+        )
+    return records_by_id
+
+
+def _best_batch_summary_rows(
+    db: Session,
+    exp_batch_panels: list[dict] | None,
+    exp_molecule_level_records: list[dict] | None = None,
+) -> list[dict]:
+    records_by_id = _collect_molecule_records_from_experimental_context(exp_batch_panels, exp_molecule_level_records)
+    if not records_by_id:
+        return []
+
+    observations_by_metric: dict[str, list[dict]] = {str(spec["label"]): [] for spec in _MOLECULE_SUMMARY_METRIC_SPECS}
+
+    for node in records_by_id.values():
+        record = node.get("record")
+        if record is None:
+            continue
+        record_id = int(getattr(record, "id", 0) or 0)
+        if record_id <= 0:
+            continue
+        run_date = str(getattr(record, "run_date", "") or "")
+        run_epoch = _run_date_epoch(run_date)
+        batch_label = str(node.get("batch_label") or "—")
+        try:
+            measurements = list_measurements_for_record(db, record_id=record_id)
+        except Exception:
+            measurements = []
+        for m in list(measurements or []):
+            metric_key = normalize_metric_key(_measurement_metric_key(m))
+            if not metric_key:
+                continue
+            value_num = m.get("value_num")
+            try:
+                numeric_value = float(value_num) if value_num is not None else None
+            except Exception:
+                numeric_value = None
+            if numeric_value is None:
+                continue
+            unit = str(m.get("unit") or "").strip()
+            if not unit:
+                unit = str(metric_catalog_entry(metric_key).get("unit") or "").strip()
+            unit = _normalize_unit_display(unit)
+            for spec in _MOLECULE_SUMMARY_METRIC_SPECS:
+                aliases = {normalize_metric_key(str(k)) for k in (spec.get("keys") or ())}
+                if metric_key not in aliases:
+                    continue
+                observations_by_metric[str(spec["label"])].append(
+                    {
+                        "value": numeric_value,
+                        "unit": unit,
+                        "record_id": record_id,
+                        "run_date": run_date,
+                        "run_epoch": run_epoch,
+                        "batch_label": batch_label,
+                    }
+                )
+
+    rows: list[dict] = []
+    for spec in _MOLECULE_SUMMARY_METRIC_SPECS:
+        metric_label = str(spec["label"])
+        observations = list(observations_by_metric.get(metric_label) or [])
+        if not observations:
+            continue
+        unit_counts: dict[str, int] = {}
+        for obs in observations:
+            unit_counts[str(obs.get("unit") or "")] = int(unit_counts.get(str(obs.get("unit") or ""), 0)) + 1
+        chosen_unit = ""
+        if unit_counts:
+            chosen_unit = sorted(unit_counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0])))[0][0]
+        compatible = [obs for obs in observations if str(obs.get("unit") or "") == chosen_unit]
+        if not compatible:
+            continue
+
+        best = compatible[0]
+        for obs in compatible[1:]:
+            best_mode = str(spec.get("best") or "max")
+            if best_mode == "min":
+                better = (
+                    float(obs["value"]) < float(best["value"])
+                    or (
+                        float(obs["value"]) == float(best["value"])
+                        and (float(obs["run_epoch"]), int(obs["record_id"])) > (float(best["run_epoch"]), int(best["record_id"]))
+                    )
+                )
+            else:
+                better = (
+                    float(obs["value"]) > float(best["value"])
+                    or (
+                        float(obs["value"]) == float(best["value"])
+                        and (float(obs["run_epoch"]), int(obs["record_id"])) > (float(best["run_epoch"]), int(best["record_id"]))
+                    )
+                )
+            if better:
+                best = obs
+
+        avg_value = sum(float(obs["value"]) for obs in compatible) / float(len(compatible))
+        best_txt = _format_numeric_value(float(best["value"]))
+        avg_txt = _format_numeric_value(float(avg_value))
+        if chosen_unit:
+            best_txt = f"{best_txt} {chosen_unit}"
+            avg_txt = f"{avg_txt} {chosen_unit}"
+        rows.append(
+            {
+                "metric_label": metric_label,
+                "experiment": str(spec.get("experiment") or ""),
+                "best_display": best_txt,
+                "average_display": avg_txt,
+                "best_batch": str(best.get("batch_label") or "—"),
+                "best_date": str(best.get("run_date") or "—"),
             }
         )
-    rows.sort(key=lambda r: (str(r.get("run_date") or ""), int(r.get("record_id") or 0)), reverse=True)
     return rows
 
 
@@ -551,6 +845,11 @@ def molecule_detail(molecule_id: int, request: Request, tab: str = "overview", b
         ctx.setdefault("data_overview", None)
         ctx.setdefault("exp_qc_mode", qc_mode)
         ctx.setdefault("exp_run_qc", {})
+    ctx["best_batch_summary_rows"] = _best_batch_summary_rows(
+        db,
+        ctx.get("exp_batch_panels"),
+        ctx.get("exp_molecule_level_records"),
+    )
 
     return templates.TemplateResponse("molecules/detail.html", ctx)
 
@@ -617,7 +916,7 @@ def molecule_results(molecule_id: int, request: Request, batch_id: int | None = 
     except KeyError:
         raise HTTPException(404)
     ctx["surface"] = ui_surfaces.molecule_results_surface(molecule_id=int(molecule_id))
-    ctx["result_value_rows"] = _flatten_result_value_rows(
+    ctx["experiment_result_rows"] = _build_experiment_result_rows(
         db,
         ctx.get("exp_batch_panels"),
         ctx.get("exp_molecule_level_records"),

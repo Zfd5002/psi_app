@@ -59,7 +59,7 @@
       {% endfor %}
     </select>
     <label>New primary ID</label>
-    <input type="text" name="new_primary_id" value="{{ form_data.new_primary_id if form_data is defined and form_data.new_primary_id is defined else '' }}" />
+    <input id="builder_new_primary_id" type="text" name="new_primary_id" value="{{ form_data.new_primary_id if form_data is defined and form_data.new_primary_id is defined else '' }}" />
     <label>New title</label>
     <input type="text" name="new_title" value="{{ form_data.new_title if form_data is defined and form_data.new_title is defined else '' }}" />
     <label>Target component</label>
@@ -112,35 +112,46 @@
   {% endif %}
   <div class="mini muted">Parent: {{ draft.parent_primary_id }} · Derivation: {{ draft.derivation_type|humanize_state }}</div>
   {% if draft.preview_rows %}
-  <table class="table mini">
-    <thead><tr><th>Component</th><th>Before</th><th>After</th><th>Mutations</th></tr></thead>
-    <tbody>
-      {% for row in draft.preview_rows %}
-      <tr>
-        <td>{{ row.component }}</td>
-        <td><code>{{ row.before }}</code></td>
-        <td><code>{{ row.after }}</code></td>
-        <td class="muted">{{ row.mutations }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="builder-draft-diff">
   <h4>Sequence diff view</h4>
-  <table class="table mini">
-    <thead><tr><th>Component</th><th>Diff summary</th></tr></thead>
-    <tbody>
-      {% for row in draft.preview_rows %}
-      <tr>
-        <td>{{ row.component }}</td>
-        <td>
-          <code>{{ row.before }}</code>
-          <span class="muted">→</span>
-          <code>{{ row.after }}</code>
-        </td>
-      </tr>
+  {% for row in draft.preview_rows %}
+  <div class="seq-diff-block">
+    <div class="seq-diff-head">
+      <b>{{ row.component }}</b>
+      <span class="muted mini">{% if row.mutations %}{{ row.mutations }}{% else %}Inline mutation preview{% endif %}</span>
+    </div>
+    {% if row.diff_rows is defined and row.diff_rows %}
+      {% for dr in row.diff_rows %}
+      <div class="seq-diff-row">
+        <div class="seq-diff-range muted mini">{{ dr.start }}–{{ dr.end }}</div>
+        <div class="seq-diff-line">
+          <span class="seq-diff-label muted mini">Original</span>
+          <span class="seq-diff-seq">
+            {% for cell in dr.original %}
+            <span class="seq-diff-aa{% if cell.changed %} is-changed{% endif %}">{{ cell.aa }}</span>
+            {% endfor %}
+          </span>
+        </div>
+        <div class="seq-diff-line">
+          <span class="seq-diff-label muted mini">Edited</span>
+          <span class="seq-diff-seq">
+            {% for cell in dr.edited %}
+            <span class="seq-diff-aa{% if cell.changed %} is-changed{% endif %}">{{ cell.aa }}</span>
+            {% endfor %}
+          </span>
+        </div>
+      </div>
       {% endfor %}
-    </tbody>
-  </table>
+    {% else %}
+      <div class="mini">
+        <code>{{ row.before }}</code>
+        <span class="muted">→</span>
+        <code>{{ row.after }}</code>
+      </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  </div>
   {% endif %}
   {% if draft.changed_residues %}
   <h4>Changed residues</h4>
@@ -158,14 +169,6 @@
     </tbody>
   </table>
   {% endif %}
-  <table class="table mini">
-    <thead><tr><th>Component</th><th>Sequence</th></tr></thead>
-    <tbody>
-      {% for role, seq in (draft.components.items()|list|sort) %}
-      <tr><td>{{ role }}</td><td><code>{{ seq }}</code></td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
   <form method="post" action="/builder/point-mutation/create">
     <input type="hidden" name="parent_molecule_id" value="{{ draft.parent_molecule_id }}" />
     <input type="hidden" name="new_primary_id" value="{{ draft.new_primary_id }}" />
@@ -197,7 +200,32 @@
   var byProgram = JSON.parse('{{ (parent_molecules_by_program_json if parent_molecules_by_program_json is defined else "{}")|safe }}');
   var programSelect = document.getElementById("builder_parent_program");
   var moleculeSelect = document.getElementById("builder_parent_molecule");
+  var newPrimaryInput = document.getElementById("builder_new_primary_id");
   if (!programSelect || !moleculeSelect) return;
+  function fetchParentContext(parentId) {
+    if (!newPrimaryInput || !parentId) return;
+    fetch("/builder/parent_context?parent_molecule_id=" + encodeURIComponent(String(parentId)))
+      .then(function (r) {
+        if (!r.ok) throw new Error("context unavailable");
+        return r.json();
+      })
+      .then(function (payload) {
+        if (!payload || typeof payload !== "object") return;
+        if (payload.suggested_new_primary_id) {
+          newPrimaryInput.value = String(payload.suggested_new_primary_id || "");
+        }
+      })
+      .catch(function () {});
+  }
+  function setProgramAndParent(programId, parentId) {
+    if (!programId || !parentId) return;
+    programSelect.value = String(programId);
+    moleculeSelect.setAttribute("data-selected-parent", String(parentId));
+    renderMolecules();
+    moleculeSelect.value = String(parentId);
+    renderSelectedSummary();
+    fetchParentContext(parentId);
+  }
   function renderMolecules() {
     var pid = String(programSelect.value || "");
     var selected = String(moleculeSelect.getAttribute("data-selected-parent") || "");
@@ -228,11 +256,20 @@
     card.textContent = "Selected parent: " + String(opt.text || "");
   }
   renderSelectedSummary();
-  moleculeSelect.addEventListener("change", renderSelectedSummary);
+  var initialParent = String(moleculeSelect.value || "").trim();
+  if (initialParent && newPrimaryInput && !String(newPrimaryInput.value || "").trim()) {
+    fetchParentContext(initialParent);
+  }
+  moleculeSelect.addEventListener("change", function () {
+    renderSelectedSummary();
+    var pid = String(moleculeSelect.value || "").trim();
+    if (pid) fetchParentContext(pid);
+  });
   programSelect.addEventListener("change", function () {
     moleculeSelect.setAttribute("data-selected-parent", "");
     renderMolecules();
     renderSelectedSummary();
+    if (newPrimaryInput) newPrimaryInput.value = "";
   });
   var clearBtn = document.getElementById("builder_clear_selection");
   if (clearBtn) {
@@ -242,6 +279,7 @@
       moleculeSelect.setAttribute("data-selected-parent", "");
       var card = document.getElementById("builder_selected_parent_card");
       if (card) card.style.display = "none";
+      if (newPrimaryInput) newPrimaryInput.value = "";
     });
   }
 
@@ -285,12 +323,24 @@
             searchResults.textContent = "No matches.";
             return;
           }
-          var lines = [];
+          searchResults.innerHTML = "";
           for (var i = 0; i < rows.length; i += 1) {
             var row = rows[i];
-            lines.push((row.primary_id || "") + (row.title ? " — " + row.title : "") + " (" + (row.program_name || "") + ")");
+            var label = (row.primary_id || "") + (row.title ? " — " + row.title : "") + " (" + (row.program_name || "") + ")";
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "btn mini";
+            btn.style.margin = "2px 6px 2px 0";
+            btn.textContent = label;
+            btn.addEventListener("click", (function (item, itemLabel) {
+              return function () {
+                setProgramAndParent(item.program_id, item.id);
+                updateRecent({ id: item.id, label: itemLabel });
+                searchInput.value = String(item.primary_id || "");
+              };
+            })(row, label));
+            searchResults.appendChild(btn);
           }
-          searchResults.textContent = lines.join(" | ");
         })
         .catch(function () {
           searchResults.textContent = "Search unavailable.";

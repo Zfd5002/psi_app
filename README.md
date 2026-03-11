@@ -115,3 +115,36 @@ Run the minimal (no-pytest) smoke tests:
 ```bash
 python -m psi.scripts.smoke_test
 ```
+
+## Test gates
+
+PSI uses tiered deterministic test gates for development speed and release confidence.
+
+Tier 1 (everyday patch iteration):
+
+```bash
+python -m compileall -q psi
+bash scripts/test_fast_gate.sh
+python -m psi.tools.di_contract_smoke
+python -m psi.tools.di_replay_regression --limit 5
+python -c "from psi.version import PSI_VERSION; print(PSI_VERSION)"
+```
+
+Tier 2 (milestone / end-of-chain validation):
+
+```bash
+bash scripts/test_milestone_gate.sh
+```
+
+Tier 3 (full release validation):
+
+```bash
+pytest -q
+```
+
+Fast gate source of truth:
+- Node ID allowlist: `tests/fast_gate_nodeids.txt`
+- One pytest node ID per line, deterministic order.
+
+Milestone gate source of truth:
+- Curated target file list: `tests/milestone_gate_targets.txt`

@@ -49,6 +49,7 @@ from psi.services.molecule_viewer import (
     build_molecule_viewer_context,
 )
 from psi.services.sequence_annotation import annotate_sequence_for_editor
+from psi.services.constant_regions import get_constant_region_payload_for_components
 from psi.services.insight_engine import build_insight_bundle
 from psi.services.trajectory import build_molecule_trajectory_context
 from psi.services import claims as claims_svc
@@ -484,6 +485,10 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
 
     sequence_context = build_molecule_sequence_context(db, molecule_id=int(molecule_id))
     components = list(sequence_context.get("components") or [])
+    constant_region_payload_by_component = get_constant_region_payload_for_components(
+        db,
+        components=components,
+    )
 
     # Heavy compute gating (UI-facing).
     fmt = (m.molecule_format or "").strip()
@@ -510,6 +515,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         components=components,
         domain_instances=domain_instances,
         numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
+        constant_region_payload_by_component=constant_region_payload_by_component,
         pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
     )
     di_by_component = dict(viewer_context.get("di_by_component") or {})
@@ -554,6 +560,7 @@ def get_molecule_detail(db: Session, molecule_id: int, *, pdl1_allowed_mismatche
         "domain_instances": domain_instances,
         "latest_run_events": run_events,
         "numbering_payload": numbering_payload,
+        "constant_region_payload_by_component": constant_region_payload_by_component,
         "numbering_maps": numbering_maps,
         "feature_tracks": feature_tracks,
         "viewer_v2_components": viewer_v2_components,

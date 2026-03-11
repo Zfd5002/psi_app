@@ -174,6 +174,7 @@ def build_viewer_v2_components(
     feature_tracks: list[dict[str, Any]],
     di_by_component: dict[int, list[DomainInstance]],
     numbering_payload: dict[str, Any] | None,
+    constant_region_payload_by_component: dict[int, dict[str, Any]] | None = None,
     pdl1_allowed_mismatches: int,
 ) -> list[dict[str, Any]]:
     viewer_v2_components = []
@@ -263,26 +264,41 @@ def build_viewer_v2_components(
                             "parent_id": f"di:{di.id}",
                         }
                     )
-        fc = detect_fc_region(seq)
-        if fc:
-            features.append(
-                {
-                    "id": f"fc:{comp_id}:{fc.start}:{fc.end}",
-                    "name": fc.name,
-                    "group": "Recognized regions",
-                    "kind": fc.kind,
-                    "feature_type": "region",
-                    "spans": [{"start": int(fc.start), "end": int(fc.end)}],
-                    "confidence": float(fc.confidence),
-                    "source": fc.source,
-                    "status": "success",
-                    "method": fc.method,
-                    "tool_name": fc.tool_name,
-                    "tool_version": fc.tool_version,
-                    "meta": fc.meta or {},
-                    "parent_id": None,
-                }
-            )
+
+        const_payload = (
+            constant_region_payload_by_component.get(comp_id)
+            if isinstance(constant_region_payload_by_component, dict)
+            else None
+        )
+        const_features = const_payload.get("features") if isinstance(const_payload, dict) else []
+        has_species_like_fc = any(
+            isinstance(row, dict)
+            and str(row.get("name") or "").startswith("Fc (")
+            and str(row.get("group") or "") == "Recognized regions"
+            for row in list(const_features or [])
+        )
+        # Backward-compatible Fc fallback when constant-region artifacts are unavailable.
+        if not has_species_like_fc:
+            fc = detect_fc_region(seq)
+            if fc:
+                features.append(
+                    {
+                        "id": f"fc:{comp_id}:{fc.start}:{fc.end}",
+                        "name": fc.name,
+                        "group": "Recognized regions",
+                        "kind": fc.kind,
+                        "feature_type": "region",
+                        "spans": [{"start": int(fc.start), "end": int(fc.end)}],
+                        "confidence": float(fc.confidence),
+                        "source": fc.source,
+                        "status": "success",
+                        "method": fc.method,
+                        "tool_name": fc.tool_name,
+                        "tool_version": fc.tool_version,
+                        "meta": fc.meta or {},
+                        "parent_id": None,
+                    }
+                )
         for rf in detect_pdl1_features(seq=seq, allowed_mismatches=int(pdl1_allowed_mismatches or 0)):
             if rf.feature_type == "reference_match":
                 mm = int(rf.meta.get("mismatches_total", 0))
@@ -349,6 +365,35 @@ def build_viewer_v2_components(
                 }
             )
 
+        for row in list(const_features or []):
+            if not isinstance(row, dict):
+                continue
+            start = int(row.get("start", -1))
+            end = int(row.get("end", -1))
+            if start < 0 or end <= start or end > length:
+                continue
+            name = str(row.get("name") or "").strip()
+            if not name:
+                continue
+            features.append(
+                {
+                    "id": f"const:{comp_id}:{name}:{start}:{end}",
+                    "name": name,
+                    "group": str(row.get("group") or "Recognized regions"),
+                    "kind": str(row.get("kind") or "region"),
+                    "feature_type": str(row.get("feature_type") or "region"),
+                    "spans": [{"start": start, "end": end}],
+                    "confidence": float(row.get("confidence") or 0.0),
+                    "source": str(row.get("source") or "computed"),
+                    "status": str(row.get("status") or "success"),
+                    "method": str(row.get("method") or ""),
+                    "tool_name": str(row.get("tool_name") or ""),
+                    "tool_version": str(row.get("tool_version") or ""),
+                    "meta": dict(row.get("meta") or {}),
+                    "parent_id": None,
+                }
+            )
+
         order = [
             "Sequence",
             "Antibody regions",
@@ -395,6 +440,7 @@ def build_molecule_viewer_context(
     components: list[MoleculeComponent],
     domain_instances: list[DomainInstance],
     numbering_payload: dict[str, Any] | None,
+    constant_region_payload_by_component: dict[int, dict[str, Any]] | None = None,
     pdl1_allowed_mismatches: int,
 ) -> dict[str, Any]:
     di_by_component = domain_instances_by_component(domain_instances=domain_instances)
@@ -412,6 +458,7 @@ def build_molecule_viewer_context(
         feature_tracks=feature_tracks,
         di_by_component=di_by_component,
         numbering_payload=numbering_payload if isinstance(numbering_payload, dict) else None,
+        constant_region_payload_by_component=constant_region_payload_by_component if isinstance(constant_region_payload_by_component, dict) else None,
         pdl1_allowed_mismatches=int(pdl1_allowed_mismatches or 0),
     )
     return {

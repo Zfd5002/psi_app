@@ -1,8 +1,8 @@
 PATCH_NOTES.md
+README.md
+overlay_file_list.txt
 psi/version.py
-psi/web/routers/molecules.py
-psi/services/molecules.py
-psi/web/templates/molecules/partials/sequence_viewer.html
-psi/web/templates/molecules/partials/history_audit_zone.html
-tests/test_molecule_split_surfaces.py
-tests/test_sequence_viewer_layout.py
+scripts/test_fast_gate.sh
+scripts/test_milestone_gate.sh
+tests/fast_gate_nodeids.txt
+tests/milestone_gate_targets.txt

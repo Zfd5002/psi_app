@@ -83,6 +83,30 @@
   </div>
 
   <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">Best Batch-Derived Summary</h2>
+    <div class="muted mini">Compact cross-batch snapshot of best and average observed molecule performance.</div>
+    <div class="linked-table-wrap" style="margin-top:8px;">
+      <table class="table mini">
+        <thead><tr><th>Metric</th><th>Experiment</th><th>Best</th><th>Average</th><th>Best Batch</th><th>Best Date</th></tr></thead>
+        <tbody>
+          {% for row in best_batch_summary_rows %}
+          <tr>
+            <td><b>{{ row.metric_label }}</b></td>
+            <td class="muted">{{ row.experiment }}</td>
+            <td>{{ row.best_display }}</td>
+            <td>{{ row.average_display }}</td>
+            <td class="muted">{{ row.best_batch }}</td>
+            <td class="muted">{{ row.best_date }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted empty-state-cell">No numeric batch-derived summary metrics are available yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
     <h2 style="margin-top:0;">Recent Experiment Results</h2>
     <div class="muted mini">Most recent results for this molecule. Use Results for full ELN-style review.</div>
     <div class="linked-table-wrap" style="margin-top:8px;">

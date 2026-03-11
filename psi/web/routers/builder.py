@@ -15,6 +15,7 @@ from psi.services.builder import (
     build_variant_set_draft,
     create_variant_set_from_draft,
     create_molecule_from_draft,
+    suggest_new_primary_id_for_parent,
 )
 from psi.services.sequence_editor import normalize_mutation_queue
 from psi.services.builder_ops import (
@@ -102,6 +103,7 @@ def _search_builder_molecules(db: Session, *, q: str, limit: int = 10) -> list[d
                 "id": int(m.id),
                 "primary_id": str(m.primary_id or ""),
                 "title": str(m.title or ""),
+                "program_id": int(p.id),
                 "program_name": str(p.name or ""),
             }
         )
@@ -728,3 +730,12 @@ async def builder_point_mutation_create(request: Request, db: Session = Depends(
 @router.get("/builder/search_molecules")
 def builder_search_molecules(q: str = "", db: Session = Depends(get_db)):
     return JSONResponse(content=_search_builder_molecules(db, q=q, limit=10))
+
+
+@router.get("/builder/parent_context")
+def builder_parent_context(parent_molecule_id: int, db: Session = Depends(get_db)):
+    try:
+        payload = suggest_new_primary_id_for_parent(db, parent_molecule_id=int(parent_molecule_id))
+    except KeyError:
+        raise HTTPException(404)
+    return JSONResponse(content=payload)

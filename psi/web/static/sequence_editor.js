@@ -1,6 +1,7 @@
 (function () {
   function byId(id) { return document.getElementById(id); }
   function safe(v) { return String(v || ""); }
+  var SEQ_DIFF_ROW_WIDTH = 64;
   function initSequenceEditorHover() {
     var panel = byId("sequence_editor_panel");
     var tip = byId("sequence_editor_tooltip");
@@ -14,8 +15,7 @@
     var directErrors = byId("seq_direct_errors");
     var previewMeta = byId("seq_preview_meta");
     var previewErrors = byId("seq_preview_errors");
-    var previewOriginal = byId("seq_preview_original");
-    var previewEdited = byId("seq_preview_edited");
+    var previewRows = byId("seq_preview_rows");
     var previewChanged = byId("seq_preview_changed_positions");
     var toBuilderComponent = byId("seq_to_builder_component");
     var toBuilderMutations = byId("seq_to_builder_mutations");
@@ -146,6 +146,84 @@
       toVariantSubmit.disabled = false;
       if (toVariantHint) toVariantHint.textContent = "Ready to seed a mutation-panel variant set from queued mutations.";
     }
+    function buildDiffRows(original, edited, rowWidth) {
+      var o = safe(original).trim().toUpperCase();
+      var e = safe(edited).trim().toUpperCase();
+      var width = Math.max(8, Number(rowWidth || SEQ_DIFF_ROW_WIDTH) || SEQ_DIFF_ROW_WIDTH);
+      var maxLen = Math.max(o.length, e.length);
+      if (!maxLen) return [];
+      var oPad = o.padEnd(maxLen, "-");
+      var ePad = e.padEnd(maxLen, "-");
+      var rows = [];
+      for (var start = 0; start < maxLen; start += width) {
+        var end = Math.min(maxLen, start + width);
+        var origCells = [];
+        var editCells = [];
+        var changedCount = 0;
+        for (var i0 = start; i0 < end; i0 += 1) {
+          var oa = oPad[i0];
+          var ea = ePad[i0];
+          var changed = oa !== ea;
+          if (changed) changedCount += 1;
+          var pos = i0 + 1;
+          origCells.push({ aa: oa, changed: changed, position: pos });
+          editCells.push({ aa: ea, changed: changed, position: pos });
+        }
+        rows.push({
+          start: start + 1,
+          end: end,
+          changed_count: changedCount,
+          original: origCells,
+          edited: editCells
+        });
+      }
+      return rows;
+    }
+    function renderDiffRows(rows) {
+      if (!previewRows) return;
+      previewRows.innerHTML = "";
+      if (!rows || !rows.length) {
+        var empty = document.createElement("div");
+        empty.className = "mini muted";
+        empty.textContent = "No preview yet.";
+        previewRows.appendChild(empty);
+        return;
+      }
+      for (var r = 0; r < rows.length; r += 1) {
+        var row = rows[r] || {};
+        var rowEl = document.createElement("div");
+        rowEl.className = "seq-diff-row";
+
+        var rangeEl = document.createElement("div");
+        rangeEl.className = "seq-diff-range muted mini";
+        rangeEl.textContent = String(row.start || "") + "–" + String(row.end || "");
+        rowEl.appendChild(rangeEl);
+
+        function mkLine(label, cells) {
+          var lineEl = document.createElement("div");
+          lineEl.className = "seq-diff-line";
+          var labelEl = document.createElement("span");
+          labelEl.className = "seq-diff-label muted mini";
+          labelEl.textContent = label;
+          var seqEl = document.createElement("span");
+          seqEl.className = "seq-diff-seq";
+          for (var c0 = 0; c0 < cells.length; c0 += 1) {
+            var cell = cells[c0] || {};
+            var aa = document.createElement("span");
+            aa.className = "seq-diff-aa" + (cell.changed ? " is-changed" : "");
+            aa.textContent = safe(cell.aa);
+            seqEl.appendChild(aa);
+          }
+          lineEl.appendChild(labelEl);
+          lineEl.appendChild(seqEl);
+          return lineEl;
+        }
+
+        rowEl.appendChild(mkLine("Original", row.original || []));
+        rowEl.appendChild(mkLine("Edited", row.edited || []));
+        previewRows.appendChild(rowEl);
+      }
+    }
     function buildPreview() {
       var componentRole = getSelectedComponentRole();
       if (!componentRole) return;
@@ -170,8 +248,7 @@
       }
       var edited = chars.join("");
       if (previewMeta) previewMeta.textContent = "Preview component: " + componentRole + " (" + chars.length + " aa)";
-      if (previewOriginal) previewOriginal.textContent = original;
-      if (previewEdited) previewEdited.textContent = edited;
+      renderDiffRows(buildDiffRows(original, edited, SEQ_DIFF_ROW_WIDTH));
       if (previewChanged) previewChanged.textContent = changed.length ? ("Changed positions: " + changed.sort(function(a,b){return a-b;}).join(", ")) : "Changed positions: none";
       if (previewErrors) previewErrors.textContent = errs.join(" | ");
     }

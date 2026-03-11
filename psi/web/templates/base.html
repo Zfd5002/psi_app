@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}PSI{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v={{ PSI_VERSION or '' }}" />
 </head>
 <body class="{{ body_class if body_class is defined else '' }}">
   {% set _path = request.url.path if request is defined and request and request.url is defined else '' %}

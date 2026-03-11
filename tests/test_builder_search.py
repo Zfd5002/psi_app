@@ -41,7 +41,8 @@ def test_builder_search_returns_primary_title_and_program_name_with_limit() -> N
                 )
             rows = _search_builder_molecules(db, q="MB-", limit=10)
             assert len(rows) == 10
-            assert set(rows[0].keys()) == {"id", "primary_id", "title", "program_name"}
+            assert set(rows[0].keys()) == {"id", "primary_id", "title", "program_id", "program_name"}
+            assert int(rows[0]["program_id"]) == int(p.id)
             assert rows[0]["program_name"] == "Prog-A"
         finally:
             db.close()

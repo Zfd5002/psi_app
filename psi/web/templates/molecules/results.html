@@ -32,23 +32,30 @@
 
   <div class="card section-card section-primary" style="margin-top:10px;">
     <h2 style="margin-top:0;">Measured Result Values</h2>
-    <div class="muted mini">Flattened scientist-readable outcomes across this molecule's experiment history.</div>
+    <div class="muted mini">One row per experiment run, with compact key-metric summary.</div>
     <div class="linked-table-wrap" style="margin-top:8px;">
-      <table class="table mini">
-        <thead><tr><th>Run date</th><th>Experiment</th><th>Measured metric</th><th>Value</th><th>Units</th><th>Batch</th><th>Record</th></tr></thead>
+      <table class="table mini results-experiment-table">
+        <colgroup>
+          <col class="col-run-date" />
+          <col class="col-batch" />
+          <col class="col-experiment" />
+          <col class="col-summary" />
+          <col class="col-result" />
+          <col class="col-record" />
+        </colgroup>
+        <thead><tr><th>Run Date</th><th>Batch</th><th>Experiment</th><th>Summary</th><th>Result</th><th>Record</th></tr></thead>
         <tbody>
-          {% for row in (result_value_rows if result_value_rows is defined and result_value_rows is iterable else [])[:120] %}
+          {% for row in (experiment_result_rows if experiment_result_rows is defined and experiment_result_rows is iterable else [])[:120] %}
           <tr>
-            <td class="muted">{{ row.run_date }}</td>
-            <td>{{ row.assay|humanize_path_token }}</td>
-            <td>{{ row.metric|humanize_path_token }}</td>
-            <td><b>{{ row.value }}</b></td>
-            <td class="muted">{{ row.units or "—" }}</td>
-            <td class="muted">{% if row.batch_id %}<a href="/batches/{{ row.batch_id }}">{{ row.batch_label }}</a>{% else %}—{% endif %}</td>
-            <td><a href="/data/{{ row.record_id }}">{{ row.record_title }}</a></td>
+            <td class="muted col-run-date">{{ row.run_date }}</td>
+            <td class="muted col-batch">{% if row.batch_id %}<a href="/batches/{{ row.batch_id }}">{{ row.batch_label }}</a>{% else %}—{% endif %}</td>
+            <td class="col-experiment">{{ row.experiment }}</td>
+            <td class="col-summary">{{ row.summary }}</td>
+            <td class="col-result"><b>{{ row.result }}</b></td>
+            <td class="col-record"><a href="/data/{{ row.record_id }}">{{ row.record_title }}</a></td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="muted empty-state-cell">No measured result values available for this molecule yet.</td></tr>
+          <tr><td colspan="6" class="muted empty-state-cell">No measured result values available for this molecule yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
