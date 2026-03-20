@@ -1,3 +1,32 @@
+## 2026-03-20 — v1.3.0d157
+Why:
+- Scientist workflow needed a dedicated sequence-derived analysis surface without overloading the Sequence viewer or changing Governance semantics.
+- PSI already had active FAST sequence-property computation and storage; missing piece was additive surface discoverability and structured display.
+
+What:
+- Added new molecule sequence-analysis route and surface:
+  - `psi/web/routers/molecules.py`
+  - new route: `/molecules/{molecule_id}/sequence-analysis`
+  - new template: `psi/web/templates/molecules/sequence_analysis.html`
+- Added local molecule nav entry:
+  - `Sequence Analysis` in:
+    - `psi/web/ui_surfaces.py` molecule surface descriptors
+    - `psi/web/templates/molecules/partials/surface_nav.html`
+  - also added active-state class handling in `surface_nav.html` for all molecule local-nav links.
+- Added compact Sequence-page handoff strip:
+  - `psi/web/templates/molecules/sequence.html`
+  - includes risk summary, key FAST metrics, and CTA to open full Sequence Analysis page.
+- Added focused tests:
+  - `tests/test_molecule_split_surfaces.py` (new route context render)
+  - `tests/test_program_navigation_affordances.py` (nav/summary strip/new template section order)
+  - `tests/test_ui_surfaces.py` (new surface descriptor contract)
+
+Notes:
+- Reused existing computed/storage/context pipeline (`latest_values_by_key`, `latest_values_parsed`).
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+- No new sequence algorithms.
+
 ## 2026-03-11 — v1.3.0d156
 Why:
 - `get_program_detail(...)` still held DI lineage and optional verification logic inline, which increased orchestration complexity.

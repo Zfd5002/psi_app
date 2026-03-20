@@ -192,6 +192,49 @@ def test_plan_step_operations() -> None:
         eng.dispose()
 
 
+def test_list_plan_steps_for_plan_ids_groups_and_orders_per_plan() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 7)
+            p = Program(name="P-plan-batch-steps", created_at=now, updated_at=now)
+            db.add(p); db.commit(); db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="M-plan-batch-steps", title="", created_at=now, updated_at=now)
+            db.add(m); db.commit(); db.refresh(m)
+            plan_a = svc.create_plan(
+                db,
+                scope_type="molecule",
+                molecule_id=int(m.id),
+                program_id=int(p.id),
+                claim_id=None,
+                title="Plan A",
+                plan_type="readiness_advancement",
+                status="recommended",
+            )
+            plan_b = svc.create_plan(
+                db,
+                scope_type="molecule",
+                molecule_id=int(m.id),
+                program_id=int(p.id),
+                claim_id=None,
+                title="Plan B",
+                plan_type="readiness_advancement",
+                status="recommended",
+            )
+            b_done = svc.add_plan_step(db, plan_id=int(plan_b.id), step_order=1, step_kind="experiment", status="done")
+            a_task_created = svc.add_plan_step(db, plan_id=int(plan_a.id), step_order=2, step_kind="experiment", status="task_created")
+            a_proposed = svc.add_plan_step(db, plan_id=int(plan_a.id), step_order=1, step_kind="experiment", status="proposed")
+            rows_by_plan = svc.list_plan_steps_for_plan_ids(db, plan_ids=[int(plan_b.id), int(plan_a.id)])
+            assert sorted(rows_by_plan.keys()) == [int(plan_a.id), int(plan_b.id)]
+            assert [int(x.id) for x in rows_by_plan[int(plan_a.id)]] == [int(a_proposed.id), int(a_task_created.id)]
+            assert [int(x.id) for x in rows_by_plan[int(plan_b.id)]] == [int(b_done.id)]
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
 def test_plan_type_and_step_kind_discipline_helpers() -> None:
     assert svc.normalize_plan_type("claim_de_risking") == "claim_de_risking"
     assert svc.normalize_plan_type("unknown") == "readiness_advancement"

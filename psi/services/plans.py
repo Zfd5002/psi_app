@@ -300,6 +300,34 @@ def list_plan_steps(db: Session, *, plan_id: int) -> list[ScientificPlanStep]:
     )
 
 
+def list_plan_steps_for_plan_ids(db: Session, *, plan_ids: list[int]) -> dict[int, list[ScientificPlanStep]]:
+    ids = sorted({int(pid) for pid in plan_ids if pid is not None})
+    if not ids:
+        return {}
+    st_rank = case(
+        (ScientificPlanStep.status == "proposed", 0),
+        (ScientificPlanStep.status == "task_created", 1),
+        (ScientificPlanStep.status == "done", 2),
+        (ScientificPlanStep.status == "skipped", 3),
+        else_=4,
+    )
+    rows = (
+        db.query(ScientificPlanStep)
+        .filter(ScientificPlanStep.plan_id.in_(ids))
+        .order_by(
+            ScientificPlanStep.plan_id.asc(),
+            st_rank.asc(),
+            ScientificPlanStep.step_order.asc(),
+            ScientificPlanStep.id.asc(),
+        )
+        .all()
+    )
+    by_plan: dict[int, list[ScientificPlanStep]] = {int(pid): [] for pid in ids}
+    for row in rows:
+        by_plan.setdefault(int(row.plan_id), []).append(row)
+    return by_plan
+
+
 def update_plan_step_status(db: Session, *, step_id: int, status: str) -> ScientificPlanStep:
     row = db.get(ScientificPlanStep, int(step_id))
     if row is None:

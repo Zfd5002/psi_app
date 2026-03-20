@@ -101,6 +101,26 @@ def test_molecule_governance_route_renders_surface(mkdb, dummy_templates, monkey
         eng.dispose()
 
 
+def test_molecule_sequence_analysis_route_renders_surface(mkdb, dummy_templates, monkeypatch) -> None:
+    eng, SessionTmp = mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            _p, m = _seed_scope(db)
+            monkeypatch.setattr(molecules_router, "get_templates", lambda _request: dummy_templates)
+            resp = molecules_router.molecule_sequence_analysis(
+                molecule_id=int(m.id),
+                request=SimpleNamespace(query_params={}),
+                db=db,
+            )
+            assert resp.context["surface"]["surface_key"] == "molecule_sequence_analysis"
+            assert int(resp.context["molecule"].id) == int(m.id)
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+
+
 def test_experiment_result_rows_one_row_per_data_record(monkeypatch) -> None:
     fake_record = SimpleNamespace(
         id=11,
@@ -154,6 +174,48 @@ def test_experiment_result_rows_one_row_per_data_record(monkeypatch) -> None:
     assert "Kon 91,000 M^-1 s^-1" in summary
     assert "Koff 0.008 s^-1" in summary
     assert "Chi2" not in summary
+
+
+def test_experiment_result_rows_uses_batched_measurement_lookup_when_available(monkeypatch) -> None:
+    rec_a = SimpleNamespace(
+        id=901,
+        title="A",
+        run_date="2026-03-10",
+        data_type="BINDING",
+        method="SPR",
+        primary_result_text="",
+    )
+    rec_b = SimpleNamespace(
+        id=902,
+        title="B",
+        run_date="2026-03-09",
+        data_type="BINDING",
+        method="SPR",
+        primary_result_text="",
+    )
+    panel = {
+        "batch": SimpleNamespace(id=7, batch_id="M-SPLIT-001"),
+        "batch_label": "M-SPLIT-001",
+        "assays": {"Binding": {"cond-1": {"runs": [{"record": rec_a}, {"record": rec_b}]}}},
+    }
+    seen: list[list[int]] = []
+
+    def _batched(_db, *, record_ids):
+        ids = sorted(int(x) for x in record_ids)
+        seen.append(ids)
+        return {
+            901: [{"metric_key": "kd_nM", "value_num": 1.1, "unit": "nM"}],
+            902: [{"metric_key": "kd_nM", "value_num": 2.2, "unit": "nM"}],
+        }
+
+    def _single_should_not_run(*_args, **_kwargs):
+        raise AssertionError("single-record lookup should not run when batched lookup is available")
+
+    monkeypatch.setattr(molecules_router, "list_measurements_for_record_ids", _batched)
+    monkeypatch.setattr(molecules_router, "list_measurements_for_record", _single_should_not_run)
+    rows = molecules_router._build_experiment_result_rows(SimpleNamespace(), [panel], [])
+    assert seen == [[901, 902]]
+    assert len(rows) == 2
 
 
 def test_experiment_result_rows_sort_by_group_then_run_date_desc_then_record_id_desc(monkeypatch) -> None:

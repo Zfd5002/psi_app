@@ -49,3 +49,54 @@ def test_program_detail_includes_plan_summary_and_preview() -> None:
             db.close()
     finally:
         eng.dispose()
+
+
+def test_claim_plan_context_uses_batched_plan_step_lookup() -> None:
+    eng, SessionTmp = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 7)
+            p = Program(name="P-pps-batch", created_at=now, updated_at=now)
+            db.add(p); db.commit(); db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="M-pps-batch", title="", created_at=now, updated_at=now)
+            db.add(m); db.commit(); db.refresh(m)
+            plan = plans_svc.create_plan(
+                db,
+                scope_type="molecule",
+                molecule_id=int(m.id),
+                program_id=int(p.id),
+                claim_id=None,
+                title="Plan",
+                plan_type="readiness_advancement",
+                status="recommended",
+            )
+            plans_svc.add_plan_step(
+                db,
+                plan_id=int(plan.id),
+                metric_key="kd_nM",
+                suggested_assay="SPR",
+                step_kind="experiment",
+                status="proposed",
+            )
+            calls: list[list[int]] = []
+            original_batch = program_svc.plans_svc.list_plan_steps_for_plan_ids
+
+            def _wrapped_batch(db_sess, *, plan_ids):
+                calls.append(sorted(int(x) for x in plan_ids))
+                return original_batch(db_sess, plan_ids=plan_ids)
+
+            program_svc.plans_svc.list_plan_steps_for_plan_ids = _wrapped_batch
+            try:
+                ctx = program_svc._build_program_claim_plan_context(db, program_id=int(p.id))
+            finally:
+                program_svc.plans_svc.list_plan_steps_for_plan_ids = original_batch
+
+            assert calls, "expected batched plan-step lookup"
+            assert any(int(plan.id) in call_ids for call_ids in calls)
+            assert int(ctx["program_plan_summary"]["recommended"]) >= 1
+            assert len(ctx["program_plans_preview"]) >= 1
+        finally:
+            db.close()
+    finally:
+        eng.dispose()

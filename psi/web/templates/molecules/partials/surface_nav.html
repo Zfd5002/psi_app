@@ -1,9 +1,11 @@
 {% set _sid = molecule.id if molecule is defined and molecule and molecule.id is defined else 0 %}
+{% set _path = request.url.path if request is defined and request and request.url is defined and request.url.path is defined else "" %}
 {% if _sid %}
 <div class="local-subnav no-print">
-  <a href="/molecules/{{ _sid }}">Workspace</a>
-  <a href="/molecules/{{ _sid }}/results">Results</a>
-  <a href="/molecules/{{ _sid }}/sequence">Sequence</a>
-  <a href="/molecules/{{ _sid }}/governance">Governance</a>
+  <a href="/molecules/{{ _sid }}"{% if _path == "/molecules/" ~ _sid %} class="active"{% endif %}>Workspace</a>
+  <a href="/molecules/{{ _sid }}/results"{% if _path == "/molecules/" ~ _sid ~ "/results" %} class="active"{% endif %}>Results</a>
+  <a href="/molecules/{{ _sid }}/sequence"{% if _path == "/molecules/" ~ _sid ~ "/sequence" %} class="active"{% endif %}>Sequence</a>
+  <a href="/molecules/{{ _sid }}/sequence-analysis"{% if _path == "/molecules/" ~ _sid ~ "/sequence-analysis" %} class="active"{% endif %}>Sequence Analysis</a>
+  <a href="/molecules/{{ _sid }}/governance"{% if _path == "/molecules/" ~ _sid ~ "/governance" %} class="active"{% endif %}>Governance</a>
 </div>
 {% endif %}

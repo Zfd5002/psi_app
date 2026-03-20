@@ -31,3 +31,10 @@ def test_program_workflow_surface_includes_learning_nav_items() -> None:
     labels = [str(x.get("label")) for x in d.get("local_nav", [])]
     assert "Recent Learning" in labels
     assert "Awaiting Interpretation" in labels
+
+
+def test_molecule_sequence_analysis_surface_has_expected_key_and_nav() -> None:
+    d = ui_surfaces.molecule_sequence_analysis_surface(molecule_id=7)
+    assert d["surface_key"] == "molecule_sequence_analysis"
+    labels = [str(x.get("label")) for x in d.get("local_nav", [])]
+    assert "Sequence Analysis" in labels

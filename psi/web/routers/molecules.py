@@ -13,7 +13,7 @@ from psi.web import ui_surfaces
 from psi.web import handoff_context as handoff
 from psi.core.db import get_db as get_db_ctx
 from psi.services import molecules as svc
-from psi.services.measurements import list_measurements_for_record
+from psi.services.measurements import list_measurements_for_record, list_measurements_for_record_ids
 from psi.services.metric_catalog import metric_catalog_entry, metric_group_sort_key, normalize_metric_key
 from psi.services.computed import run_computed_properties, run_immunogenicity_mhci
 from psi.services.numbering import trigger_numbering_for_molecule
@@ -294,28 +294,41 @@ def _run_date_epoch(value: str) -> float:
         return -1.0
 
 
+def _load_measurements_by_record_id(db: Session, *, record_ids: list[int]) -> dict[int, list[dict]]:
+    ids = sorted({int(rid) for rid in list(record_ids or []) if int(rid) > 0})
+    if not ids:
+        return {}
+    try:
+        batched = list_measurements_for_record_ids(db, record_ids=ids)
+        return {int(rid): list(batched.get(int(rid)) or []) for rid in ids}
+    except Exception:
+        # Keep behavior conservative: if batch loading is unavailable, degrade gracefully.
+        out: dict[int, list[dict]] = {}
+        for rid in ids:
+            try:
+                out[int(rid)] = list_measurements_for_record(db, record_id=int(rid))
+            except Exception:
+                out[int(rid)] = []
+        return out
+
+
 def _build_experiment_result_rows(
     db: Session,
     exp_batch_panels: list[dict] | None,
     exp_molecule_level_records: list[dict] | None = None,
 ) -> list[dict]:
     records_by_id = _collect_molecule_records_from_experimental_context(exp_batch_panels, exp_molecule_level_records)
-    measurement_cache: dict[int, list[dict]] = {}
-
-    def _measurements_for_record(record_id: int) -> list[dict]:
-        if record_id not in measurement_cache:
-            try:
-                measurement_cache[record_id] = list_measurements_for_record(db, record_id=int(record_id))
-            except Exception:
-                measurement_cache[record_id] = []
-        return measurement_cache.get(record_id, [])
+    measurements_by_record = _load_measurements_by_record_id(
+        db,
+        record_ids=[int(rid) for rid in records_by_id.keys()],
+    )
 
     rows: list[dict] = []
     for record_id, node in records_by_id.items():
         record = node.get("record")
         if record is None:
             continue
-        measurements = _measurements_for_record(int(record_id))
+        measurements = list(measurements_by_record.get(int(record_id)) or [])
         group_name = _record_group_name(record, measurements)
         group_order = int(metric_group_sort_key(group_name)[0])
         run_date = str(getattr(record, "run_date", "") or "")
@@ -416,6 +429,10 @@ def _best_batch_summary_rows(
         return []
 
     observations_by_metric: dict[str, list[dict]] = {str(spec["label"]): [] for spec in _MOLECULE_SUMMARY_METRIC_SPECS}
+    measurements_by_record = _load_measurements_by_record_id(
+        db,
+        record_ids=[int(rid) for rid in records_by_id.keys()],
+    )
 
     for node in records_by_id.values():
         record = node.get("record")
@@ -427,10 +444,7 @@ def _best_batch_summary_rows(
         run_date = str(getattr(record, "run_date", "") or "")
         run_epoch = _run_date_epoch(run_date)
         batch_label = str(node.get("batch_label") or "—")
-        try:
-            measurements = list_measurements_for_record(db, record_id=record_id)
-        except Exception:
-            measurements = []
+        measurements = list(measurements_by_record.get(record_id) or [])
         for m in list(measurements or []):
             metric_key = normalize_metric_key(_measurement_metric_key(m))
             if not metric_key:
@@ -938,6 +952,22 @@ def molecule_sequence(molecule_id: int, request: Request, db: Session = Depends(
         raise HTTPException(404)
     ctx["surface"] = ui_surfaces.molecule_sequence_surface(molecule_id=int(molecule_id))
     return templates.TemplateResponse("molecules/sequence.html", ctx)
+
+
+@router.get("/molecules/{molecule_id}/sequence-analysis", response_class=HTMLResponse)
+def molecule_sequence_analysis(molecule_id: int, request: Request, db: Session = Depends(get_db)):
+    templates = get_templates(request)
+    try:
+        ctx = _build_molecule_page_context(
+            db=db,
+            request=request,
+            molecule_id=int(molecule_id),
+            include_batch_ui=False,
+        )
+    except KeyError:
+        raise HTTPException(404)
+    ctx["surface"] = ui_surfaces.molecule_sequence_analysis_surface(molecule_id=int(molecule_id))
+    return templates.TemplateResponse("molecules/sequence_analysis.html", ctx)
 
 
 @router.get("/molecules/{molecule_id}/governance", response_class=HTMLResponse)

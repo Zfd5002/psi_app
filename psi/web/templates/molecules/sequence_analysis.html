@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}{{ molecule.primary_id }} Sequence Analysis | PSI{% endblock %}
+{% block content %}
+{% set mh = molecule_header_model if molecule_header_model is defined and molecule_header_model else {} %}
+{% set by = latest_values_by_key if latest_values_by_key is defined and latest_values_by_key else {} %}
+{% set parsed = latest_values_parsed if latest_values_parsed is defined and latest_values_parsed else [] %}
+
+{% set risk_item = by.get('fast.developability_risk') if by else None %}
+{% set risk = risk_item.value if risk_item and risk_item.value is mapping else {} %}
+{% set risk_metrics = risk.metrics if risk and risk.metrics is defined and risk.metrics is mapping else {} %}
+{% set risk_flags = risk.flags if risk and risk.flags is defined and risk.flags is iterable else [] %}
+{% set risk_comp_item = by.get('fast.developability_risk_by_component') if by else None %}
+{% set risk_comp = risk_comp_item.value if risk_comp_item and risk_comp_item.value is mapping else {} %}
+
+{% set len_item = by.get('fast.sequence_length') if by else None %}
+{% set mw_item = by.get('fast.molecular_weight_da') if by else None %}
+{% set pi_item = by.get('fast.theoretical_pI') if by else None %}
+{% set cys_item = by.get('fast.cysteine_count') if by else None %}
+{% set inst_item = by.get('fast.instability_index') if by else None %}
+{% set ext_item = by.get('fast.extinction_coefficient_a280') if by else None %}
+{% set ext = ext_item.value if ext_item and ext_item.value is mapping else {} %}
+{% set comp_item = by.get('fast.amino_acid_composition') if by else None %}
+{% set comp = comp_item.value if comp_item and comp_item.value is mapping else {} %}
+{% set motif_item = by.get('fast.motif_heuristics') if by else None %}
+{% set motif = motif_item.value if motif_item and motif_item.value is mapping else {} %}
+{% set proxy_item = by.get('fast.developability_proxies') if by else None %}
+{% set proxies = proxy_item.value if proxy_item and proxy_item.value is mapping else {} %}
+{% set asm_item = by.get('fast.assembly_inference') if by else None %}
+{% set asm = asm_item.value if asm_item and asm_item.value is mapping else {} %}
+{% set ann_item = by.get('fast.sequence_annotation') if by else None %}
+{% set ann = ann_item.value if ann_item and ann_item.value is mapping else {} %}
+
+{% set aa_order = ['A','R','N','D','C','E','Q','G','H','I','L','K','M','F','P','S','T','W','Y','V','X'] %}
+{% set aa_name = {'A':'Ala','R':'Arg','N':'Asn','D':'Asp','C':'Cys','E':'Glu','Q':'Gln','G':'Gly','H':'His','I':'Ile','L':'Leu','K':'Lys','M':'Met','F':'Phe','P':'Pro','S':'Ser','T':'Thr','W':'Trp','Y':'Tyr','V':'Val','X':'Unknown'} %}
+
+{% set seq_len = (len_item.value if len_item and len_item.value is not none else 0) %}
+{% set pos_count = (comp.get('K', 0) + comp.get('R', 0) + comp.get('H', 0)) %}
+{% set neg_count = (comp.get('D', 0) + comp.get('E', 0)) %}
+{% set aro_count = (comp.get('F', 0) + comp.get('W', 0) + comp.get('Y', 0)) %}
+{% set hyd_count = (comp.get('A', 0) + comp.get('V', 0) + comp.get('I', 0) + comp.get('L', 0) + comp.get('M', 0) + comp.get('F', 0) + comp.get('W', 0) + comp.get('Y', 0) + comp.get('P', 0)) %}
+{% set polar_uncharged = (comp.get('S', 0) + comp.get('T', 0) + comp.get('N', 0) + comp.get('Q', 0) + comp.get('C', 0)) %}
+{% set nonpolar_aliphatic = (comp.get('A', 0) + comp.get('V', 0) + comp.get('I', 0) + comp.get('L', 0) + comp.get('M', 0) + comp.get('G', 0) + comp.get('P', 0)) %}
+
+<div class="card molecule-page">
+  {% set page_eyebrow = "Sequence Analysis" %}
+  {% set page_title = molecule.primary_id ~ " Sequence Analysis" %}
+  {% set page_subtitle = "Deep sequence-derived property review with deterministic computed outputs." %}
+  {% set page_primary_actions = [
+    {"href": "/molecules/" ~ molecule.id ~ "/sequence", "label": "Back to Sequence"},
+    {"href": "/molecules/" ~ molecule.id ~ "/governance#computed", "label": "Open Governance Computed Results"},
+    {"href": "/molecules/" ~ molecule.id ~ "/governance", "label": "Recompute FAST Properties"}
+  ] %}
+  {% set page_secondary_actions = [
+    {"href": "/molecules/" ~ molecule.id, "label": "Back to Workspace"},
+    {"href": "/molecules/" ~ molecule.id ~ "/results", "label": "Open Results"},
+    {"href": "/programs/" ~ molecule.program_id, "label": "Open Program Workspace"}
+  ] %}
+  {% set page_metrics = [
+    {"label": "Current Stage", "value": (mh.progress_stage if mh.progress_stage is defined and mh.progress_stage else "not started")},
+    {"label": "Risk", "value": (risk.overall if risk and risk.overall is defined else "unknown")|upper},
+    {"label": "Risk Score", "value": (risk.score if risk and risk.score is defined else "—")},
+    {"label": "Sequence Length", "value": (seq_len if seq_len else "—")}
+  ] %}
+  {% include "partials/page_header.html" %}
+  {% set surface_chrome_active_index = 2 %}
+  {% set hide_surface_local_nav = true %}
+  {% include "partials/surface_chrome.html" %}
+  {% include "molecules/partials/surface_nav.html" %}
+  <div class="page-intent-line">Review sequence-derived properties and heuristic risk outputs without leaving molecule workflow.</div>
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">1. Sequence Analysis Summary</h2>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+      <div>Overall risk: <strong>{{ (risk.overall if risk and risk.overall is defined else 'unknown')|upper }}</strong> <span class="muted mini">(score={{ risk.score if risk and risk.score is defined else '—' }})</span></div>
+      <div>net charge pH7: <strong>{% if risk_metrics.net_charge_pH7 is defined and risk_metrics.net_charge_pH7 is not none %}{{ risk_metrics.net_charge_pH7|round(2) }}{% else %}—{% endif %}</strong></div>
+      <div>hydrophobic: <strong>{% if risk_metrics.hydrophobic_fraction is defined and risk_metrics.hydrophobic_fraction is not none %}{{ (risk_metrics.hydrophobic_fraction * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+      <div>instability: <strong>{% if risk_metrics.instability_index is defined and risk_metrics.instability_index is not none %}{{ risk_metrics.instability_index|round(1) }}{% else %}—{% endif %}</strong></div>
+      <div>N-gly: <strong>{{ risk_metrics.n_gly_motifs if risk_metrics.n_gly_motifs is defined else '—' }}</strong></div>
+      <div>deamid: <strong>{{ risk_metrics.deamidation_motifs if risk_metrics.deamidation_motifs is defined else '—' }}</strong></div>
+      <div>ox susceptible: <strong>{{ risk_metrics.oxidation_susceptible_residues if risk_metrics.oxidation_susceptible_residues is defined else '—' }}</strong></div>
+      <div>length: <strong>{{ seq_len if seq_len else '—' }}</strong></div>
+    </div>
+    {% if risk_flags and (risk_flags|length) > 0 %}
+      <div class="muted mini" style="margin-top:8px;">Top driver: <strong>{{ risk_flags[0]|humanize_state }}</strong></div>
+    {% endif %}
+  </div>
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">2. Physicochemical Core</h2>
+    <table class="table mini">
+      <tbody>
+        <tr><td><b>Sequence length</b></td><td>{{ seq_len if seq_len else '—' }} aa</td></tr>
+        <tr><td><b>Molecular weight</b></td><td>{% if mw_item and mw_item.value is not none %}{{ "{:,.1f}".format(mw_item.value) }} Da{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Theoretical pI</b></td><td>{% if pi_item and pi_item.value is not none %}{{ "{:.2f}".format(pi_item.value) }}{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Cysteine count</b></td><td>{{ cys_item.value if cys_item and cys_item.value is not none else '—' }}</td></tr>
+        <tr><td><b>Instability index</b></td><td>{% if inst_item and inst_item.value is not none %}{{ "{:.1f}".format(inst_item.value) }}{% else %}—{% endif %}</td></tr>
+        <tr><td><b>A280 Trp count</b></td><td>{{ ext.trp if ext.trp is defined else '—' }}</td></tr>
+        <tr><td><b>A280 Tyr count</b></td><td>{{ ext.tyr if ext.tyr is defined else '—' }}</td></tr>
+        <tr><td><b>A280 Cys count</b></td><td>{{ ext.cys if ext.cys is defined else '—' }}</td></tr>
+        <tr><td><b>Extinction coefficient (reduced)</b></td><td>{% if ext.extinction_reduced is defined and ext.extinction_reduced is not none %}{{ "{:,.0f}".format(ext.extinction_reduced) }} M^-1 cm^-1{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Extinction coefficient (oxidized)</b></td><td>{% if ext.extinction_oxidized is defined and ext.extinction_oxidized is not none %}{{ "{:,.0f}".format(ext.extinction_oxidized) }} M^-1 cm^-1{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Assumed disulfides</b></td><td>{{ ext.assumed_disulfides if ext.assumed_disulfides is defined else '—' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">3. Amino Acid Composition</h2>
+    <table class="table mini">
+      <thead><tr><th>Residue</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for aa in aa_order %}
+          <tr>
+            <td><b>{{ aa }}</b> ({{ aa_name.get(aa, aa) }})</td>
+            <td>{{ comp.get(aa, 0) if aa == 'X' else (comp.get(aa) if comp.get(aa) is not none else '—') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card section-card section-secondary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">4. Derived Composition Metrics</h2>
+    <table class="table mini">
+      <tbody>
+        <tr><td><b>Positive residues (K+R+H)</b></td><td>{{ pos_count if comp else '—' }}</td></tr>
+        <tr><td><b>Negative residues (D+E)</b></td><td>{{ neg_count if comp else '—' }}</td></tr>
+        <tr><td><b>Aromatic residues (F+W+Y)</b></td><td>{{ aro_count if comp else '—' }}</td></tr>
+        <tr><td><b>Hydrophobic residues (A,V,I,L,M,F,W,Y,P)</b></td><td>{{ hyd_count if comp else '—' }}</td></tr>
+        <tr><td><b>Hydrophobic residues (%)</b></td><td>{% if comp and seq_len %}{{ ((hyd_count / seq_len) * 100)|round(1) }}%{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Polar uncharged residues (S+T+N+Q+C)</b></td><td>{{ polar_uncharged if comp else '—' }}</td></tr>
+        <tr><td><b>Nonpolar aliphatic residues (A+V+I+L+M+G+P)</b></td><td>{{ nonpolar_aliphatic if comp else '—' }}</td></tr>
+        <tr><td><b>Basic fraction (%)</b></td><td>{% if comp and seq_len %}{{ ((pos_count / seq_len) * 100)|round(1) }}%{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Acidic fraction (%)</b></td><td>{% if comp and seq_len %}{{ ((neg_count / seq_len) * 100)|round(1) }}%{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Unknown residues (X)</b></td><td>{{ comp.get('X', 0) }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">5. Motif and Liability Summary</h2>
+    <table class="table mini">
+      <tbody>
+        <tr><td><b>N-gly motifs</b></td><td>{{ motif.n_gly_motifs if motif.n_gly_motifs is defined else '—' }}</td></tr>
+        <tr><td><b>Deamidation motifs</b></td><td>{{ motif.deamidation_motifs if motif.deamidation_motifs is defined else '—' }}</td></tr>
+        <tr><td><b>Oxidation-susceptible residues</b></td><td>{{ motif.oxidation_susceptible_residues if motif.oxidation_susceptible_residues is defined else '—' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card section-card section-primary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">6. Developability Proxies and Risk</h2>
+    <table class="table mini">
+      <tbody>
+        <tr><td><b>Overall risk</b></td><td>{{ (risk.overall if risk and risk.overall is defined else 'unknown')|upper }}</td></tr>
+        <tr><td><b>Risk score</b></td><td>{{ risk.score if risk and risk.score is defined else '—' }}</td></tr>
+        <tr><td><b>Triggered flags</b></td><td>{% if risk_flags and (risk_flags|length) > 0 %}{{ risk_flags|map('humanize_state')|join(', ') }}{% else %}None{% endif %}</td></tr>
+        <tr><td><b>Net charge (pH 7)</b></td><td>{% if proxies.net_charge_pH7 is defined and proxies.net_charge_pH7 is not none %}{{ "{:.2f}".format(proxies.net_charge_pH7) }}{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Aromatic fraction</b></td><td>{% if proxies.aromatic_fraction is defined and proxies.aromatic_fraction is not none %}{{ (proxies.aromatic_fraction * 100)|round(1) }}%{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Hydrophobic fraction</b></td><td>{% if proxies.hydrophobic_fraction is defined and proxies.hydrophobic_fraction is not none %}{{ (proxies.hydrophobic_fraction * 100)|round(1) }}%{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Risk metric: hydrophobic fraction</b></td><td>{% if risk_metrics.hydrophobic_fraction is defined and risk_metrics.hydrophobic_fraction is not none %}{{ (risk_metrics.hydrophobic_fraction * 100)|round(1) }}%{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Risk metric: net charge (pH 7)</b></td><td>{% if risk_metrics.net_charge_pH7 is defined and risk_metrics.net_charge_pH7 is not none %}{{ "{:.2f}".format(risk_metrics.net_charge_pH7) }}{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Risk metric: instability index</b></td><td>{% if risk_metrics.instability_index is defined and risk_metrics.instability_index is not none %}{{ "{:.1f}".format(risk_metrics.instability_index) }}{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Risk metric: N-gly motifs</b></td><td>{{ risk_metrics.n_gly_motifs if risk_metrics.n_gly_motifs is defined else '—' }}</td></tr>
+        <tr><td><b>Risk metric: deamidation motifs</b></td><td>{{ risk_metrics.deamidation_motifs if risk_metrics.deamidation_motifs is defined else '—' }}</td></tr>
+        <tr><td><b>Risk metric: oxidation-susceptible residues</b></td><td>{{ risk_metrics.oxidation_susceptible_residues if risk_metrics.oxidation_susceptible_residues is defined else '—' }}</td></tr>
+        <tr><td><b>Risk metric: cysteine count</b></td><td>{{ risk_metrics.cysteine_count if risk_metrics.cysteine_count is defined else '—' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card section-card section-secondary" style="margin-top:10px;">
+    <h2 style="margin-top:0;">7. Component-Level Developability</h2>
+    {% if risk_comp and risk_comp|length > 0 %}
+      <table class="table mini">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Overall</th>
+            <th>Score</th>
+            <th>Flags</th>
+            <th>netQ</th>
+            <th>arom%</th>
+            <th>hydro%</th>
+            <th>instability</th>
+            <th>N-gly</th>
+            <th>deamid</th>
+            <th>ox</th>
+            <th>Cys</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for role, row in risk_comp|dictsort %}
+            {% set r_metrics = row.metrics if row and row.metrics is defined and row.metrics is mapping else {} %}
+            <tr>
+              <td><b>{{ role }}</b></td>
+              <td>{{ (row.overall if row and row.overall is defined else 'unknown')|upper }}</td>
+              <td>{{ row.score if row and row.score is defined else '—' }}</td>
+              <td>{% if row and row.flags is defined and row.flags and (row.flags|length) > 0 %}{{ row.flags|map('humanize_state')|join(', ') }}{% else %}None{% endif %}</td>
+              <td>{% if r_metrics.net_charge_pH7 is defined and r_metrics.net_charge_pH7 is not none %}{{ r_metrics.net_charge_pH7|round(2) }}{% else %}—{% endif %}</td>
+              <td>{% if r_metrics.aromatic_fraction is defined and r_metrics.aromatic_fraction is not none %}{{ (r_metrics.aromatic_fraction * 100)|round(1) }}%{% else %}—{% endif %}</td>
+              <td>{% if r_metrics.hydrophobic_fraction is defined and r_metrics.hydrophobic_fraction is not none %}{{ (r_metrics.hydrophobic_fraction * 100)|round(1) }}%{% else %}—{% endif %}</td>
+              <td>{% if r_metrics.instability_index is defined and r_metrics.instability_index is not none %}{{ r_metrics.instability_index|round(1) }}{% else %}—{% endif %}</td>
+              <td>{{ r_metrics.n_gly_motifs if r_metrics.n_gly_motifs is defined else '—' }}</td>
+              <td>{{ r_metrics.deamidation_motifs if r_metrics.deamidation_motifs is defined else '—' }}</td>
+              <td>{{ r_metrics.oxidation_susceptible_residues if r_metrics.oxidation_susceptible_residues is defined else '—' }}</td>
+              <td>{{ r_metrics.cysteine_count if r_metrics.cysteine_count is defined else '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="muted">No component-level developability payload is available yet.</div>
+    {% endif %}
+  </div>
+
+  <details class="card section-card section-secondary" style="margin-top:10px;" open>
+    <summary><b>8. Assembly and Architecture Context</b></summary>
+    <table class="table mini" style="margin-top:8px;">
+      <tbody>
+        <tr><td><b>Inferred same heavy chain</b></td><td>{% if asm.inferred_same_heavy is defined %}{{ 'Yes' if asm.inferred_same_heavy else 'No' }}{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Inferred common light chain</b></td><td>{% if asm.inferred_common_light is defined %}{{ 'Yes' if asm.inferred_common_light else 'No' }}{% else %}—{% endif %}</td></tr>
+        <tr><td><b>Sequence architecture</b></td><td>{{ ann.architecture if ann.architecture is defined else '—' }}</td></tr>
+        <tr><td><b>Sequence format</b></td><td>{{ ann.format if ann.format is defined else '—' }}</td></tr>
+      </tbody>
+    </table>
+  </details>
+
+  <details class="card section-card section-secondary" style="margin-top:10px;">
+    <summary><b>9. Advanced Payloads (Raw)</b></summary>
+
+    {% for key in ['fast.extinction_coefficient_a280', 'fast.amino_acid_composition', 'fast.motif_heuristics', 'fast.developability_proxies', 'fast.developability_risk', 'fast.developability_risk_by_component', 'fast.assembly_inference', 'fast.sequence_annotation'] %}
+      {% set row = by.get(key) if by else None %}
+      {% if row and row.value is not none %}
+        <details style="margin-top:8px;">
+          <summary class="muted mini" style="cursor:pointer;">{{ key }}</summary>
+          <pre style="white-space:pre-wrap;margin:6px 0 0 0;">{{ row.value }}</pre>
+        </details>
+      {% endif %}
+    {% endfor %}
+
+    <details style="margin-top:10px;">
+      <summary class="muted mini" style="cursor:pointer;">All FAST properties (raw table)</summary>
+      <table class="table mini" style="margin-top:8px;">
+        <thead><tr><th>Property</th><th>Value</th><th>Tier</th></tr></thead>
+        <tbody>
+          {% for v in parsed %}
+            {% if v.key.startswith('fast.') %}
+              <tr>
+                <td>{{ v.key }}</td>
+                <td><pre style="white-space:pre-wrap;margin:0;">{{ v.value }}</pre></td>
+                <td class="muted">{{ v.tier }}</td>
+              </tr>
+            {% endif %}
+          {% else %}
+            <tr><td colspan="3" class="muted">No FAST payloads available yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  </details>
+</div>
+{% endblock %}

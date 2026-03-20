@@ -132,6 +132,7 @@ def molecule_detail_surface(*, molecule_id: int) -> SurfaceDescriptor:
             nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
             nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
             nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Sequence Analysis", f"/molecules/{int(molecule_id)}/sequence-analysis"),
             nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
         ],
         archetype_labels=["Overview Signals", "Scientific Workspace", "Operational Loop"],
@@ -149,6 +150,7 @@ def molecule_results_surface(*, molecule_id: int) -> SurfaceDescriptor:
             nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
             nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
             nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Sequence Analysis", f"/molecules/{int(molecule_id)}/sequence-analysis"),
             nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
         ],
         archetype_labels=["ELN Review", "Scientific Workspace", "Result History"],
@@ -166,6 +168,7 @@ def molecule_sequence_surface(*, molecule_id: int) -> SurfaceDescriptor:
             nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
             nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
             nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Sequence Analysis", f"/molecules/{int(molecule_id)}/sequence-analysis"),
             nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
         ],
         archetype_labels=["Sequence View", "Design Surface", "Annotation Review"],
@@ -183,11 +186,30 @@ def molecule_governance_surface(*, molecule_id: int) -> SurfaceDescriptor:
             nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
             nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
             nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Sequence Analysis", f"/molecules/{int(molecule_id)}/sequence-analysis"),
             nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
         ],
         archetype_labels=["Governance View", "Assessment History", "Audit Trace"],
         attention_mode="normal",
         workflow_stage_emphasis="policy and snapshot traceability",
+    )
+
+
+def molecule_sequence_analysis_surface(*, molecule_id: int) -> SurfaceDescriptor:
+    return workspace_surface(
+        surface_key="molecule_sequence_analysis",
+        surface_title="Sequence Analysis",
+        dominant_purpose="deep sequence-derived property review",
+        local_nav=[
+            nav_item("Workspace", f"/molecules/{int(molecule_id)}"),
+            nav_item("Results", f"/molecules/{int(molecule_id)}/results"),
+            nav_item("Sequence", f"/molecules/{int(molecule_id)}/sequence"),
+            nav_item("Sequence Analysis", f"/molecules/{int(molecule_id)}/sequence-analysis"),
+            nav_item("Governance", f"/molecules/{int(molecule_id)}/governance"),
+        ],
+        archetype_labels=["Sequence Analysis", "Scientific Workspace", "Computed Signal Review"],
+        attention_mode="normal",
+        workflow_stage_emphasis="sequence triage and property interpretation",
     )
 
 

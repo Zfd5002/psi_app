@@ -29,6 +29,35 @@
   {% include "molecules/partials/surface_nav.html" %}
   <div class="page-intent-line">Inspect annotated sequences first, then use builder handoff and sequence editing tools.</div>
 
+  {% set _risk = latest_values_by_key.get('fast.developability_risk') if latest_values_by_key else None %}
+  {% set _risk_v = (_risk.value if _risk and _risk.value is mapping else {}) %}
+  {% set _risk_m = (_risk_v.metrics if _risk_v and _risk_v.metrics is defined and _risk_v.metrics is mapping else {}) %}
+  {% set _len = latest_values_by_key.get('fast.sequence_length') if latest_values_by_key else None %}
+  <div class="card section-card section-secondary" style="margin-top:10px;">
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+      <div>
+        <h2 style="margin:0;">Sequence Analysis Handoff</h2>
+        <div class="muted mini">Compact sequence-property summary for quick triage. Open the deep page for full detail.</div>
+      </div>
+      <a class="btn primary no-print" href="/molecules/{{ molecule.id }}/sequence-analysis">Open Full Sequence Analysis</a>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:10px;">
+      <div><span class="muted mini">Overall risk</span> <strong>{{ (_risk_v.overall if _risk_v.overall is defined else 'unknown')|upper }}</strong> <span class="muted mini">(score={{ _risk_v.score if _risk_v.score is defined else "—" }})</span></div>
+      <div><span class="muted mini">net charge pH7</span> <strong>{% if _risk_m.net_charge_pH7 is defined and _risk_m.net_charge_pH7 is not none %}{{ _risk_m.net_charge_pH7|round(2) }}{% else %}—{% endif %}</strong></div>
+      <div><span class="muted mini">hydrophobic</span> <strong>{% if _risk_m.hydrophobic_fraction is defined and _risk_m.hydrophobic_fraction is not none %}{{ (_risk_m.hydrophobic_fraction * 100)|round(1) }}%{% else %}—{% endif %}</strong></div>
+      <div><span class="muted mini">instability</span> <strong>{% if _risk_m.instability_index is defined and _risk_m.instability_index is not none %}{{ _risk_m.instability_index|round(1) }}{% else %}—{% endif %}</strong></div>
+      <div><span class="muted mini">N-gly</span> <strong>{{ _risk_m.n_gly_motifs if _risk_m.n_gly_motifs is defined else "—" }}</strong></div>
+      <div><span class="muted mini">deamid</span> <strong>{{ _risk_m.deamidation_motifs if _risk_m.deamidation_motifs is defined else "—" }}</strong></div>
+      <div><span class="muted mini">ox susceptible</span> <strong>{{ _risk_m.oxidation_susceptible_residues if _risk_m.oxidation_susceptible_residues is defined else "—" }}</strong></div>
+      <div><span class="muted mini">length</span> <strong>{{ _len.value if _len and _len.value is not none else "—" }}</strong></div>
+    </div>
+
+    {% if _risk_v.flags is defined and _risk_v.flags and (_risk_v.flags|length) > 0 %}
+      <div class="muted mini" style="margin-top:8px;">Top driver: <strong>{{ _risk_v.flags[0]|humanize_state }}</strong></div>
+    {% endif %}
+  </div>
+
   {% include "molecules/partials/sequence_viewer.html" %}
 
   <div class="card section-card section-primary" style="margin-top:10px;">

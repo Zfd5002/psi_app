@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from psi.core.db import ensure_schema
 from psi.core.models import Base, Batch, Molecule, Program
 from psi.services.data_records import create_data_record
+from psi.services.measurements import list_measurements_for_record_ids
 
 
 def _mkdb():
@@ -72,6 +73,61 @@ def test_upsert_measurements_populates_name_and_metric_key_when_both_present() -
             assert len(rows) == 1
             assert str(rows[0].get("name") or "") == "ec50"
             assert str(rows[0].get("metric_key") or "") == "ec50"
+        finally:
+            db.close()
+    finally:
+        eng.dispose()
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+def test_list_measurements_for_record_ids_batches_and_groups_rows() -> None:
+    eng, SessionTmp, path = _mkdb()
+    try:
+        db = SessionTmp()
+        try:
+            now = datetime(2026, 3, 3, 0, 0, 0)
+            p = Program(name="P2", description="", created_at=now, updated_at=now)
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+            m = Molecule(program_id=int(p.id), primary_id="M2", title="Mol2", created_at=now, updated_at=now)
+            db.add(m)
+            db.commit()
+            db.refresh(m)
+            b = Batch(molecule_id=int(m.id), batch_id="B2", title="Batch2", created_at=now, updated_at=now)
+            db.add(b)
+            db.commit()
+            db.refresh(b)
+
+            rec_a = create_data_record(
+                db,
+                program_id=int(p.id),
+                molecule_id=int(m.id),
+                batch_id=int(b.id),
+                domain="Biological",
+                data_type="Binding",
+                method="SPR",
+                title="Run A",
+                results_json={"kd_nM": 3.4, "koff": 0.01},
+            )
+            rec_b = create_data_record(
+                db,
+                program_id=int(p.id),
+                molecule_id=int(m.id),
+                batch_id=int(b.id),
+                domain="Biological",
+                data_type="Binding",
+                method="SPR",
+                title="Run B",
+                results_json={"kd_nM": 7.8},
+            )
+            grouped = list_measurements_for_record_ids(db, record_ids=[int(rec_b.id), int(rec_a.id)])
+            assert sorted(grouped.keys()) == [int(rec_a.id), int(rec_b.id)]
+            assert len(grouped[int(rec_a.id)]) >= 2
+            assert len(grouped[int(rec_b.id)]) >= 1
         finally:
             db.close()
     finally:

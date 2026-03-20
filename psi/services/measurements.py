@@ -279,6 +279,51 @@ def list_measurements_for_record(db: Session, *, record_id: int) -> List[Dict[st
     return [dict(r) for r in rows]
 
 
+def list_measurements_for_record_ids(db: Session, *, record_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+    """Batch-list extracted measurement rows for multiple DataRecord IDs.
+
+    Returns a deterministic mapping keyed by record_id with rows ordered exactly like
+    `list_measurements_for_record(...)` for each record.
+    """
+    _ensure_data_measurements_table(db)
+
+    ids = sorted({int(rid) for rid in list(record_ids or []) if int(rid) > 0})
+    if not ids:
+        return {}
+
+    mcols = _measurement_cols(db)
+    record_fk = mcols.get("record_fk") or "data_record_id"
+    name_col = mcols.get("name") or "name"
+    id_col = mcols.get("id") or "id"
+    produced_at_col = mcols.get("produced_at")
+    created_at_col = mcols.get("created_at") or mcols.get("updated_at")
+
+    order_bits = [name_col]
+    if produced_at_col:
+        order_bits.append(produced_at_col)
+    if created_at_col and created_at_col not in order_bits:
+        order_bits.append(created_at_col)
+    if id_col and id_col not in order_bits:
+        order_bits.append(id_col)
+    order_sql = ", ".join([f"{c} ASC" for c in order_bits if c])
+
+    bind_names = [f"rid_{idx}" for idx in range(len(ids))]
+    params = {name: ids[idx] for idx, name in enumerate(bind_names)}
+    in_sql = ", ".join([f":{name}" for name in bind_names])
+    q = text(
+        "SELECT * FROM data_measurements "
+        f"WHERE {record_fk} IN ({in_sql}) "
+        f"ORDER BY {record_fk} ASC, {order_sql}"
+    )
+    rows = db.execute(q, params).mappings().all()
+    out: Dict[int, List[Dict[str, Any]]] = {rid: [] for rid in ids}
+    for row in rows:
+        rid = int(row.get(record_fk) or 0)
+        if rid in out:
+            out[rid].append(dict(row))
+    return out
+
+
 
 def _has_primary(db: Session, record_id: int, cols: Dict[str, Optional[str]]) -> bool:
     if not cols.get("is_primary"):

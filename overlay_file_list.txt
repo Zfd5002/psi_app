@@ -1,4 +1,10 @@
 PATCH_NOTES.md
-overlay_file_list.txt
-psi/services/programs.py
 psi/version.py
+psi/web/ui_surfaces.py
+psi/web/routers/molecules.py
+psi/web/templates/molecules/partials/surface_nav.html
+psi/web/templates/molecules/sequence.html
+psi/web/templates/molecules/sequence_analysis.html
+tests/test_molecule_split_surfaces.py
+tests/test_program_navigation_affordances.py
+tests/test_ui_surfaces.py
