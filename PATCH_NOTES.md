@@ -1,3 +1,23 @@
+## 2026-03-27 — v1.3.0d164
+Why:
+- Future Codex sessions needed an in-repo, durable reminder of the new GitHub branch/distribution split for developer vs user delivery.
+- Mara’s Windows distribution flow should stay separate from developer workflows while keeping one shared PSI codebase.
+
+What:
+- Added workflow note to `PSI_CONTEXT.md` documenting:
+  - `main` as developer branch
+  - `windows-user` as Mara-facing distribution branch
+  - no developer/dual-repo workflow expectation for Mara
+  - preference for ZIP/release-style user delivery from `windows-user`
+  - stable-tested promotion policy before user-facing release
+- Added corresponding branch/distribution note to `APPLY_UPDATE.md` so update operations docs carry the same rule.
+
+Notes:
+- Documentation-only workflow continuity patch.
+- No app behavior changes.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
 ## 2026-03-26 — v1.3.0d163
 Why:
 - Windows support required explicit end-user and support documentation to reduce repeated ad-hoc support burden.

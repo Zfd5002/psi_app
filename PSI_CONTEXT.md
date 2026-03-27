@@ -60,6 +60,14 @@ Desktop shortcut note:
 
 This is **intentional** and fundamental to PSI’s design.
 
+### GitHub branch workflow (developer vs user distribution)
+
+- `main` is the active developer branch for ongoing PSI development.
+- `windows-user` is the user-facing distribution branch for Mara’s Windows installs.
+- Mara should **not** be asked to use the developer workflow or dual-repo workflow.
+- Mara should pull/download updates only from `windows-user` (prefer ZIP/release-style delivery when practical).
+- User-facing changes should be promoted into `windows-user` only after they are tested and considered stable.
+
 ### Release checklist (REQUIRED for every overlay ZIP)
 
 1) **Version bump**: update the canonical version constant in `psi/version.py`:

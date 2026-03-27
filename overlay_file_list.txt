@@ -1,9 +1,4 @@
+APPLY_UPDATE.md
 PATCH_NOTES.md
-README.md
-docs/windows/README.md
-docs/windows/WINDOWS_LAUNCH.md
-docs/windows/WINDOWS_SETUP.md
-docs/windows/WINDOWS_SMOKE_CHECKLIST.md
-docs/windows/WINDOWS_TROUBLESHOOTING.md
-docs/windows/WINDOWS_UPDATE.md
+PSI_CONTEXT.md
 psi/version.py

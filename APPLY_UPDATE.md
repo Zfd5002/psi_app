@@ -8,6 +8,13 @@ These steps apply an update ZIP **safely** on top of an existing local install.
 - Your virtual environment lives at: `~/psi_repo/.venv`
 - Your SQLite DB lives at: `~/psi_repo/psi/psi.sqlite`
 
+## Branch/distribution workflow note
+
+- `main` is the active developer branch.
+- `windows-user` is the user-facing distribution branch for Mara.
+- Mara should use only `windows-user` artifacts/ZIPs and should not be asked to follow developer dual-repo workflows.
+- Promote updates to `windows-user` only after they are tested and considered stable.
+
 ## Rules
 
 The update ZIP must NOT include:
@@ -65,4 +72,3 @@ If `vendor/` (ANARCI) is excluded from your update ZIP, rehydrate it:
 ```bash
 ./scripts/install_anarci.sh
 ```
-
