@@ -29,6 +29,7 @@ From File Explorer, run:
 `scripts\windows\bootstrap_psi.cmd`
 
 What this does:
+- checks for Python 3.10+ and, if missing, runs guided Python installer flow
 - creates a repo-local `.venv` if missing
 - installs core dependencies from `requirements.txt`
 - runs preflight checks (`uvicorn`/ASGI import + schema check)

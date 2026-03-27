@@ -5,7 +5,7 @@ This guide is for first-time PSI setup on a Windows machine.
 ## Supported baseline
 
 - Windows 10 or Windows 11
-- Python 3.10+ installed (`py` launcher recommended)
+- Internet access for first-time setup (Python/dependency download)
 - Writable install folder (for example: `Documents\PSI\psi_repo`)
 
 ## One-time setup steps
@@ -16,6 +16,8 @@ This guide is for first-time PSI setup on a Windows machine.
 4. Wait for setup to finish.
 
 The bootstrap script:
+- checks for Python 3.10+ first
+- if Python is missing/unsupported, it downloads and runs the official Python installer (guided/passive)
 - detects Python (`py -3.11`, then `py -3`, then `python`)
 - creates `.venv` if missing
 - installs core dependencies from `requirements.txt`

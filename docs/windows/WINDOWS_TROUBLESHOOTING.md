@@ -8,9 +8,19 @@ Symptom:
 - bootstrap reports Python was not found.
 
 Action:
-1. Install Python 3.11 (or newer) from python.org.
-2. Re-open the PSI folder.
-3. Re-run `scripts\windows\bootstrap_psi.cmd`.
+1. Re-run `scripts\windows\bootstrap_psi.cmd` and allow it to run the Python installer.
+2. If Python download/install still fails, install Python 3.11 manually from python.org.
+3. Re-open the PSI folder and re-run bootstrap.
+
+## Setup: unsupported Python version
+
+Symptom:
+- bootstrap reports an unsupported Python version.
+
+Action:
+1. Let bootstrap run the guided Python installer.
+2. If needed, install Python 3.11 manually from python.org.
+3. Re-run bootstrap.
 
 ## Setup: install location not writable
 

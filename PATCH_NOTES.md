@@ -1,3 +1,26 @@
+## 2026-03-27 — v1.3.0d165
+Why:
+- Windows setup audit showed missing Python was the highest-probability first-time blocker for non-technical users.
+- Bootstrap failure visibility also needed improvement in the double-click `.cmd` path.
+
+What:
+- Enhanced Windows bootstrap to handle Python acquisition/install:
+  - `scripts/windows/bootstrap_psi.ps1` now:
+    - verifies existing Python version support (3.10+)
+    - detects common installed Python paths in addition to `py`/`python`
+    - if Python is missing/unsupported, downloads and runs official Python installer (`python-3.11.9-amd64.exe`) in guided/passive mode
+    - re-checks Python availability/version before continuing
+    - fails clearly if installer/download/recheck fails
+- Improved failure visibility:
+  - `scripts/windows/bootstrap_psi.cmd` now pauses on failure so non-technical users can read error output.
+- Updated Windows setup docs and README to reflect integrated Python install flow.
+
+Notes:
+- Focused bootstrap UX patch only.
+- No launcher/update redesign.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
 ## 2026-03-27 — v1.3.0d164
 Why:
 - Future Codex sessions needed an in-repo, durable reminder of the new GitHub branch/distribution split for developer vs user delivery.

@@ -23,11 +23,33 @@ function Fail {
 }
 
 function Get-PythonLaunchSpec {
+    $pathCandidates = @()
+    if ($env:LocalAppData) {
+        $pathCandidates += (Get-ChildItem -Path (Join-Path $env:LocalAppData "Programs\Python") -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            Join-Path $_.FullName "python.exe"
+        })
+    }
+    if ($env:ProgramFiles) {
+        $pathCandidates += (Get-ChildItem -Path (Join-Path $env:ProgramFiles "Python*") -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            Join-Path $_.FullName "python.exe"
+        })
+    }
+    if ($env:ProgramFiles -and $env:ProgramFiles.Contains("x86") -and $env:ProgramW6432) {
+        $pathCandidates += (Get-ChildItem -Path (Join-Path $env:ProgramW6432 "Python*") -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            Join-Path $_.FullName "python.exe"
+        })
+    }
+
     $candidates = @(
         @{ Exe = "py"; Args = @("-3.11") },
         @{ Exe = "py"; Args = @("-3") },
         @{ Exe = "python"; Args = @() }
     )
+    foreach ($p in $pathCandidates | Select-Object -Unique) {
+        if (Test-Path -LiteralPath $p) {
+            $candidates += @{ Exe = $p; Args = @() }
+        }
+    }
     foreach ($candidate in $candidates) {
         $cmd = Get-Command $candidate.Exe -ErrorAction SilentlyContinue
         if (-not $cmd) {
@@ -43,6 +65,113 @@ function Get-PythonLaunchSpec {
         }
     }
     return $null
+}
+
+function Get-PythonVersion {
+    param([hashtable]$LaunchSpec)
+    try {
+        $raw = & $LaunchSpec.Exe @($LaunchSpec.Args + @("-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"))
+        if ($LASTEXITCODE -ne 0) {
+            return $null
+        }
+        $text = "$raw".Trim()
+        if ($text -notmatch "^\d+\.\d+$") {
+            return $null
+        }
+        $parts = $text.Split(".")
+        return @{
+            major = [int]$parts[0]
+            minor = [int]$parts[1]
+            text = $text
+        }
+    } catch {
+        return $null
+    }
+}
+
+function Is-SupportedPythonVersion {
+    param([hashtable]$VersionObj)
+    if (-not $VersionObj) {
+        return $false
+    }
+    return ($VersionObj.major -gt 3) -or ($VersionObj.major -eq 3 -and $VersionObj.minor -ge 10)
+}
+
+function Install-PythonIfNeeded {
+    param([string]$RepoRoot)
+    $detected = Get-PythonLaunchSpec
+    if ($detected) {
+        $detectedVersion = Get-PythonVersion -LaunchSpec $detected
+        if (Is-SupportedPythonVersion -VersionObj $detectedVersion) {
+            return @{
+                launch = $detected
+                version = $detectedVersion
+            }
+        }
+        if ($detectedVersion) {
+            Write-Warn "Detected unsupported Python $($detectedVersion.text). PSI requires Python 3.10 or newer."
+        } else {
+            Write-Warn "Detected Python launcher but version check failed. Reinstalling Python is recommended."
+        }
+    }
+
+    Write-Info "Python 3.10+ was not found. Starting guided Python installation..."
+    $installerUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+    $dlDir = Join-Path $RepoRoot ".bootstrap_tmp"
+    $installerPath = Join-Path $dlDir "python-3.11.9-amd64.exe"
+    try {
+        New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
+    } catch {
+        Fail "Could not prepare installer directory: $dlDir"
+    }
+
+    try {
+        Write-Info "Downloading Python installer..."
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+    } catch {
+        Fail "Python download failed. Check internet access and retry."
+    }
+
+    if (-not (Test-Path -LiteralPath $installerPath)) {
+        Fail "Python installer download was incomplete."
+    }
+
+    Write-Info "Running Python installer (this may take a few minutes)..."
+    Write-Info "Installer options: per-user install + launcher + PATH update."
+    try {
+        $proc = Start-Process -FilePath $installerPath -ArgumentList @(
+            "/passive",
+            "InstallAllUsers=0",
+            "PrependPath=1",
+            "Include_launcher=1",
+            "Include_test=0",
+            "Shortcuts=0",
+            "SimpleInstall=1"
+        ) -Wait -PassThru
+    } catch {
+        Fail "Could not start Python installer."
+    }
+
+    if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+        Fail "Python installer failed with exit code $($proc.ExitCode)."
+    }
+
+    Write-Info "Re-checking Python availability..."
+    for ($i = 0; $i -lt 20; $i++) {
+        $rechecked = Get-PythonLaunchSpec
+        if ($rechecked) {
+            $v = Get-PythonVersion -LaunchSpec $rechecked
+            if (Is-SupportedPythonVersion -VersionObj $v) {
+                return @{
+                    launch = $rechecked
+                    version = $v
+                }
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    Fail "Python installation completed, but Python 3.10+ could not be detected. Re-run bootstrap or install Python manually from python.org."
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -65,20 +194,10 @@ try {
     Fail "Install location is not writable. Move PSI to a writable folder (for example: Documents) and retry."
 }
 
-$py = Get-PythonLaunchSpec
-if (-not $py) {
-    Fail "Python 3 was not found. Install Python 3.11 (or newer) from python.org and retry."
-}
-
-$versionText = & $py.Exe @($py.Args + @("-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"))
-if ($LASTEXITCODE -ne 0) {
-    Fail "Unable to query Python version."
-}
-$versionParts = $versionText.Trim().Split(".")
-if ([int]$versionParts[0] -lt 3 -or ([int]$versionParts[0] -eq 3 -and [int]$versionParts[1] -lt 10)) {
-    Fail "Python $versionText is not supported. Use Python 3.10 or newer."
-}
-Write-Info "Using Python launcher: $($py.Exe) $($py.Args -join ' ')"
+$pyInfo = Install-PythonIfNeeded -RepoRoot $repoRoot
+$py = $pyInfo.launch
+$versionText = $pyInfo.version.text
+Write-Info "Using Python launcher: $($py.Exe) $($py.Args -join ' ') (version $versionText)"
 
 if (-not (Test-Path -LiteralPath ".venv\Scripts\python.exe")) {
     Write-Info "Creating local environment (.venv)..."

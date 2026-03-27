@@ -1,4 +1,8 @@
-APPLY_UPDATE.md
 PATCH_NOTES.md
-PSI_CONTEXT.md
+README.md
+docs/windows/README.md
+docs/windows/WINDOWS_SETUP.md
+docs/windows/WINDOWS_TROUBLESHOOTING.md
 psi/version.py
+scripts/windows/bootstrap_psi.cmd
+scripts/windows/bootstrap_psi.ps1

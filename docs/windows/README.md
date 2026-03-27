@@ -13,3 +13,6 @@ Use these guides in order:
 Support boundary (current phase):
 - Core PSI workflow is supported on Windows via scripts under `scripts/windows/`.
 - Heavy compute (ANARCI/domain-heavy workflows) is optional and may require additional machine-specific setup.
+
+Setup note:
+- `bootstrap_psi.cmd` now handles Python acquisition/install when Python 3.10+ is missing.
