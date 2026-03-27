@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -340,7 +340,8 @@ def test_portfolio_timeline_aggregates_weekly_activity() -> None:
     try:
         db = SessionTmp()
         try:
-            now = datetime(2026, 3, 7, 12, 0, 0)
+            # Keep fixtures aligned to runtime week buckets (build_portfolio_timeline uses date.today()).
+            now = datetime.combine(date.today(), time(12, 0, 0))
             p = Program(name="PTL", created_at=now, updated_at=now)
             db.add(p); db.commit(); db.refresh(p)
             m = Molecule(program_id=int(p.id), primary_id="T1", title="", created_at=now, updated_at=now)

@@ -22,6 +22,21 @@ If `anarci` fails to install from `requirements-heavy.txt` in your environment, 
 ./scripts/install_anarci.sh
 ```
 
+### Windows first-time bootstrap (core PSI)
+
+From File Explorer, run:
+
+`scripts\windows\bootstrap_psi.cmd`
+
+What this does:
+- creates a repo-local `.venv` if missing
+- installs core dependencies from `requirements.txt`
+- runs preflight checks (`uvicorn`/ASGI import + schema check)
+
+Optional heavy compute setup:
+- run `scripts\windows\bootstrap_psi.cmd -IncludeHeavyCompute`
+- heavy compute remains optional for the Windows baseline flow
+
 This repo was refactored from an MVP layout into a layered, extensible architecture designed for:
 
 - clean long-term growth by a small team
@@ -83,13 +98,69 @@ v1.01 introduces an **additive, backward-compatible** upgrade for antibody-centr
 
 ## Running
 
-Create a virtualenv, install requirements, and run:
+### Canonical user launch (recommended)
+
+Use the launch contract script:
+
+```bash
+./scripts/start_psi.sh
+```
+
+User launch semantics:
+- mode: `user` (default)
+- entrypoint: `psi.web.asgi:app`
+- bind: `PSI_HOST` / `PSI_PORT` (defaults: `127.0.0.1:8000`)
+- reload: disabled
+- browser open: enabled by default in user mode (disable with `PSI_OPEN_BROWSER=0` or `--no-browser`)
+
+### Explicit dev launch
+
+```bash
+./scripts/start_psi.sh --dev
+```
+
+Dev launch semantics:
+- mode: `dev`
+- entrypoint: `psi.web.asgi:app`
+- reload: enabled
+- browser open: disabled by default in dev mode (override with `--browser`)
+
+Direct uvicorn usage remains supported for advanced workflows:
 
 ```bash
 uvicorn psi.web.asgi:app --reload
 ```
 
 The legacy entrypoint `psi.app:app` is kept for backwards compatibility.
+
+### Windows user launch
+
+After first-time bootstrap, run:
+
+`scripts\windows\launch_psi.cmd`
+
+Desktop shortcut install:
+
+`scripts\windows\install_desktop_shortcut.cmd`
+
+Launcher behavior:
+- user-mode launch (`psi.web.asgi:app`, no reload)
+- browser auto-open enabled by default
+- setup-missing and port-in-use cases return explicit launcher messages
+
+### Windows update helper
+
+Apply an update overlay ZIP/folder without Linux tools:
+
+`scripts\windows\update_psi.cmd`
+
+Update helper behavior:
+- prompts for update package path if not provided
+- applies additive overlay copy in place
+- preserves local runtime data (`.venv`, `uploads`, sqlite/db files)
+
+Windows docs:
+- `docs/windows/README.md`
 
 ## Extensions
 

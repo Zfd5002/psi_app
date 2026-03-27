@@ -1,3 +1,149 @@
+## 2026-03-26 — v1.3.0d163
+Why:
+- Windows support required explicit end-user and support documentation to reduce repeated ad-hoc support burden.
+- Setup/launch/update scripts needed matching written guidance and validation checklists.
+
+What:
+- Added Windows documentation set under `docs/windows/`:
+  - `README.md`
+  - `WINDOWS_SETUP.md`
+  - `WINDOWS_LAUNCH.md`
+  - `WINDOWS_UPDATE.md`
+  - `WINDOWS_TROUBLESHOOTING.md`
+  - `WINDOWS_SMOKE_CHECKLIST.md`
+- Documentation now covers:
+  - first-time setup flow
+  - daily launch and desktop shortcut usage
+  - update flow
+  - non-technical troubleshooting guidance
+  - explicit support boundary for optional heavy compute
+  - real-Windows smoke validation checklist for support handoff
+- Added README pointer to Windows documentation bundle.
+
+Notes:
+- Docs/supportability patch only.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
+## 2026-03-26 — v1.3.0d162
+Why:
+- Mara needed a Windows-native update path that does not depend on bash/rsync/Linux tooling.
+- Update flow needed to preserve mutable local runtime data while allowing additive code/script updates.
+
+What:
+- Added Windows update helper scripts:
+  - `scripts/windows/update_psi.ps1`
+  - `scripts/windows/update_psi.cmd`
+- Update helper now supports:
+  - update source as ZIP or folder
+  - optional interactive prompt for source path
+  - overlay-root detection for PSI overlay zips
+  - additive in-place copy using Windows-native `robocopy`
+  - explicit preservation of local mutable runtime paths/files:
+    - `.venv`
+    - `uploads` / `psi/uploads`
+    - sqlite/db files
+    - cache/bytecode directories/files
+  - clear success/failure messages for non-technical operation
+- Added minimal README update-helper usage notes.
+
+Notes:
+- Update-flow patch only; broad Windows docs/troubleshooting are not included here.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
+## 2026-03-26 — v1.3.0d161
+Why:
+- Windows bootstrap alone was not enough for non-technical daily use.
+- PSI needed a stable Windows launcher and shortcut flow aligned to the d158 user launch contract.
+
+What:
+- Added Windows launcher scripts:
+  - `scripts/windows/launch_psi.ps1`
+  - `scripts/windows/launch_psi.cmd`
+- Launcher behavior now includes:
+  - canonical user-mode entrypoint (`psi.web.asgi:app`)
+  - repo-local `.venv` dependency checks
+  - explicit launcher failure categories/messages for missing setup/dependencies/runtime failure
+  - explicit port-in-use handling (open existing app URL if already running)
+  - browser auto-open by default (disable with `-NoBrowser` or `PSI_OPEN_BROWSER=0`)
+- Added Windows desktop shortcut installer:
+  - `scripts/windows/install_desktop_shortcut.ps1`
+  - `scripts/windows/install_desktop_shortcut.cmd`
+- Updated bootstrap completion output to point to launcher/shortcut scripts.
+- Added minimal README launch instructions for Windows user flow.
+
+Notes:
+- Launcher/shortcut patch only; Windows update flow is not included here.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
+## 2026-03-26 — v1.3.0d160
+Why:
+- Windows support needed a first-time bootstrap path for non-technical users before launcher/shortcut/update patches.
+- Setup needed explicit prerequisite checks, local-environment creation, and clear optional heavy-compute handling.
+
+What:
+- Added Windows bootstrap scripts:
+  - `scripts/windows/bootstrap_psi.ps1`
+  - `scripts/windows/bootstrap_psi.cmd`
+- Bootstrap flow now provides:
+  - repo-root auto-detection
+  - writable install-location preflight
+  - Python launcher detection (`py -3.11`, `py -3`, `python`)
+  - local `.venv` creation (if missing)
+  - core dependency install from `requirements.txt`
+  - import/schema readiness checks (`uvicorn`, `psi.web.asgi`, `ensure_schema`)
+  - explicit optional heavy-compute install path (`-IncludeHeavyCompute`) with non-blocking warning behavior
+- Added minimal README guidance for Windows first-time bootstrap.
+
+Notes:
+- Bootstrap/setup patch only; no launcher/shortcut flow yet.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
+## 2026-03-26 — v1.3.0d159
+Why:
+- Two weekly-rollup tests used fixed historical fixture dates and became calendar-fragile as real time advanced.
+- PSI product behavior remained correct; tests needed deterministic time-window alignment.
+
+What:
+- Hardened time-window fixtures in:
+  - `tests/test_dev_board.py::test_build_development_board_includes_task_chips`
+  - `tests/test_portfolio_service.py::test_portfolio_timeline_aggregates_weekly_activity`
+- Both tests now derive fixture `now` relative to runtime `date.today()` so weekly rollup assertions remain stable over time.
+
+Notes:
+- Test-only patch; no production service logic changes.
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
+## 2026-03-26 — v1.3.0d158
+Why:
+- PSI launch behavior needed a single stable user-facing contract before Windows bootstrap/launcher patches.
+- Startup guidance was mixed across direct uvicorn docs and dev-first script defaults.
+
+What:
+- Formalized launch contract in `scripts/start_psi.sh`:
+  - default mode is now `user` (no reload)
+  - explicit `--dev` / `--reload` mode for development
+  - canonical entrypoint standardized to `psi.web.asgi:app`
+  - explicit host/port contract (`PSI_HOST` / `PSI_PORT`, optional CLI overrides)
+  - launcher-level browser-open contract made explicit (user default on, dev default off)
+  - explicit startup failure categories for wrappers:
+    - `launch:error:env_missing`
+    - `launch:error:dependency_missing`
+    - `launch:error:port_in_use`
+    - `launch:error:runtime_failed`
+- Updated launch documentation:
+  - `README.md`: canonical user launch vs explicit dev launch sections
+  - `PSI_CONTEXT.md`: release checklist and desktop-launch note aligned to canonical user launch
+
+Notes:
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+- Linux developer workflow preserved with explicit dev mode.
+
 ## 2026-03-20 — v1.3.0d157
 Why:
 - Scientist workflow needed a dedicated sequence-derived analysis surface without overloading the Sequence viewer or changing Governance semantics.

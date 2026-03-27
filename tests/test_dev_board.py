@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import text
 from sqlalchemy import create_engine
@@ -203,7 +203,8 @@ def test_build_development_board_includes_task_chips() -> None:
     try:
         db = SessionTmp()
         try:
-            now = datetime(2026, 3, 7)
+            # Keep fixtures inside the rolling 7-day window used by execution rollup.
+            now = datetime.combine(date.today(), time(12, 0, 0))
             p = Program(name="P-board-tasks", created_at=now, updated_at=now)
             db.add(p)
             db.commit()

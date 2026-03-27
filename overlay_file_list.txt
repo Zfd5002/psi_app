@@ -1,10 +1,9 @@
 PATCH_NOTES.md
+README.md
+docs/windows/README.md
+docs/windows/WINDOWS_LAUNCH.md
+docs/windows/WINDOWS_SETUP.md
+docs/windows/WINDOWS_SMOKE_CHECKLIST.md
+docs/windows/WINDOWS_TROUBLESHOOTING.md
+docs/windows/WINDOWS_UPDATE.md
 psi/version.py
-psi/web/ui_surfaces.py
-psi/web/routers/molecules.py
-psi/web/templates/molecules/partials/surface_nav.html
-psi/web/templates/molecules/sequence.html
-psi/web/templates/molecules/sequence_analysis.html
-tests/test_molecule_split_surfaces.py
-tests/test_program_navigation_affordances.py
-tests/test_ui_surfaces.py

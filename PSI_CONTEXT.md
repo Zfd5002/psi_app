@@ -68,7 +68,7 @@ This is **intentional** and fundamental to PSI’s design.
 2) **Patch notes append-only**: add a new entry to `PATCH_NOTES.md` (never edit older entries).
 3) Run:
    - `python -m psi.scripts.smoke_test`
-   - `./scripts/start_psi.sh --prod` (manual sanity: homepage loads)
+   - `./scripts/start_psi.sh` (manual sanity: canonical user launch; homepage loads)
 4) Build code-only overlay ZIP using `compress.sh` and verify it contains only changed files.
 
 Note: `smoke_test` enforces that `PATCH_NOTES.md` contains the current `PSI_VERSION`.
@@ -230,7 +230,7 @@ From the repo root:
 - `bash scripts/install_desktop_shortcut.sh`
 
 This creates `~/Desktop/PSI.desktop` that launches:
-- `uvicorn psi.web.app:create_app --factory --reload`
+- `scripts/start_psi.sh` (canonical user launch contract; no reload by default)
 
 If your desktop environment blocks launching, right-click the icon and choose **Allow Launching**.
 
