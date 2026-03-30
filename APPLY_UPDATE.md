@@ -27,6 +27,8 @@ It SHOULD include:
 
 - application code (`psi/`)
 - templates / static assets
+- Windows-user release manifest (`docs/windows/windows_user_release_manifest.json`)
+- packaged desktop icon asset (`assets/windows/psi_desktop_icon.ico`)
 
 It MAY exclude:
 

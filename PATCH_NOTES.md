@@ -1,3 +1,42 @@
+## 2026-03-30 — v1.3.0d167
+Why:
+- Windows-user update UX needed a safe first phase that never mutates files while PSI is running.
+- Prior audit established manifest-based channel checks as the safest source of truth for user-safe updates.
+- Release contract also needed an explicit packaged desktop icon requirement for Windows-user releases.
+
+What:
+- Added read-only Windows-user update check service:
+  - `psi/services/windows_update.py`
+  - compares local `PSI_VERSION` to remote manifest version for channel `windows-user`
+  - returns check states: idle / windows_only / up_to_date / update_available / check_failed
+  - enforces manifest channel and required icon-asset declaration
+  - performs no download/apply/updater execution
+- Wired Home page update-status surface:
+  - `psi/web/routers/search.py` now exposes update status context
+  - `psi/web/templates/home.html` adds a simple “Windows User Updates” card with a check-only button
+  - UX explicitly states check-only behavior (no download/apply)
+- Added Windows-user manifest contract file:
+  - `docs/windows/windows_user_release_manifest.json`
+  - includes channel/version/download/checksum placeholders and required desktop icon asset path
+- Added explicit icon packaging contract doc:
+  - `assets/windows/README.md`
+  - release/update packages must ship `assets/windows/psi_desktop_icon.ico` and must not use runtime external icon URLs
+- Updated Windows workflow docs to carry manifest + icon release contract notes:
+  - `docs/windows/README.md`
+  - `docs/windows/WINDOWS_UPDATE.md`
+  - `APPLY_UPDATE.md`
+  - `PSI_CONTEXT.md`
+- Added focused tests for service/router/template surfaces:
+  - `tests/test_windows_update_service.py`
+  - `tests/test_home_windows_update_status.py`
+  - `tests/test_home_update_card_template.py`
+- Bumped version to `v1.3.0d167`.
+
+Notes:
+- This patch is check-only and read-only by design.
+- No updater invocation, no in-place mutation, no schema/DB changes.
+- Future phases (download/verify/external updater handoff) remain intentionally out of scope.
+
 ## 2026-03-30 — v1.3.0d166
 Why:
 - Windows launcher failed before PSI startup because `launch_psi.ps1` declared a `Host` parameter that collides with PowerShell's built-in read-only `$Host` automatic variable.

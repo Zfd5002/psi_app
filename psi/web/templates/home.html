@@ -48,4 +48,30 @@
     </div>
   </div>
 </div>
+{% set wu = (windows_update if windows_update is defined and windows_update is mapping else {}) %}
+<div class="card" style="margin-top:12px;">
+  <h2>Windows User Updates</h2>
+  <div class="muted">Installed version: {{ wu.local_version if wu.local_version is defined and wu.local_version else (PSI_VERSION or "") }}</div>
+  <div class="muted">Update channel: windows-user</div>
+  {% if wu.status is defined and wu.status %}
+    <div class="notice" style="margin-top:10px;">
+      {{ wu.message if wu.message is defined and wu.message else "Not checked yet." }}
+    </div>
+  {% else %}
+    <div class="notice" style="margin-top:10px;">Not checked yet.</div>
+  {% endif %}
+  <div class="muted mini" style="margin-top:8px;">
+    Check-only mode: this action does not download or apply updates.
+  </div>
+  <div style="margin-top:10px;">
+    {% if wu.status is defined and wu.status == "windows_only" %}
+      <button class="btn" type="button" disabled>Check for updates</button>
+    {% else %}
+      <form method="get" action="/">
+        <input type="hidden" name="check_updates" value="1" />
+        <button class="btn" type="submit">Check for updates</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

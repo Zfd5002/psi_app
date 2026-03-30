@@ -1,3 +1,14 @@
+APPLY_UPDATE.md
 PATCH_NOTES.md
+PSI_CONTEXT.md
+assets/windows/README.md
+docs/windows/README.md
+docs/windows/WINDOWS_UPDATE.md
+docs/windows/windows_user_release_manifest.json
+psi/services/windows_update.py
 psi/version.py
-scripts/windows/launch_psi.ps1
+psi/web/routers/search.py
+psi/web/templates/home.html
+tests/test_home_update_card_template.py
+tests/test_home_windows_update_status.py
+tests/test_windows_update_service.py

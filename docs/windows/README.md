@@ -10,6 +10,10 @@ Use these guides in order:
 4. [Windows Troubleshooting](./WINDOWS_TROUBLESHOOTING.md)
 5. [Windows Smoke Checklist](./WINDOWS_SMOKE_CHECKLIST.md)
 
+Windows-user release manifest contract:
+- `windows_user_release_manifest.json` is the update-channel source of truth for in-app check-only status.
+- Releases must package the desktop icon asset path declared by the manifest (`assets/windows/psi_desktop_icon.ico`).
+
 Support boundary (current phase):
 - Core PSI workflow is supported on Windows via scripts under `scripts/windows/`.
 - Heavy compute (ANARCI/domain-heavy workflows) is optional and may require additional machine-specific setup.

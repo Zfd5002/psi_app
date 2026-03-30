@@ -67,6 +67,8 @@ This is **intentional** and fundamental to PSI’s design.
 - Mara should **not** be asked to use the developer workflow or dual-repo workflow.
 - Mara should pull/download updates only from `windows-user` (prefer ZIP/release-style delivery when practical).
 - User-facing changes should be promoted into `windows-user` only after they are tested and considered stable.
+- Windows-user update status must use a release manifest source of truth (`docs/windows/windows_user_release_manifest.json`).
+- Windows-user release/update packages must include the packaged desktop icon asset at `assets/windows/psi_desktop_icon.ico` (no runtime external icon URL dependency).
 
 ### Release checklist (REQUIRED for every overlay ZIP)
 
