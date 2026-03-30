@@ -2,7 +2,8 @@
 param(
     [switch]$NoBrowser,
     [switch]$Dev,
-    [string]$Host = "",
+    [Alias("Host")]
+    [string]$BindHost = "",
     [int]$Port = 0
 )
 
@@ -42,7 +43,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..")).Path
 Set-Location $repoRoot
 
-$resolvedHost = if ($Host) { $Host } elseif ($env:PSI_HOST) { $env:PSI_HOST } else { "127.0.0.1" }
+$resolvedHost = if ($BindHost) { $BindHost } elseif ($env:PSI_HOST) { $env:PSI_HOST } else { "127.0.0.1" }
 $resolvedPort = if ($Port -gt 0) { $Port } elseif ($env:PSI_PORT) { [int]$env:PSI_PORT } else { 8000 }
 $openBrowser = if ($NoBrowser) { $false } elseif ($env:PSI_OPEN_BROWSER -eq "0") { $false } else { $true }
 

@@ -1,8 +1,3 @@
 PATCH_NOTES.md
-README.md
-docs/windows/README.md
-docs/windows/WINDOWS_SETUP.md
-docs/windows/WINDOWS_TROUBLESHOOTING.md
 psi/version.py
-scripts/windows/bootstrap_psi.cmd
-scripts/windows/bootstrap_psi.ps1
+scripts/windows/launch_psi.ps1

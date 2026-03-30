@@ -1,3 +1,21 @@
+## 2026-03-30 — v1.3.0d166
+Why:
+- Windows launcher failed before PSI startup because `launch_psi.ps1` declared a `Host` parameter that collides with PowerShell's built-in read-only `$Host` automatic variable.
+- This caused `VariableNotWritable` on launch for real Windows users.
+
+What:
+- Fixed Windows launcher host parameter collision in `scripts/windows/launch_psi.ps1`:
+  - renamed launcher host parameter from `Host` to `BindHost`
+  - updated host resolution to use `BindHost` while preserving `PSI_HOST` environment override behavior
+  - added backward-compatible parameter alias so existing `-Host` invocations still map safely without writing to `$Host`
+- Bumped version to `v1.3.0d166`.
+
+Notes:
+- Surgical Windows launcher correctness patch only.
+- Launch behavior preserved (host/port resolution, browser auto-open, port-in-use handling, failure categories).
+- No DB/schema changes.
+- No DI/governance/snapshot/report semantics changes.
+
 ## 2026-03-27 — v1.3.0d165
 Why:
 - Windows setup audit showed missing Python was the highest-probability first-time blocker for non-technical users.
