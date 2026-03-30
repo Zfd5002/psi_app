@@ -1,11 +1,9 @@
 {
   "channel": "windows-user",
   "version": "v1.3.0d167",
-  "download_url": "https://example.invalid/psi/psi_overlay_v1.3.0d167.zip",
-  "sha256": "REQUIRED_FOR_PUBLISH",
-  "release_notes_url": "https://example.invalid/psi/release-notes/v1.3.0d167",
+  "download_url": "https://example.com/placeholder.zip",
+  "sha256": "placeholder",
   "required_assets": {
     "desktop_icon": "assets/windows/psi_desktop_icon.ico"
-  },
-  "notes": "Windows-user release manifest. This contract powers check-only in-app update status in d167."
+  }
 }
